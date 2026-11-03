@@ -1,11 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import type { TranscriptItem } from '@accio/protocol';
-import { describeActivity, describeTools, layoutTranscript, toolLabel, type ToolItem, type TranscriptBlock } from './transcriptBlocks';
+import { describeActivity, describeTools, layoutTranscript, toolLabel, toolSummary, type ToolItem, type TranscriptBlock } from './transcriptBlocks';
 
 const tool = (id: string, name = 'Bash', turnId = 't1', status: ToolItem['status'] = 'done'): ToolItem => ({ kind: 'tool', id, turnId, name, summary: id, status });
 const say = (id: string, text = id, turnId = 't1'): TranscriptItem => ({ kind: 'assistant', id, turnId, text });
 const ask = (id: string, turnId = 't1'): TranscriptItem => ({ kind: 'user', id, turnId, text: id, at: '2026-11-03T12:00:00Z' });
 const done = (turnId = 't1', ms = 5000): TranscriptItem => ({ kind: 'finished', id: `${turnId}:finished`, turnId, ms });
+
+it('cleans legacy shell rows and live activity without changing other tool summaries', () => {
+  const summary = String.raw`"C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'Get-Content long…`;
+  const shell = { ...tool('shell', 'Shell'), summary };
+  expect(toolSummary(shell)).toBe('Get-Content long…');
+  expect(describeActivity(shell)).toBe('Running Get-Content long…');
+  expect(toolSummary({ ...shell, name: 'Read' })).toBe(summary);
+  expect(shell.summary).toBe(summary);
+});
 type Shape = string | Shape[] | { work: Shape[] };
 const shape = (blocks: TranscriptBlock[]): Shape[] => blocks.map((b) =>
   b.kind === 'tools' ? b.items.map((i) => i.id) : b.kind === 'work' ? { work: shape(b.blocks) } : b.item.id);

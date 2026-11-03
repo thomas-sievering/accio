@@ -118,7 +118,7 @@ const harness = new FakeHarness(async function* (run) {
   await writeFile(join(run.cwd, 'my notes.txt'), 'Notes with spaces.');
   yield { type: 'assistant', parent_tool_use_id: null, session_id: SESSION, message: { id: 'tools', content: [
     { type: 'tool_use', id: 'success-tool', name: 'Read', input: { file_path: 'chat.png', offset: 3 } },
-    { type: 'tool_use', id: 'failed-tool', name: 'Bash', input: { command: 'fixture-failure' } },
+      { type: 'tool_use', id: 'failed-tool', name: 'Bash', input: { command: String.raw`"C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'fixture-failure'` } },
   ] } } as HarnessMessage;
   yield { type: 'user', parent_tool_use_id: null, session_id: SESSION, message: { content: [
     { type: 'tool_result', tool_use_id: 'success-tool', content: [
