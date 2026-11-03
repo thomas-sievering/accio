@@ -19,6 +19,18 @@ export type HarnessView = {
   machines: { machineId: string; version: string | null }[];
 };
 
+/**
+ * GLOSSARY: System prompt. What accio adds to each harness's own instructions, as
+ * this machine sends it. Each section is listed once; a section whose text differs
+ * between harnesses has one variant per distinct text.
+ */
+export type SystemPromptView = {
+  /** Every harness and how it receives the system prompt. */
+  harnesses: { id: string; name: string; delivery: string }[];
+  sections: { id: string; title: string; variants: { harnessIds: string[]; text: string }[] }[];
+};
+
 export const harnessMethods = {
   'harnesses.list': method<z.ZodObject<{}>, HarnessView[]>(z.object({})),
+  'systemPrompt.get': method<z.ZodObject<{}>, SystemPromptView>(z.object({})),
 };

@@ -1,11 +1,12 @@
 import { mkdir } from 'node:fs/promises';
 import { startCodex, type CodexFactory, type CodexNotification } from '@accio/codex';
+import { systemPromptText } from '../harnesses/systemPrompt.js';
 import type { Harness, HarnessEvent } from './harness.js';
 
 /** Codex runs on this machine. Only the profile's scoped proxy key reaches it. */
 export function codexHarness(factory: CodexFactory = startCodex): Harness {
   return {
-    async *run({ cwd, prompt, sessionId, model, env, signal }) {
+    async *run({ cwd, prompt, sessionId, model, modelName, env, signal }) {
       if (signal.aborted) return;
       const home = env.CODEX_HOME;
       const baseUrl = env.ACCIO_OPENAI_URL;
@@ -35,7 +36,7 @@ export function codexHarness(factory: CodexFactory = startCodex): Harness {
       signal.addEventListener('abort', stop, { once: true });
       try {
         if (signal.aborted) return;
-        const params = { cwd, ...(model ? { model } : {}), approvalPolicy: 'never', sandbox: 'danger-full-access' };
+        const params = { cwd, ...(model ? { model } : {}), approvalPolicy: 'never', sandbox: 'danger-full-access', developerInstructions: systemPromptText({ harnessId: 'codex', model, modelName }) };
         const result = await client.request(sessionId ? 'thread/resume' : 'thread/start', { ...params, ...(sessionId ? { threadId: sessionId } : {}) });
         threadId = result.thread.id;
         yield { type: 'harness_event', event: { kind: 'session', id: threadId! } };

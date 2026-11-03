@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { query } from '@anthropic-ai/claude-agent-sdk';
+import { systemPromptText } from '../harnesses/systemPrompt.js';
 import type { Harness, HarnessMessage, HarnessTurn } from './harness.js';
 
 /** How long a stopped turn gets to wind down gracefully before its process is killed. */
@@ -14,7 +15,7 @@ const HARD_STOP_AFTER_MS = 3000;
  * the checkout's own .claude folder and CLAUDE.md.
  */
 export const claudeCode: Harness = {
-  async *run({ cwd, prompt, sessionId, model, env, signal }: HarnessTurn) {
+  async *run({ cwd, prompt, sessionId, model, modelName, env, signal }: HarnessTurn) {
     if (signal.aborted) return;
     const abortController = new AbortController();
     const stderr: string[] = [];
@@ -30,7 +31,7 @@ export const claudeCode: Harness = {
         permissionMode: 'bypassPermissions',
         allowDangerouslySkipPermissions: true,
         settingSources: ['user', 'project', 'local'],
-        systemPrompt: { type: 'preset', preset: 'claude_code' },
+        systemPrompt: { type: 'preset', preset: 'claude_code', append: systemPromptText({ harnessId: 'claudeCode', model, modelName }) },
         stderr: (data) => {
           stderr.push(data);
           if (stderr.length > 50) stderr.shift();

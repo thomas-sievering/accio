@@ -62,12 +62,12 @@ describe('profile model choices', () => {
     const checkout = await c.call('checkouts.add', { path, profileId: 'personal' });
     const thread = await c.call('threads.start', { checkoutId: checkout.id, text: 'hello', model: opus });
     await c.waitFor('threads.changed', (ts) => ts.some((t) => t.id === thread.id && t.status === 'idle'));
-    expect(harness.runs[0]).toMatchObject({ model: 'opus', sessionId: null });
+    expect(harness.runs[0]).toMatchObject({ model: 'opus', modelName: 'Claude Opus', sessionId: null });
     expect(await c.call('threads.setModel', { threadId: thread.id, model: haiku })).toMatchObject({ model: haiku });
     c.events.length = 0;
     await c.call('threads.send', { threadId: thread.id, text: 'continue' });
     await c.waitFor('threads.changed', (ts) => ts.some((t) => t.id === thread.id && t.status === 'idle'));
-    expect(harness.runs[1]).toMatchObject({ model: 'haiku', sessionId: SESSION });
+    expect(harness.runs[1]).toMatchObject({ model: 'haiku', modelName: 'Claude Haiku', sessionId: SESSION });
     await t.stop({ keepHome: true }); stop = undefined;
     const restarted = await startTestApp({ harness }, t.home); stop = restarted.stop;
     expect((await (await restarted.connect()).call('threads.list', {}))[0]?.model).toEqual(haiku);

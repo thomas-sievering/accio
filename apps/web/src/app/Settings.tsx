@@ -2,14 +2,15 @@ import { useEffect, type ReactNode } from 'react';
 import { HubSettings } from '../hub/HubSettings';
 import { MachineSettings } from '../machine/MachineSettings';
 import { HarnessesSettings } from '../harnesses/HarnessesSettings';
+import { SystemPromptSettings } from '../harnesses/SystemPromptSettings';
 import { AccountsSettings } from '../profiles/AccountsSettings';
 import { ProfilesSettings } from '../profiles/ProfilesSettings';
 import { useProfiles } from '../profiles/profiles';
-import { ArrowLeft, Hub, Layers, Monitor, Users } from './icons';
+import { ArrowLeft, Hub, Layers, Monitor, ScrollText, Users } from './icons';
 import { SidebarResizer } from './SidebarResizer';
 
 /** Where Settings is open. `profileId` opens one profile ('new' to add one). */
-export type SettingsRoute = { section: 'profiles'; profileId?: string } | { section: 'accounts'; accountId?: string } | { section: 'hub' } | { section: 'harnesses' } | { section: 'machines'; machineId?: string };
+export type SettingsRoute = { section: 'profiles'; profileId?: string } | { section: 'accounts'; accountId?: string } | { section: 'hub' } | { section: 'harnesses' } | { section: 'systemPrompt' } | { section: 'machines'; machineId?: string };
 type Section = SettingsRoute['section'];
 
 const GROUPS: { label?: string; items: { id: Section; label: string; icon: ReactNode }[] }[] = [
@@ -17,6 +18,7 @@ const GROUPS: { label?: string; items: { id: Section; label: string; icon: React
     { id: 'accounts', label: 'Accounts', icon: <Users /> },
     { id: 'profiles', label: 'Profiles', icon: <Users /> },
     { id: 'harnesses', label: 'Harnesses', icon: <Layers /> },
+    { id: 'systemPrompt', label: 'System prompt', icon: <ScrollText /> },
     { id: 'machines', label: 'Machines', icon: <Monitor /> },
   ] },
   {
@@ -103,6 +105,7 @@ export function Settings({ route, onRoute, onClose }: { route: SettingsRoute; on
             {route.section === 'accounts' && <AccountsSettings accountId={accountId} onOpen={(id) => onRoute({ section: 'accounts', accountId: id })} onBack={() => onRoute({ section: 'accounts' })} />}
             {route.section === 'hub' && <HubSettings />}
             {route.section === 'harnesses' && <HarnessesSettings />}
+            {route.section === 'systemPrompt' && <SystemPromptSettings />}
             {route.section === 'machines' && (
               <>
                 {route.machineId && <button className="link" onClick={() => onRoute({ section: 'machines' })}>All machines</button>}
