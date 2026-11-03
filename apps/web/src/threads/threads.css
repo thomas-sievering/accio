@@ -431,10 +431,6 @@ button.row {
 .tool.interrupted .tool-name::before {
   background: var(--amber);
 }
-/* Consecutive calls read as one block. */
-.tool + .tool {
-  margin-top: -6px;
-}
 .tool-toggle > svg {
   opacity: 0;
 }
@@ -511,6 +507,89 @@ button.row {
   flex: 1;
   height: 1px;
   background: var(--line);
+}
+/* Same divider as .turn-finished, but it opens onto the turn's folded work. */
+.turn-work {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.turn-work-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0;
+  padding: 3px 0 3px 12px;
+  color: var(--dim);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.turn-work-toggle::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  margin-left: 4px;
+  background: var(--line);
+}
+.turn-work-toggle:not(:disabled):hover,
+.turn-work-toggle:focus-visible {
+  color: var(--ink);
+}
+.turn-work-toggle:disabled {
+  cursor: default;
+}
+/* While the turn runs: a spinner, then what the harness is doing now. */
+.turn-work.live .turn-work-toggle {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.turn-work.live .turn-work-toggle::before {
+  content: '';
+  flex: none;
+  width: 9px;
+  height: 9px;
+  margin-right: 2px;
+  border-radius: 50%;
+  border: 1.5px solid var(--line-2);
+  border-top-color: var(--muted);
+  animation: spin 0.9s linear infinite;
+}
+.turn-work-activity {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.turn-work-elapsed {
+  flex: none;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+.turn-work-elapsed::before {
+  content: '·';
+  margin-right: 6px;
+}
+.turn-work-toggle > svg {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  transition: rotate 0.15s;
+}
+.turn-work.open .turn-work-toggle > svg {
+  rotate: 90deg;
+}
+.turn-work-failed {
+  color: var(--red);
+}
+.turn-work-failed::before {
+  content: '·';
+  margin-right: 6px;
+  color: var(--dim);
+}
+.turn-work-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 .notice {
   align-self: center;
@@ -690,10 +769,18 @@ div.model-picker-empty b { color: var(--ink); font-weight: 500; }
   height: 15px;
 }
 
-/* Stop and Resume */
+/* Stop: while a turn runs, the send slot becomes a red round stop button */
+.send.stop {
+  border-radius: 50%;
+  background: #e5484d;
+  color: #fff;
+}
+.send.stop:hover:not(:disabled) {
+  background: #d93d42;
+}
 .send.stop svg {
-  width: 13px;
-  height: 13px;
+  width: 12px;
+  height: 12px;
 }
 /* The one slot above the composer: why the thread can't go on, and the action that fixes it */
 .notice-bar {

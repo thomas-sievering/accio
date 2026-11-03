@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { mediaKind, mediaMimeType, normalizeMarkdownSource, type ChoicePick, type TranscriptItem } from '@accio/protocol';
+import { mediaKind, mediaMimeType, normalizeMarkdownSource, type ChoicePick, type DeliveryMode, type ThreadDelivery, type TranscriptItem } from '@accio/protocol';
 import type { Profiles } from '../profiles/profiles.js';
 import { configFolderOf } from '../profiles/claudeConfigFolder.js';
 import type { Projects } from '../projects/projects.js';
@@ -37,8 +37,11 @@ import { ThreadContent } from './content.js';
 import { markdownReferences } from './markdown.js';
 import { isChoiceTool, parseChoice, pickPrompt } from './choice.js';
 import type { AccioTools, ToolAccess } from '../tools/tools.js';
+import { DeliveryGit, DeliveryPending, deliveryPrompt } from './delivery.js';
+import { Previews } from './previews.js';
+import { samePath } from '../projects/project.js';
 
-type TurnOptions = { resume?: boolean; retry?: boolean; pick?: ChoicePick };
+type TurnOptions = { resume?: boolean; retry?: boolean; delivery?: boolean; pick?: ChoicePick };
 type Live = { cursor: number; items: TranscriptItem[]; file: JsonFile<TranscriptItem[]>; saveTimer?: ReturnType<typeof setTimeout> };
 
 /** Threads on this machine, their transcripts, and the turns running in them. */
@@ -50,8 +53,14 @@ export class Threads {
   private running = new Map<string, AbortController>();
   private closing = false;
   private starts = new Set<Promise<unknown>>();
+  private startingThreads = new Set<string>();
   private preparing = new Set<Promise<void>>();
   private turns = new Set<Promise<void>>();
+  private lifecycle = new Set<string>();
+  private deliveryStarting = new Set<string>();
+  private deliveryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private deliveryGit: DeliveryGit;
+  private previews: Previews;
   readonly assets: ThreadAssets;
   private content: ThreadContent;
 
@@ -66,6 +75,8 @@ export class Threads {
     private tools?: AccioTools,
   ) {
     this.file = new JsonFile(join(home, 'threads.json'), () => []);
+    this.deliveryGit = new DeliveryGit(home);
+    this.previews = new Previews(home);
     this.assets = new ThreadAssets(home, (threadId) => this.list.some((thread) => thread.id === threadId));
     this.content = new ThreadContent(home, this.assets);
     projects.onRemoveThreads((id) => this.deleteThreads(this.list.filter((t) => t.checkoutId === id)));
@@ -80,6 +91,7 @@ export class Threads {
   }
 
   async load() {
+    await this.previews.load();
     const stored = (await this.file.read()).map(fromStored);
     const candidates = new Set(dropUnstarted(stored).map((t) => t.id));
     const started: Thread[] = [];
@@ -88,7 +100,19 @@ export class Threads {
       if (candidates.has(thread.id) || (await this.transcript(thread.id)).items.length > 0) started.push(thread);
     }
     const { threads, interrupted } = recoverAfterRestart(started);
-    this.list = threads;
+    this.list = threads.map(t => t.delivery?.status === 'running' ? { ...t, delivery: { ...t.delivery, status: 'blocked', detail: 'Delivery was interrupted. Check the conversation and request Ship again to continue safely.' } } : t.delivery?.status === 'queued' && t.status === 'idle' ? { ...t, status: 'interrupted' } : t);
+    let recoveredRelease = false;
+    for (const thread of this.list) {
+      if (!thread.workspace?.releaseRequestedAt || thread.workspace.releasedAt || !thread.delivery?.revision) continue;
+      try {
+        this.assertWorkspaceUnused(thread);
+        await this.previews.stop(thread.id);
+        await this.deliveryGit.release(thread.id, thread.workspace, thread.delivery.revision);
+        thread.workspace = { ...thread.workspace, releasedAt: now() };
+        thread.settledAt = now();
+        recoveredRelease = true;
+      } catch { /* Preserve the journal and workspace for an explicit Archive retry. */ }
+    }
     for (const thread of interrupted) {
       const live = await this.transcript(thread.id);
       const turnId = [...live.items].reverse().find((i) => i.kind === 'user')?.turnId ?? 'restart';
@@ -101,12 +125,13 @@ export class Threads {
       });
       await live.file.write(live.items);
     }
-    if (interrupted.length || started.length < stored.length) await this.file.write(threads);
+    if (recoveredRelease || interrupted.length || started.length < stored.length || this.list.some(t => t.delivery?.status === 'blocked')) await this.file.write(this.list);
+    for (const thread of this.list) if (thread.delivery?.status === 'waiting') this.scheduleDeliveryCheck(thread.id);
   }
 
   register(router: Router) {
     router
-      .on('threads.list', () => this.list.map(toView))
+      .on('threads.list', () => this.views())
       .on('threads.start', (input) => this.trackStart(async () => {
         const { text, model, machineId } = input;
         if (machineId) {
@@ -130,14 +155,27 @@ export class Threads {
           const selected = this.models.require(profileId, choice);
           // GLOSSARY: a thread keeps the profile it started with for its whole life.
           const thread = newThread({ checkoutId: checkout?.id ?? '', projectId: project?.id ?? '', profileId, model: selected }, now());
+          if (checkout) thread.workspace = await this.deliveryGit.allocate(thread.id, checkout.path);
           if (!checkout) await mkdir(join(this.home, 'workspaces', thread.id), { recursive: true });
           // Quiet: clients first see the thread once its turn is running, never as an idle empty thread.
+          this.startingThreads.add(thread.id);
           const stored = this.commit([...this.list, thread], { quiet: true });
           try {
             // Reserve synchronously with insertion, before persistence yields to another intent.
             await this.beginTurn(thread.id, text, {}, stored);
           } catch (err) {
-            await this.deleteThreads([this.require(thread.id)]);
+            this.startingThreads.delete(thread.id);
+            if (thread.workspace) {
+              // A failed start must leave a recoverable owner for its allocated worktree.
+              const live = await this.transcript(thread.id);
+              if (!live.items.some(item => item.kind === 'user')) {
+                const turnId = randomUUID();
+                await this.addItem(thread.id, { kind: 'user', id: `${turnId}:u`, turnId, text, at: now() });
+                await this.addItem(thread.id, { kind: 'notice', id: `${turnId}:err`, turnId, tone: 'error', text: (err as Error).message });
+              }
+              await this.update(thread.id, t => ({ ...t, title: text.split('\n')[0]!.slice(0, 60), status: 'failed' }));
+              await this.flush(thread.id);
+            } else await this.deleteThreads([this.require(thread.id)]);
             throw err;
           }
           return toView(this.require(thread.id));
@@ -175,6 +213,7 @@ export class Threads {
       })
       .on('threads.fileUrl', async ({ threadId, path }) => {
         const thread = this.require(threadId);
+        if (thread.workspace?.releasedAt) throw new UserError('This workspace was archived. Saved media remains in the conversation; send a follow-up to restore a working copy.');
         const live = await this.transcript(threadId);
         this.require(threadId);
         const linked = live.items.some((item) => item.kind === 'assistant' && markdownReferences(item.text).files.includes(path));
@@ -185,6 +224,41 @@ export class Threads {
         await this.beginTurn(threadId, text, { pick });
         return null;
       })
+      .on('threads.deliverySummary', async ({ threadId }) => {
+        const thread = this.require(threadId);
+        const summary = await this.deliveryGit.summary(thread.workspace);
+        const project = thread.checkoutId ? this.projects.projectOf(this.projects.checkout(thread.checkoutId)) : undefined;
+        return { ...summary, previewAvailable: !!(project?.previewCommand && thread.workspace && !thread.workspace.releasedAt) };
+      })
+      .on('threads.deliver', ({ threadId, mode }) => this.requestDelivery(threadId, mode))
+      .on('threads.cancelDelivery', async ({ threadId }) => {
+        if (this.lifecycle.has(threadId) || this.deliveryStarting.has(threadId)) throw new UserError('Wait for the current thread action to finish.');
+        const thread = this.require(threadId);
+        if (!thread.delivery || !['queued', 'waiting', 'blocked'].includes(thread.delivery.status)) throw new UserError('Only a queued or paused delivery can be cancelled.');
+        this.clearDeliveryCheck(threadId);
+        return toView(await this.update(threadId, t => ({ ...t, delivery: undefined })));
+      })
+      .on('threads.checkDelivery', async ({ threadId }) => { await this.checkDelivery(threadId); return toView(this.require(threadId)); })
+      .on('threads.openPreview', ({ threadId }) => this.withLifecycle(threadId, async () => {
+        const thread = this.require(threadId);
+        const command = thread.checkoutId ? this.projects.projectOf(this.projects.checkout(thread.checkoutId)).previewCommand : undefined;
+        if (!command || !thread.workspace || thread.workspace.releasedAt) throw new UserError('Set a preview command in project settings first.');
+        return { url: await this.previews.open(threadId, thread.workspace.path, command) };
+      }))
+      .on('threads.archive', ({ threadId }) => this.withLifecycle(threadId, async () => {
+        let thread = this.require(threadId);
+        if (this.running.has(threadId) || thread.status === 'running') throw new UserError('Wait for the thread to finish before archiving.');
+        if (!thread.workspace || thread.workspace.releasedAt || !thread.delivery || !['delivered', 'ready'].includes(thread.delivery.status)) throw new UserError('Ship the change successfully before archiving its workspace.');
+        this.assertWorkspaceUnused(thread);
+        const verified = await this.deliveryGit.verify(thread.workspace, thread.delivery);
+        if (verified.status !== 'delivered' || verified.revision !== thread.delivery.revision) throw new UserError('This change has not been delivered. The workspace has been kept.');
+        await this.previews.stop(threadId);
+        // Journal the verified revision and release intent before touching files.
+        thread = await this.update(threadId, t => ({ ...t, delivery: verified, workspace: { ...t.workspace!, releaseRequestedAt: now() } }));
+        await this.deliveryGit.release(threadId, thread.workspace!, verified.revision!);
+        thread = await this.update(threadId, t => settle({ ...t, workspace: { ...t.workspace!, releasedAt: now() }, delivery: verified }, now()));
+        return toView(thread);
+      }))
       .on('threads.setModel', async ({ threadId, model }) => {
         const thread = this.require(threadId);
         if (this.running.has(threadId) || thread.status === 'running') throw new UserError('Wait for this turn to finish before changing its model.');
@@ -221,6 +295,104 @@ export class Threads {
 
   // ---- turns ----
 
+  private assertWorkspaceUnused(thread: Thread) {
+    const path = thread.workspace!.path;
+    if (this.projects.state().checkouts.some(c => samePath(c.path, path)) || this.list.some(t => t.id !== thread.id && t.workspace && !t.workspace.releasedAt && (samePath(t.workspace.path, path) || samePath(t.workspace.sourcePath, path)))) throw new UserError('Another checkout or thread still uses this workspace.');
+  }
+
+  private async withLifecycle<T>(id: string, action: () => Promise<T>): Promise<T> {
+    if (this.closing) throw new UserError('This machine is shutting down');
+    this.require(id);
+    if (this.lifecycle.has(id)) throw new UserError('Wait for the current thread action to finish.');
+    this.lifecycle.add(id);
+    const pending = action();
+    this.starts.add(pending);
+    try { return await pending; }
+    finally {
+      this.lifecycle.delete(id); this.starts.delete(pending);
+      // Preview startup can overlap the end of work. Release its reservation
+      // before dispatching a queued delivery that waited behind it.
+      if (this.list.find(t => t.id === id)?.status === 'idle') await this.dispatchDelivery(id);
+    }
+  }
+
+  private async requestDelivery(threadId: string, mode: DeliveryMode) {
+    await this.withLifecycle(threadId, async () => {
+      const thread = this.require(threadId);
+      if (!thread.workspace || thread.workspace.releasedAt) throw new UserError('Start a new thread in a committed Git project to use an owned worktree.');
+      if (thread.delivery && ['queued', 'running', 'waiting'].includes(thread.delivery.status)) throw new UserError('Delivery is already requested.');
+      const baseBranch = await this.deliveryGit.target(thread.workspace);
+      const project = this.projects.projectOf(this.projects.checkout(thread.checkoutId));
+      const delivery: ThreadDelivery = { mode, policy: thread.delivery?.pullRequestUrl ? 'pull-request' : project.deliveryPolicy ?? 'direct', baseBranch, requestedAt: now(), status: 'queued' };
+      try { await this.update(threadId, t => ({ ...t, delivery })); }
+      catch (error) {
+        // A rejected request must never become an in-memory publication grant.
+        this.list = this.list.map(t => t.id === threadId ? { ...t, delivery: thread.delivery } : t);
+        this.broadcast('threads.changed', this.views());
+        throw error;
+      }
+    });
+    await this.dispatchDelivery(threadId);
+    return toView(this.require(threadId));
+  }
+
+  private async dispatchDelivery(threadId: string) {
+    const thread = this.require(threadId);
+    if (this.closing || this.lifecycle.has(threadId) || this.running.has(threadId) || thread.status === 'running' || thread.delivery?.status !== 'queued') return;
+    this.deliveryStarting.add(threadId);
+    try { await this.beginTurn(threadId, '', { delivery: true }); }
+    catch (error) {
+      await this.update(threadId, t => t.delivery ? { ...t, delivery: { ...t.delivery, status: 'blocked', detail: (error as Error).message } } : t);
+    }
+    finally { this.deliveryStarting.delete(threadId); }
+  }
+
+  private clearDeliveryCheck(threadId: string) {
+    clearTimeout(this.deliveryTimers.get(threadId)); this.deliveryTimers.delete(threadId);
+  }
+
+  private scheduleDeliveryCheck(threadId: string) {
+    this.clearDeliveryCheck(threadId);
+    if (this.closing) return;
+    const timer = setTimeout(() => {
+      this.deliveryTimers.delete(threadId);
+      void this.checkDelivery(threadId).catch(error => console.error('[delivery] checking delivery failed', error));
+    }, 30_000);
+    timer.unref(); this.deliveryTimers.set(threadId, timer);
+  }
+
+  private async recordDeliveryWait(threadId: string, error: Error) {
+    const delivery = this.require(threadId).delivery!;
+    const withinBudget = Date.now() - Date.parse(delivery.requestedAt) < 60 * 60_000;
+    const waiting = error instanceof DeliveryPending && withinBudget;
+    await this.update(threadId, t => ({ ...t, delivery: { ...t.delivery!, status: waiting ? 'waiting' : 'blocked', detail: error.message, waitingOn: error instanceof DeliveryPending ? error.continueAgent ? 'agent' : error.waitingOn : undefined } }));
+    if (waiting) this.scheduleDeliveryCheck(threadId);
+    else this.clearDeliveryCheck(threadId);
+  }
+
+  private async checkDelivery(threadId: string) {
+    const current = this.require(threadId);
+    if (current.delivery?.status !== 'waiting') return;
+    if (this.running.has(threadId) || this.lifecycle.has(threadId)) { this.scheduleDeliveryCheck(threadId); return; }
+    await this.withLifecycle(threadId, async () => {
+      const thread = this.require(threadId);
+      if (thread.delivery?.status !== 'waiting' || !thread.workspace) return;
+      try {
+        const verified = await this.deliveryGit.verify(thread.workspace, thread.delivery);
+        await this.update(threadId, t => ({ ...t, delivery: verified }));
+        this.clearDeliveryCheck(threadId);
+      } catch (error) {
+        const attempts = thread.delivery.continuationAttempts ?? 0;
+        if (error instanceof DeliveryPending && error.continueAgent && thread.status === 'idle' && attempts < 3 && Date.now() - Date.parse(thread.delivery.requestedAt) < 60 * 60_000) {
+          await this.update(threadId, t => ({ ...t, delivery: { ...t.delivery!, status: 'queued', continuationAttempts: attempts + 1, detail: error.message } }));
+          this.clearDeliveryCheck(threadId);
+        } else if (error instanceof DeliveryPending && error.continueAgent && attempts >= 3) {
+          await this.recordDeliveryWait(threadId, new UserError('Delivery needs attention after three follow-ups. The workspace has been kept.'));
+        } else await this.recordDeliveryWait(threadId, error as Error);
+      }
+    });
+  }
+
   private trackStart<T>(start: () => Promise<T>): Promise<T> {
     const pending = start();
     this.starts.add(pending);
@@ -233,6 +405,7 @@ export class Threads {
     if (threads.some((t) => this.running.has(t.id) || t.status === 'running')) {
       throw new UserError('Stop the thread before deleting it');
     }
+    if (threads.some(t => this.lifecycle.has(t.id) || t.delivery?.status === 'queued' || t.delivery?.status === 'waiting' || (t.workspace && !t.workspace.releasedAt))) throw new UserError('Archive the delivered workspace before deleting this thread. Unpublished work has been kept.');
     const ids = new Set(threads.map((t) => t.id));
     const saved = this.commit(this.list.filter((t) => !ids.has(t.id)));
     const writes: Promise<void>[] = [];
@@ -249,6 +422,8 @@ export class Threads {
         writes.push(live.file.idle());
       }
       this.transcripts.delete(id);
+      this.startingThreads.delete(id);
+      this.clearDeliveryCheck(id);
     }
     await saved;
     await Promise.all(writes);
@@ -261,6 +436,8 @@ export class Threads {
   private beginTurn(threadId: string, text: string, options: TurnOptions = {}, stored?: Promise<void>) {
     if (this.closing) throw new UserError('This machine is shutting down');
     const thread = this.require(threadId);
+    if (this.lifecycle.has(threadId)) throw new UserError('Wait for the current thread action to finish.');
+    if (thread.delivery?.status === 'queued' && !options.delivery && !options.resume && !options.retry) throw new UserError('Cancel the queued delivery before sending more work.');
     if (options.resume) assertResumable(thread);
     if (this.running.has(threadId) || thread.status === 'running') throw new UserError('This thread is already working. Stop it or wait for it to finish.');
     const controller = new AbortController();
@@ -279,22 +456,38 @@ export class Threads {
       let thread = this.require(threadId);
       if (thread.checkoutId) release = this.projects.useCheckout(thread.checkoutId);
       let resume = options.resume ?? false;
+      let delivering = options.delivery ?? false;
       let pick = options.pick;
       if (resume) assertResumable(thread);
-      if (options.retry) ({ text, resume, pick } = retryOf(thread, (await this.transcript(threadId)).items));
-      const prompt = pick ? pickPrompt((await this.transcript(threadId)).items, pick, text) : text;
-      if (prompt === undefined) throw new UserError('That option is no longer available');
+      if (options.retry || resume) {
+        const items = (await this.transcript(threadId)).items;
+        const last = items.findLast(item => item.kind === 'user');
+        delivering = !!(last?.kind === 'user' && last.delivery && thread.delivery);
+        if (options.retry) ({ text, resume, pick } = retryOf(thread, items));
+      }
+      const picked = pick ? pickPrompt((await this.transcript(threadId)).items, pick, text) : text;
+      if (picked === undefined) throw new UserError('That option is no longer available');
       if (!this.profiles.get(thread.profileId)) throw new UserError('The profile this thread started with no longer exists');
       const access = await this.profiles.hubAccess(thread.profileId, thread.model.harnessId === 'codex' ? 'openai' : 'anthropic');
       if (controller.signal.aborted || this.closing) throw new UserError('Turn interrupted before starting');
       thread = this.require(threadId);
       thread = { ...thread, model: this.models.require(thread.profileId, thread.model) };
+      if (thread.workspace?.releasedAt) {
+        const workspace = await this.deliveryGit.allocate(threadId, thread.workspace.sourcePath, thread.delivery?.publishedRevision ?? 'HEAD');
+        if (!workspace) throw new UserError('Could not restore an owned workspace.');
+        thread = { ...thread, workspace, sessionId: null, delivery: undefined };
+      }
+      if (delivering) thread = { ...thread, delivery: { ...thread.delivery!, status: 'running', detail: undefined } };
+      else if (thread.delivery && ['delivered', 'ready', 'waiting'].includes(thread.delivery.status)) { this.clearDeliveryCheck(threadId); thread = { ...thread, delivery: { ...thread.delivery, status: 'blocked', detail: 'New work needs to be shipped before archiving.' } }; }
       const cwd = this.cwd(thread);
+      const prompt = delivering && !resume ? deliveryPrompt(thread.workspace!, thread.delivery!) : picked;
+      if (delivering && !resume) text = thread.delivery!.mode === 'review' ? 'Prepare for review.' : `Ship to ${thread.delivery!.baseBranch} when ready.`;
       const next = startTurn(thread, text, now());
       const turnId = randomUUID();
       started = true;
+      this.startingThreads.delete(thread.id);
       await this.update(thread.id, () => next);
-      await this.addItem(thread.id, { kind: 'user', id: `${turnId}:u`, turnId, text, at: now(), ...(resume ? { resume } : {}), ...(pick ? { pick } : {}) });
+      await this.addItem(thread.id, { kind: 'user', id: `${turnId}:u`, turnId, text, at: now(), ...(resume ? { resume } : {}), ...(delivering ? { delivery: thread.delivery!.mode } : {}), ...(pick ? { pick } : {}) });
       const env = harnessEnv(process.env, access, configFolderOf(this.home, thread.profileId));
       if (thread.model.harnessId === 'codex') {
         delete env.ANTHROPIC_AUTH_TOKEN; delete env.ANTHROPIC_BASE_URL; delete env.CLAUDE_CONFIG_DIR;
@@ -303,7 +496,7 @@ export class Threads {
         env.ACCIO_OPENAI_KEY = access.accessKey;
       }
       const grant = this.tools?.grant(thread.id);
-      const turn = this.runTurn(next, turnId, { cwd, prompt, env, ...(grant ? { tools: grant.access } : {}), signal: controller.signal });
+      const turn = this.runTurn(next, turnId, { cwd, prompt, env, ...(grant ? { tools: grant.access } : {}), signal: controller.signal }, delivering);
       void turn.finally(() => grant?.revoke()).catch(() => {});
       this.turns.add(turn);
       void turn.then(() => this.turns.delete(turn), (err) => {
@@ -323,6 +516,7 @@ export class Threads {
     thread: Thread,
     turnId: string,
     run: { cwd: string; prompt: string; env: Record<string, string>; tools?: ToolAccess; signal: AbortSignal },
+    delivering = false,
   ) {
     const transcript = new TurnTranscript(turnId);
     const startedAt = Date.now();
@@ -360,6 +554,18 @@ export class Threads {
       }
     } finally {
       try {
+        if (delivering) {
+          const current = this.require(thread.id);
+          try {
+            if (outcome !== 'completed') throw new UserError('Delivery paused. Check the conversation, then request Ship again.');
+            const verified = await this.deliveryGit.verify(current.workspace!, current.delivery!);
+            await this.update(thread.id, t => ({ ...t, delivery: verified }));
+          } catch (error) {
+            const detail = (error as Error).message;
+            await this.recordDeliveryWait(thread.id, error as Error);
+            await this.addItem(thread.id, { kind: 'notice', id: `${turnId}:delivery`, turnId, tone: 'info', text: detail });
+          }
+        }
         if (outcome === 'interrupted') {
           await this.addItem(thread.id, { kind: 'notice', id: `${turnId}:stop`, turnId, tone: 'info', text: 'Stopped.' });
         }
@@ -375,6 +581,7 @@ export class Threads {
         // A storage failure must never leave a finished turn holding its slot.
         this.running.delete(thread.id);
         await this.update(thread.id, (t) => endTurn(t, outcome ?? 'failed', now()));
+        if (outcome === 'completed') await this.dispatchDelivery(thread.id);
       }
     }
   }
@@ -432,7 +639,7 @@ export class Threads {
   // ---- storage ----
 
   private cwd(thread: Thread) {
-    return thread.checkoutId ? this.projects.checkout(thread.checkoutId).path : join(this.home, 'workspaces', thread.id);
+    return thread.workspace && !thread.workspace.releasedAt ? thread.workspace.path : thread.checkoutId ? this.projects.checkout(thread.checkoutId).path : join(this.home, 'workspaces', thread.id);
   }
 
   private require(id: string): Thread {
@@ -453,9 +660,11 @@ export class Threads {
   private async commit(next: Thread[], { quiet = false } = {}) {
     // Memory first, synchronously, so concurrent updates never start from a stale list.
     this.list = next;
-    if (!quiet) this.broadcast('threads.changed', next.map(toView));
+    if (!quiet) this.broadcast('threads.changed', this.views());
     await this.file.write(next);
   }
+
+  private views() { return this.list.filter(t => !this.startingThreads.has(t.id)).map(toView); }
 
   private transcriptPath(id: string) {
     return join(this.home, 'transcripts', `${id}.json`);
@@ -512,10 +721,12 @@ export class Threads {
   /** Interrupts turns and flushes their resumable state before the machine exits. */
   async close() {
     this.closing = true;
+    for (const id of this.deliveryTimers.keys()) this.clearDeliveryCheck(id);
     for (const controller of this.running.values()) controller.abort();
     await Promise.allSettled([...this.starts]);
     await Promise.allSettled([...this.preparing]);
     await Promise.allSettled([...this.turns]);
+    await this.previews.close();
     for (const id of this.transcripts.keys()) await this.flush(id);
     await this.file.idle();
   }

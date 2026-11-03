@@ -19,6 +19,8 @@ export function ProjectSheet({ project, onClose }: { project: ProjectView; onClo
   const threadCount = threads.filter((t) => t.projectId === project.id).length;
   const { busy, error, run } = useAction();
   const [confirming, setConfirming] = useState<string>();
+  const [policy, setPolicy] = useState(project.deliveryPolicy ?? 'direct');
+  const [previewCommand, setPreviewCommand] = useState(project.previewCommand ?? '');
 
   const remove = (checkoutId: string) =>
     run(async () => {
@@ -59,6 +61,19 @@ export function ProjectSheet({ project, onClose }: { project: ProjectView; onClo
             </small>
           </label>
         ) : null}
+        <label className="field">
+          <span>Ship changes</span>
+          <select value={policy} disabled={busy} onChange={e => setPolicy(e.target.value as typeof policy)}>
+            <option value="direct">Directly to the default branch</option>
+            <option value="pull-request">Through a pull request</option>
+          </select>
+        </label>
+        <label className="field">
+          <span>Preview command</span>
+          <input value={previewCommand} onChange={e => setPreviewCommand(e.target.value)} placeholder="pnpm dev --port {port}" />
+          <small className="hint">Optional. Runs in the thread’s worktree with its own PORT and app state. Use {'{port}'} where the command needs its assigned port.</small>
+        </label>
+        {(policy !== (project.deliveryPolicy ?? 'direct') || previewCommand !== (project.previewCommand ?? '')) && <button className="primary" disabled={busy} onClick={() => void run(() => client.call('projects.setDelivery', { projectId: project.id, deliveryPolicy: policy, previewCommand }))}>Save delivery settings</button>}
         <div className="field">
           <span>Checkouts on this machine</span>
           <div className="list">

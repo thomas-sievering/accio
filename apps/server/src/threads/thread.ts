@@ -42,7 +42,7 @@ export function fromStored(t: Omit<Thread, 'snoozedUntil' | 'settledAt' | 'model
  * now exists only once its first message is sent, so these are dropped on load.
  */
 export function dropUnstarted(threads: readonly Thread[]): Thread[] {
-  return threads.filter((t) => !(t.status === 'idle' && t.sessionId === null && t.title === NEW_THREAD_TITLE));
+  return threads.filter((t) => t.workspace || !(t.status === 'idle' && t.sessionId === null && t.title === NEW_THREAD_TITLE));
 }
 
 /** GLOSSARY: Snooze. A thread hides until `until`; snoozing a settled thread reopens it first. */

@@ -13,6 +13,7 @@ export function Composer({
   placeholder,
   toolbar,
   attachment,
+  actions,
 }: {
   onSend: (text: string) => Promise<void>;
   /** Set while a turn runs: the send button becomes Stop. */
@@ -23,6 +24,8 @@ export function Composer({
   toolbar?: ReactNode;
   /** A chip above the message, such as a picked option; with one, the message may be empty. */
   attachment?: { label: string; onRemove: () => void };
+  /** Compact thread delivery controls, outside the message input. */
+  actions?: ReactNode;
 }) {
   const [text, setText] = useState('');
   const { busy, error, run } = useAction();
@@ -56,6 +59,7 @@ export function Composer({
 
   return (
     <div className="composer-wrap">
+      {actions}
       {error && <p className="error composer-error">{error}</p>}
       <form className="composer" onSubmit={submit}>
         {attachment && <div className="composer-chips">
