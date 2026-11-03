@@ -1,17 +1,20 @@
 import type { z } from 'zod';
 import { machineMethods } from './machine.js';
+import { hubMethods } from './hub.js';
 import { profileMethods, type ProfileEvents } from './profiles.js';
 import { projectMethods, type ProjectEvents } from './projects.js';
 import { threadMethods, type ThreadEvents } from './threads.js';
 
 export * from './rpc.js';
 export * from './machine.js';
+export * from './hub.js';
 export * from './profiles.js';
 export * from './projects.js';
 export * from './threads.js';
 
 export const methods = {
   ...machineMethods,
+  ...hubMethods,
   ...profileMethods,
   ...projectMethods,
   ...threadMethods,

@@ -3,6 +3,7 @@ import { startTransport } from './rpc/transport.js';
 import { registerMachine } from './machine/machine.js';
 import { Hub, startHubProxy, type Fetch } from '@accio/hub';
 import { Profiles } from './profiles/profiles.js';
+import { registerHub } from './hub/hub.js';
 import { renameAccountsToProfiles } from './store/renameAccountsToProfiles.js';
 import { Projects } from './projects/projects.js';
 import { Threads } from './threads/threads.js';
@@ -53,6 +54,7 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
   const profiles = new Profiles(opts.home, hub, hubProxy.url, broadcast);
   await profiles.load();
   profiles.register(router);
+  registerHub(router, { hub, url: hubProxy.url, profiles });
 
   const projects = new Projects(opts.home, profiles, broadcast);
   await projects.load();

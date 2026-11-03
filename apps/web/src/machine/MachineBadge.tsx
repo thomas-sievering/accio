@@ -3,7 +3,7 @@ import type { MachineInfo } from '@accio/protocol';
 import { useClient, useConnectionStatus } from '../app/connection';
 
 /** Which machine this client talks to, and whether the link is up. */
-export function MachineBadge() {
+export function MachineBadge({ onOpen }: { onOpen: () => void }) {
   const client = useClient();
   const status = useConnectionStatus();
   const [machine, setMachine] = useState<MachineInfo | null>(null);
@@ -22,9 +22,9 @@ export function MachineBadge() {
           : 'Disconnected';
 
   return (
-    <div className={`machine status-${status}`} title={machine ? `accio ${machine.version} · ${machine.platform}` : undefined}>
+    <button className={`machine status-${status}`} title={machine ? `accio ${machine.version} · ${machine.platform}` : undefined} onClick={onOpen}>
       <span className="dot" />
       <span>{label}</span>
-    </div>
+    </button>
   );
 }

@@ -1,8 +1,7 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { MachineBadge } from '../machine/MachineBadge';
 import { ProfilesProvider, useProfiles } from '../profiles/profiles';
 import { ProfileSwitcher } from '../profiles/ProfileSwitcher';
-import { ProfilesSheet } from '../profiles/ProfilesSheet';
 import { ProjectsProvider, useProjects } from '../projects/projects';
 import { ProjectScopeMenu } from '../projects/ProjectScopeMenu';
 import { AddProjectSheet } from '../projects/AddProjectSheet';
@@ -12,9 +11,10 @@ import { NewThreadButton } from '../threads/NewThreadButton';
 import { ThreadList } from '../threads/ThreadList';
 import { ThreadPane } from '../threads/ThreadPane';
 import { ThreadSearch } from '../threads/ThreadSearch';
-import { FolderPlus, Users } from './icons';
+import { FolderPlus, Settings as Gear } from './icons';
+import { Settings, type SettingsRoute } from './Settings';
 
-type OpenSheet = { kind: 'profiles'; profileId?: string } | { kind: 'addProject' } | { kind: 'project'; id: string } | null;
+type OpenSheet = { kind: 'addProject' } | { kind: 'project'; id: string } | null;
 
 export function App() {
   return (
@@ -34,15 +34,19 @@ function Shell() {
   const { threads, selectedId, projectScope, setProjectScope } = useThreads();
   const thread = threads?.find((t) => t.id === selectedId);
   const [sheet, setSheet] = useState<OpenSheet>(null);
+  const [settings, setSettings] = useState<SettingsRoute | null>(null);
+  const closeSettings = useCallback(() => setSettings(null), []);
   const close = () => setSheet(null);
   const openProject = sheet?.kind === 'project' ? state?.projects.find((p) => p.id === sheet.id) : undefined;
   const noProfiles = profiles?.length === 0;
+
+  if (settings) return <Settings route={settings} onRoute={setSettings} onClose={closeSettings} />;
 
   return (
     <div className="layout">
       <aside className="sidebar">
         <header className="side-top drag">
-          <ProfileSwitcher onManage={() => setSheet({ kind: 'profiles' })} />
+          <ProfileSwitcher onManage={() => setSettings({ section: 'profiles' })} />
           <button
             className="side-icon"
             title="Add project"
@@ -62,15 +66,15 @@ function Shell() {
           <ThreadList />
         </nav>
         <footer className="side-foot">
-          <MachineBadge />
-          <button className="side-icon" title="Profiles" aria-label="Profiles" onClick={() => setSheet({ kind: 'profiles' })}>
-            <Users />
+          <MachineBadge onOpen={() => setSettings({ section: 'machine' })} />
+          <button className="side-icon" title="Settings" aria-label="Settings" onClick={() => setSettings({ section: 'profiles' })}>
+            <Gear />
           </button>
         </footer>
       </aside>
       <main className="main">
         {thread ? (
-          <ThreadPane key={thread.id} thread={thread} onOpenProfile={(profileId) => setSheet({ kind: 'profiles', profileId })} />
+          <ThreadPane key={thread.id} thread={thread} onOpenProfile={(profileId) => setSettings({ section: 'profiles', profileId })} />
         ) : (
           <>
             <header className="main-top drag" />
@@ -78,7 +82,7 @@ function Shell() {
               {noProfiles ? (
                 <>
                   <p>Add a profile first. Every thread runs under one.</p>
-                  <button className="ghost" onClick={() => setSheet({ kind: 'profiles' })}>
+                  <button className="ghost" onClick={() => setSettings({ section: 'profiles', profileId: 'new' })}>
                     Add profile
                   </button>
                 </>
@@ -96,7 +100,6 @@ function Shell() {
           </>
         )}
       </main>
-      {sheet?.kind === 'profiles' && <ProfilesSheet onClose={close} openProfileId={sheet.profileId} />}
       {sheet?.kind === 'addProject' && <AddProjectSheet onClose={close} />}
       {openProject && <ProjectSheet project={openProject} onClose={close} />}
     </div>
