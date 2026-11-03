@@ -12,12 +12,14 @@ One machine, Claude only, through the Claude Agent SDK.
 
 ## Run
 
+accio uses pnpm (pinned in `package.json`; `corepack enable pnpm` provides it).
+
 ```sh
-npm install
-npm start          # build, then open the desktop app (starts this machine's server)
-npm run server     # server only; open the printed http://127.0.0.1:47321/#token=… link in a browser
-npm test           # vitest
-npm run typecheck
+pnpm install
+pnpm start         # build, then open the desktop app (starts this machine's server)
+pnpm server        # server only; open the printed http://127.0.0.1:47321/#token=… link in a browser
+pnpm test          # vitest
+pnpm typecheck
 ```
 
 State lives in `~/.accio` (`ACCIO_HOME` overrides it; `ACCIO_PORT` and `ACCIO_HUB_PORT` the ports, default 47321 and 47322). Hub accounts are in `~/.accio/hub/profiles.json`. State from before the Account → Profile rename moves to the new names on first start.
