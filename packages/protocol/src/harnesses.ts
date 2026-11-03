@@ -2,7 +2,11 @@ import { z } from 'zod';
 import { method } from './rpc.js';
 import type { ProviderId } from './profiles.js';
 
-export type HarnessModel = { id: string; name: string; providerId: ProviderId; description: string };
+export type HarnessModel = {
+  id: string; name: string; providerId: ProviderId; description: string;
+  /** The signed-in account's own default, as reported by the provider. */
+  isDefault?: boolean;
+};
 
 /** GLOSSARY: Harness. Which ones exist is a shared setting; each machine reports which it has. */
 export type HarnessView = {
