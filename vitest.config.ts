@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 export default defineConfig({
   resolve: {
     alias: {
+      '@accio/persistence': fileURLToPath(new URL('./packages/persistence/src/index.ts', import.meta.url)),
       '@accio/protocol': fileURLToPath(new URL('./packages/protocol/src/index.ts', import.meta.url)),
       '@accio/hub': fileURLToPath(new URL('./apps/hub/src/index.ts', import.meta.url)),
     },

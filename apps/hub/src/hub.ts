@@ -1,6 +1,5 @@
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
-import { access, rename } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import {
   SignInError,
   beginSignIn,
@@ -12,7 +11,8 @@ import {
   type Fetch,
   type PendingSignIn,
 } from './claudeOAuth.js';
-import { SecretFile } from './store.js';
+import { JsonFile } from '@accio/persistence';
+import { loadAccounts, type AccountData, type StoredAccount } from './migrateAccounts.js';
 
 /**
  * GLOSSARY: Hub. Holds named Claude accounts selected by profiles and hands out one access
@@ -34,13 +34,11 @@ export type AccountSummary = {
   claudeAccountId: string | null;
 };
 
-type StoredAccount = { id: string; name: string; account: ClaudeAccount | null };
-type Data = { profiles: HubProfile[]; accounts: StoredAccount[] };
-
 const SIGN_IN_TTL_MS = 15 * 60 * 1000;
 
 export class Hub {
-  private file: SecretFile<Data | (HubProfile & { account?: ClaudeAccount; login?: ClaudeAccount })[]>;
+  private file: JsonFile<AccountData>;
+  private queue: Promise<unknown> = Promise.resolve();
   private profiles: HubProfile[] = [];
   private accounts: StoredAccount[] = [];
   private pending = new Map<string, PendingSignIn & { accountId: string; startedAt: number }>();
@@ -50,7 +48,7 @@ export class Hub {
     home: string,
     private fetchImpl: Fetch = fetch,
   ) {
-    this.file = new SecretFile(join(home, 'hub', 'profiles.json'), () => ({ profiles: [], accounts: [] }));
+    this.file = new JsonFile(join(home, 'hub', 'profiles.json'), () => ({ profiles: [], accounts: [] }));
   }
 
   /** The file that holds the hub's profiles and accounts. */
@@ -59,34 +57,57 @@ export class Hub {
   }
 
   async load() {
-    // Before the Account → Profile rename this file was hub/accounts.json.
-    const old = join(dirname(this.file.path), 'accounts.json');
-    if (!(await exists(this.file.path)) && (await exists(old))) await rename(old, this.file.path);
-    const stored = await this.file.read();
-    if (Array.isArray(stored)) {
-      this.accounts = stored.flatMap((p) => {
-        const account = p.account ?? p.login;
-        return account ? [{ id: `account-${p.id}`, name: account.email ?? p.id, account }] : [];
-      });
-      this.profiles = stored.map((p) => ({ id: p.id, accessKey: p.accessKey, accountId: this.accounts.some((a) => a.id === `account-${p.id}`) ? `account-${p.id}` : null }));
-      await this.commit(this.profiles);
-    } else {
-      this.profiles = stored.profiles;
-      this.accounts = stored.accounts;
-    }
+    const data = await loadAccounts(this.file);
+    this.profiles = data.profiles;
+    this.accounts = data.accounts;
   }
 
   /** Creates the profile's access key on first use; returns it. */
-  async ensureProfile(id: string): Promise<string> {
-    const existing = this.profiles.find((a) => a.id === id);
-    if (existing) return existing.accessKey;
-    const profile: HubProfile = { id, accessKey: `accio-${randomBytes(24).toString('base64url')}`, accountId: null };
-    await this.commit([...this.profiles, profile]);
-    return profile.accessKey;
+  ensureProfile(id: string): Promise<string> {
+    return this.change(async () => {
+      const existing = this.profiles.find((p) => p.id === id);
+      if (existing) return existing.accessKey;
+      const profile = this.newProfile(id);
+      await this.commit([...this.profiles, profile]);
+      return profile.accessKey;
+    });
   }
 
-  async removeProfile(id: string) {
-    await this.commit(this.profiles.filter((a) => a.id !== id));
+  /** Serializes selection with account deletion and prepares the machine before publication.
+   * If preparation fails, restore the previous durable hub state without publishing it.
+   */
+  configureProfile(id: string, accountId: string | null | undefined, prepare: (key: string) => Promise<void>) {
+    return this.change(async () => {
+      if (accountId !== undefined && accountId !== null) this.requireAccount(accountId);
+      const existing = this.profiles.find((p) => p.id === id);
+      const profile = { ...(existing ?? this.newProfile(id)) };
+      if (accountId !== undefined) profile.accountId = accountId;
+      const next = existing ? this.profiles.map((p) => p.id === id ? profile : p) : [...this.profiles, profile];
+      await this.prepareProfiles(next, () => prepare(profile.accessKey));
+    });
+  }
+
+  removeProfile(id: string, prepare: () => Promise<void> = async () => {}) {
+    return this.change(() => this.prepareProfiles(this.profiles.filter((p) => p.id !== id), prepare));
+  }
+
+  private newProfile(id: string): HubProfile {
+    return { id, accessKey: `accio-${randomBytes(24).toString('base64url')}`, accountId: null };
+  }
+
+  private async prepareProfiles(next: HubProfile[], prepare: () => Promise<void>) {
+    await this.file.write({ profiles: next, accounts: this.accounts });
+    try {
+      await prepare();
+    } catch (error) {
+      try {
+        await this.file.write({ profiles: this.profiles, accounts: this.accounts });
+      } catch (rollbackError) {
+        throw new AggregateError([error, rollbackError], 'Profile preparation and restoring the hub store both failed.');
+      }
+      throw error;
+    }
+    this.profiles = next;
   }
 
   summary(id: string): AccountSummary {
@@ -99,17 +120,6 @@ export class Hub {
     };
   }
 
-  /** Starts a sign-in; open the returned URL, then paste Claude's code into completeSignIn. */
-  beginSignIn(profileId: string): { signInId: string; url: string } {
-    const profile = this.require(profileId);
-    if (!profile.accountId) {
-      const id = `account-${profileId}`;
-      if (!this.accounts.some((a) => a.id === id)) this.accounts.push({ id, name: profileId, account: null });
-      profile.accountId = id;
-    }
-    return this.beginAccountSignIn(profile.accountId);
-  }
-
   beginAccountSignIn(accountId: string): { signInId: string; url: string } {
     this.requireAccount(accountId);
     const now = Date.now();
@@ -120,36 +130,17 @@ export class Hub {
     return { signInId, url: p.url };
   }
 
-  /**
-   * Exchanges the pasted code for an account. `accept` sees who signed in before
-   * anything is stored and may refuse it.
-   */
-  async completeSignIn(
-    signInId: string,
-    pasted: string,
-    accept: (who: AccountSummary, profileId: string) => void = () => {},
-  ): Promise<string> {
+  async completeAccountSignIn(signInId: string, pasted: string) {
     const p = this.pending.get(signInId);
     if (!p || Date.now() - p.startedAt > SIGN_IN_TTL_MS) throw new SignInError('This sign-in has expired. Start it again.');
     const code = readPastedCode(pasted, p);
     const account = await exchangeCode(this.fetchImpl, p, code);
-    if (this.pending.get(signInId) !== p) throw new SignInError('This sign-in was cancelled. Start it again.');
-    this.pending.delete(signInId);
-    const profileId = this.profiles.find((profile) => profile.accountId === p.accountId)?.id ?? p.accountId;
-    accept({ signedIn: true, email: account.email, organization: account.organization, claudeAccountId: account.claudeAccountId }, profileId);
-    await this.setAccount(p.accountId, account);
-    return profileId;
-  }
-
-  async completeAccountSignIn(signInId: string, code: string) {
-    const id = this.pending.get(signInId)?.accountId;
-    await this.completeSignIn(signInId, code);
-    return this.accountView(id!);
-  }
-
-  async signOut(profileId: string) {
-    const id = this.require(profileId).accountId;
-    if (id) await this.signOutAccount(id);
+    return this.change(async () => {
+      if (this.pending.get(signInId) !== p) throw new SignInError('This sign-in was cancelled. Start it again.');
+      await this.setAccount(p.accountId, account);
+      this.pending.delete(signInId);
+      return this.accountView(p.accountId);
+    });
   }
 
   /** The profile a request's key belongs to, or undefined for an unknown key. */
@@ -171,7 +162,9 @@ export class Hub {
     let pending = this.refreshing.get(accountId!);
     if (!pending) {
       pending = refreshAccount(this.fetchImpl, account).then(async (fresh) => {
-        if (this.accounts.find((a) => a.id === accountId)?.account === account) await this.setAccount(accountId!, fresh);
+        await this.change(async () => {
+          if (this.accounts.find((a) => a.id === accountId)?.account === account) await this.setAccount(accountId!, fresh);
+        });
         return fresh;
       });
       this.refreshing.set(accountId!, pending);
@@ -182,12 +175,13 @@ export class Hub {
     }
     await pending;
     // Sign-out, account switching, or a fresh sign-in may have happened during refresh.
-    const currentId = this.require(profileId).accountId;
+    const currentId = this.profiles.find((p) => p.id === profileId)?.accountId;
     return this.accounts.find((a) => a.id === currentId)?.account?.accessToken ?? null;
   }
 
-  close(): Promise<void> {
-    return this.file.idle();
+  async close(): Promise<void> {
+    await this.queue.catch(() => {});
+    await this.file.idle();
   }
 
   private require(id: string): HubProfile {
@@ -210,31 +204,45 @@ export class Hub {
     return id ? this.accountView(id) : null;
   }
 
-  async saveAccount(name: string, id?: string) {
-    if (id) this.requireAccount(id).name = name;
-    else { id = randomUUID(); this.accounts.push({ id, name, account: null }); }
-    await this.commit(this.profiles);
-    return this.accountView(id);
+  saveAccount(name: string, id?: string) {
+    return this.change(async () => {
+      name = name.trim();
+      if (!name || name.length > 80) throw new SignInError('Account name must have 1 to 80 characters.');
+      if (id) this.requireAccount(id);
+      const saved = id ?? randomUUID();
+      const accounts = id ? this.accounts.map((a) => a.id === id ? { ...a, name } : a) : [...this.accounts, { id: saved, name, account: null }];
+      await this.commit(this.profiles, accounts);
+      return this.accountView(saved);
+    });
   }
 
-  async selectAccount(profileId: string, accountId: string | null) {
-    if (accountId) this.requireAccount(accountId);
-    this.require(profileId).accountId = accountId;
-    await this.commit(this.profiles);
+  selectAccount(profileId: string, accountId: string | null) {
+    return this.change(async () => {
+      if (accountId !== undefined && accountId !== null) this.requireAccount(accountId);
+      this.require(profileId);
+      await this.commit(this.profiles.map((p) => p.id === profileId ? { ...p, accountId } : p));
+    });
   }
 
-  async deleteAccount(id: string) {
-    this.requireAccount(id);
-    if (this.profiles.some((p) => p.accountId === id)) throw new SignInError('Remove this account from its profiles before deleting it.');
-    this.accounts = this.accounts.filter((a) => a.id !== id);
+  deleteAccount(id: string) {
+    return this.change(async () => {
+      this.requireAccount(id);
+      if (this.profiles.some((p) => p.accountId === id)) throw new SignInError('Remove this account from its profiles before deleting it.');
+      await this.commit(this.profiles, this.accounts.filter((a) => a.id !== id));
+      this.cancelSignIn(id);
+    });
+  }
+
+  signOutAccount(id: string) {
+    return this.change(async () => {
+      await this.setAccount(id, null);
+      this.cancelSignIn(id);
+      return this.accountView(id);
+    });
+  }
+
+  private cancelSignIn(id: string) {
     for (const [key, p] of this.pending) if (p.accountId === id) this.pending.delete(key);
-    await this.commit(this.profiles);
-  }
-
-  async signOutAccount(id: string) {
-    for (const [key, p] of this.pending) if (p.accountId === id) this.pending.delete(key);
-    await this.setAccount(id, null);
-    return this.accountView(id);
   }
 
   private requireAccount(id: string) {
@@ -243,20 +251,20 @@ export class Hub {
     return account;
   }
 
-  private async setAccount(id: string, account: ClaudeAccount | null) {
-    this.requireAccount(id).account = account;
-    await this.commit(this.profiles);
+  private setAccount(id: string, account: ClaudeAccount | null) {
+    this.requireAccount(id);
+    return this.commit(this.profiles, this.accounts.map((a) => a.id === id ? { ...a, account } : a));
   }
 
-  private async commit(next: HubProfile[]) {
-    this.profiles = next;
-    await this.file.write({ profiles: next, accounts: this.accounts });
+  private async commit(profiles: HubProfile[], accounts = this.accounts) {
+    await this.file.write({ profiles, accounts });
+    this.profiles = profiles;
+    this.accounts = accounts;
   }
-}
 
-function exists(path: string) {
-  return access(path).then(
-    () => true,
-    () => false,
-  );
+  private change<T>(run: () => Promise<T>): Promise<T> {
+    const result = this.queue.then(run, run);
+    this.queue = result.catch(() => {});
+    return result;
+  }
 }

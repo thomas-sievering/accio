@@ -192,13 +192,20 @@ importers:
         specifier: ^45.2.1
         version: 45.2.1
 
-  apps/hub: {}
+  apps/hub:
+    dependencies:
+      '@accio/persistence':
+        specifier: workspace:*
+        version: link:../../packages/persistence
 
   apps/server:
     dependencies:
       '@accio/hub':
         specifier: workspace:*
         version: link:../hub
+      '@accio/persistence':
+        specifier: workspace:*
+        version: link:../../packages/persistence
       '@accio/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
@@ -242,6 +249,8 @@ importers:
       vite:
         specifier: ^8.3.5
         version: 8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)
+
+  packages/persistence: {}
 
   packages/protocol:
     dependencies:

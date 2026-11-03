@@ -8,8 +8,9 @@ import { writeConfigFolder, type HubAccess } from './claudeConfigFolder.js';
 /** Other slices that hold on to a profile (projects, threads) veto its deletion here. */
 export type ProfileInUse = (profileId: string) => string | undefined;
 
-/** The profiles, stored on the hub (ADR 0004): the rules in profile.ts, and their sign-in there. */
+/** The profiles, stored on the hub (ADR 0004): the rules in profile.ts, coordinated with named accounts and machine config folders here. */
 export class Profiles {
+  private queue: Promise<unknown> = Promise.resolve();
   private inUseChecks: ProfileInUse[] = [];
 
   constructor(
@@ -62,7 +63,7 @@ export class Profiles {
     router
       .on('accounts.list', () => this.hub.accountViews())
       .on('accounts.save', async ({ id, name }) => {
-        const account = await this.hub.saveAccount(name, id);
+        const account = await asUserError(() => this.hub.saveAccount(name, id));
         this.announce();
         return account;
       })
@@ -71,54 +72,37 @@ export class Profiles {
         this.announce();
         return null;
       })
-      .on('accounts.beginSignIn', ({ id }) => this.hub.beginAccountSignIn(id))
+      .on('accounts.beginSignIn', ({ id }) => asUserError(async () => this.hub.beginAccountSignIn(id)))
       .on('accounts.completeSignIn', async ({ signInId, code }) => {
         const account = await asUserError(() => this.hub.completeAccountSignIn(signInId, code));
         this.announce();
         return account;
       })
       .on('accounts.signOut', async ({ id }) => {
-        const account = await this.hub.signOutAccount(id);
+        const account = await asUserError(() => this.hub.signOutAccount(id));
         this.announce();
         return account;
       })
       .on('profiles.list', () => this.views())
-      .on('profiles.save', async (req) => {
+      .on('profiles.save', (req) => this.change(async () => {
         const { profiles, saved } = saveProfile(this.list, req);
-        if (req.accountId) this.hub.accountView(req.accountId);
-        await this.connect(saved.id);
-        if (req.accountId !== undefined) await this.hub.selectAccount(saved.id, req.accountId);
-        await this.commit(profiles);
+        await asUserError(() => this.hub.configureProfile(saved.id, req.accountId, async (accessKey) => {
+          await writeConfigFolder(this.home, saved.id, { baseUrl: this.hubUrl, accessKey });
+          await this.settings.setProfiles(profiles);
+        }));
+        this.announce();
         return this.view(saved);
-      })
-      .on('profiles.delete', async ({ id }) => {
+      }))
+      .on('profiles.delete', ({ id }) => this.change(async () => {
         const profile = this.require(id);
         for (const check of this.inUseChecks) {
           const reason = check(id);
           if (reason) throw new UserError(`${profile.name} is still used by ${reason}`);
         }
-        await this.commit(this.list.filter((a) => a.id !== id));
-        await this.hub.removeProfile(id);
+        await this.hub.removeProfile(id, () => this.settings.setProfiles(this.list.filter((a) => a.id !== id)));
+        this.announce();
         return null;
-      })
-      .on('profiles.beginSignIn', async ({ profileId }) => {
-        this.require(profileId);
-        await this.hub.ensureProfile(profileId);
-        return this.hub.beginSignIn(profileId);
-      })
-      .on('profiles.completeSignIn', async ({ signInId, code }) => {
-        const profileId = await asUserError(() =>
-          this.hub.completeSignIn(signInId, code),
-        );
-        this.announce();
-        return this.view(this.require(profileId));
-      })
-      .on('profiles.signOut', async ({ profileId }) => {
-        const profile = this.require(profileId);
-        await this.hub.signOut(profileId);
-        this.announce();
-        return this.view(profile);
-      });
+      }));
   }
 
   private view(a: Profile): ProfileView {
@@ -140,9 +124,10 @@ export class Profiles {
     this.broadcast('accounts.changed', this.hub.accountViews());
   }
 
-  private async commit(next: Profile[]) {
-    await this.settings.setProfiles(next);
-    this.announce();
+  private change<T>(run: () => Promise<T>): Promise<T> {
+    const result = this.queue.then(run, run);
+    this.queue = result.catch(() => {});
+    return result;
   }
 }
 
