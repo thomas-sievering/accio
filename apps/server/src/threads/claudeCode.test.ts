@@ -86,3 +86,27 @@ it('cleans up a query that fails, and never starts an already aborted turn', asy
   expect((await turn(controller.signal).next()).done).toBe(true);
   expect(queryMock).toHaveBeenCalledOnce();
 });
+
+it('tells Claude that the chat renders inline media', async () => {
+  const q = query();
+  q.next.mockResolvedValueOnce({ done: true, value: undefined });
+  queryMock.mockReturnValue(q);
+  const iterator = turn(new AbortController().signal);
+  await iterator.next();
+  expect(queryMock.mock.calls[0]![0].options.systemPrompt).toMatchObject({ type: 'preset', preset: 'claude_code', append: expect.stringContaining('# Inline media') });
+});
+
+it("points Claude at this turn's accio tools", async () => {
+  const q = query();
+  q.next.mockResolvedValue({ done: true, value: undefined });
+  queryMock.mockReturnValue(q);
+  const tools = { url: 'http://127.0.0.1:1/mcp', authorization: 'Bearer t' };
+  await claudeCode.run({ cwd: '.', prompt: 'hi', sessionId: null, env: {}, tools, signal: new AbortController().signal })[Symbol.asyncIterator]().next();
+  expect(queryMock.mock.calls[0]![0].options.mcpServers).toEqual({ accio: { type: 'http', url: tools.url, headers: { Authorization: 'Bearer t' } } });
+  await turn(new AbortController().signal).next();
+  expect(queryMock.mock.calls[1]![0].options.mcpServers).toBeUndefined();
+  const remote = { type: 'http' as const, url: 'http://127.0.0.1:2/mcp', headers: { Authorization: 'Bearer remote' } };
+  await claudeCode.run({ cwd: '.', prompt: 'hi', sessionId: null, env: {}, tools, mcps: { remote }, resourceInstructions: 'Enabled skill: browser', signal: new AbortController().signal })[Symbol.asyncIterator]().next();
+  expect(queryMock.mock.calls[2]![0].options.mcpServers).toMatchObject({ accio: { url: tools.url }, remote });
+  expect(queryMock.mock.calls[2]![0].options.systemPrompt.append).toContain('Enabled skill: browser');
+});

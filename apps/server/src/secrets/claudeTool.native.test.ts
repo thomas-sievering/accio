@@ -26,7 +26,7 @@ it('runs the real Claude CLI and SDK MCP handoff against a local scripted provid
     }
     const events = [
       { type: 'message_start', message: { id: `msg_${n}`, type: 'message', role: 'assistant', model: body.model, content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 10, output_tokens: 0 } } },
-      { type: 'content_block_start', index: 0, content_block: useTool ? { type: 'tool_use', id: 'secret_tool_1', name: 'mcp__accio__request_secret', input: {} } : { type: 'text', text: '' } },
+      { type: 'content_block_start', index: 0, content_block: useTool ? { type: 'tool_use', id: 'secret_tool_1', name: 'mcp__accio_secrets__request_secret', input: {} } : { type: 'text', text: '' } },
       { type: 'content_block_delta', index: 0, delta: useTool ? { type: 'input_json_delta', partial_json: JSON.stringify({ slot: 'claude.native:test', label: 'Claude token', reason: 'Verify private SDK delivery' }) } : { type: 'text_delta', text: 'Private Claude delivery complete.' } },
       { type: 'content_block_stop', index: 0 },
       { type: 'message_delta', delta: { stop_reason: useTool ? 'tool_use' : 'end_turn', stop_sequence: null }, usage: { output_tokens: 20 } },
@@ -40,7 +40,8 @@ it('runs the real Claude CLI and SDK MCP handoff against a local scripted provid
   if (event.item.kind !== 'secret') throw new Error('Missing native Claude secret request');
   await client.call('secretRequests.answer', { threadId: thread.id, requestId: event.item.requestId, answer: { type: 'once', value: marker } });
   await expect.poll(async () => (await client.call('threads.list', {})).find(t => t.id === thread.id)?.status, { timeout: 15_000 }).toBe('idle');
-  expect(bodies[0].tools.some((t: any) => t.name === 'mcp__accio__request_secret')).toBe(true);
+  expect(bodies[0].tools.some((t: any) => t.name === 'mcp__accio_secrets__request_secret')).toBe(true);
+  expect(bodies[0].tools.some((t: any) => t.name === 'mcp__accio__offer_choice')).toBe(true);
   expect(bodies).toHaveLength(2); expect(JSON.stringify(bodies)).not.toContain(marker);
   await expect(readFile(deliveredFile)).rejects.toThrow();
 }, 45_000);

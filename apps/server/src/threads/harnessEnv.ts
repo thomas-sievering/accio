@@ -24,13 +24,19 @@ const INHERITED_BLOCKLIST = [
   /^ACCIO_OPENAI_/,
 ];
 
-export function harnessEnv(base: NodeJS.ProcessEnv, access: HubAccess, configDir: string): Record<string, string> {
+/** Shared by harnesses and app previews: inherited coding-account credentials stay out. */
+export function cleanExecutionEnv(base: NodeJS.ProcessEnv): Record<string, string> {
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(base)) {
     if (value === undefined) continue;
     if (INHERITED_BLOCKLIST.some((re) => re.test(key.toUpperCase()))) continue;
     env[key] = value;
   }
+  return env;
+}
+
+export function harnessEnv(base: NodeJS.ProcessEnv, access: HubAccess, configDir: string): Record<string, string> {
+  const env = cleanExecutionEnv(base);
   env.CLAUDE_CONFIG_DIR = configDir;
   env.ANTHROPIC_BASE_URL = access.baseUrl;
   env.ANTHROPIC_AUTH_TOKEN = access.accessKey;

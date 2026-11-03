@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import { z } from 'zod';
 import { UserError } from '../rpc/router.js';
 import { SecretStoreError } from '@accio/hub';
-import { SecretToolInput, SECRET_TOOL_DESCRIPTION, type SecretToolArgs, type SecretDelivery } from './secrets.js';
+import { SecretToolInput, SECRET_TOOL_DESCRIPTION, SECRET_MCP_SERVER, type SecretToolArgs, type SecretDelivery } from './secrets.js';
 
 /** Minimal stateless MCP endpoint for resumed Codex sessions, which cannot add dynamic tools. */
 export async function secretHttpTool(request: (input: SecretToolArgs) => Promise<SecretDelivery>) {
@@ -19,7 +19,7 @@ export async function secretHttpTool(request: (input: SecretToolArgs) => Promise
       if (message.id === undefined) { res.writeHead(202).end(); return; }
       let result: unknown;
       switch (message.method) {
-        case 'initialize': result = { protocolVersion: message.params?.protocolVersion ?? '2024-11-05', capabilities: { tools: {} }, serverInfo: { name: 'accio', version: '1.0.0' } }; break;
+        case 'initialize': result = { protocolVersion: message.params?.protocolVersion ?? '2024-11-05', capabilities: { tools: {} }, serverInfo: { name: SECRET_MCP_SERVER, version: '1.0.0' } }; break;
         case 'ping': result = {}; break;
         case 'tools/list': result = { tools: [{ name: 'request_secret', description: SECRET_TOOL_DESCRIPTION, inputSchema: z.toJSONSchema(SecretToolInput) }] }; break;
         case 'tools/call': {

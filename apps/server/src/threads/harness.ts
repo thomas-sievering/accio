@@ -1,3 +1,5 @@
+import type { ToolAccess } from '../tools/tools.js';
+
 /**
  * The port between threads and the harness that runs their turns. Claude wraps
  * the Agent SDK; Codex wraps app-server. Tests can replace either adapter.
@@ -22,7 +24,7 @@ export type StreamEvent =
 export type HarnessEvent =
   | { kind: 'session'; id: string }
   | { kind: 'text'; id: string; text: string; append?: boolean }
-  | { kind: 'tool'; id: string; name: string; summary: string; status: 'running' | 'done' | 'error'; output?: string }
+  | { kind: 'tool'; id: string; name: string; summary: string; status: 'running' | 'done' | 'error'; output?: string; input?: unknown }
   | { kind: 'end'; error?: string };
 
 export type HarnessMessage =
@@ -43,19 +45,28 @@ export type HarnessMessage =
   | { type: string; session_id?: string; [k: string]: unknown };
 
 export type HarnessTurn = {
+  resourceInstructions?: string;
+  mcps?: Record<string, HarnessMcp>;
   cwd: string;
   prompt: string;
   /** Harness session to continue; null starts a new one. */
   sessionId: string | null;
   /** Harness model alias; omitted to use the account's default. */
   model?: string;
+  /** The model's display name, when known; used in the system prompt. */
+  modelName?: string;
   env: Record<string, string>;
+  /** This turn's access to accio's MCP tools; omitted when the machine serves none. */
+  tools?: ToolAccess;
   signal: AbortSignal;
   /** Bound by the machine to this turn, project and profile; never accepts identity arguments. */
   requestSecret?: (input: import('../secrets/secrets.js').SecretToolArgs) => Promise<import('../secrets/secrets.js').SecretDelivery>;
   /** Authorized saved-purpose metadata lets a fresh harness reuse the exact stable key. */
   secretPurposes?: { slot: string; name: string }[];
 };
+
+export type HarnessMcp = { type: 'http'; url: string; headers: Record<string, string> } | { type: 'stdio'; command: string; args: string[] };
+export type TurnResources = { env: Record<string, string>; instructions: string; mcps: Record<string, HarnessMcp>; snapshot: { tools: { id: string; version: string }[]; skills: { id: string; revision: string }[]; mcps: string[] }; release: () => void };
 
 export interface Harness {
   run(run: HarnessTurn): AsyncIterable<HarnessMessage>;

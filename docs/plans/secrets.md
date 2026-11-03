@@ -1,6 +1,6 @@
 # Private secret entry and saved secrets
 
-Status: implemented for the current local-machine release, 2026-11-03. Private entry, project memory, automatic reuse, Settings management, encrypted Hub storage, and Claude/Codex bridges ship together. Remote relay, opaque-reference consumers and external vaults remain future work. [ADR 0011](../adr/0011-private-secrets-and-project-memory.md) records the implementation decisions; the sections below preserve the agreed design and verification requirements.
+Status: implemented for the current local-machine release, 2026-11-03. Private entry, project memory, automatic reuse, Settings management, encrypted Hub storage, and Claude/Codex bridges ship together. Remote relay, opaque-reference consumers and external vaults remain future work. [ADR 0013](../adr/0013-private-secrets-and-project-memory.md) records the implementation decisions; the sections below preserve the agreed design and verification requirements.
 
 ## Outcome
 

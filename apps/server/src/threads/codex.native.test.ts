@@ -7,10 +7,17 @@ let app: Awaited<ReturnType<typeof startTestApp>>;
 afterEach(() => app?.stop());
 
 /** Exercises the pinned native binary and its actual wire protocol; inference stays local and scripted. */
-it('runs the bundled Codex through the hub proxy and restores its native session', async () => {
+it.each([false, true])('runs the bundled Codex through the hub proxy and restores its native session (MCP: %s)', async (withMcp) => {
   const login = new FakeCodex();
+  const mcpRequests: string[] = [];
   const requests: { headers: Headers; body: any }[] = [];
-  app = await startTestApp({ codexFactory: login.factory, codexHarness: codexHarness(), openaiFetch: async (_url, init) => {
+  app = await startTestApp({ codexFactory: login.factory, codexHarness: codexHarness(), mcpFetch: async (_url, init) => {
+    const input = JSON.parse(String(init?.body ?? '{}'));
+    mcpRequests.push(input.method);
+    if (!('id' in input)) return new Response(null, { status: 202 });
+    const result = input.method === 'initialize' ? { protocolVersion: '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'test', version: '1' } } : { tools: [{ name: 'lookup', description: 'Look up a test item', inputSchema: { type: 'object', properties: {} } }] };
+    return Response.json({ jsonrpc: '2.0', id: input.id, result });
+  }, openaiFetch: async (_url, init) => {
     requests.push({ headers: new Headers(init?.headers), body: JSON.parse(new TextDecoder().decode(init?.body as Uint8Array)) });
     const id = `resp_${requests.length}`;
     const message = { id: `msg_${requests.length}`, type: 'message', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: 'Native Codex reply.', annotations: [] }] };
@@ -32,11 +39,13 @@ it('runs the bundled Codex through the hub proxy and restores its native session
   await login.latest.complete('native');
   await client.call('accounts.signInStatus', { signInId: signIn.signInId });
   const profile = await client.call('profiles.save', { name: 'Native test', openaiAccountId: account.id });
+  if (withMcp) await client.call('mcp.save', { id: 'test-remote', name: 'Test remote', transport: 'http', url: 'https://mcp.example.test/mcp', auth: 'none', scope: { global: true, profileIds: [], projectKeys: [] } });
   const thread = await client.call('threads.start', { profileId: profile.id, text: 'Say hello.' });
   await client.waitFor('threads.changed', (threads) => threads.some((t) => t.id === thread.id && t.status !== 'running'), 15_000);
   const first = (await client.call('threads.list', {})).find((t) => t.id === thread.id);
   const transcript = await client.call('threads.transcript', { threadId: thread.id });
-  expect(transcript.filter((i) => i.kind === 'notice')).toEqual([]);
+  expect(transcript.filter((i) => i.kind === 'notice')).toHaveLength(withMcp ? 1 : 0);
+  if (withMcp) expect(mcpRequests).toEqual(expect.arrayContaining(['initialize', 'tools/list']));
   expect(first?.status).toBe('idle');
   expect(transcript).toEqual(expect.arrayContaining([expect.objectContaining({ kind: 'assistant', text: 'Native Codex reply.' })]));
   expect(requests[0]?.body).toMatchObject({ model: 'test-codex', stream: true, store: false });
@@ -46,7 +55,7 @@ it('runs the bundled Codex through the hub proxy and restores its native session
   await client.call('threads.send', { threadId: thread.id, text: 'Continue the conversation.' });
   await client.waitFor('threads.changed', (threads) => threads.some((t) => t.id === thread.id && t.status !== 'running'), 15_000);
   const after = await client.call('threads.transcript', { threadId: thread.id });
-  expect(after.filter((i) => i.kind === 'notice')).toEqual([]);
+  expect(after.filter((i) => i.kind === 'notice')).toHaveLength(withMcp ? 2 : 0);
   expect(after.filter((i) => i.kind === 'assistant')).toHaveLength(2);
   expect(requests).toHaveLength(2);
 }, 40_000);

@@ -1,0 +1,30 @@
+# Tools, MCP servers and skills
+
+The hub owns definitions and selections. Tools execute on this machine; remote HTTP MCP credentials stay on the hub; skill sources are Git snapshots. Global, profile and project selections are additive. No selection means optional.
+
+## Run the repeatable settings journey
+
+Run `node .agents/skills/3-verify/scripts/verify.mjs .agents/skills/3-verify/scripts/resources.mjs` after building. It uses the production server and disposable home from the verification runner. It creates its profile, project and Git skill source through UI actions, then retains actions, screenshots, ARIA snapshots and read-only persisted observations. The failing-install check reaches npm and requires network access. A failure to reach npm is not evidence of a package-not-found response.
+
+This journey covers the settings flows below with a signed-out profile. It does not prove successful provider sign-in, repair execution, a real MCP service's OAuth flow, or multiple-machine behavior. Report these separately with their prerequisites.
+
+## Entry points and expected outcomes
+
+- `tools-settings`: Settings sidebar → Tools → Add tool. Use preset fills Playwright CLI's package, executable and exact version. Invalid versions show an inline error. Leave all scopes off, save, and require Optional with a Pending machine card. Reopen to confirm saved values.
+- `tools-scope`: In a tool's detail choose Install on all machines, specific profiles or projects; Save. Confirm the selections in the hub store. Enabling starts installation; Ready requires a successful check, not merely a saved definition.
+- `tools-readiness`: Settings → Tools → named tool, and Settings → Machines → this machine → Managed tools. Compare version, check time and failure details. Install and check runs locally. Failed checks show Needs attention and either Open repair thread or the reason one could not start. Remote actions are unavailable in v0.1.
+- `tools-repair`: Requires a signed-in profile with an available model. Make a disposable tool's check fail, require one local repair thread, and open it from its status card. Repeated checks must reuse that thread. Let the repair finish; require a new health-check result before accepting Ready. Inspect the transcript and managed installation as second observations. A signed-out refusal covers only the blocked branch.
+- `mcp-settings`: Settings → MCP servers → Add MCP server. Choose Remote (HTTP), enter URL and authentication, select scopes and save. Local command (stdio) instead takes a command and one argument per line. Reopen each definition and confirm transport and selections.
+- `mcp-token`: On a saved bearer server enter Bearer token and Save token. Require the saved-state message and an empty/hidden input; the saved token must not appear in page HTML or `hub/resources.json`. Sign out clears the saved credential. Use a disposable test token, and preserve only assertions about the secret store, never its contents.
+- `mcp-oauth`: Requires a reachable service with supported OAuth metadata and a callback reachable from the browser. Choose OAuth, save, then Sign in. Complete consent and require Signed in. Repeat with Complete sign-in using the full callback address. Sign out and require Signed out. Failure stays visible; an unreachable test service proves only the failure branch. Test cancel and expiration separately.
+- `skills-source`: Settings → Skills → Add skill source. Enter Name, Git URL and optional ref; Add source. The resulting source shows repository, followed ref, active commit and imported optional skills. A source with no SKILL.md must show its error.
+- `skills-update`: Commit a change in the disposable source, then Check for updates. Require the new revision preview while the persisted active revision remains unchanged. Apply the revision, reopen and require the new active revision with existing selections retained. Select a previous revision to prove rollback. Preview compares names and descriptions; its hint states that other files may also have changed.
+- `skills-scope`: In a source's skill row choose Enable synced skill, select profiles/projects or Enable everywhere, then Save. Reopen and compare the skill scope in `hub/resources.json`.
+- `skills-copy`: In the skill row choose Copy into project, select Checkout on this machine, then Copy. Require the returned path and read the resulting `.agents/skills/<name>/SKILL.md`. A second copy must refuse to overwrite it. The copy belongs to project Git; its source no longer updates those files. When a project copy and an enabled synced skill share a name, turn preparation reports the conflict until one is disabled.
+- `resources-project`: Filter threads → named project settings → Tools, MCP servers and skills. Check an optional item; require the project's remote key (or `local:<id>`) added while other selections remain. Inherited global/profile items are checked and locked, with their origin explained.
+- `resources-profile`: Settings → Profiles → named profile → Tools, MCP servers and skills. Toggle an optional item and reopen. Require its profile selection without losing project selections. Global items remain inherited.
+- `resources-delete`: Tool and MCP detail require a second delete click. Skill sources require Delete source followed by the named confirmation. Confirm disappearance after reopening. Deleting a definition does not delete project-owned skill copies.
+
+## Proof boundaries
+
+The hub stores non-secret definitions and selections in `hub/resources.json`. A turn's transcript records the resolved tool versions, skill revisions and MCP names. Successful settings saves alone do not prove resource use by a harness. The backend suite exercises repair execution with a fake model, OAuth with a fake service and the real bundled Codex discovering an HTTP MCP through the hub. Real provider consent and paid repair turns remain separate live checks.

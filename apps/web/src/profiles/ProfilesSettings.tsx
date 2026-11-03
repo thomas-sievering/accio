@@ -4,6 +4,7 @@ import { useClient } from '../app/connection';
 import { Chevron, Plus, User } from '../app/icons';
 import { SettingsSection } from '../app/Settings';
 import { useAction } from '../app/useAction';
+import { ResourcePicker } from '../resources/ResourcePicker';
 import { claudeAccount, hasSignedInAccount, useProfiles } from './profiles';
 
 /** Profiles select accounts configured in Accounts settings. */
@@ -59,6 +60,7 @@ function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: Pr
   const [openaiAccountId, setOpenAIAccountId] = useState(profile?.providers.find((p) => p.id === 'openai')?.accounts[0]?.id ?? '');
   const [name, setName] = useState(profile?.name ?? '');
   const { busy, error, run } = useAction();
+  const dirty = !profile || name !== profile.name || accountId !== (claudeAccount(profile)?.id ?? '') || openaiAccountId !== (profile.providers.find((p) => p.id === 'openai')?.accounts[0]?.id ?? '');
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -110,6 +112,14 @@ function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: Pr
           </button>
         </SettingsSection>
       )}
+      {profile && (
+        <SettingsSection title="Tools, MCP servers and skills">
+          <div className="setting-form">
+            <small className="hint">Turned on for every project and thread of {profile.name}. Changes save immediately, separately from Save.</small>
+            <ResourcePicker context={{ kind: 'profile', profile }} />
+          </div>
+        </SettingsSection>
+      )}
       <footer className="settings-actions">
         {profile && (
           <button
@@ -123,9 +133,9 @@ function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: Pr
         )}
         <span className="spacer" />
         <button type="button" className="ghost" onClick={onDone}>
-          {profile ? 'Done' : 'Cancel'}
+          Cancel
         </button>
-        <button type="submit" className="ghost primary" disabled={busy || !accounts}>
+        <button type="submit" className="ghost primary" disabled={busy || !accounts || !dirty}>
           {profile ? 'Save' : 'Add profile'}
         </button>
       </footer>

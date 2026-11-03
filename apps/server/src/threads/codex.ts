@@ -1,14 +1,16 @@
 import { mkdir } from 'node:fs/promises';
 import { startCodex, type CodexFactory, type CodexNotification } from '@accio/codex';
+import { systemPromptText } from '../harnesses/systemPrompt.js';
 import type { Harness, HarnessEvent } from './harness.js';
 import { z } from 'zod';
-import { SecretToolInput, SECRET_TOOL_DESCRIPTION, savedPurposeInstructions } from '../secrets/secrets.js';
+import { SecretToolInput, SECRET_TOOL_DESCRIPTION, SECRET_MCP_SERVER, savedPurposeInstructions } from '../secrets/secrets.js';
 import { secretHttpTool } from '../secrets/httpTool.js';
+import { ACCIO_MCP_SERVER } from '../tools/tools.js';
 
 /** Codex runs on this machine. Only the profile's scoped proxy key reaches it. */
 export function codexHarness(factory: CodexFactory = startCodex): Harness {
   return {
-    async *run({ cwd, prompt, sessionId, model, env, signal, requestSecret, secretPurposes }) {
+    async *run({ cwd, prompt, sessionId, model, modelName, env, tools, signal, resourceInstructions, mcps, requestSecret, secretPurposes }) {
       if (signal.aborted) return;
       const home = env.CODEX_HOME;
       const baseUrl = env.ACCIO_OPENAI_URL;
@@ -21,7 +23,13 @@ export function codexHarness(factory: CodexFactory = startCodex): Harness {
         'model_providers.accio.env_key="ACCIO_OPENAI_KEY"', 'model_providers.accio.wire_api="responses"',
         'model_providers.accio.supports_websockets=false',
         'approval_policy="never"', 'sandbox_mode="danger-full-access"',
-        ...(endpoint ? [`mcp_servers.accio.url=${JSON.stringify(endpoint.url)}`, 'mcp_servers.accio.bearer_token_env_var="ACCIO_TOOL_TOKEN"'] : []),
+        ...Object.entries(mcps ?? {}).flatMap(([id, mcp]) => {
+          // Override keys are dot-separated paths, not TOML key expressions.
+          // IDs are validated as bare keys by the protocol.
+          const prefix = `mcp_servers.${id}`;
+          return mcp.type === 'http' ? [`${prefix}.url=${JSON.stringify(mcp.url)}`, ...Object.entries(mcp.headers).map(([key, value]) => `${prefix}.http_headers.${key}=${JSON.stringify(value)}`)] : [`${prefix}.command=${JSON.stringify(mcp.command)}`, `${prefix}.args=${JSON.stringify(mcp.args)}`];
+        }),
+        ...(endpoint ? [`mcp_servers.${SECRET_MCP_SERVER}.url=${JSON.stringify(endpoint.url)}`, `mcp_servers.${SECRET_MCP_SERVER}.bearer_token_env_var="ACCIO_TOOL_TOKEN"`] : []),
       ] }).catch(async error => { await endpoint?.close(); throw error; });
       const events: CodexNotification[] = [];
       let wake = () => {};
@@ -53,13 +61,18 @@ export function codexHarness(factory: CodexFactory = startCodex): Harness {
       signal.addEventListener('abort', stop, { once: true });
       try {
         if (signal.aborted) return;
-        const params = { cwd, ...(model ? { model } : {}), approvalPolicy: 'never', sandbox: 'danger-full-access' };
-        const tools = requestSecret ? { dynamicTools: [{ type: 'function', name: 'request_secret', description: SECRET_TOOL_DESCRIPTION,
+        // Config, unlike dynamic tools, applies on resume too, so resumed threads keep accio's tools.
+        const config = {
+          ...(tools ? { [`mcp_servers.${ACCIO_MCP_SERVER}`]: { url: tools.url, http_headers: { Authorization: tools.authorization } } } : {}),
+          ...(endpoint ? { [`mcp_servers.${SECRET_MCP_SERVER}`]: { url: endpoint.url, bearer_token_env_var: 'ACCIO_TOOL_TOKEN' } } : {}),
+        };
+        const params = { cwd, ...(model ? { model } : {}), ...(Object.keys(config).length ? { config } : {}), approvalPolicy: 'never', sandbox: 'danger-full-access',
+          developerInstructions: [systemPromptText({ harnessId: 'codex', model, modelName }), resourceInstructions,
+            requestSecret ? `For missing tokens use request_secret (or ${SECRET_MCP_SERVER} MCP request_secret on resumed sessions). Reuse the exact service/operation/target slot. Accio handles saved project credentials automatically. Never ask for or print a secret in chat, and never copy or link secret files.` + savedPurposeInstructions(secretPurposes) : undefined,
+          ].filter(Boolean).join('\n\n') };
+        const dynamicTools = requestSecret && !sessionId ? { dynamicTools: [{ type: 'function', name: 'request_secret', description: SECRET_TOOL_DESCRIPTION,
           inputSchema: z.toJSONSchema(SecretToolInput), deferLoading: false }] } : {};
-        const result = await client.request(sessionId ? 'thread/resume' : 'thread/start', { ...params, ...(!sessionId ? tools : {}),
-          ...(endpoint ? { config: { mcp_servers: { accio: { url: endpoint.url, bearer_token_env_var: 'ACCIO_TOOL_TOKEN' } } } } : {}),
-          ...(requestSecret ? { developerInstructions: 'For missing tokens use request_secret (or accio MCP request_secret on resumed sessions). Reuse the exact service/operation/target slot. Accio handles saved project credentials automatically. Never ask for or print a secret in chat, and never copy or link secret files.' + savedPurposeInstructions(secretPurposes) } : {}),
-          ...(sessionId ? { threadId: sessionId } : {}) });
+        const result = await client.request(sessionId ? 'thread/resume' : 'thread/start', { ...params, ...dynamicTools, ...(sessionId ? { threadId: sessionId } : {}) });
         threadId = result.thread.id;
         yield { type: 'harness_event', event: { kind: 'session', id: threadId! } };
         if (signal.aborted) return;
@@ -105,7 +118,7 @@ export function codexEvents({ method, params }: CodexNotification): HarnessEvent
     case 'commandExecution': return [{ kind: 'tool', id: item.id, name: 'Shell', summary: item.command, status, output: item.aggregatedOutput ?? undefined }];
     case 'fileChange': return [{ kind: 'tool', id: item.id, name: 'Edit', summary: item.changes.map((c: any) => c.path).join(', '), status,
       ...(done ? { output: item.changes.map((c: any) => `${c.path}\n${c.diff ?? ''}`).join('\n') } : {}) }];
-    case 'mcpToolCall': return [{ kind: 'tool', id: item.id, name: `${item.server}/${item.tool}`, summary: JSON.stringify(item.arguments ?? {}), status,
+    case 'mcpToolCall': return [{ kind: 'tool', id: item.id, name: `${item.server}/${item.tool}`, summary: JSON.stringify(item.arguments ?? {}), input: item.arguments ?? {}, status,
       ...(done ? { output: JSON.stringify(item.error ?? item.result ?? '') } : {}) }];
     case 'webSearch': return [{ kind: 'tool', id: item.id, name: 'Search', summary: item.query ?? '', status }];
     default: return [];

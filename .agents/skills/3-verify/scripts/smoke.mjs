@@ -22,7 +22,7 @@ export default async function smoke({ page, runDir, home, fixture, action, captu
     await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Verify work');
     await button('Add profile').click();
     await page.getByRole('heading', { name: 'Verify work', exact: true }).waitFor();
-    await button('Done').click();
+    await button('Cancel').click();
     await profileRow('Verify work').waitFor();
   });
   await action('profiles/settings: rename and reload persisted profile', async () => {
@@ -34,7 +34,7 @@ export default async function smoke({ page, runDir, home, fixture, action, captu
     await button('Settings').click();
     await profileRow('Verify work renamed').click();
     assert.equal(await page.getByRole('textbox', { name: 'Name', exact: true }).inputValue(), 'Verify work renamed');
-    await button('Done').click();
+    await button('Cancel').click();
     assert((await settingsFile()).profiles.some((p) => p.name === 'Verify work renamed'));
   });
   await capture('profiles-persisted');
@@ -55,7 +55,7 @@ export default async function smoke({ page, runDir, home, fixture, action, captu
     await page.getByRole('textbox', { name: 'Account name', exact: true }).fill('Verify ChatGPT');
     await button('Add account').click();
     await button('Sign in with ChatGPT').waitFor();
-    await button('Done').click();
+    await button('Cancel').click();
     await page.getByRole('button', { name: 'Verify ChatGPT Signed out', exact: true }).waitFor();
   });
   await action('accounts/profiles: select the named account and reopen it', async () => {
@@ -65,14 +65,14 @@ export default async function smoke({ page, runDir, home, fixture, action, captu
     await button('Save').click();
     await page.getByRole('button', { name: 'Verify personal Verify ChatGPT · Signed out', exact: true }).click();
     assert.match(await page.getByRole('combobox', { name: /OpenAI · ChatGPT account/ }).locator('option:checked').innerText(), /Verify ChatGPT/);
-    await button('Done').click();
+    await button('Cancel').click();
   });
   await capture('accounts-selected');
   await action('accounts/settings: an account in use cannot be deleted', async () => {
     await section('Accounts').click();
     await page.getByRole('button', { name: 'Verify ChatGPT Signed out', exact: true }).click();
     assert(await button('Delete').isDisabled());
-    await button('Done').click();
+    await button('Cancel').click();
   });
 
   await action('machines/settings: rename this machine and persist profile folders', async () => {

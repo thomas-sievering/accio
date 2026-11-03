@@ -2,15 +2,21 @@ import { useEffect, type ReactNode } from 'react';
 import { HubSettings } from '../hub/HubSettings';
 import { MachineSettings } from '../machine/MachineSettings';
 import { HarnessesSettings } from '../harnesses/HarnessesSettings';
+import { SystemPromptSettings } from '../harnesses/SystemPromptSettings';
 import { AccountsSettings } from '../profiles/AccountsSettings';
 import { ProfilesSettings } from '../profiles/ProfilesSettings';
 import { useProfiles } from '../profiles/profiles';
 import { SecretsSettings, type SecretsRoute } from '../secrets/SecretsSettings';
-import { ArrowLeft, Hub, Key, Layers, Monitor, Users } from './icons';
-import { SidebarResizer } from './SidebarResizer';
+import { ToolsSettings } from '../tools/ToolsSettings';
+import { McpSettings } from '../mcp/McpSettings';
+import { SkillsSettings } from '../skills/SkillsSettings';
+import { useResources } from '../resources/resources';
+import { ArrowLeft, BookOpen, Hub, Key, Layers, Monitor, Plug, ScrollText, Users, Wrench } from './icons';
+import { SidebarResizer } from './Resizer';
 
 /** Where Settings is open. `profileId` opens one profile ('new' to add one). */
-export type SettingsRoute = { section: 'profiles'; profileId?: string } | { section: 'accounts'; accountId?: string } | ({ section: 'secrets' } & SecretsRoute) | { section: 'hub' } | { section: 'harnesses' } | { section: 'machines'; machineId?: string };
+export type SettingsRoute = { section: 'profiles'; profileId?: string } | { section: 'accounts'; accountId?: string } | ({ section: 'secrets' } & SecretsRoute) | { section: 'hub' } | { section: 'harnesses' } | { section: 'systemPrompt' } | { section: 'machines'; machineId?: string }
+  | { section: 'tools'; toolId?: string } | { section: 'mcps'; mcpId?: string } | { section: 'skills'; sourceId?: string };
 type Section = SettingsRoute['section'];
 
 const GROUPS: { label?: string; items: { id: Section; label: string; icon: ReactNode }[] }[] = [
@@ -19,7 +25,13 @@ const GROUPS: { label?: string; items: { id: Section; label: string; icon: React
     { id: 'secrets', label: 'Secrets', icon: <Key /> },
     { id: 'profiles', label: 'Profiles', icon: <Users /> },
     { id: 'harnesses', label: 'Harnesses', icon: <Layers /> },
+    { id: 'systemPrompt', label: 'System prompt', icon: <ScrollText /> },
     { id: 'machines', label: 'Machines', icon: <Monitor /> },
+  ] },
+  { label: 'Tools and skills', items: [
+    { id: 'tools', label: 'Tools', icon: <Wrench /> },
+    { id: 'mcps', label: 'MCP servers', icon: <Plug /> },
+    { id: 'skills', label: 'Skills', icon: <BookOpen /> },
   ] },
   {
     label: 'Connections',
@@ -31,14 +43,23 @@ const GROUPS: { label?: string; items: { id: Section; label: string; icon: React
 const LABEL = Object.fromEntries(GROUPS.flatMap((g) => g.items.map((i) => [i.id, i.label]))) as Record<Section, string>;
 
 /** Settings replace the whole window while open, as in T3 Code. Back (top of the sidebar, as in Cal.com and Circle) or Escape returns to the threads. */
-export function Settings({ route, onRoute, onClose }: { route: SettingsRoute; onRoute: (r: SettingsRoute) => void; onClose: () => void }) {
+export function Settings({ route, onRoute, onClose, onOpenThread }: { route: SettingsRoute; onRoute: (r: SettingsRoute) => void; onClose: () => void; onOpenThread: (threadId: string) => void }) {
   const { profiles, accounts } = useProfiles();
+  const { state: resources } = useResources();
   const profileId = route.section === 'profiles' ? route.profileId : undefined;
   const accountId = route.section === 'accounts' ? route.accountId : undefined;
   const accountLabel = accountId === 'new' || accountId === 'new-openai' ? 'New account' : accounts?.find((a) => a.id === accountId)?.name;
   const profileLabel = profileId === 'new' ? 'New profile' : profiles?.find((p) => p.id === profileId)?.name;
   const secretLabel = route.section === 'secrets' && route.secretId ? route.secretId === 'new' ? 'New secret' : route.replace ? 'Replace value' : 'Edit secret' : undefined;
   const backTo: SettingsRoute = route.section === 'secrets' ? { section: 'secrets', profileId: route.profileId } : { section: route.section };
+  const toolId = route.section === 'tools' ? route.toolId : undefined;
+  const mcpId = route.section === 'mcps' ? route.mcpId : undefined;
+  const sourceId = route.section === 'skills' ? route.sourceId : undefined;
+  const resourceLabel = toolId ? (toolId === 'new' ? 'New tool' : resources?.tools.find((t) => t.id === toolId)?.name)
+    : mcpId ? (mcpId === 'new' ? 'New MCP server' : resources?.mcps.find((m) => m.id === mcpId)?.name)
+      : sourceId ? (sourceId === 'new' ? 'New skill source' : resources?.sources.find((s) => s.id === sourceId)?.name)
+        : undefined;
+  const detailLabel = profileLabel || accountLabel || secretLabel || resourceLabel;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -84,11 +105,11 @@ export function Settings({ route, onRoute, onClose }: { route: SettingsRoute; on
           <nav className="crumbs">
             <span>Settings</span>
             <span className="sep">/</span>
-            {(profileLabel || accountLabel || secretLabel) ? (
+            {detailLabel ? (
               <>
                 <button onClick={() => onRoute(backTo)}>{LABEL[route.section]}</button>
                 <span className="sep">/</span>
-                <b>{profileLabel || accountLabel || secretLabel}</b>
+                <b>{detailLabel}</b>
               </>
             ) : (
               <b>{LABEL[route.section]}</b>
@@ -109,10 +130,14 @@ export function Settings({ route, onRoute, onClose }: { route: SettingsRoute; on
             {route.section === 'secrets' && <SecretsSettings route={route} onRoute={(r) => onRoute({ section: 'secrets', ...r })} />}
             {route.section === 'hub' && <HubSettings />}
             {route.section === 'harnesses' && <HarnessesSettings />}
+            {route.section === 'systemPrompt' && <SystemPromptSettings />}
+            {route.section === 'tools' && <ToolsSettings key={toolId ?? ''} toolId={toolId} onOpen={(id) => onRoute({ section: 'tools', toolId: id })} onBack={() => onRoute({ section: 'tools' })} onOpenThread={onOpenThread} />}
+            {route.section === 'mcps' && <McpSettings key={mcpId ?? ''} mcpId={mcpId} onOpen={(id) => onRoute({ section: 'mcps', mcpId: id })} onBack={() => onRoute({ section: 'mcps' })} />}
+            {route.section === 'skills' && <SkillsSettings key={sourceId ?? ''} sourceId={sourceId} onOpen={(id) => onRoute({ section: 'skills', sourceId: id })} onBack={() => onRoute({ section: 'skills' })} />}
             {route.section === 'machines' && (
               <>
                 {route.machineId && <button className="link" onClick={() => onRoute({ section: 'machines' })}>All machines</button>}
-                <MachineSettings machineId={route.machineId} onOpen={(machineId) => onRoute({ section: 'machines', machineId })} />
+                <MachineSettings machineId={route.machineId} onOpen={(machineId) => onRoute({ section: 'machines', machineId })} onOpenThread={onOpenThread} />
               </>
             )}
           </div>

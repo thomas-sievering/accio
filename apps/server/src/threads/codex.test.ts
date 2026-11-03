@@ -5,7 +5,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { codexEnv } from '@accio/codex';
 import { FakeCodex } from '../testing/fakeCodex.js';
 import { harnessEnv } from './harnessEnv.js';
-import { codexHarness } from './codex.js';
+import { codexEvents, codexHarness } from './codex.js';
 
 let home: string | undefined;
 afterEach(async () => { vi.useRealTimers(); if (home) await rm(home, { recursive: true, force: true }); home = undefined; });
@@ -52,4 +52,23 @@ it('propagates a native process failure and closes the client', async () => {
   for (const listener of fake.latest.exits) listener(new Error('native crash'));
   await rejected;
   expect(fake.latest.closed).toBe(true);
+});
+
+it('gives Codex accio tools on start and on resume, and keeps tool arguments structured', async () => {
+  home = await mkdtemp(join(tmpdir(), 'accio-tools-codex-'));
+  const tools = { url: 'http://127.0.0.1:1/mcp', authorization: 'Bearer t' };
+  const env = { CODEX_HOME: home, ACCIO_OPENAI_URL: 'http://127.0.0.1:1234/openai', ACCIO_OPENAI_KEY: 'profile-key' };
+  const expected = { 'mcp_servers.accio': { url: tools.url, http_headers: { Authorization: 'Bearer t' } } };
+  for (const sessionId of [null, 'codex-session']) {
+    const fake = new FakeCodex();
+    for await (const _ of codexHarness(fake.factory).run({ cwd: home, prompt: 'hi', sessionId, env, tools, signal: new AbortController().signal })) { /* drain */ }
+    const opened = fake.latest.requests.find((r) => r.method === (sessionId ? 'thread/resume' : 'thread/start'));
+    expect((opened?.params as { config?: unknown }).config).toEqual(expected);
+  }
+  const [call] = codexEvents({ method: 'item/started', params: { item: { type: 'mcpToolCall', id: 'c', server: 'accio', tool: 'offer_choice', arguments: { question: 'Q' }, status: 'inProgress' } } });
+  expect(call).toMatchObject({ kind: 'tool', name: 'accio/offer_choice', input: { question: 'Q' } });
+  const fake = new FakeCodex();
+  for await (const _ of codexHarness(fake.factory).run({ cwd: home, prompt: 'hi', sessionId: 'codex-session', env, tools, mcps: { remote: { type: 'http', url: 'https://example.test/mcp', headers: { Authorization: 'Bearer remote' } } }, resourceInstructions: 'Enabled skill: browser', signal: new AbortController().signal })) { /* drain */ }
+  expect(fake.latest.options.config).toContain('mcp_servers.remote.url="https://example.test/mcp"');
+  expect(fake.latest.requests.find(r => r.method === 'thread/resume')?.params).toMatchObject({ config: expected, developerInstructions: expect.stringContaining('Enabled skill: browser') });
 });

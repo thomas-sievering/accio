@@ -2,6 +2,7 @@ import { useId, useState } from 'react';
 import type { ThreadView, ToolDetails, TranscriptItem } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { More } from '../app/icons';
+import { optionLetter } from './Choice';
 import { useAction } from '../app/useAction';
 
 export function ThreadActionsMenu({ thread, items }: { thread: ThreadView; items?: TranscriptItem[] }) {

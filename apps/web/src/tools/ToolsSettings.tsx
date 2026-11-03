@@ -1,0 +1,218 @@
+import { useState, type FormEvent } from 'react';
+import { ToolDefinition, type MachineView, type ToolStatus } from '@accio/protocol';
+import { useClient } from '../app/connection';
+import { Chevron, Plus, Wrench } from '../app/icons';
+import { SettingRow, SettingsSection } from '../app/Settings';
+import { useAction } from '../app/useAction';
+import { useLive } from '../app/useLive';
+import { hasSignedInAccount, useProfiles } from '../profiles/profiles';
+import { useProjects } from '../projects/projects';
+import { optionalScope, scopeSummary, slugId, useDraft, useResources } from '../resources/resources';
+import { ScopeEditor } from '../resources/ScopeEditor';
+import { Field } from '../resources/Field';
+import { readiness, ToolStatusCard } from './ToolStatusCard';
+
+/** `npm view @playwright/cli version` on 2026-11-03. Editable before saving. */
+const PLAYWRIGHT_CLI = { name: 'Playwright CLI', package: '@playwright/cli', version: '0.1.23', executable: 'playwright-cli', checkArgs: ['--version'] };
+
+type Draft = Omit<ToolDefinition, 'id'> & { id: string };
+const blank = (): Draft => ({ id: '', name: '', package: '', version: '', executable: '', checkArgs: ['--version'], scope: optionalScope(), repairProfileId: undefined });
+
+/** Command-line tools the hub installs with npm into a managed folder on each machine. */
+export function ToolsSettings({ toolId, onOpen, onBack, onOpenThread }: { toolId?: string; onOpen: (id: string) => void; onBack: () => void; onOpenThread: (id: string) => void }) {
+  const client = useClient();
+  const { state, loadError, retry } = useResources();
+  const { profiles = [] } = useProfiles();
+  const { state: projects } = useProjects();
+  const machines = useLive(() => client.call('machines.list', {}), 'machines.changed');
+  if (!state) return loadError ? <LoadError error={loadError} retry={retry} /> : <p className="note" role="status">Loading tools…</p>;
+  if (toolId === 'new') return <ToolForm taken={state.tools.map((t) => t.id)} onSaved={(t) => onOpen(t.id)} onDone={onBack} />;
+  const tool = state.tools.find((t) => t.id === toolId);
+  if (toolId && !tool) return <><p className="note">This tool was deleted.</p><button className="link" onClick={onBack}>All tools</button></>;
+  if (tool) {
+    return (
+      <>
+        <ToolForm key={tool.id} tool={tool} taken={[]} onSaved={() => {}} onDone={onBack} />
+        <MachineStatuses tool={tool} machines={machines} statuses={state.toolStatuses} onOpenThread={onOpenThread} />
+      </>
+    );
+  }
+  const here = machines?.find((m) => m.thisMachine);
+  return (
+    <>
+      <p className="note">Managed npm tools. accio installs each tool’s exact version into its own folder on every machine, checks it, and adds it to the PATH of threads it’s enabled for. A failed check starts a repair thread.</p>
+      <SettingsSection title="Tools">
+        {state.tools.length === 0 && <SettingRow title="No tools yet" description="Start with the Playwright CLI preset, or add any npm package with an executable." />}
+        {[...state.tools].sort((a, b) => a.name.localeCompare(b.name)).map((t) => {
+          const status = state.toolStatuses.find((s) => s.toolId === t.id && s.machineId === here?.id);
+          const r = readiness(here, status);
+          return (
+            <button key={t.id} className="setting setting-link" onClick={() => onOpen(t.id)}>
+              <span className="menu-icon"><Wrench /></span>
+              <span className="setting-text">
+                <b>{t.name}</b>
+                <small>{t.package}@{t.version} · {scopeSummary(t.scope, profiles, projects?.projects)}</small>
+              </span>
+              {here && <span className={`pill ${r.tone === 'ok' ? 'ok' : r.tone === 'bad' ? 'bad' : r.tone === 'busy' ? 'busy' : ''}`} title="On this machine"><span className="dot" />{r.label}</span>}
+              <Chevron />
+            </button>
+          );
+        })}
+        <button className="setting setting-link" onClick={() => onOpen('new')}>
+          <span className="menu-icon"><Plus /></span>
+          <span className="setting-text">
+            <b>Add tool</b>
+            <small>An npm package pinned to an exact version.</small>
+          </span>
+        </button>
+      </SettingsSection>
+    </>
+  );
+}
+
+function MachineStatuses({ tool, machines, statuses, onOpenThread }: { tool: ToolDefinition; machines?: MachineView[]; statuses: ToolStatus[]; onOpenThread: (id: string) => void }) {
+  const sorted = [...(machines ?? [])].sort((a, b) => Number(b.thisMachine) - Number(a.thisMachine) || a.name.localeCompare(b.name));
+  return (
+    <section className="settings-section">
+      <h2>Machines</h2>
+      {!machines ? <p className="note" role="status">Loading machines…</p> : (
+        <div className="tool-cards">
+          {sorted.map((m) => (
+            <ToolStatusCard key={m.id} heading="machine" tool={tool} machine={m} status={statuses.find((s) => s.toolId === tool.id && s.machineId === m.id)} onOpenThread={onOpenThread} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+const valid = {
+  package: (v: string) => ToolDefinition.shape.package.safeParse(v).success,
+  version: (v: string) => ToolDefinition.shape.version.safeParse(v).success,
+  executable: (v: string) => ToolDefinition.shape.executable.safeParse(v).success,
+};
+
+function ToolForm({ tool, taken, onSaved, onDone }: { tool?: ToolDefinition; taken: string[]; onSaved: (t: ToolDefinition) => void; onDone: () => void }) {
+  const client = useClient();
+  const { profiles = [] } = useProfiles();
+  const { value, dirty, set, reset } = useDraft<Draft>(tool ?? blank());
+  const [args, setArgs] = useState<string>();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [touched, setTouched] = useState(false);
+  const { busy, error, run } = useAction();
+  const argsText = args ?? value.checkArgs.join(' ');
+  const checkArgs = argsText.split(/\s+/).filter(Boolean);
+  const changed = dirty || (args !== undefined && JSON.stringify(checkArgs) !== JSON.stringify(tool?.checkArgs ?? ['--version']));
+
+  const problems = {
+    name: !value.name.trim() ? 'Give the tool a name.' : undefined,
+    package: !valid.package(value.package.trim()) ? 'An npm package name, such as @playwright/cli.' : undefined,
+    version: !value.version.trim() ? 'Pin a version, such as 1.2.3.' : !valid.version(value.version.trim()) ? 'Use an exact version, such as 1.2.3.' : undefined,
+    executable: !valid.executable(value.executable.trim()) ? 'The command the package installs, such as playwright-cli.' : undefined,
+  };
+  const invalid = Object.values(problems).some(Boolean);
+  const show = (k: keyof typeof problems) => (touched || (value[k] as string) !== '') && problems[k];
+
+  const repairProfile = profiles.find((p) => p.id === value.repairProfileId);
+  const repairWarning = value.repairProfileId
+    ? repairProfile && !hasSignedInAccount(repairProfile) ? `${repairProfile.name} isn’t signed in, so a failed check can’t start a repair thread.` : undefined
+    : !profiles.some(hasSignedInAccount) ? 'No profile is signed in yet, so a failed check can’t start a repair thread.' : undefined;
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setTouched(true);
+    if (invalid) return;
+    const saved = await run(() => client.call('tools.save', {
+      ...value,
+      id: tool?.id ?? slugId(value.name, taken),
+      name: value.name.trim(), package: value.package.trim(), version: value.version.trim(), executable: value.executable.trim(),
+      checkArgs, repairProfileId: value.repairProfileId || undefined,
+    }));
+    if (saved) { reset(); setArgs(undefined); onSaved(saved); }
+  };
+  const remove = async () => {
+    if (tool && (await run(async () => (await client.call('tools.delete', { id: tool.id }), true)))) onDone();
+  };
+  const preset = () => {
+    for (const [k, v] of Object.entries(PLAYWRIGHT_CLI)) set(k as keyof Draft, v as never);
+    setArgs(undefined);
+  };
+
+  return (
+    <form className="settings-profile-form" onSubmit={submit} noValidate>
+      <SettingsSection title={tool ? tool.name : 'New tool'}>
+        <div className="setting-form">
+          {!tool && (
+            <div className="preset">
+              <span className="grow"><b>Playwright CLI</b><small className="hint"> · @playwright/cli@{PLAYWRIGHT_CLI.version}, runs <code>playwright-cli</code></small></span>
+              <button type="button" className="ghost" onClick={preset}>Use preset</button>
+            </div>
+          )}
+          <Field label="Name" error={show('name')}>
+            {(p) => <input {...p} value={value.name} onChange={(e) => set('name', e.target.value)} placeholder="Playwright CLI" maxLength={120} required autoFocus={!tool} />}
+          </Field>
+          <div className="field-row">
+            <Field label="npm package" className="grow" error={show('package')}>
+              {(p) => <input {...p} value={value.package} onChange={(e) => set('package', e.target.value)} placeholder="@playwright/cli" spellCheck={false} required />}
+            </Field>
+            <Field label="Version" className="version-field" error={show('version')}>
+              {(p) => <input {...p} value={value.version} onChange={(e) => set('version', e.target.value)} placeholder="1.2.3" spellCheck={false} required />}
+            </Field>
+          </div>
+          <small className="hint">Pin an exact version so every machine runs the same tool. {tool && 'Changing it installs the new version alongside the old one.'}</small>
+          <div className="field-row">
+            <Field label="Executable" className="grow" error={show('executable')}>
+              {(p) => <input {...p} value={value.executable} onChange={(e) => set('executable', e.target.value)} placeholder="playwright-cli" spellCheck={false} required />}
+            </Field>
+            <label className="field grow">
+              <span>Health check arguments</span>
+              <input value={argsText} onChange={(e) => setArgs(e.target.value)} placeholder="--version" spellCheck={false} />
+            </label>
+          </div>
+          <small className="hint">accio runs the executable with these arguments (separated by spaces) to check it works.</small>
+        </div>
+      </SettingsSection>
+      <SettingsSection title="Where it’s installed">
+        <div className="setting-form">
+          <ScopeEditor name={value.name || 'this tool'} scope={value.scope} onChange={(s) => set('scope', s)} disabled={busy}
+            globalLabel="Install on all machines" globalHint="Every profile and project gets it on its PATH." />
+          <small className="hint">Saving a tool that’s enabled anywhere installs and checks it on this machine right away.</small>
+        </div>
+      </SettingsSection>
+      <SettingsSection title="Repair">
+        <div className="setting-form">
+          <label className="field">
+            <span>Repair threads run as</span>
+            <select value={value.repairProfileId ?? ''} onChange={(e) => set('repairProfileId', e.target.value || undefined)}>
+              <option value="">Any signed-in profile</option>
+              {profiles.map((p) => <option key={p.id} value={p.id}>{p.name}{hasSignedInAccount(p) ? '' : ' · Signed out'}</option>)}
+            </select>
+          </label>
+          <small className="hint">When a check fails, accio starts a thread on that machine that diagnoses and fixes the install, then checks again.</small>
+          {repairWarning && <small className="warn" role="status">{repairWarning}</small>}
+        </div>
+      </SettingsSection>
+      {error && <p className="error" role="alert">{error}</p>}
+      <footer className="settings-actions">
+        {tool && (confirmDelete ? (
+          <>
+            <button type="button" className="ghost" disabled={busy} onClick={() => setConfirmDelete(false)}>Keep</button>
+            <button type="button" className="ghost danger" disabled={busy} onClick={remove}>Delete {tool.name} from the hub</button>
+          </>
+        ) : (
+          <button type="button" className="ghost danger" disabled={busy} onClick={() => setConfirmDelete(true)}>Delete</button>
+        ))}
+        <span className="spacer" />
+        {changed && tool && <button type="button" className="ghost" disabled={busy} onClick={() => { reset(); setArgs(undefined); setTouched(false); }}>Discard changes</button>}
+        <button type="button" className="ghost" onClick={onDone}>{tool ? 'Done' : 'Cancel'}</button>
+        <button type="submit" className="ghost primary" disabled={busy || (!!tool && !changed) || (touched && invalid)}>
+          {busy ? 'Saving…' : tool ? 'Save' : 'Add tool'}
+        </button>
+      </footer>
+    </form>
+  );
+}
+
+export function LoadError({ error, retry }: { error: string; retry: () => void }) {
+  return <p className="error" role="alert">Could not load from the hub: {error} <button type="button" className="link" onClick={retry}>Retry</button></p>;
+}

@@ -3,11 +3,15 @@ import { lstat, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { SecretsVault, SecretStoreError, checkValue, type SecretScope } from '@accio/hub';
+
 import { privateDirectory, privateFile } from '@accio/persistence';
 import { SecretSlot, type SecretRequestItem, type ParamsOf } from '@accio/protocol';
 import { UserError, type Broadcast, type Router } from '../rpc/router.js';
 import type { Profiles } from '../profiles/profiles.js';
 import type { Projects } from '../projects/projects.js';
+
+/** Separate from the machine's general accio MCP server. */
+export const SECRET_MCP_SERVER = 'accio_secrets';
 
 export const SecretToolInput = z.object({
   slot: SecretSlot.describe('Stable credential purpose including service, operation and account/target, e.g. cloudflare.pages.deploy:docs. Reuse the exact slot on later requests.'),

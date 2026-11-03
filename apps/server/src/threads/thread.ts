@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { ThreadView, TranscriptItem } from '@accio/protocol';
+import type { ChoicePick, ThreadView, TranscriptItem } from '@accio/protocol';
 import { DEFAULT_MODEL } from '@accio/protocol';
 import { UserError } from '../rpc/router.js';
 
@@ -42,7 +42,7 @@ export function fromStored(t: Omit<Thread, 'snoozedUntil' | 'settledAt' | 'model
  * now exists only once its first message is sent, so these are dropped on load.
  */
 export function dropUnstarted(threads: readonly Thread[]): Thread[] {
-  return threads.filter((t) => !(t.status === 'idle' && t.sessionId === null && t.title === NEW_THREAD_TITLE));
+  return threads.filter((t) => t.workspace || !(t.status === 'idle' && t.sessionId === null && t.title === NEW_THREAD_TITLE));
 }
 
 /** GLOSSARY: Snooze. A thread hides until `until`; snoozing a settled thread reopens it first. */
@@ -123,9 +123,9 @@ export function assertResumable(thread: Thread) {
 }
 
 /** What Retry sends: the failed turn's own message, or another resume if that turn was one. */
-export function retryOf(thread: Thread, items: readonly TranscriptItem[]): { text: string; resume: boolean } {
+export function retryOf(thread: Thread, items: readonly TranscriptItem[]): { text: string; resume: boolean; pick?: ChoicePick } {
   if (thread.status !== 'failed') throw new UserError('Only a failed thread can be retried');
   const last = [...items].reverse().find((i) => i.kind === 'user');
   if (!last || last.kind !== 'user') throw new UserError('There is no message to retry');
-  return last.resume ? { text: RESUME_PROMPT, resume: true } : { text: last.text, resume: false };
+  return last.resume ? { text: RESUME_PROMPT, resume: true } : { text: last.text, resume: false, ...(last.pick ? { pick: last.pick } : {}) };
 }

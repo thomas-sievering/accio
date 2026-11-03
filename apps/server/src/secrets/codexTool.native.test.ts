@@ -43,6 +43,7 @@ it('executes request_secret through the pinned native Codex dynamic-tool protoco
   await client.call('secretRequests.answer', { threadId: thread.id, requestId: card.item.requestId, answer: { type: 'once', value: marker } });
   await expect.poll(async () => (await client.call('threads.list', {})).find(t => t.id === thread.id)?.status, { timeout: 15_000 }).toBe('idle');
   expect(bodies[0].tools.some((t: any) => t.name === 'request_secret')).toBe(true);
+  expect(bodies[0].tools.some((t: any) => t.name === 'mcp__accio')).toBe(true);
   expect(JSON.stringify(bodies)).not.toContain(marker);
   expect(deliveryPath).not.toBe(''); await expect(readFile(deliveryPath)).rejects.toThrow();
 }, 35_000);
@@ -56,9 +57,10 @@ it('adds the private MCP tool when resuming a native Codex thread created before
     const n = bodies.length;
     let output: any = { id: `msg_${n}`, type: 'message', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: 'Native turn complete.', annotations: [] }] };
     if (n === 2) {
-      const tool = body.tools.find((t: any) => t.name === 'mcp__accio');
+      const tool = body.tools.find((t: any) => t.name === 'mcp__accio_secrets');
       expect(tool?.tools.some((t: any) => t.name === 'request_secret')).toBe(true);
-      output = { id: 'fc_mcp', type: 'function_call', call_id: 'call_mcp', namespace: 'mcp__accio', name: 'request_secret', status: 'completed',
+      expect(body.tools.some((t: any) => t.name === 'mcp__accio')).toBe(true);
+      output = { id: 'fc_mcp', type: 'function_call', call_id: 'call_mcp', namespace: 'mcp__accio_secrets', name: 'request_secret', status: 'completed',
         arguments: JSON.stringify({ slot: 'native.secret:resumed', label: 'Resumed token', reason: 'Verify the old session tool' }) };
     }
     if (n === 3) expect(JSON.stringify(body.input.filter((i: any) => i.type === 'function_call_output'))).toContain('provided');

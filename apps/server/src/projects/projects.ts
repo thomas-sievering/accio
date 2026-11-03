@@ -92,6 +92,13 @@ export class Projects {
   register(router: Router) {
     router
       .on('projects.get', () => this.data)
+      .on('projects.setDelivery', async ({ projectId, deliveryPolicy, previewCommand }) => {
+        const project = this.data.projects.find((p) => p.id === projectId);
+        if (!project) throw new UserError('No such project');
+        const updated = { ...project, deliveryPolicy, previewCommand };
+        await this.commit({ ...this.data, projects: this.data.projects.map((p) => p.id === projectId ? updated : p) });
+        return updated;
+      })
       .on('checkouts.inspect', async ({ path }) => {
         const facts = await inspectFolder(path);
         return {

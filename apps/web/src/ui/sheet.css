@@ -82,10 +82,13 @@
   padding: 0 10px;
   border: 1px solid var(--line-2);
   border-radius: 8px;
-  background: var(--bg);
+  background-color: var(--bg);
   color: var(--ink);
   font: inherit;
   font-size: 14px;
+}
+.field select {
+  padding-right: 30px;
 }
 .field input:focus,
 .field select:focus {

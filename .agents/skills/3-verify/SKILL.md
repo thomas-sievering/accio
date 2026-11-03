@@ -19,7 +19,7 @@ pnpm verify
 
 On Linux, browser system libraries may require `pnpm exec playwright install --with-deps chromium`. The proven target is Windows with local Chromium.
 
-On 2026-11-03 the committed Claude SDK versions were younger than pnpm's default release-age cutoff. The proof used `pnpm --config.minimumReleaseAge=0 install --frozen-lockfile` for those existing locked dependencies. If this exact error recurs, inspect the rejected versions before using a temporary override. Keep repository policy unchanged; pnpm may otherwise auto-add exceptions to `pnpm-workspace.yaml`. The same temporary `--config.minimumReleaseAge=0` option can precede `verify` while the cutoff applies.
+`pnpm-workspace.yaml` exempts `@anthropic-ai/*` and `@openai/*` from pnpm's minimum release age, so new harness SDK releases install directly. If install rejects any other package as too new, inspect the rejected versions; do not override the policy or add exemptions without the user's agreement.
 
 `pnpm verify` builds the workspace and runs [the runner](scripts/verify.mjs) with [the smoke journey](scripts/smoke.mjs). After a successful build, repeat or supply a custom journey with:
 
@@ -52,7 +52,7 @@ Use the actual printed directory name as the argument. Inside a custom journey, 
 
 Use Playwright against the real production UI. The runner supplies `page`, `context`, `home`, `fixture`, `runDir`, `action`, `capture`, and `doctor` to a journey's default async export. The committed `smoke.mjs` is the executable reference for profiles, named accounts, machine settings and adding projects. It never signs in or sends a model request.
 
-For inline media and tool-detail changes, also run the existing `pnpm test:chat` suite (`tests/inline-chat.spec.ts`). It covers Chromium and a hidden Electron shell against `scripts/chat-test-server.ts`, which substitutes the coding harness at the production dependency boundary. Its seeded chat coverage does not establish real-provider authentication or live turns; its fixed port 47481 permits one suite instance at a time.
+For inline media, tool-detail or delivery changes, also run `pnpm test:chat` (`tests/inline-chat.spec.ts` and `tests/delivery.spec.ts`). It covers Chromium and a hidden Electron shell against `scripts/chat-test-server.ts`, which substitutes the coding harness at the production dependency boundary. Its seeded chat coverage does not establish real-provider authentication or live turns. Each invocation allocates its own port; `ACCIO_CHAT_TEST_PORT` can override that choice.
 
 For a changed flow, write `out/verify-journey.mjs` as an ES module with the same export contract, then run it with the command above. Copy the relevant mapped recipe into that journey, assert the expected outcomes, and wrap each interaction group in `await action('feature/entry: expected behavior', async () => { ... })`. Save checkpoints with `await capture('feature-state')`. User actions go through Playwright clicks, typing, keyboard presses and selects. Use read-only files or RPC only as a second observation of effects; never create the tested state through internal setters or test endpoints.
 
