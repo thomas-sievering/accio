@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { TranscriptItem } from '@accio/protocol';
+import { mediaKind, mediaMimeType, normalizeMarkdownSource, type ChoicePick, type TranscriptItem } from '@accio/protocol';
 import type { Profiles } from '../profiles/profiles.js';
 import { configFolderOf } from '../profiles/claudeConfigFolder.js';
 import type { Projects } from '../projects/projects.js';
@@ -35,7 +35,10 @@ import type { Machines } from '../machine/machine.js';
 import { ThreadAssets } from './assets.js';
 import { ThreadContent } from './content.js';
 import { markdownReferences } from './markdown.js';
+import { isChoiceTool, parseChoice, pickPrompt } from './choice.js';
+import type { AccioTools, ToolAccess } from '../tools/tools.js';
 
+type TurnOptions = { resume?: boolean; retry?: boolean; pick?: ChoicePick };
 type Live = { cursor: number; items: TranscriptItem[]; file: JsonFile<TranscriptItem[]>; saveTimer?: ReturnType<typeof setTimeout> };
 
 /** Threads on this machine, their transcripts, and the turns running in them. */
@@ -60,6 +63,7 @@ export class Threads {
     private broadcast: Broadcast,
     private models: Models,
     private machines: Machines,
+    private tools?: AccioTools,
   ) {
     this.file = new JsonFile(join(home, 'threads.json'), () => []);
     this.assets = new ThreadAssets(home, (threadId) => this.list.some((thread) => thread.id === threadId));
@@ -177,8 +181,8 @@ export class Threads {
         if (!linked) throw new UserError('This file is not linked in the thread');
         return this.assets.fileUrl(threadId, this.cwd(thread), path);
       })
-      .on('threads.send', async ({ threadId, text }) => {
-        await this.beginTurn(threadId, text);
+      .on('threads.send', async ({ threadId, text, pick }) => {
+        await this.beginTurn(threadId, text, { pick });
         return null;
       })
       .on('threads.setModel', async ({ threadId, model }) => {
@@ -254,7 +258,7 @@ export class Threads {
     }
   }
 
-  private beginTurn(threadId: string, text: string, options: { resume?: boolean; retry?: boolean } = {}, stored?: Promise<void>) {
+  private beginTurn(threadId: string, text: string, options: TurnOptions = {}, stored?: Promise<void>) {
     if (this.closing) throw new UserError('This machine is shutting down');
     const thread = this.require(threadId);
     if (options.resume) assertResumable(thread);
@@ -267,7 +271,7 @@ export class Threads {
     return preparation;
   }
 
-  private async prepareTurn(threadId: string, text: string, options: { resume?: boolean; retry?: boolean }, controller: AbortController, stored?: Promise<void>) {
+  private async prepareTurn(threadId: string, text: string, options: TurnOptions, controller: AbortController, stored?: Promise<void>) {
     let release = () => {};
     let started = false;
     try {
@@ -275,8 +279,11 @@ export class Threads {
       let thread = this.require(threadId);
       if (thread.checkoutId) release = this.projects.useCheckout(thread.checkoutId);
       let resume = options.resume ?? false;
+      let pick = options.pick;
       if (resume) assertResumable(thread);
-      if (options.retry) ({ text, resume } = retryOf(thread, (await this.transcript(threadId)).items));
+      if (options.retry) ({ text, resume, pick } = retryOf(thread, (await this.transcript(threadId)).items));
+      const prompt = pick ? pickPrompt((await this.transcript(threadId)).items, pick, text) : text;
+      if (prompt === undefined) throw new UserError('That option is no longer available');
       if (!this.profiles.get(thread.profileId)) throw new UserError('The profile this thread started with no longer exists');
       const access = await this.profiles.hubAccess(thread.profileId, thread.model.harnessId === 'codex' ? 'openai' : 'anthropic');
       if (controller.signal.aborted || this.closing) throw new UserError('Turn interrupted before starting');
@@ -287,7 +294,7 @@ export class Threads {
       const turnId = randomUUID();
       started = true;
       await this.update(thread.id, () => next);
-      await this.addItem(thread.id, { kind: 'user', id: `${turnId}:u`, turnId, text, at: now(), ...(resume ? { resume } : {}) });
+      await this.addItem(thread.id, { kind: 'user', id: `${turnId}:u`, turnId, text, at: now(), ...(resume ? { resume } : {}), ...(pick ? { pick } : {}) });
       const env = harnessEnv(process.env, access, configFolderOf(this.home, thread.profileId));
       if (thread.model.harnessId === 'codex') {
         delete env.ANTHROPIC_AUTH_TOKEN; delete env.ANTHROPIC_BASE_URL; delete env.CLAUDE_CONFIG_DIR;
@@ -295,7 +302,9 @@ export class Threads {
         env.ACCIO_OPENAI_URL = `${access.baseUrl}/openai`;
         env.ACCIO_OPENAI_KEY = access.accessKey;
       }
-      const turn = this.runTurn(next, turnId, { cwd, prompt: text, env, signal: controller.signal });
+      const grant = this.tools?.grant(thread.id);
+      const turn = this.runTurn(next, turnId, { cwd, prompt, env, ...(grant ? { tools: grant.access } : {}), signal: controller.signal });
+      void turn.finally(() => grant?.revoke()).catch(() => {});
       this.turns.add(turn);
       void turn.then(() => this.turns.delete(turn), (err) => {
         this.turns.delete(turn);
@@ -313,7 +322,7 @@ export class Threads {
   private async runTurn(
     thread: Thread,
     turnId: string,
-    run: { cwd: string; prompt: string; env: Record<string, string>; signal: AbortSignal },
+    run: { cwd: string; prompt: string; env: Record<string, string>; tools?: ToolAccess; signal: AbortSignal },
   ) {
     const transcript = new TurnTranscript(turnId);
     const startedAt = Date.now();
@@ -373,6 +382,8 @@ export class Threads {
   private async apply(threadId: string, change: TranscriptChange, cwd: string) {
     if (change.type === 'session') {
       await this.update(threadId, (t) => ({ ...t, sessionId: change.sessionId }), { quiet: true });
+    } else if (change.type === 'tool' && isChoiceTool(change.item.name)) {
+      await this.offerChoice(threadId, change, cwd);
     } else if (change.type === 'tool') {
       await this.content.saveTool(threadId, change.item.id, change.input, change.content);
       await this.addItem(threadId, change.item);
@@ -390,6 +401,31 @@ export class Threads {
       live.items = live.items.map((i) => (i.id === change.itemId && i.kind === 'assistant' ? { ...i, text: i.text + change.text } : i));
       this.scheduleSave(threadId, live);
       this.broadcast('thread.delta', { threadId, cursor: ++live.cursor, itemId: change.itemId, text: change.text });
+    }
+  }
+
+  /**
+   * A choice replaces its tool row once the arguments are complete and valid. Its
+   * images are saved then, once. Invalid arguments fail the call, which shows as
+   * an ordinary failed tool so the harness's mistake stays visible.
+   */
+  private async offerChoice(threadId: string, change: Extract<TranscriptChange, { type: 'tool' }>, cwd: string) {
+    const live = await this.transcript(threadId);
+    if (live.items.some((item) => item.id === change.item.id && item.kind === 'choice')) return;
+    const offer = parseChoice(change.input);
+    if (offer) {
+      const options = [];
+      for (const { path, label } of offer.options) {
+        // Tool paths are plain paths; the asset reader expects Markdown's encoded destinations.
+        const source = normalizeMarkdownSource(path);
+        options.push(mediaKind(mediaMimeType(source) ?? '') === 'image'
+          ? { label, ...await this.content.assets.snapshot(threadId, cwd, source) }
+          : { label, source, error: 'Not a PNG, JPEG, GIF, WebP or AVIF image.' });
+      }
+      await this.addItem(threadId, { kind: 'choice', id: change.item.id, turnId: change.item.turnId, question: offer.question, options });
+    } else if (change.item.status === 'error') {
+      await this.content.saveTool(threadId, change.item.id, change.input, change.content);
+      await this.addItem(threadId, change.item);
     }
   }
 

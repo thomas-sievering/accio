@@ -1,7 +1,8 @@
-import { memo, useLayoutEffect, useRef, useState } from 'react';
+import { memo, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { TranscriptItem } from '@accio/protocol';
 import { AssistantMarkdown } from './AssistantMarkdown';
 import { ToolCallRow } from './ToolCallRow';
+import { Choice, optionName } from './Choice';
 import './transcript-media.css';
 
 /** Follow late media/layout changes only while the reader is already at the bottom. */
@@ -12,6 +13,7 @@ export function Transcript({ threadId, items, working }: { threadId: string; ite
   const anchor = useRef<{ element: HTMLElement; offset: number } | undefined>(undefined);
   const [away, setAway] = useState(false);
   const lastTurn = items.findLast((item) => item.kind === 'user')?.turnId;
+  const picks = useMemo(() => pickedOptions(items), [items]);
 
   useLayoutEffect(() => {
     pinned.current = true;
@@ -53,12 +55,14 @@ export function Transcript({ threadId, items, working }: { threadId: string; ite
         pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
         setAway(!pinned.current);
         const top = el.getBoundingClientRect().top;
-        const visible = [...(content.current?.querySelectorAll<HTMLElement>(':scope > .msg:not(.assistant), :scope > .tool, :scope > .notice, :scope > .turn-finished, :scope > .msg.assistant > *') ?? [])]
+        const visible = [...(content.current?.querySelectorAll<HTMLElement>(':scope > .msg:not(.assistant), :scope > .tool, :scope > .choice, :scope > .notice, :scope > .turn-finished, :scope > .msg.assistant > *') ?? [])]
           .find((node) => node.getBoundingClientRect().bottom > top);
         anchor.current = visible ? { element: visible, offset: visible.getBoundingClientRect().top - top } : undefined;
       }}>
         <div className="thread" ref={content}>
-          {items.map((item) => <Item key={`${threadId}:${item.id}`} threadId={threadId} item={item} preparing={working && item.turnId === lastTurn} />)}
+          {items.map((item) => <Item key={`${threadId}:${item.id}`} threadId={threadId} item={item} preparing={working && item.turnId === lastTurn}
+            picked={item.kind === 'choice' ? picks.picked.get(item.id) : undefined}
+            pickName={item.kind === 'user' ? picks.names.get(item.id) : undefined} />)}
           {working && <div className="typing" aria-label="Working"><i /><i /><i /></div>}
         </div>
       </div>
@@ -72,10 +76,32 @@ export function Transcript({ threadId, items, working }: { threadId: string; ite
   );
 }
 
-const Item = memo(function Item({ threadId, item, preparing }: { threadId: string; item: TranscriptItem; preparing: boolean }) {
+/** Which option each answered choice got, and how each picking message names its pick. */
+function pickedOptions(items: TranscriptItem[]) {
+  const choices = new Map<string, Extract<TranscriptItem, { kind: 'choice' }>>();
+  const picked = new Map<string, number>();
+  const names = new Map<string, string>();
+  for (const item of items) {
+    if (item.kind === 'choice') choices.set(item.id, item);
+    if (item.kind !== 'user' || !item.pick) continue;
+    const choice = choices.get(item.pick.choiceId);
+    picked.set(item.pick.choiceId, item.pick.option);
+    if (choice) names.set(item.id, optionName(choice, item.pick.option));
+  }
+  return { picked, names };
+}
+
+const Item = memo(function Item({ threadId, item, preparing, picked, pickName }: {
+  threadId: string; item: TranscriptItem; preparing: boolean; picked?: number; pickName?: string;
+}) {
   switch (item.kind) {
     case 'user':
-      return <div className={`msg user${item.resume ? ' resume' : ''}`}>{item.resume ? 'Resume' : item.text}</div>;
+      return <div className={`msg user${item.resume ? ' resume' : ''}`}>
+        {pickName && <span className="msg-pick">✓ {pickName}</span>}
+        {item.resume ? 'Resume' : item.text}
+      </div>;
+    case 'choice':
+      return <Choice threadId={threadId} item={item} picked={picked} />;
     case 'assistant':
       if (!item.text.trim()) return null;
       return <div className="msg assistant"><AssistantMarkdown threadId={threadId} text={item.text} media={item.media} preparing={preparing} /></div>;
