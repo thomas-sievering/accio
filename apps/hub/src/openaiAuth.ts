@@ -5,7 +5,24 @@ import { startCodex, type CodexClient, type CodexFactory } from '@accio/codex';
 import { SignInError } from './claudeOAuth.js';
 import { LimitsReadError } from './limits.js';
 
-export type CodexModel = { id: string; name: string; description: string; isDefault: boolean };
+/** `efforts` is absent on models stored before accio kept them. */
+export type CodexModel = { id: string; name: string; description: string; isDefault: boolean; efforts?: { id: string; description?: string }[]; defaultEffort?: string };
+type ModelPage = { data: { model: string; displayName: string; description?: string; isDefault: boolean;
+  supportedReasoningEfforts?: { reasoningEffort: string; description?: string }[]; defaultReasoningEffort?: string }[]; nextCursor?: string | null };
+
+/** Every model the signed-in ChatGPT account offers Codex, with the effort levels each accepts. */
+async function listModels(client: CodexClient): Promise<CodexModel[]> {
+  const models: CodexModel[] = [];
+  let cursor: string | null = null;
+  do {
+    const page: ModelPage = await client.request('model/list', { cursor, limit: 100, includeHidden: false });
+    models.push(...page.data.map((m) => ({ id: m.model, name: m.displayName, description: m.description ?? '', isDefault: !!m.isDefault,
+      efforts: (m.supportedReasoningEfforts ?? []).map((e) => ({ id: e.reasoningEffort, ...(e.description ? { description: e.description } : {}) })),
+      ...(m.defaultReasoningEffort ? { defaultEffort: m.defaultReasoningEffort } : {}) })));
+    cursor = page.nextCursor ?? null;
+  } while (cursor);
+  return models;
+}
 /** Only metadata is stored in profiles.json. Codex owns auth.json inside this hub-only credential home. */
 export type OpenAIAccount = { credentialId: string; email: string | null; planType: string | null; models: CodexModel[] };
 export type OpenAICredentials = { accessToken: string; accountId: string };
@@ -80,13 +97,7 @@ export class OpenAIAuth {
     }
     const result = await p.client.request('account/read', { refreshToken: false });
     if (result.account?.type !== 'chatgpt') throw new SignInError('Sign in with a ChatGPT account to use Codex.');
-    const models: CodexModel[] = [];
-    let cursor: string | null = null;
-    do {
-      const page: { data: { model: string; displayName: string; description?: string; isDefault: boolean }[]; nextCursor?: string | null } = await p.client.request('model/list', { cursor, limit: 100, includeHidden: false });
-      models.push(...page.data.map((m: any) => ({ id: m.model, name: m.displayName, description: m.description ?? '', isDefault: !!m.isDefault })));
-      cursor = page.nextCursor ?? null;
-    } while (cursor);
+    const models = await listModels(p.client);
     // Check credentials before publishing a signed-in account.
     await this.readCredentials(p.credentialId);
     return { status: 'complete', account: { credentialId: p.credentialId, email: result.account.email ?? null, planType: result.account.planType ?? null, models } };
@@ -114,6 +125,15 @@ export class OpenAIAuth {
     const pending = this.loadCredentials(account, force).finally(() => this.refreshing.delete(account.credentialId));
     this.refreshing.set(account.credentialId, pending);
     return pending;
+  }
+
+  /** The account's current models; account-only, never starts a thread or turn. */
+  async models(account: OpenAIAccount): Promise<CodexModel[]> {
+    await this.credentials(account);
+    const dir = this.directory(account.credentialId);
+    const client = await this.factory({ home: dir, cwd: dir });
+    try { return await listModels(client); }
+    finally { await client.close(); }
   }
 
   /** Account-only query in the hub credential home; never starts a thread or turn. */

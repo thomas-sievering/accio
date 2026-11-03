@@ -11,6 +11,9 @@ export function HarnessesSettings() {
   const machines = useLive(() => client.call('machines.list', {}), 'machines.changed');
   const [harnesses, setHarnesses] = useState<HarnessView[]>();
   const [error, setError] = useState<string>();
+  // The models offered change with every profile's sign-ins, not only with machines.
+  const [revision, setRevision] = useState(0);
+  useEffect(() => client.onEvent('models.changed', () => setRevision((n) => n + 1)), [client]);
   useEffect(() => {
     if (status !== 'open') return;
     let active = true;
@@ -19,7 +22,7 @@ export function HarnessesSettings() {
       (err: Error) => { if (active) setError(err.message); },
     );
     return () => { active = false; };
-  }, [client, status, machines]);
+  }, [client, status, machines, revision]);
   return (
     <>
       <p className="note">Harnesses run your threads. Each uses models from the providers listed below.</p>
@@ -42,3 +45,4 @@ export function HarnessesSettings() {
     </>
   );
 }
+

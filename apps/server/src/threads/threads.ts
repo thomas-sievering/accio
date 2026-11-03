@@ -293,9 +293,10 @@ export class Threads {
         return toView(thread);
       }))
       .on('threads.setModel', async ({ threadId, model }) => {
+        await this.models.ready(this.require(threadId).profileId);
         const thread = this.require(threadId);
         if (this.running.has(threadId) || thread.status === 'running') throw new UserError('Wait for this turn to finish before changing its model.');
-        const selected = this.models.require(thread.profileId, model);
+        const selected = this.models.requireExact(thread.profileId, model);
         if (selected.harnessId !== thread.model.harnessId) throw new UserError('Start a new thread to change its harness.');
         return toView(await this.update(threadId, (t) => ({ ...t, model: selected })));
       })
@@ -345,10 +346,11 @@ export class Threads {
         try {
           if (checkout) release = this.projects.useCheckout(checkout.id);
           // Refuse before anything is stored, so a thread that cannot run never appears.
+          await this.models.ready(profileId);
           const choice = model ?? this.models.default(profileId);
           await this.profiles.hubAccess(profileId, choice.harnessId === 'codex' ? 'openai' : 'anthropic');
           if (this.closing) throw new UserError('This machine is shutting down');
-          const selected = this.models.require(profileId, choice);
+          const selected = model ? this.models.requireExact(profileId, choice) : this.models.require(profileId, choice);
           // GLOSSARY: a thread keeps the profile it started with for its whole life.
           const thread = newThread({ checkoutId: checkout?.id ?? '', projectId: project?.id ?? '', profileId, hubId: this.profiles.client.id, model: selected }, now());
           if (options.repairToolId) { thread.repairToolId = options.repairToolId; thread.title = `Repair ${options.repairToolId}`; }
@@ -620,6 +622,7 @@ export class Threads {
       if (!this.profiles.get(thread.profileId)) throw new UserError('The profile this thread started with no longer exists');
       const access = await this.profiles.hubAccess(thread.profileId, thread.model.harnessId === 'codex' ? 'openai' : 'anthropic');
       if (controller.signal.aborted || this.closing) throw new UserError('Turn interrupted before starting');
+      await this.models.ready(thread.profileId);
       thread = this.require(threadId);
       thread = { ...thread, model: this.models.require(thread.profileId, thread.model) };
       if (thread.workspace?.releasedAt) {
@@ -694,7 +697,7 @@ export class Threads {
         profileName: this.profiles.require(thread.profileId).name, projectId: thread.projectId || null,
         projectName: this.projects.state().projects.find(p => p.id === thread.projectId)?.name ?? 'No project',
         machineName: this.machines.views().find(m => m.thisMachine)?.name ?? 'This machine', signal: run.signal });
-      for await (const msg of harness.run({ ...run, sessionId: thread.sessionId, model: thread.model.modelId, requestSecret, modelName: this.models.modelName(thread.profileId, thread.model),
+      for await (const msg of harness.run({ ...run, sessionId: thread.sessionId, model: thread.model.modelId, effort: this.models.effort(thread.profileId, thread.model), requestSecret, modelName: this.models.modelName(thread.profileId, thread.model),
         registerSteer: send => { const input = this.liveInputs.get(thread.id); if (input?.turnId === turnId) input.send = send; },
         secretPurposes: this.secrets.purposes(thread.profileId, thread.projectId || null) })) {
         for (const change of transcript.accept(msg)) {
@@ -754,6 +757,8 @@ export class Threads {
         // A storage failure must never leave a finished turn holding its slot.
         this.running.delete(thread.id);
         await this.update(thread.id, (t) => endTurn(t, outcome ?? 'failed', now()));
+        // Every turn spends the account's allowance, so a model it used up is marked as soon as possible.
+        this.profiles.refreshLimits(thread.profileId, thread.model.harnessId === 'codex' ? 'openai' : 'anthropic');
         if (thread.repairToolId && outcome === 'completed') this.onRepairFinished?.(thread.repairToolId);
         if (outcome === 'completed') {
           await this.dispatchQueued(thread.id);

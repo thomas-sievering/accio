@@ -56,6 +56,8 @@ export type HarnessTurn = {
   sessionId: string | null;
   /** Harness model alias; omitted to use the account's default. */
   model?: string;
+  /** GLOSSARY: Effort. One the model accepts; omitted to use the model's default. */
+  effort?: string;
   /** The model's display name, when known; used in the system prompt. */
   modelName?: string;
   env: Record<string, string>;

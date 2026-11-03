@@ -674,12 +674,14 @@ button.row {
   font-weight: 600;
   color: var(--muted);
 }
+/* The model and its effort sit together on the left of the composer bar. */
+.model-choice { display: inline-flex; align-items: center; gap: 2px; min-width: 0; margin-right: auto; }
+/* The first control's text lines up with the textarea's; its hover pill bleeds left. */
+.model-choice > :first-child { margin-left: -8px; }
 .model-trigger {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-left: -8px; /* Icon lines up with the textarea text; the hover pill bleeds left. */
-  margin-right: auto;
   padding: 5px 8px;
   border-radius: 6px;
   color: var(--muted);
@@ -732,6 +734,15 @@ div.model-picker-empty { display: flex; flex-direction: column; align-items: cen
 div.model-picker-empty b { color: var(--ink); font-weight: 500; }
 .model-picker-empty-icon { display: grid; place-items: center; width: 32px; height: 32px; margin-bottom: 4px; border: 1px solid var(--line); border-radius: 8px; color: var(--amber); }
 .model-picker-error { grid-column: 1 / -1; margin: 0; padding: 10px 12px; border-top: 1px solid var(--line); }
+
+/* GLOSSARY: Effort. Quiet text at rest; the word rolls with a spring when changed. */
+.effort-word { display: inline-grid; position: relative; overflow: hidden; color: var(--muted); font-size: 11px; line-height: 20px; margin-left: 2px; text-align: left; }
+.effort-word > span { grid-area: 1 / 1; }
+.effort-word-size { visibility: hidden; }
+.effort-word-out { opacity: 0; }
+.effort-word-current, .effort-word-out { transform-origin: left center; }
+.model-picker-row.limited .model-picker-name { opacity: 0.55; }
+.model-picker-limited { color: var(--amber) !important; }
 .composer-machine {
   max-width: 240px;
   min-width: 0;

@@ -1,5 +1,5 @@
 import { mkdir } from 'node:fs/promises';
-import type { ProfileView, ProviderId } from '@accio/protocol';
+import type { AccountLimitsView, LimitWindow, ProfileView, ProviderId } from '@accio/protocol';
 import { HubClient } from '@accio/hub';
 import type { Broadcast, Router } from '../rpc/router.js';
 import { UserError } from '../rpc/router.js';
@@ -36,6 +36,16 @@ export class Profiles {
   require(id: string) { const profile = this.get(id); if (!profile) throw new UserError(`No profile ${id}`); return profile; }
   profileView(id: string): ProfileView { this.require(id); return this.client.snapshot.profiles.find((p) => p.id === id)!; }
   codexModels(id: string) { this.require(id); return this.client.snapshot.models[id] ?? []; }
+  limitWindows(accountId: string): LimitWindow[] {
+    return this.limitViews().find((v) => v.accountId === accountId)?.snapshot?.windows ?? [];
+  }
+  refreshLimits(profileId: string, providerId: ProviderId) {
+    const account = this.profileView(profileId).providers.find((p) => p.id === providerId)?.accounts.find((a) => a.signedIn);
+    if (!account) return;
+    void this.client.call('accounts.refreshLimits', { accountIds: [account.id] }).catch((error) => console.error('[limits] background refresh failed', (error as Error).message));
+  }
+  limitViews(): AccountLimitsView[] { return this.client.snapshot?.limits ?? []; }
+  onLimitsChanged(listener: () => void) { this.client.onChanged(listener); }
   async hubAccess(id: string, providerId: ProviderId = 'anthropic'): Promise<HubAccess> {
     const profile = this.profileView(id);
     if (!profile.providers.find((p) => p.id === providerId)?.accounts.some((a) => a.signedIn)) throw new UserError(`Select a signed-in ${providerId === 'openai' ? 'ChatGPT' : 'Claude'} account for ${profile.name} in Profiles.`);

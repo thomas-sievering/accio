@@ -71,6 +71,7 @@ export async function startHubService(opts: HubServiceOptions) {
   settings.onMachinesChanged(announce);
   hub.limits.subscribe(announce);
   secrets.onChanged(announce);
+  const modelsRefreshed = hub.refreshCodexModels().then((changed) => { if (changed) announce(); });
   function auth(req: IncomingMessage) { const token = /^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1]; return token ? trust.authenticate(token) : undefined; }
   function login(id: string, machineId: string) {
     const pending = logins.get(id);
@@ -290,7 +291,7 @@ export async function startHubService(opts: HubServiceOptions) {
   const url = `http://${opts.host ?? '127.0.0.1'}:${port}`;
   mcp.setUrl(opts.publicUrl ?? url);
   return { hub, settings, resources, secrets, trust, port, url, snapshot, createPairingCode: () => HubTrust.createCode(opts.home),
-    async close() { closing = true; clearInterval(heartbeat); for (const ws of sockets.clients) ws.terminate(); await new Promise<void>((resolve) => server.close(() => resolve())); sockets.close(); await queue; for (const grant of grants.values()) grant.release(); await proxy.close(); await hub.close(); await secrets.close(); await resources.close(); await settings.close(); await trust.close(); } };
+    async close() { closing = true; clearInterval(heartbeat); for (const ws of sockets.clients) ws.terminate(); await new Promise<void>((resolve) => server.close(() => resolve())); sockets.close(); await queue; for (const grant of grants.values()) grant.release(); await proxy.close(); await modelsRefreshed; await hub.close(); await secrets.close(); await resources.close(); await settings.close(); await trust.close(); } };
 }
 
 function json(res: ServerResponse, status: number, value: unknown) { res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify(value)); }

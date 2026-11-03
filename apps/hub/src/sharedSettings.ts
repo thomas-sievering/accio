@@ -23,7 +23,9 @@ export type MachineRecord = MachineHello & {
 export type SharedSeed = { profiles: SharedProfile[]; machines: MachineRecord[] };
 
 type FavoriteModel = { harnessId: string; modelId: string };
-type Data = SharedSeed & { modelFavorites?: Record<string, FavoriteModel[]> };
+type Data = SharedSeed & {
+  modelFavorites?: Record<string, FavoriteModel[]>;
+};
 
 /** GLOSSARY: Provider. The ones accio knows; only Anthropic can be signed in to so far. */
 export const PROVIDERS = [

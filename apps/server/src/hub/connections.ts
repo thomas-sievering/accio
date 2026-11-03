@@ -15,6 +15,10 @@ import { AccioTools } from '../tools/tools.js';
 import { offerChoice } from '../threads/choice.js';
 import { ResourceManager } from '../resources/resources.js';
 import type { CommandRunner } from '../resources/process.js';
+import { ClaudeModels } from '../harnesses/claudeModels.js';
+import type { ClaudeModelSource } from '../harnesses/catalog.js';
+import { harnessEnv } from '../threads/harnessEnv.js';
+import { configFolderOf } from '../profiles/claudeConfigFolder.js';
 
 export type SavedHub = { id: string; name: string; url: string; token: string; home: string; local: boolean; managed?: boolean; snapshot?: HubSnapshot };
 export type HubWorkspace = { client: HubClient; router: Router; profiles: Profiles; machines: Machines; models: Models; projects: Projects; threads: Threads; tools: AccioTools; resources: ResourceManager; secrets: SecretsAccess; home: string; initialize(origin: string): void; close(): Promise<void> };
@@ -30,7 +34,7 @@ export class HubConnections {
   private closing = false;
   private origin?: string;
   initialized = false;
-  constructor(private home: string, private here: MachineInfo, private harnesses: HarnessInstall[], private runners: Record<string, Harness>, private send: (event: any, data: any, hubId?: string) => void, private resourceCommand?: CommandRunner) {
+  constructor(private home: string, private here: MachineInfo, private harnesses: HarnessInstall[], private runners: Record<string, Harness>, private send: (event: any, data: any, hubId?: string) => void, private resourceCommand?: CommandRunner, private claudeModelSource?: ClaudeModelSource) {
     this.file = new JsonFile(join(home, 'hub-connections.json'), () => []);
     this.register();
   }
@@ -59,8 +63,11 @@ export class HubConnections {
     };
     const profiles = new Profiles(record.home, client, broadcast);
     const machines = new Machines(this.here, settings, broadcast);
-    const models = new Models(profiles, settings, this.here.id);
-    profiles.register(router); machines.register(router); models.register(router, broadcast); registerHarnesses(router, settings);
+    const claudeModels = new ClaudeModels(this.claudeModelSource,
+      async (profileId) => harnessEnv(process.env, await profiles.hubAccess(profileId, 'anthropic'), configFolderOf(record.home, profileId)),
+      () => broadcast('models.changed', null));
+    const models = new Models(profiles, settings, this.here.id, claudeModels);
+    profiles.register(router); machines.register(router); models.register(router, broadcast); registerHarnesses(router, settings, models);
     router.on('hub.get', () => ({ runs: record.local ? 'local' : 'remote', hubId: record.id, url: record.url, reachable: client.status === 'connected', store: client.snapshot?.store ?? '', settingsStore: client.snapshot?.settingsStore ?? '' }));
     const projects = new Projects(record.home, profiles, machines, broadcast); await projects.load(); projects.register(router);
     const tools = new AccioTools([offerChoice]);
