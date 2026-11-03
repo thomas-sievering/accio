@@ -6,7 +6,7 @@ import { useThreads } from './threads';
 
 const SETTLED_PAGE = 5;
 
-/** Snoozed and Settled shelves at the bottom of the sidebar, as in T3 Code. Empty shelves are not shown. */
+/** Working, Snoozed and Settled shelves at the bottom of the sidebar, as in T3 Code. Empty shelves are not shown. */
 export function ThreadShelves() {
   const { shelves } = useThreads();
   const [settledShown, setSettledShown] = useState(SETTLED_PAGE);
@@ -14,6 +14,11 @@ export function ThreadShelves() {
 
   return (
     <div className="shelves">
+      <Shelf name="working" label="Working" count={shelves.working.length} defaultOpen>
+        {shelves.working.map((t) => (
+          <ThreadRow key={t.id} thread={t} place="working" />
+        ))}
+      </Shelf>
       <Shelf name="snoozed" label="Snoozed" count={shelves.snoozed.length}>
         {shelves.snoozed.map((t) => (
           <ThreadRow key={t.id} thread={t} place="snoozed" />
@@ -33,8 +38,8 @@ export function ThreadShelves() {
   );
 }
 
-function Shelf(props: { name: string; label: string; count: number; children: ReactNode }) {
-  const [open, setOpen] = useLocalState<'1' | '0'>(`accio.shelf.${props.name}`, '0');
+function Shelf(props: { name: string; label: string; count: number; defaultOpen?: boolean; children: ReactNode }) {
+  const [open, setOpen] = useLocalState<'1' | '0'>(`accio.shelf.${props.name}`, props.defaultOpen ? '1' : '0');
   const expanded = open === '1';
   if (props.count === 0) return null;
   return (
