@@ -30,6 +30,11 @@ export const Close = () => (
     <path d="M18 6 6 18M6 6l12 12" />
   </svg>
 );
+export const ArrowLeft = () => (
+  <svg {...base}>
+    <path d="M19 12H5M12 19l-7-7 7-7" />
+  </svg>
+);
 export const Users = () => (
   <svg {...base}>
     <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />

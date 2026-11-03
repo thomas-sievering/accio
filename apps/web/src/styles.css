@@ -582,12 +582,6 @@ pre {
   text-align: center;
   font-size: 13px;
 }
-.tile-xs {
-  width: 16px;
-  height: 16px;
-  font-size: 9.5px;
-  border-radius: 5px;
-}
 
 /* Sheet extras */
 .row-input {
@@ -1323,6 +1317,20 @@ button.row {
   color: var(--ink);
   font-weight: 600;
 }
+.settings-back {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 13.5px;
+}
+.settings-back:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
 .crumbs {
   display: flex;
   align-items: center;
@@ -1428,11 +1436,6 @@ button.row {
   align-items: center;
   gap: 8px;
   margin-top: 14px;
-}
-.with-tile {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
 }
 .pill {
   display: inline-flex;

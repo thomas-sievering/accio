@@ -1,7 +1,7 @@
 import type { ThreadView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { Folder, ShieldOff } from '../app/icons';
-import { ProfileTile, useProfiles } from '../profiles/profiles';
+import { useProfiles } from '../profiles/profiles';
 import { useProjects } from '../projects/projects';
 import { Composer } from './Composer';
 import { Transcript } from './Transcript';
@@ -29,7 +29,6 @@ export function ThreadPane({ thread, onOpenProfile }: { thread: ThreadView; onOp
         <div className="thread-title">
           <b>{thread.title}</b>
           <span className="thread-where" title={checkout?.path}>
-            <ProfileTile profile={profile} size="xs" />
             {profile?.name ?? 'unknown profile'}
             {checkout && <span className="faint"> · {checkout.path}</span>}
           </span>
@@ -39,7 +38,6 @@ export function ThreadPane({ thread, onOpenProfile }: { thread: ThreadView; onOp
         <div className="hero">
           <h1>What should we build in {project?.name ?? 'this checkout'}?</h1>
           <p className="hero-sub">
-            <ProfileTile profile={profile} size="xs" />
             as {profile?.name ?? 'unknown profile'}
           </p>
           {profile && !profile.account && <ProfileNote name={profile.name} onOpen={() => onOpenProfile(profile.id)} />}

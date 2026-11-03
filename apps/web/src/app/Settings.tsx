@@ -3,7 +3,7 @@ import { HubSettings } from '../hub/HubSettings';
 import { MachineSettings } from '../machine/MachineSettings';
 import { ProfilesSettings } from '../profiles/ProfilesSettings';
 import { useProfiles } from '../profiles/profiles';
-import { Close, Hub, Monitor, Users } from './icons';
+import { ArrowLeft, Hub, Monitor, Users } from './icons';
 
 /** Where Settings is open. `profileId` opens one profile ('new' to add one). */
 export type SettingsRoute = { section: 'profiles'; profileId?: string } | { section: 'hub' } | { section: 'machine' };
@@ -21,7 +21,7 @@ const GROUPS: { label?: string; items: { id: Section; label: string; icon: React
 ];
 const LABEL = Object.fromEntries(GROUPS.flatMap((g) => g.items.map((i) => [i.id, i.label]))) as Record<Section, string>;
 
-/** Settings replace the whole window while open, as in T3 Code. Escape closes them. */
+/** Settings replace the whole window while open, as in T3 Code. Back (top of the sidebar, as in Cal.com and Circle) or Escape returns to the threads. */
 export function Settings({ route, onRoute, onClose }: { route: SettingsRoute; onRoute: (r: SettingsRoute) => void; onClose: () => void }) {
   const { profiles } = useProfiles();
   const profileId = route.section === 'profiles' ? route.profileId : undefined;
@@ -40,7 +40,12 @@ export function Settings({ route, onRoute, onClose }: { route: SettingsRoute; on
   return (
     <div className="layout">
       <aside className="sidebar">
-        <header className="side-top drag" />
+        <header className="side-top drag">
+          <button className="settings-back" title="Back to threads (Esc)" onClick={onClose}>
+            <ArrowLeft />
+            Back
+          </button>
+        </header>
         <nav className="side-body">
           {GROUPS.map((g, n) => (
             <div key={n} className="settings-group">
@@ -75,10 +80,6 @@ export function Settings({ route, onRoute, onClose }: { route: SettingsRoute; on
               <b>{LABEL[route.section]}</b>
             )}
           </nav>
-          <span className="spacer" />
-          <button className="side-icon" title="Close settings (Esc)" aria-label="Close settings" onClick={onClose}>
-            <Close />
-          </button>
         </header>
         <div className="settings-scroll">
           <div className="settings-page">

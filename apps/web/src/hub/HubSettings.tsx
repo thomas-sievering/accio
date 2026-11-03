@@ -3,7 +3,7 @@ import type { HubInfo } from '@accio/protocol';
 import { useClient, useConnectionStatus } from '../app/connection';
 import { Refresh } from '../app/icons';
 import { SettingRow, SettingsSection } from '../app/Settings';
-import { ProfileTile, useProfiles } from '../profiles/profiles';
+import { useProfiles } from '../profiles/profiles';
 
 /** GLOSSARY: Hub. Read-only for now: where it runs, whether it answers, and the accounts it holds. */
 export function HubSettings({ onOpenProfile }: { onOpenProfile: (profileId: string) => void }) {
@@ -62,12 +62,7 @@ export function HubSettings({ onOpenProfile }: { onOpenProfile: (profileId: stri
         {hub.profiles.map((p) => (
           <SettingRow
             key={p.profileId}
-            title={
-              <span className="with-tile">
-                <ProfileTile profile={profiles?.find((x) => x.id === p.profileId)} size="xs" />
-                {p.name}
-              </span>
-            }
+            title={p.name}
             description={
               p.account
                 ? `Claude · ${p.account.email ?? 'signed in'}${p.account.organization ? ` · ${p.account.organization}` : ''}`
