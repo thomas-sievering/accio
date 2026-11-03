@@ -156,7 +156,7 @@ describe('threads slice', () => {
     expect((await c.call('threads.list', {}))[0]).toMatchObject({ settledAt: null, snoozedUntil: null });
   });
 
-  it('refuses a second message while a turn is running', async () => {
+  it('preserves an unsent message when the running harness has no live input channel', async () => {
     let release!: () => void;
     const held = new Promise<void>((r) => (release = r));
     const harness = new FakeHarness(async function* () {
@@ -169,7 +169,7 @@ describe('threads slice', () => {
       await t.stop();
     };
     const thread = await c.call('threads.start', { checkoutId: checkout.id, text: 'one' });
-    await expect(c.call('threads.send', { threadId: thread.id, text: 'two' })).rejects.toThrow(/already working/);
+    await expect(c.call('threads.send', { threadId: thread.id, text: 'two' })).rejects.toThrow(/starting or finishing/);
     release();
     await settled(c, thread.id);
   });

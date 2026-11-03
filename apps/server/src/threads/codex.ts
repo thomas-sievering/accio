@@ -10,7 +10,7 @@ import { ACCIO_MCP_SERVER } from '../tools/tools.js';
 /** Codex runs on this machine. Only the profile's scoped proxy key reaches it. */
 export function codexHarness(factory: CodexFactory = startCodex): Harness {
   return {
-    async *run({ cwd, prompt, sessionId, model, modelName, env, tools, signal, resourceInstructions, mcps, requestSecret, secretPurposes }) {
+    async *run({ cwd, prompt, sessionId, model, modelName, env, tools, signal, resourceInstructions, mcps, requestSecret, secretPurposes, registerSteer }) {
       if (signal.aborted) return;
       const home = env.CODEX_HOME;
       const baseUrl = env.ACCIO_OPENAI_URL;
@@ -78,6 +78,10 @@ export function codexHarness(factory: CodexFactory = startCodex): Harness {
         if (signal.aborted) return;
         const turn = await client.request('turn/start', { threadId, input: [{ type: 'text', text: prompt }], ...(model ? { model } : {}) });
         turnId = turn.turn.id;
+        registerSteer?.(async (text) => {
+          if (signal.aborted) throw new Error('This turn has stopped');
+          await client.request('turn/steer', { threadId, expectedTurnId: turnId, input: [{ type: 'text', text }] });
+        });
         if (signal.aborted) { clearTimeout(stopTimer); stop(); }
         for (;;) {
           if (!events.length && !failure && !forcedStop) await new Promise<void>((resolve) => { wake = resolve; });
@@ -89,6 +93,7 @@ export function codexHarness(factory: CodexFactory = startCodex): Harness {
             if (event.method === 'turn/completed') {
               const completed = event.params.turn;
               if (completed.id !== turnId) continue;
+              registerSteer?.(undefined);
               if (completed.status === 'interrupted' && !signal.aborted) throw new Error('Codex interrupted the turn');
               if (!signal.aborted) yield { type: 'harness_event', event: { kind: 'end', ...(completed.status === 'failed' ? { error: completed.error?.message ?? 'Codex turn failed' } : {}) } };
               return;
@@ -97,6 +102,7 @@ export function codexHarness(factory: CodexFactory = startCodex): Harness {
           }
         }
       } finally {
+        registerSteer?.(undefined);
         signal.removeEventListener('abort', stop);
         clearTimeout(stopTimer); off(); offExit(); offRequest?.();
         // Closing the native child is bounded, even if interrupt never acknowledged.

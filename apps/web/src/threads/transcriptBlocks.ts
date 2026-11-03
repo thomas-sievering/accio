@@ -33,6 +33,8 @@ export function layoutTranscript(items: TranscriptItem[], runningTurn?: string):
 }
 
 function layoutTurn(turn: TranscriptItem[], running: boolean): TranscriptBlock[] {
+  // Mid-turn corrections belong in the visible conversation, in their original order.
+  if (turn.some(item => item.kind === 'user' && item.steered)) return groupTools(turn);
   const finished = turn.at(-1)?.kind === 'finished' ? turn.at(-1) as Extract<TranscriptItem, { kind: 'finished' }> : undefined;
   if (!finished && !running) return groupTools(turn);
   const body = finished ? turn.slice(0, -1) : turn;

@@ -11,6 +11,11 @@ const shape = (blocks: TranscriptBlock[]): Shape[] => blocks.map((b) =>
   b.kind === 'tools' ? b.items.map((i) => i.id) : b.kind === 'work' ? { work: shape(b.blocks) } : b.item.id);
 
 describe('layoutTranscript', () => {
+  it('keeps mid-turn steering and responses visible in conversation order', () => {
+    const correction: TranscriptItem = { kind: 'user', id: 'steer', turnId: 't1', text: 'use helper', at: '', steered: true };
+    expect(shape(layoutTranscript([ask('q'), tool('1'), correction, say('a'), done()])))
+      .toEqual(['q', ['1'], 'steer', 'a', 't1:finished']);
+  });
   it('lays out a running turn in full, joining consecutive calls', () => {
     expect(shape(layoutTranscript([ask('q'), say('a'), tool('1'), tool('2'), say('b'), tool('3')]))).toEqual(['q', 'a', ['1', '2'], 'b', ['3']]);
   });
