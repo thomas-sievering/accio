@@ -194,6 +194,29 @@ export class Hub {
     return this.accounts.find((a) => a.id === id)?.openai?.models ?? [];
   }
 
+  /**
+   * Asks each signed-in ChatGPT account again which models it offers, since they
+   * change over time and older sign-ins stored no effort levels. True when any changed.
+   */
+  async refreshCodexModels(): Promise<boolean> {
+    const results = await Promise.all(this.accounts.flatMap((a) => a.openai ? [{ id: a.id, openai: a.openai }] : []).map(async ({ id, openai }) => {
+      let models;
+      try { models = await this.openai.models(openai); } catch (error) {
+        console.error('[hub] could not read ChatGPT models', (error as Error).message);
+        return false;
+      }
+      if (JSON.stringify(models) === JSON.stringify(openai.models)) return false;
+      return this.change(async () => {
+        // A sign-out or new sign-in meanwhile has its own models.
+        const current = this.accounts.find((a) => a.id === id)?.openai;
+        if (current?.credentialId !== openai.credentialId) return false;
+        await this.commit(this.profiles, this.accounts.map((a) => a.id === id ? { ...a, openai: { ...current, models } } : a));
+        return true;
+      });
+    }));
+    return results.some(Boolean);
+  }
+
   async openaiCredentials(profileId: string, force = false) {
     const id = this.require(profileId).openaiAccountId;
     const account = this.accounts.find((a) => a.id === id)?.openai;

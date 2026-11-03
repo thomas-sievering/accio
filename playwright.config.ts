@@ -12,7 +12,7 @@ const baseURL = `http://127.0.0.1:${port}`;
 
 export default defineConfig({
   testDir: './tests',
-  testMatch: ['inline-chat.spec.ts', 'delivery.spec.ts'],
+  testMatch: ['inline-chat.spec.ts', 'delivery.spec.ts', 'effort.spec.ts'],
   fullyParallel: false,
   workers: 1,
   timeout: 30_000,

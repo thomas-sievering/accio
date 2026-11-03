@@ -1,4 +1,4 @@
-import type { ProfileView, ProviderId } from '@accio/protocol';
+import type { AccountLimitsView, LimitWindow, ProfileView, ProviderId } from '@accio/protocol';
 import { SignInError, type Hub, type SharedSettings } from '@accio/hub';
 import type { Broadcast, Router } from '../rpc/router.js';
 import { UserError } from '../rpc/router.js';
@@ -152,6 +152,29 @@ export class Profiles {
   }
 
   codexModels(id: string) { this.require(id); return this.hub.codexModels(id); }
+
+  /** The account's latest limit windows as the hub last read them; no new read. */
+  limitWindows(accountId: string): LimitWindow[] {
+    return this.limitViews().find((v) => v.accountId === accountId)?.snapshot?.windows ?? [];
+  }
+
+  /**
+   * Reads the limits of the account a profile uses at this provider again, in the
+   * background. The hub skips accounts it read within the last minute.
+   */
+  refreshLimits(profileId: string, providerId: ProviderId) {
+    const account = this.hub.selectedAccount(profileId, providerId);
+    if (!account?.signedIn) return;
+    void this.hub.refreshLimits([account.id]).catch((error) => console.error('[limits] background refresh failed', (error as Error).message));
+  }
+
+  limitViews(): AccountLimitsView[] {
+    return this.hub.limits.views();
+  }
+
+  onLimitsChanged(listener: () => void) {
+    this.hub.limits.subscribe(listener);
+  }
 
   private views(): ProfileView[] {
     return this.list.map((a) => this.view(a));

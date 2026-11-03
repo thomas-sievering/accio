@@ -10,7 +10,7 @@ import { ACCIO_MCP_SERVER } from '../tools/tools.js';
 /** Codex runs on this machine. Only the profile's scoped proxy key reaches it. */
 export function codexHarness(factory: CodexFactory = startCodex): Harness {
   return {
-    async *run({ cwd, prompt, sessionId, model, modelName, env, tools, signal, resourceInstructions, mcps, requestSecret, secretPurposes }) {
+    async *run({ cwd, prompt, sessionId, model, effort, modelName, env, tools, signal, resourceInstructions, mcps, requestSecret, secretPurposes }) {
       if (signal.aborted) return;
       const home = env.CODEX_HOME;
       const baseUrl = env.ACCIO_OPENAI_URL;
@@ -76,7 +76,7 @@ export function codexHarness(factory: CodexFactory = startCodex): Harness {
         threadId = result.thread.id;
         yield { type: 'harness_event', event: { kind: 'session', id: threadId! } };
         if (signal.aborted) return;
-        const turn = await client.request('turn/start', { threadId, input: [{ type: 'text', text: prompt }], ...(model ? { model } : {}) });
+        const turn = await client.request('turn/start', { threadId, input: [{ type: 'text', text: prompt }], ...(model ? { model } : {}), ...(effort ? { effort } : {}) });
         turnId = turn.turn.id;
         if (signal.aborted) { clearTimeout(stopTimer); stop(); }
         for (;;) {

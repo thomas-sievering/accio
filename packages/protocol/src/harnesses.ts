@@ -6,7 +6,14 @@ export type HarnessModel = {
   id: string; name: string; providerId: ProviderId; description: string;
   /** The signed-in account's own default, as reported by the provider. */
   isDefault?: boolean;
+  /** GLOSSARY: Effort. The levels this model accepts, lowest first, as its harness reports them; empty when it takes none. */
+  efforts: ModelEffort[];
+  /** The level the harness uses when none is chosen. */
+  defaultEffort?: string;
 };
+
+/** One effort level a model accepts, such as 'high'. */
+export type ModelEffort = { id: string; description?: string };
 
 /** GLOSSARY: Harness. Which ones exist is a shared setting; each machine reports which it has. */
 export type HarnessView = {

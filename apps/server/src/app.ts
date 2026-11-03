@@ -7,6 +7,10 @@ import type { CommandRunner } from './resources/process.js';
 import { moveProfilesToHub } from './store/moveProfilesToHub.js';
 import { registerHarnesses } from './harnesses/harnesses.js';
 import { Models } from './harnesses/models.js';
+import { ClaudeModels } from './harnesses/claudeModels.js';
+import { sdkClaudeModels, type ClaudeModelSource } from './harnesses/catalog.js';
+import { harnessEnv } from './threads/harnessEnv.js';
+import { configFolderOf } from './profiles/claudeConfigFolder.js';
 import { Profiles } from './profiles/profiles.js';
 import { registerHub } from './hub/hub.js';
 import { renameAccountsToProfiles } from './store/renameAccountsToProfiles.js';
@@ -35,6 +39,8 @@ export type AppDeps = {
   resourceCommand: CommandRunner;
   mcpFetch: typeof fetch;
   harness: Harness;
+  /** Asks Claude Code for a profile's models; by default the real SDK, unless `harness` replaces Claude Code. */
+  claudeModels: ClaudeModelSource;
   /** Reaches Anthropic for sign-in, token refresh and account limits. */
   claudeFetch: Fetch;
   /** Where the hub forwards threads' requests. */
@@ -84,8 +90,12 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
   const profiles = new Profiles(opts.home, hub, settings, hubProxy.url, broadcast);
   await profiles.load();
   profiles.register(router);
-  const models = new Models(profiles, settings, here.id);
+  const claudeModels = new ClaudeModels(deps.claudeModels ?? (deps.harness ? undefined : sdkClaudeModels),
+    async (profileId) => harnessEnv(process.env, await profiles.hubAccess(profileId, 'anthropic'), configFolderOf(opts.home, profileId)),
+    () => broadcast('models.changed', null));
+  const models = new Models(profiles, settings, here.id, claudeModels);
   models.register(router, broadcast);
+  void hub.refreshCodexModels().then((changed) => { if (changed) broadcast('models.changed', null); });
   registerHub(router, { hub, settings, url: hubProxy.url });
 
   const projects = new Projects(opts.home, profiles, machines, broadcast);

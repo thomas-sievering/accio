@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEv
 import { modelKey, type ModelSelection, type ModelsState } from '@accio/protocol';
 import { useClient, useConnectionStatus } from '../app/connection';
 import { Check, ProviderLogo, Star } from '../app/icons';
+import { EffortControl } from './EffortControl';
 
 /** A profile-scoped picker: favourites first, then each provider/harness pair. */
 export function ModelPicker({ profileId, harnessId, value, onChange, disabled = false }: {
@@ -70,7 +71,10 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
     if (busy || disabled) return;
     setBusy(true);
     setError(undefined);
-    try { await onChange(model); panel.current?.hidePopover(); }
+    // Another model keeps the effort when it accepts it, so moving from Opus to Sonnet stays at high.
+    const next = models.find((m) => m.harnessId === model.harnessId && m.id === model.modelId);
+    const effort = value.effort && next?.efforts.some((e) => e.id === value.effort) ? value.effort : undefined;
+    try { await onChange(effort ? { ...model, effort } : model); panel.current?.hidePopover(); }
     catch (err) { setError((err as Error).message); }
     finally { setBusy(false); }
   };
@@ -100,7 +104,7 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
     buttons[next]?.focus();
   };
 
-  return <>
+  return <span className="model-choice">
     <button type="button" className="model-trigger" popoverTarget={id} disabled={disabled || busy || !profileId || status !== 'open'} aria-label={`Select model: ${selected?.name ?? fallbackName}`}
       onClick={(event) => {
         const rect = event.currentTarget.getBoundingClientRect();
@@ -155,7 +159,9 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
       </div>
       {error && <p className="error model-picker-error" role="alert">{error}</p>}
     </div>
-  </>;
+    {selected && selected.efforts.length > 0 && <EffortControl key={modelKey(current)} model={selected} value={current.effort} disabled={disabled || !profileId || status !== 'open'}
+      onChange={(effort) => onChange({ harnessId: current.harnessId, modelId: current.modelId, ...(effort ? { effort } : {}) })} />}
+  </span>;
 }
 
 /** The provider logo already names the brand, so a name beside it drops the "Claude " prefix. */
