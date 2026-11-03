@@ -582,12 +582,6 @@ pre {
   text-align: center;
   font-size: 13px;
 }
-.tile-xs {
-  width: 16px;
-  height: 16px;
-  font-size: 9.5px;
-  border-radius: 5px;
-}
 
 /* Sheet extras */
 .row-input {
@@ -1200,21 +1194,32 @@ button.row {
   width: 13px;
   height: 13px;
 }
-.resume-bar {
+/* The one slot above the composer: why the thread can't go on, and the action that fixes it */
+.notice-bar {
   display: flex;
   align-items: center;
   gap: 12px;
   width: min(760px, calc(100% - 32px));
   margin: 0 auto 8px;
-  padding: 8px 8px 8px 14px;
+  padding: 6px 6px 6px 14px;
   border-radius: 12px;
+  font-size: 13px;
+}
+.notice-bar > span {
+  flex: 1;
+}
+.notice-bar b {
+  font-weight: 600;
+}
+.notice-bar.warn {
   border: 1px solid oklch(0.8 0.14 75 / 0.35);
   background: oklch(0.8 0.14 75 / 0.08);
   color: var(--amber);
-  font-size: 13px;
 }
-.resume-bar span {
-  flex: 1;
+.notice-bar.error {
+  border: 1px solid oklch(0.68 0.19 25 / 0.35);
+  background: oklch(0.68 0.19 25 / 0.08);
+  color: var(--red);
 }
 
 /* Sign in with Claude */
@@ -1268,25 +1273,6 @@ button.row {
   color: var(--amber) !important;
 }
 
-/* Shown above the composer when the thread's profile can't run */
-.profile-note {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: min(760px, calc(100% - 32px));
-  margin: 0 auto 8px;
-  padding: 6px 6px 6px 14px;
-  font-size: 13px;
-  color: var(--muted);
-}
-.profile-note span {
-  flex: 1;
-}
-.profile-note b {
-  color: var(--ink);
-  font-weight: 600;
-}
-
 /* Settings: replace the whole window while open (as in T3 Code). */
 .machine {
   border-radius: 8px;
@@ -1322,6 +1308,20 @@ button.row {
   background: var(--active);
   color: var(--ink);
   font-weight: 600;
+}
+.settings-back {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 13.5px;
+}
+.settings-back:hover {
+  background: var(--hover);
+  color: var(--ink);
 }
 .crumbs {
   display: flex;
@@ -1440,11 +1440,6 @@ button.row {
   gap: 8px;
   margin-top: 14px;
 }
-.with-tile {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
 .pill {
   display: inline-flex;
   align-items: center;
@@ -1477,56 +1472,177 @@ button.row {
   padding-bottom: 8vh;
 }
 .hero h1 {
-  margin: 0;
+  margin: 0 0 26px;
   font-size: 30px;
   font-weight: 500;
   letter-spacing: -0.02em;
   text-align: center;
   color: var(--ink);
 }
-.hero-sub {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 8px 0 26px;
-  font-size: 13px;
-  color: var(--dim);
-}
-.hero .profile-note,
+.hero .notice-bar,
 .hero .composer-wrap {
   width: 100%;
 }
 .hero .composer-wrap {
   margin: 0;
 }
-.hero-meta {
-  display: flex;
-  gap: 4px;
-  width: 100%;
-  margin-top: 8px;
-  padding: 0 6px;
-}
-.hero-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  padding: 3px 6px;
-  font-size: 12px;
-  color: var(--dim);
-  white-space: nowrap;
-}
-.hero-chip svg {
-  flex: none;
-  width: 13px;
-  height: 13px;
-}
-.hero-chip.push {
-  margin-left: auto;
-}
 
 .project-mark {
   flex: none;
   display: block;
   border-radius: 3px;
+}
+
+/* Full-access mark at the end of the thread header's where-line (ADR 0005) */
+.full-access {
+  display: grid;
+  margin-left: 2px;
+  color: var(--dim);
+}
+.full-access svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* Scope menu: profiles with their projects beneath */
+.switcher-mark {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+}
+.scope-menu {
+  max-height: min(70vh, 560px);
+  overflow-y: auto;
+}
+.scope-project .menu-split-main {
+  padding-left: 18px;
+}
+.scope-project .row-action {
+  opacity: 0;
+}
+.scope-project:hover .row-action,
+.scope-project:focus-within .row-action {
+  opacity: 1;
+}
+
+/* Rename inside the thread menu */
+.menu-form input {
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+}
+.menu-form input:focus {
+  outline: 2px solid var(--blue);
+  outline-offset: -1px;
+}
+
+/* Profile folders as a list */
+.folder-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.folder-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px 4px 10px;
+  border-radius: 8px;
+  background: var(--raised);
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.with-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.with-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* First run: profile, sign-in and project as steps, done in place */
+.first-run {
+  width: min(560px, calc(100% - 32px));
+  margin: auto;
+  padding-bottom: 8vh;
+}
+.first-run h1 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.first-run-sub {
+  margin: 6px 0 22px;
+  font-size: 13px;
+  color: var(--dim);
+}
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.step {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.step.current {
+  border-color: var(--line-2);
+}
+.step.later {
+  opacity: 0.5;
+}
+.step-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink);
+}
+.step-head b {
+  font-weight: 600;
+}
+.step.done .step-head {
+  color: var(--muted);
+}
+.step-n {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--line-2);
+  font-size: 12px;
+}
+.step.done .step-n {
+  border-color: transparent;
+  background: var(--green);
+  color: var(--bg);
+}
+.step-n svg {
+  width: 12px;
+  height: 12px;
+}
+.step-body {
+  margin-top: 12px;
+}
+.step-body .sheet-body {
+  padding: 0;
+}
+.step-body .sheet-foot {
+  padding: 12px 0 0;
+  border: 0;
 }

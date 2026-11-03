@@ -1,17 +1,17 @@
 import { useCallback, useState } from 'react';
 import { MachineBadge } from '../machine/MachineBadge';
-import { ProfilesProvider, useProfiles } from '../profiles/profiles';
-import { ProfileSwitcher } from '../profiles/ProfileSwitcher';
+import { claudeAccount, ProfilesProvider, useProfiles } from '../profiles/profiles';
 import { ProjectsProvider, useProjects } from '../projects/projects';
-import { ProjectScopeMenu } from '../projects/ProjectScopeMenu';
 import { AddProjectSheet } from '../projects/AddProjectSheet';
 import { ProjectSheet } from '../projects/ProjectSheet';
 import { ThreadsProvider, useThreads } from '../threads/threads';
-import { NewThreadButton } from '../threads/NewThreadButton';
+import { NewThreadButton, useNewThreadChoices } from '../threads/NewThreadButton';
 import { ThreadList } from '../threads/ThreadList';
-import { ThreadPane } from '../threads/ThreadPane';
+import { DraftPane, ThreadPane } from '../threads/ThreadPane';
 import { ThreadSearch } from '../threads/ThreadSearch';
-import { FolderPlus, Settings as Gear } from './icons';
+import { FirstRun } from './FirstRun';
+import { Settings as Gear } from './icons';
+import { ScopeMenu } from './ScopeMenu';
 import { Settings, type SettingsRoute } from './Settings';
 
 type OpenSheet = { kind: 'addProject' } | { kind: 'project'; id: string } | null;
@@ -28,17 +28,23 @@ export function App() {
   );
 }
 
+/**
+ * One way to each thing: the scope menu picks what the sidebar shows and adds
+ * projects; the gear opens Settings (profiles, hub, machine); everything a
+ * thread can do is on its right-click menu.
+ */
 function Shell() {
   const { profiles } = useProfiles();
   const { state } = useProjects();
-  const { threads, selectedId, projectScope, setProjectScope } = useThreads();
+  const { threads, selectedId, draft } = useThreads();
   const thread = threads?.find((t) => t.id === selectedId);
   const [sheet, setSheet] = useState<OpenSheet>(null);
   const [settings, setSettings] = useState<SettingsRoute | null>(null);
   const closeSettings = useCallback(() => setSettings(null), []);
   const close = () => setSheet(null);
   const openProject = sheet?.kind === 'project' ? state?.projects.find((p) => p.id === sheet.id) : undefined;
-  const noProfiles = profiles?.length === 0;
+  const openProfile = (profileId: string) => setSettings({ section: 'profiles', profileId });
+  const setUp = profiles && state && profiles.length > 0 && profiles.some((p) => claudeAccount(p)) && state.projects.length > 0;
 
   if (settings) return <Settings route={settings} onRoute={setSettings} onClose={closeSettings} />;
 
@@ -46,20 +52,10 @@ function Shell() {
     <div className="layout">
       <aside className="sidebar">
         <header className="side-top drag">
-          <ProfileSwitcher onManage={() => setSettings({ section: 'profiles' })} />
-          <button
-            className="side-icon"
-            title="Add project"
-            aria-label="Add project"
-            disabled={noProfiles}
-            onClick={() => setSheet({ kind: 'addProject' })}
-          >
-            <FolderPlus />
-          </button>
+          <ScopeMenu onOpenProject={(p) => setSheet({ kind: 'project', id: p.id })} onAddProject={() => setSheet({ kind: 'addProject' })} />
         </header>
         <div className="side-tools">
           <ThreadSearch />
-          <ProjectScopeMenu scope={projectScope} onScope={setProjectScope} onOpenProject={(p) => setSheet({ kind: 'project', id: p.id })} />
           <NewThreadButton />
         </div>
         <nav className="side-body">
@@ -73,35 +69,29 @@ function Shell() {
         </footer>
       </aside>
       <main className="main">
-        {thread ? (
-          <ThreadPane key={thread.id} thread={thread} onOpenProfile={(profileId) => setSettings({ section: 'profiles', profileId })} />
+        {draft ? (
+          <DraftPane key={draft} checkoutId={draft} onOpenProfile={openProfile} />
+        ) : thread ? (
+          <ThreadPane key={thread.id} thread={thread} onOpenProfile={openProfile} />
         ) : (
           <>
             <header className="main-top drag" />
-            <div className="empty">
-              {noProfiles ? (
-                <>
-                  <p>Add a profile first. Every thread runs under one.</p>
-                  <button className="ghost" onClick={() => setSettings({ section: 'profiles', profileId: 'new' })}>
-                    Add profile
-                  </button>
-                </>
-              ) : state?.projects.length === 0 ? (
-                <>
-                  <p>Add a project: a folder on this machine, usually a git repository.</p>
-                  <button className="ghost" onClick={() => setSheet({ kind: 'addProject' })}>
-                    Add project
-                  </button>
-                </>
-              ) : (
-                'Pick a thread, or start a new one.'
-              )}
-            </div>
+            {profiles && state && !setUp ? <FirstRun /> : <Idle />}
           </>
         )}
       </main>
       {sheet?.kind === 'addProject' && <AddProjectSheet onClose={close} />}
       {openProject && <ProjectSheet project={openProject} onClose={close} />}
+    </div>
+  );
+}
+
+function Idle() {
+  const choices = useNewThreadChoices();
+  return (
+    <div className="empty">
+      <p>Pick a thread, or start a new one.</p>
+      {choices.length > 0 && <NewThreadButton className="ghost primary with-icon" label="New thread" />}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import type { ProfileView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { Chevron, Plus } from '../app/icons';
 import { SettingsSection } from '../app/Settings';
+import { useAction } from '../app/useAction';
 import { claudeAccount, ProfileTile, useProfiles } from './profiles';
 import { SignInWithClaude } from './SignInWithClaude';
 
@@ -52,26 +53,15 @@ export function ProfilesSettings({
 function ProfileForm({ profile, onSaved, onDone }: { profile?: ProfileView; onSaved: (p: ProfileView) => void; onDone: () => void }) {
   const client = useClient();
   const [name, setName] = useState(profile?.name ?? '');
-  const [error, setError] = useState<string>();
-  const [busy, setBusy] = useState(false);
+  const { busy, error, run } = useAction();
 
-  const run = async (action: () => Promise<ProfileView | null>) => {
-    setBusy(true);
-    setError(undefined);
-    try {
-      const result = await action();
-      if (result) onSaved(result);
-      else onDone();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
-    void run(() => client.call('profiles.save', { id: profile?.id, name }));
+    const saved = await run(() => client.call('profiles.save', { id: profile?.id, name }));
+    if (saved) onSaved(saved);
+  };
+  const remove = async () => {
+    if (profile && (await run(async () => (await client.call('profiles.delete', { id: profile.id }), true)))) onDone();
   };
 
   return (
@@ -109,7 +99,7 @@ function ProfileForm({ profile, onSaved, onDone }: { profile?: ProfileView; onSa
             type="button"
             className="ghost danger"
             disabled={busy}
-            onClick={() => run(async () => (await client.call('profiles.delete', { id: profile.id }), null))}
+            onClick={remove}
           >
             Delete
           </button>

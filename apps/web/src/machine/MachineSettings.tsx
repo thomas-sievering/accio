@@ -5,6 +5,7 @@ import { useLive } from '../app/useLive';
 import { Chevron, Monitor } from '../app/icons';
 import { SettingRow, SettingsSection } from '../app/Settings';
 import { useProfiles } from '../profiles/profiles';
+import { FolderList } from './FolderList';
 
 /** The machines known to the hub, including those currently offline. */
 export function MachineSettings({ machineId, onOpen }: { machineId?: string; onOpen: (id: string) => void }) {
@@ -66,8 +67,8 @@ function MachineDetail({ machine }: { machine: MachineView }) {
 
 function ProfileFolders({ machine, profileId, name }: { machine: MachineView; profileId: string; name: string }) {
   const client = useClient();
-  const saved = (machine.profileFolders[profileId] ?? []).join('\n');
-  const [draft, setDraft] = useState<string>();
+  const saved = machine.profileFolders[profileId] ?? [];
+  const [draft, setDraft] = useState<string[]>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const submit = async (e: FormEvent) => {
@@ -77,7 +78,7 @@ function ProfileFolders({ machine, profileId, name }: { machine: MachineView; pr
     try {
       await client.call('machines.setProfileFolders', {
         machineId: machine.id, profileId,
-        folders: (draft ?? saved).split('\n').map((f) => f.trim()).filter(Boolean),
+        folders: draft ?? saved,
       });
       setDraft(undefined);
     } catch (err) {
@@ -88,13 +89,13 @@ function ProfileFolders({ machine, profileId, name }: { machine: MachineView; pr
   };
   return (
     <form className="setting-form" onSubmit={submit}>
-      <label className="field">
+      <div className="field">
         <span>{name}</span>
-        <textarea rows={2} value={draft ?? saved} onChange={(e) => setDraft(e.target.value)} disabled={busy} spellCheck={false} />
-        <small className="hint">One folder per line on {machine.name}. New projects inside these folders default to {name}.</small>
-      </label>
+        <FolderList folders={draft ?? saved} onChange={setDraft} disabled={busy} />
+        <small className="hint">Folders on {machine.name}. New projects inside these folders default to {name}.</small>
+      </div>
       {error && <p className="error">{error}</p>}
-      <button type="submit" className="ghost primary" disabled={busy || draft === undefined || draft === saved}>Save folders</button>
+      <button type="submit" className="ghost primary" disabled={busy || draft === undefined || JSON.stringify(draft) === JSON.stringify(saved)}>Save folders</button>
     </form>
   );
 }

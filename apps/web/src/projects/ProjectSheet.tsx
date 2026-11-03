@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { ProjectView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { Sheet } from '../app/Sheet';
+import { useAction } from '../app/useAction';
 import { useProfiles } from '../profiles/profiles';
 import { useThreads } from '../threads/threads';
 import { useProjects } from './projects';
@@ -16,20 +17,14 @@ export function ProjectSheet({ project, onClose }: { project: ProjectView; onClo
   const { checkoutsOf } = useProjects();
   const { threads = [] } = useThreads();
   const threadCount = threads.filter((t) => t.projectId === project.id).length;
-  const [error, setError] = useState<string>();
+  const { error, run } = useAction();
   const [confirming, setConfirming] = useState<string>();
 
-  const act = (p: Promise<unknown>) => {
-    setError(undefined);
-    return p.catch((e: Error) => setError(e.message));
-  };
   const remove = (checkoutId: string) =>
-    act(
-      (async () => {
-        for (const t of threads.filter((t) => t.checkoutId === checkoutId)) await client.call('threads.delete', { threadId: t.id });
-        await client.call('checkouts.remove', { id: checkoutId });
-      })(),
-    ).finally(() => setConfirming(undefined));
+    run(async () => {
+      for (const t of threads.filter((t) => t.checkoutId === checkoutId)) await client.call('threads.delete', { threadId: t.id });
+      await client.call('checkouts.remove', { id: checkoutId });
+    }).finally(() => setConfirming(undefined));
 
   return (
     <Sheet title={project.name} onClose={onClose}>
@@ -38,26 +33,33 @@ export function ProjectSheet({ project, onClose }: { project: ProjectView; onClo
           <div>
             <span className="dim">Repository</span> {project.repoKey ?? 'no git remote'}
           </div>
+          {profiles.length === 1 && (
+            <div>
+              <span className="dim">Profile</span> {profiles[0]!.name}
+            </div>
+          )}
         </div>
-        <label className="field">
-          <span>Profile</span>
-          <select
-            value={project.profileId}
-            disabled={threadCount > 0}
-            onChange={(e) => act(client.call('projects.setProfile', { projectId: project.id, profileId: e.target.value }))}
-          >
-            {profiles.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </select>
-          <small className="hint">
-            {threadCount > 0
-              ? `Fixed while the project has threads (${threadCount}): each thread keeps the profile it started with.`
-              : 'You can change it while the project has no threads.'}
-          </small>
-        </label>
+        {profiles.length > 1 ? (
+          <label className="field">
+            <span>Profile</span>
+            <select
+              value={project.profileId}
+              disabled={threadCount > 0}
+              onChange={(e) => run(() => client.call('projects.setProfile', { projectId: project.id, profileId: e.target.value }))}
+            >
+              {profiles.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+            <small className="hint">
+              {threadCount > 0
+                ? `Fixed while the project has threads (${threadCount}): each thread keeps the profile it started with.`
+                : 'You can change it while the project has no threads.'}
+            </small>
+          </label>
+        ) : null}
         <div className="field">
           <span>Checkouts on this machine</span>
           <div className="list">

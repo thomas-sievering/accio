@@ -40,9 +40,7 @@ describe('interrupted turns', () => {
     await mkdir(folder);
     await c.signedIn('Personal');
     const checkout = await c.call('checkouts.add', { path: folder, profileId: 'personal' });
-    const thread = await c.call('threads.create', { checkoutId: checkout.id });
-
-    await c.call('threads.send', { threadId: thread.id, text: 'run the long thing' });
+    const thread = await c.call('threads.start', { checkoutId: checkout.id, text: 'run the long thing' });
     await c.waitFor('thread.item', (e) => e.item.kind === 'tool');
     await expect(c.call('threads.resume', { threadId: thread.id })).rejects.toThrow(/Only an interrupted/);
 
@@ -68,7 +66,8 @@ describe('interrupted turns', () => {
     await mkdir(folder);
     await first.c.signedIn('Personal');
     const checkout = await first.c.call('checkouts.add', { path: folder, profileId: 'personal' });
-    const thread = await first.c.call('threads.create', { checkoutId: checkout.id });
+    const thread = await first.c.call('threads.start', { checkoutId: checkout.id, text: 'deploy' });
+    await statusIs(first.c, thread.id, 'idle');
     await first.t.stop({ keepHome: true });
 
     // What a crash mid-turn leaves on disk: the thread still running, a tool still in flight.

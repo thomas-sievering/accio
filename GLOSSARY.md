@@ -65,7 +65,7 @@ One machine's copy of a project's repository. A folder without a git remote is a
 _Avoid_: Clone, project folder
 
 **Thread**:
-A durable conversation with a harness inside one checkout. It keeps the profile it started with for its whole life, but not any one account, provider or harness.
+A durable conversation with a harness inside one checkout. It exists from its first message on. It keeps the profile it started with for its whole life, but not any one account, provider or harness.
 _Avoid_: Chat, session, agent, conversation
 
 **Turn**:
@@ -96,7 +96,7 @@ Marking a thread as done. It stays readable and can be reopened.
 _Avoid_: Archive, close, resolve
 
 **Shelf**:
-A group of threads in the sidebar apart from the open list: Working (running), Snoozed and Settled.
+A group of threads in the sidebar apart from the open list: Snoozed and Settled. A running thread stays in the open list.
 _Avoid_: Folder, inbox, tab
 
 ## Skills
