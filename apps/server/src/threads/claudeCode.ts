@@ -14,13 +14,14 @@ const HARD_STOP_AFTER_MS = 3000;
  * the checkout's own .claude folder and CLAUDE.md.
  */
 export const claudeCode: Harness = {
-  async *run({ cwd, prompt, sessionId, env, signal }: HarnessTurn) {
+  async *run({ cwd, prompt, sessionId, model, env, signal }: HarnessTurn) {
     const abortController = new AbortController();
     const stderr: string[] = [];
     const q = query({
       prompt,
       options: {
         cwd,
+        model,
         env,
         abortController,
         resume: sessionId ?? undefined,

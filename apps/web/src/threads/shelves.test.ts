@@ -8,6 +8,7 @@ const thread = (id: string, extra: Partial<ThreadView> = {}): ThreadView => ({
   checkoutId: 'c1',
   projectId: 'p1',
   profileId: 'a1',
+  model: { harnessId: 'claudeCode', modelId: 'default' },
   title: id,
   status: 'idle',
   createdAt: '2026-11-03T10:00:00Z',

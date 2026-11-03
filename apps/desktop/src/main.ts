@@ -1,8 +1,9 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
+import { dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { stat } from 'node:fs/promises';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -10,6 +11,7 @@ const require = createRequire(import.meta.url);
 type Ready = { url: string; token: string };
 
 let server: ChildProcess | undefined;
+let localServerOrigin: string | undefined;
 
 /**
  * The desktop app carries the local machine's server (GLOSSARY: Client holds no
@@ -46,7 +48,10 @@ async function createWindow(ready: Ready) {
     // Same chrome as botbot: native caption buttons over a hidden title bar.
     titleBarStyle: 'hidden',
     titleBarOverlay: { color: '#00000000', symbolColor: '#d4d4d4', height: 52 },
-    webPreferences: { preload: join(here, '../preload.cjs') },
+    webPreferences: {
+      preload: join(here, '../preload.cjs'),
+      additionalArguments: [`--accio-server-origin=${new URL(ready.url).origin}`],
+    },
   });
   win.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url);
@@ -63,9 +68,21 @@ ipcMain.handle('accio:pick-folder', async (event) => {
   return result.canceled ? null : (result.filePaths[0] ?? null);
 });
 
+ipcMain.handle('accio:open-folder', async (event, path: unknown) => {
+  if (!event.senderFrame || new URL(event.senderFrame.url).origin !== localServerOrigin) {
+    throw new Error('Only folders on this desktop machine can be opened in Explorer.');
+  }
+  if (typeof path !== 'string' || !isAbsolute(path) || !(await stat(path)).isDirectory()) {
+    throw new Error('Folder does not exist.');
+  }
+  const error = await shell.openPath(path);
+  if (error) throw new Error(error);
+});
+
 app.whenReady().then(async () => {
   try {
     const ready = await startServer();
+    localServerOrigin = new URL(ready.url).origin;
     await createWindow(ready);
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) void createWindow(ready);

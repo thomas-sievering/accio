@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { ThreadView, TranscriptItem } from '@accio/protocol';
+import { DEFAULT_MODEL } from '@accio/protocol';
 import { UserError } from '../rpc/router.js';
 
 /** A thread as stored: what clients see, plus the Claude session it continues. */
@@ -11,10 +12,11 @@ export function toView({ sessionId: _s, ...view }: Thread): ThreadView {
   return view;
 }
 
-export function newThread(input: { checkoutId: string; projectId: string; profileId: string }, now: string): Thread {
+export function newThread(input: { checkoutId: string; projectId: string; profileId: string; model?: ThreadView['model'] }, now: string): Thread {
   return {
     id: randomUUID(),
     ...input,
+    model: input.model ?? { ...DEFAULT_MODEL },
     title: NEW_THREAD_TITLE,
     status: 'idle',
     sessionId: null,
@@ -26,8 +28,8 @@ export function newThread(input: { checkoutId: string; projectId: string; profil
 }
 
 /** Threads stored before snooze and settle moved to the server have neither field. */
-export function fromStored(t: Omit<Thread, 'snoozedUntil' | 'settledAt'> & Partial<Pick<Thread, 'snoozedUntil' | 'settledAt'>>): Thread {
-  return { ...t, snoozedUntil: t.snoozedUntil ?? null, settledAt: t.settledAt ?? null };
+export function fromStored(t: Omit<Thread, 'snoozedUntil' | 'settledAt' | 'model'> & Partial<Pick<Thread, 'snoozedUntil' | 'settledAt' | 'model'>>): Thread {
+  return { ...t, model: t.model ?? { ...DEFAULT_MODEL }, snoozedUntil: t.snoozedUntil ?? null, settledAt: t.settledAt ?? null };
 }
 
 /**

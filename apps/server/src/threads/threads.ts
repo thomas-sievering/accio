@@ -9,6 +9,7 @@ import type { Broadcast, Router } from '../rpc/router.js';
 import { UserError } from '../rpc/router.js';
 import { JsonFile } from '../store/jsonFile.js';
 import type { Harness } from './harness.js';
+import type { Models } from '../harnesses/models.js';
 import { harnessEnv } from './harnessEnv.js';
 import {
   RESUME_PROMPT,
@@ -47,6 +48,7 @@ export class Threads {
     private projects: Projects,
     private harness: Harness,
     private broadcast: Broadcast,
+    private models: Models,
   ) {
     this.file = new JsonFile(join(home, 'threads.json'), () => []);
     projects.onCheckInUse((checkoutId) => this.countUsing((t) => t.checkoutId === checkoutId));
@@ -87,13 +89,14 @@ export class Threads {
   register(router: Router) {
     router
       .on('threads.list', () => this.list.map(toView))
-      .on('threads.start', async ({ checkoutId, text }) => {
+      .on('threads.start', async ({ checkoutId, text, model }) => {
         const checkout = this.projects.checkout(checkoutId);
         const project = this.projects.projectOf(checkout);
         // Refuse before anything is stored, so a thread that cannot run never appears.
         await this.profiles.hubAccess(project.profileId);
+        const selected = this.models.require(project.profileId, model);
         // GLOSSARY: a thread keeps the profile it started with for its whole life.
-        const thread = newThread({ checkoutId, projectId: project.id, profileId: project.profileId }, now());
+        const thread = newThread({ checkoutId, projectId: project.id, profileId: project.profileId, model: selected }, now());
         // Quiet: clients first see the thread once its turn is running, never as an idle empty thread.
         await this.commit([...this.list, thread], { quiet: true });
         await this.beginTurn(thread.id, text);
@@ -103,6 +106,13 @@ export class Threads {
       .on('threads.send', async ({ threadId, text }) => {
         await this.beginTurn(threadId, text);
         return null;
+      })
+      .on('threads.setModel', async ({ threadId, model }) => {
+        const thread = this.require(threadId);
+        if (thread.status === 'running') throw new UserError('Wait for this turn to finish before changing its model.');
+        const selected = this.models.require(thread.profileId, model);
+        if (selected.harnessId !== thread.model.harnessId) throw new UserError('Start a new thread to change its harness.');
+        return toView(await this.update(threadId, (t) => ({ ...t, model: selected })));
       })
       .on('threads.stop', ({ threadId }) => {
         const controller = this.running.get(this.require(threadId).id);
@@ -144,6 +154,7 @@ export class Threads {
     const thread = this.require(threadId);
     if (!this.profiles.get(thread.profileId)) throw new UserError('The profile this thread started with no longer exists');
     const access = await this.profiles.hubAccess(thread.profileId);
+    this.models.require(thread.profileId, thread.model);
     const checkout = this.projects.checkout(thread.checkoutId);
 
     const started = startTurn(thread, text, now());
@@ -167,7 +178,7 @@ export class Threads {
     const transcript = new TurnTranscript(turnId);
     let outcome: TurnOutcome | null = null;
     try {
-      for await (const msg of this.harness.run({ ...run, sessionId: thread.sessionId })) {
+      for await (const msg of this.harness.run({ ...run, sessionId: thread.sessionId, model: thread.model.modelId === 'default' ? undefined : thread.model.modelId })) {
         for (const change of transcript.accept(msg)) {
           if (change.type === 'end') outcome = change.outcome;
           await this.apply(thread.id, change);

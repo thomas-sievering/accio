@@ -27,6 +27,7 @@ export function HarnessesSettings() {
       {harnesses?.map((h) => (
         <SettingsSection key={h.id} title={h.name}>
           <SettingRow title="Providers"><span>{h.providers.map((p) => p === 'anthropic' ? 'Anthropic' : 'OpenAI').join(', ')}</span></SettingRow>
+          <SettingRow title="Models" description="Model aliases follow Claude Code's current versions."><span>{h.models.map((m) => m.name).join(', ')}</span></SettingRow>
           {h.machines.length === 0 && <SettingRow title="No installations reported" />}
           {h.machines.map((install) => {
             const machine = machines?.find((m) => m.id === install.machineId);
