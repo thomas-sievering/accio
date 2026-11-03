@@ -11,7 +11,7 @@ Profiles separate personal/work configuration and choose one named account per p
 
 ## How to get to it (user POV)
 
-- From an empty home, enter a name under `Set up accio` and choose `Add`.
+- From an empty home, keep `This PC` under `Set up accio` and choose `Continue`, then enter a name and choose `Continue`.
 - Choose `Settings` then `Profiles`; choose `Add profile` or an existing profile row.
 - In a signed-out thread draft, choose `Choose account` to open that profile directly.
 
@@ -19,7 +19,7 @@ Profiles separate personal/work configuration and choose one named account per p
 
 Preconditions: healthy empty instance for onboarding. Other entries require a profile; create it through onboarding. Account selection requires named accounts from [Accounts](accounts.md).
 
-- **Onboarding.** `await page.getByPlaceholder('personal, work…').fill('Verify personal'); await page.getByRole('button', { name: 'Add', exact: true }).click()`. Require text `Choose an account for Verify personal`. This proves profile creation, not completion of sign-in or project onboarding.
+- **Onboarding.** Click exact button `Continue` on the hub question (`This PC` is preselected), then `await page.getByPlaceholder('personal, work…').fill('Verify personal'); await page.getByRole('button', { name: 'Continue', exact: true }).click()`. Require text `Choose an account for Verify personal`. This proves profile creation, not completion of sign-in or project onboarding.
 - **Settings creation.** Click button `Settings`, then `page.locator('.sidebar nav').getByRole('button', { name: 'Profiles', exact: true })` when switching sections. Click `page.getByRole('button', { name: /^Add profile / })`, fill textbox `Name` with `Verify work`, click exact button `Add profile`. Require heading `Verify work`. Click `Cancel` to return to the list; the new profile is already saved.
 - **Cancel.** Open `Add profile`, fill `Name` with `Discard me`, click `Cancel`. Require no profile button starting with `Discard me`, and no such persisted profile.
 - **Rename/reopen.** Click profile button matching `/^Verify work No account selected$/`, fill textbox `Name` with `Verify work renamed`, click `Save`. Reload, reopen Settings, reopen that renamed row, and assert `inputValue()` equals the saved name.
