@@ -45,7 +45,3 @@ export function claudeModel(info: ClaudeModelInfo): HarnessModel | undefined {
   };
 }
 
-/** The models a harness offers before any profile is asked. Codex has no fixed catalog: its models come from the signed-in ChatGPT account. */
-export function harnessModels(harnessId: string): HarnessModel[] {
-  return harnessId === 'claudeCode' ? CLAUDE_MODELS : [];
-}

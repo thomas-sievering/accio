@@ -3,6 +3,7 @@ import { modelKey, type ModelSelection, type ModelsState } from '@accio/protocol
 import { useClient, useConnectionStatus } from '../app/connection';
 import { Check, ProviderLogo, Star } from '../app/icons';
 import { EffortControl } from './EffortControl';
+import { PresetControl, isPreset, usedUpText } from './PresetControl';
 
 /** A profile-scoped picker: favourites first, then each provider/harness pair. */
 export function ModelPicker({ profileId, harnessId, value, onChange, disabled = false }: {
@@ -104,7 +105,13 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
     buttons[next]?.focus();
   };
 
+  // Presets never cross harnesses: a thread's are its own harness's, a draft's those of the model it has.
+  const presets = (data?.presets ?? []).filter((p) => p.harnessId === (harnessId ?? current.harnessId));
+  const onPreset = presets.some((p) => isPreset(p, current, models));
+  const controlsDisabled = disabled || !profileId || status !== 'open';
+
   return <span className="model-choice">
+    {presets.length > 0 && <PresetControl presets={presets} models={models} value={current} disabled={controlsDisabled} onChange={onChange} />}
     <button type="button" className="model-trigger" popoverTarget={id} disabled={disabled || busy || !profileId || status !== 'open'} aria-label={`Select model: ${selected?.name ?? fallbackName}`}
       onClick={(event) => {
         const rect = event.currentTarget.getBoundingClientRect();
@@ -143,10 +150,11 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
           const key = modelKey(choice);
           const isSelected = modelKey(current) === key;
           const isFavorite = favorites.has(key);
-          return <div className={`model-picker-row${isSelected ? ' selected' : ''}`} key={key}>
+          return <div className={`model-picker-row${isSelected ? ' selected' : ''}${m.limited ? ' limited' : ''}`} key={key} title={m.limited ? usedUpText(m.limited) : undefined}>
             <button type="button" data-model-choice aria-pressed={isSelected} onClick={() => void choose(choice)}>
               {/* Favourites mix providers, so each row carries its provider's logo instead of the full name. */}
               <span className="model-picker-name">{activeTab === 'favorites' ? <><ProviderLogo providerId={m.providerId} />{short(m.name)}</> : m.name}{m.isDefault && <span className="model-picker-badge">Default</span>}</span>
+              {m.limited && <small className="model-picker-limited">{usedUpText(m.limited)}</small>}
             </button>
             <button type="button" className="model-star" title={isFavorite ? 'Remove from favourites' : 'Add to favourites'}
               aria-label={`${isFavorite ? 'Remove' : 'Add'} ${m.name} ${isFavorite ? 'from' : 'to'} favourites`} aria-pressed={isFavorite}
@@ -159,7 +167,7 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
       </div>
       {error && <p className="error model-picker-error" role="alert">{error}</p>}
     </div>
-    {selected && selected.efforts.length > 0 && <EffortControl key={modelKey(current)} model={selected} value={current.effort} disabled={disabled || !profileId || status !== 'open'}
+    {selected && selected.efforts.length > 0 && <EffortControl key={modelKey(current)} model={selected} value={current.effort} disabled={controlsDisabled} quiet={onPreset}
       onChange={(effort) => onChange({ harnessId: current.harnessId, modelId: current.modelId, ...(effort ? { effort } : {}) })} />}
   </span>;
 }

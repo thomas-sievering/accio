@@ -676,11 +676,12 @@ button.row {
 }
 /* The model and its effort sit together on the left of the composer bar. */
 .model-choice { display: inline-flex; align-items: center; gap: 2px; min-width: 0; margin-right: auto; }
+/* The first control's text lines up with the textarea's; its hover pill bleeds left. */
+.model-choice > :first-child { margin-left: -8px; }
 .model-trigger {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-left: -8px; /* Icon lines up with the textarea text; the hover pill bleeds left. */
   padding: 5px 8px;
   border-radius: 6px;
   color: var(--muted);
@@ -734,32 +735,25 @@ div.model-picker-empty b { color: var(--ink); font-weight: 500; }
 .model-picker-empty-icon { display: grid; place-items: center; width: 32px; height: 32px; margin-bottom: 4px; border: 1px solid var(--line); border-radius: 8px; color: var(--amber); }
 .model-picker-error { grid-column: 1 / -1; margin: 0; padding: 10px 12px; border-top: 1px solid var(--line); }
 
-/* GLOSSARY: Effort. A rising meter that warms as the model thinks harder. */
-.effort-trigger {
+/* A level chip that steps on scroll and opens a stepped slider: presets and effort. */
+.step-chip {
+  --tone: var(--muted);
   display: inline-flex;
   align-items: center;
-  gap: 7px;
   padding: 5px 8px;
   border-radius: 6px;
   color: var(--muted);
   font-size: 13px;
   white-space: nowrap;
 }
-.effort-trigger, .effort-picker { --tone: var(--muted); }
-:is(.effort-trigger, .effort-picker).tone-low { --tone: var(--ink); }
-:is(.effort-trigger, .effort-picker).tone-high { --tone: var(--blue); }
-:is(.effort-trigger, .effort-picker).tone-top { --tone: var(--amber); }
-.effort-trigger.tone-top .effort-label { color: var(--amber); }
-.effort-trigger:hover:not(:disabled), .effort-trigger:focus-visible { background: var(--hover); color: var(--ink); }
-.effort-trigger:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
-.effort-trigger:disabled { cursor: default; opacity: 0.6; }
-.effort-label { display: inline-block; }
-.effort-label.bumped { animation: effort-bump 260ms ease-out; }
-@keyframes effort-bump { from { color: var(--tone); transform: translateY(-2px); } to { transform: none; } }
-.effort-meter { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; }
-.effort-meter i { width: 3px; border-radius: 1px; background: var(--line-2); transition: background-color 160ms ease, height 160ms ease; }
-.effort-meter i.on { background: var(--tone, var(--ink)); }
-.effort-picker {
+.step-chip:hover:not(:disabled), .step-chip:focus-visible { background: var(--hover); color: var(--ink); }
+.step-chip:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+.step-chip:disabled { cursor: default; opacity: 0.6; }
+.step-chip-content { display: inline-flex; align-items: center; gap: 7px; }
+.step-chip-content.bumped { animation: step-bump 260ms ease-out; }
+@keyframes step-bump { from { color: var(--tone); transform: translateY(-2px); } to { transform: none; } }
+.step-picker {
+  --tone: var(--muted);
   position: fixed;
   margin: 0;
   padding: 10px 14px 12px;
@@ -770,24 +764,17 @@ div.model-picker-empty b { color: var(--ink); font-weight: 500; }
   box-shadow: 0 12px 40px #0006;
   font-size: 13px;
 }
-.effort-picker:popover-open { display: flex; flex-direction: column; }
-.effort-picker-title { display: flex; justify-content: space-between; margin: 0 0 8px; color: var(--muted); font-size: 12px; }
-.effort-picker-title b { color: var(--tone); font-weight: 600; }
-.effort-picker input[type="range"] {
-  appearance: none;
-  width: 100%;
-  height: 18px;
-  margin: 0;
-  background: transparent;
-  cursor: pointer;
-}
-.effort-picker input[type="range"]:focus-visible { outline: none; }
-.effort-picker input[type="range"]::-webkit-slider-runnable-track {
+.step-picker:popover-open { display: flex; flex-direction: column; }
+.step-picker-title { display: flex; justify-content: space-between; margin: 0 0 8px; color: var(--muted); font-size: 12px; }
+.step-picker-title b { color: var(--tone); font-weight: 600; }
+.step-picker input[type="range"] { appearance: none; width: 100%; height: 18px; margin: 0; background: transparent; cursor: pointer; }
+.step-picker input[type="range"]:focus-visible { outline: none; }
+.step-picker input[type="range"]::-webkit-slider-runnable-track {
   height: 4px;
   border-radius: 2px;
   background: linear-gradient(to right, var(--tone) var(--at), var(--line-2) var(--at));
 }
-.effort-picker input[type="range"]::-webkit-slider-thumb {
+.step-picker input[type="range"]::-webkit-slider-thumb {
   appearance: none;
   width: 14px;
   height: 14px;
@@ -798,17 +785,42 @@ div.model-picker-empty b { color: var(--ink); font-weight: 500; }
   box-shadow: 0 0 0 1px var(--tone);
   transition: transform 120ms ease;
 }
-.effort-picker input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone) 40%, transparent); }
-.effort-picker input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.15); }
-.effort-ticks { position: relative; display: block; height: 16px; margin: 4px 7px 0; }
-.effort-ticks button { position: absolute; top: 0; transform: translateX(-50%); padding: 0 2px; color: var(--dim); font-size: 11px; white-space: nowrap; }
-.effort-ticks button:hover { color: var(--ink); }
-.effort-ticks button.on { color: var(--ink-strong); }
-.effort-error { font-size: 12px; }
+.step-picker input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone) 40%, transparent); }
+.step-picker input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.15); }
+/* Inset by half the thumb so each label sits under its stop. */
+.step-ticks { position: relative; display: block; height: 16px; margin: 4px 7px 0; }
+.step-ticks button { position: absolute; top: 0; transform: translateX(-50%); padding: 0 2px; color: var(--dim); font-size: 11px; white-space: nowrap; }
+.step-ticks button:hover { color: var(--ink); }
+.step-ticks button.on { color: var(--ink-strong); }
+.step-ticks button.unavailable { text-decoration: line-through; opacity: 0.6; }
+.step-picker-detail { margin: 10px 0 0; padding-top: 8px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+.step-picker-detail.unavailable { color: var(--amber); }
+.step-error { font-size: 12px; }
+
+/* GLOSSARY: Effort. A rising meter that warms as the model thinks harder. */
+.tone-low { --tone: var(--ink); }
+.effort-chip.tone-high, .step-picker.tone-high { --tone: var(--blue); }
+.effort-chip.tone-top, .step-picker.tone-top { --tone: var(--amber); }
+.effort-chip.tone-top .step-chip-content { color: var(--amber); }
+.effort-chip.quiet { padding-inline: 6px; }
+.effort-meter { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; }
+.effort-meter i { width: 3px; border-radius: 1px; background: var(--line-2); transition: background-color 160ms ease, height 160ms ease; }
+.effort-meter i.on { background: var(--tone, var(--ink)); }
+
+/* GLOSSARY: Preset. One colour per level, from calm to costly. */
+.tone-medium { --tone: var(--green); }
+.step-picker.tone-high, .preset-chip.tone-high { --tone: var(--blue); }
+.tone-ultra { --tone: var(--amber); }
+.preset-chip { color: var(--ink); font-weight: 500; }
+.preset-chip.tone-none { color: var(--muted); font-weight: 400; }
+.preset-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--tone); box-shadow: 0 0 6px color-mix(in srgb, var(--tone) 60%, transparent); }
+.preset-chip.tone-none .preset-dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--muted); }
+.model-picker-row.limited .model-picker-name { opacity: 0.55; }
+.model-picker-limited { color: var(--amber) !important; }
 @media (prefers-reduced-motion: reduce) {
-  .effort-label.bumped { animation: none; }
-  .effort-picker input[type="range"]::-webkit-slider-thumb { transition: none; }
+  .step-chip-content.bumped { animation: none; }
   .effort-meter i { transition: none; }
+  .step-picker input[type="range"]::-webkit-slider-thumb { transition: none; }
 }
 .composer-machine {
   max-width: 240px;

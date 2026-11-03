@@ -85,7 +85,6 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
   const codex = await codexInstall();
   await machines.connect([await claudeCodeInstall(), ...(codex.version ? [codex] : [])]);
   machines.register(router);
-  registerHarnesses(router, settings);
 
   const profiles = new Profiles(opts.home, hub, settings, hubProxy.url, broadcast);
   await profiles.load();
@@ -95,6 +94,7 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
     () => broadcast('models.changed', null));
   const models = new Models(profiles, settings, here.id, claudeModels);
   models.register(router, broadcast);
+  registerHarnesses(router, settings, models);
   void hub.refreshCodexModels().then((changed) => { if (changed) broadcast('models.changed', null); });
   registerHub(router, { hub, settings, url: hubProxy.url });
 

@@ -180,3 +180,18 @@
 .pill.bad .dot {
   background: var(--red);
 }
+
+/* GLOSSARY: Preset. A level's model and effort side by side. */
+.preset-setting { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.preset-setting select {
+  min-width: 0;
+  padding: 4px 24px 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background-color: var(--raised);
+  background-position: right 8px center;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+.preset-setting select:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }

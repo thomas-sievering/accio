@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { method } from './rpc.js';
 import type { ProviderId } from './profiles.js';
+import type { PresetView } from './models.js';
 
 export type HarnessModel = {
   id: string; name: string; providerId: ProviderId; description: string;
@@ -21,7 +22,10 @@ export type HarnessView = {
   name: string;
   /** The providers whose models it can use. */
   providers: ProviderId[];
+  /** Every model it offers any profile on this machine. */
   models: HarnessModel[];
+  /** GLOSSARY: Preset. Its four levels, resolved against `models`. */
+  presets: PresetView[];
   /** The machines that have it installed. */
   machines: { machineId: string; version: string | null }[];
 };
