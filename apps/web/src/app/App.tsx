@@ -14,6 +14,7 @@ import { NewThreadButton } from '../threads/NewThreadButton';
 import { ThreadList } from '../threads/ThreadList';
 import { DraftPane, ThreadPane } from '../threads/ThreadPane';
 import { ThreadSearch } from '../threads/ThreadSearch';
+import { useAppEvent } from './appEvents';
 import { ConnectionNotice } from './ConnectionNotice';
 import { FirstRun } from './FirstRun';
 import { Close, FolderPlus, Limits, Owl, Settings as Gear } from './icons';
@@ -57,6 +58,7 @@ function Shell() {
   const [sheet, setSheet] = useState<OpenSheet>(null);
   const [settings, setSettings] = useState<SettingsRoute | null>(null);
   const closeSettings = useCallback(() => setSettings(null), []);
+  useAppEvent('settings.open', setSettings);
   const [panelOpen, togglePanel] = usePanelOpen();
   const openThread = (id: string) => {
     select(id);

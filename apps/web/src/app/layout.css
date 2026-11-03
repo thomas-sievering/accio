@@ -213,26 +213,45 @@
   border-bottom: 1px solid var(--line);
   background: var(--side);
 }
+/* Tabs live under the caption row: an underlined strip, quiet until chosen. */
 .side-panel-tabs {
+  position: sticky;
+  top: var(--caption-h);
+  z-index: 1;
   display: flex;
-  gap: 2px;
+  flex: none;
+  background: var(--side);
+  gap: 14px;
   min-width: 0;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line);
 }
 .side-panel-tab {
-  height: 28px;
-  padding: 0 10px;
-  border-radius: 7px;
-  color: var(--muted);
-  font-size: 13px;
+  position: relative;
+  height: 34px;
+  padding: 0 1px;
+  color: var(--dim);
+  font-size: 12.5px;
   white-space: nowrap;
 }
 .side-panel-tab:hover {
   color: var(--ink);
-  background: var(--hover);
 }
 .side-panel-tab[aria-selected='true'] {
   color: var(--ink-strong);
-  background: var(--active);
+}
+.side-panel-tab[aria-selected='true']::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 -1px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--ink-strong);
+}
+.side-panel-tab:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
+  border-radius: 4px;
 }
 .side-panel-body {
   display: flex;
