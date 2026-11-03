@@ -1,4 +1,6 @@
 import type { CheckoutView, ProfileView, ProjectView, ThreadView } from '@accio/protocol';
+import { DEFAULT_MODEL, type ModelSelection } from '@accio/protocol';
+import { useState } from 'react';
 import { useClient } from '../app/connection';
 import { ShieldOff } from '../app/icons';
 import { claudeAccount, useProfiles } from '../profiles/profiles';
@@ -7,11 +9,10 @@ import { FolderLink } from '../projects/FolderLink';
 import { ProjectMark } from '../projects/ProjectMark';
 import { useProjects } from '../projects/projects';
 import { Composer } from './Composer';
+import { ModelPicker } from './ModelPicker';
 import { ThreadNotice } from './ThreadNotice';
 import { Transcript } from './Transcript';
 import { useThreads, useTranscript } from './threads';
-
-const harness = <span className="composer-harness">Claude Code</span>;
 
 /** Where a thread runs, looked up once for the header, the notice and the composer. */
 function usePlace(checkoutId: string, profileId?: string) {
@@ -28,6 +29,7 @@ export function ThreadPane({ thread, onOpenProfile }: { thread: ThreadView; onOp
   const place = usePlace(thread.checkoutId, thread.profileId);
   const items = useTranscript(thread.id);
   const running = thread.status === 'running';
+  const [savingModel, setSavingModel] = useState(false);
   const lastTurn = items?.findLast((item) => item.kind === 'user')?.turnId;
   const blocked = thread.status === 'failed' || thread.status === 'interrupted';
   const notices = blocked ? items?.filter((item) => item.kind === 'notice' && item.turnId === lastTurn) : undefined;
@@ -40,11 +42,15 @@ export function ThreadPane({ thread, onOpenProfile }: { thread: ThreadView; onOp
       {visibleItems ? <Transcript items={visibleItems} working={running} /> : <div className="empty" />}
       <ThreadNotice thread={thread} profile={place.profile} detail={detail} onOpenProfile={onOpenProfile} />
       <Composer
-        disabled={running || !place.profile || !claudeAccount(place.profile)}
+        disabled={running || savingModel || !place.profile || !claudeAccount(place.profile)}
         onStop={running ? async () => void (await client.call('threads.stop', { threadId: thread.id })) : undefined}
         placeholder={running ? 'Working…' : 'Ask Claude Code anything'}
         onSend={async (text) => void (await client.call('threads.send', { threadId: thread.id, text }))}
-        toolbar={harness}
+        toolbar={<ModelPicker key={thread.id} profileId={thread.profileId} value={thread.model} disabled={running} onChange={async (model) => {
+          setSavingModel(true);
+          try { await client.call('threads.setModel', { threadId: thread.id, model }); }
+          finally { setSavingModel(false); }
+        }} />}
       />
     </>
   );
@@ -58,6 +64,8 @@ export function DraftPane({ checkoutId, onOpenProfile }: { checkoutId: string; o
   const client = useClient();
   const { select } = useThreads();
   const place = usePlace(checkoutId);
+  const [choice, setChoice] = useState<{ checkoutId: string; profileId?: string; model: ModelSelection }>();
+  const model = choice?.checkoutId === checkoutId && choice.profileId === place.profile?.id ? choice.model : DEFAULT_MODEL;
 
   return (
     <>
@@ -68,8 +76,8 @@ export function DraftPane({ checkoutId, onOpenProfile }: { checkoutId: string; o
         <Composer
           disabled={!place.profile || !claudeAccount(place.profile)}
           placeholder="Ask Claude Code anything"
-          onSend={async (text) => select((await client.call('threads.start', { checkoutId, text })).id)}
-          toolbar={harness}
+          onSend={async (text) => select((await client.call('threads.start', { checkoutId, text, model })).id)}
+          toolbar={<ModelPicker profileId={place.profile?.id} value={model} onChange={async (model) => setChoice({ checkoutId, profileId: place.profile?.id, model })} />}
         />
       </div>
     </>

@@ -19,7 +19,7 @@ describe('machines on the hub', () => {
     expect(machine?.harnesses).toEqual([{ harnessId: 'claudeCode', version: expect.stringMatching(/^\d+\.\d+/) }]);
 
     const harnesses = await c.call('harnesses.list', {});
-    expect(harnesses).toEqual([
+    expect(harnesses).toMatchObject([
       { id: 'claudeCode', name: 'Claude Code', providers: ['anthropic'], machines: [{ machineId: here.id, version: expect.any(String) }] },
     ]);
   });

@@ -1173,6 +1173,57 @@ button.row {
   font-weight: 600;
   color: var(--muted);
 }
+.model-trigger {
+  margin-right: auto;
+  padding: 5px 8px;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.model-trigger:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--ink);
+}
+.model-trigger:disabled { cursor: default; opacity: 0.6; }
+.model-picker {
+  position: fixed;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  background: var(--raised);
+  color: var(--ink);
+  box-shadow: 0 12px 40px #0006;
+  overflow: auto;
+  font-size: 13px;
+}
+.model-picker-search { padding: 12px; border-bottom: 1px solid var(--line); }
+.model-picker-search input {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+}
+.model-picker-body { display: grid; grid-template-columns: 145px minmax(0, 1fr); min-height: 200px; }
+.model-picker-tabs { padding: 8px; border-right: 1px solid var(--line); }
+.model-picker-tabs button { width: 100%; padding: 9px 8px; border-radius: 6px; text-align: left; color: var(--muted); }
+.model-picker-tabs button[aria-pressed="true"] { background: var(--active); color: var(--ink); }
+.model-picker small { display: block; font-size: 11.5px; color: var(--muted); font-weight: 400; }
+.model-picker-tabs small { margin-top: 3px; }
+.model-picker-models { padding: 8px; }
+.model-picker-row { display: flex; align-items: center; border-radius: 7px; }
+.model-picker-row:hover { background: var(--hover); }
+.model-picker-row.selected { background: var(--active); }
+.model-picker-row > button:first-child { flex: 1; min-width: 0; padding: 10px; text-align: left; }
+.model-picker-name { display: flex; justify-content: space-between; gap: 8px; font-weight: 600; margin-bottom: 3px; }
+.model-picker-name > span { color: var(--green); }
+.model-star { flex: none; padding: 10px; color: var(--muted); font-size: 18px; }
+.model-star[aria-pressed="true"] { color: var(--amber); }
+.model-picker-empty { padding: 12px; color: var(--muted); }
+.model-picker-error { margin: 0; padding: 10px 12px; border-top: 1px solid var(--line); }
 .send {
   display: grid;
   place-items: center;

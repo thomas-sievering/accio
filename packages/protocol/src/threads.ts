@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { method } from './rpc.js';
+import { ModelSelection } from './models.js';
 
 /**
  * GLOSSARY: Thread. A durable conversation with a harness inside one checkout.
@@ -10,6 +11,7 @@ export type ThreadView = {
   checkoutId: string;
   projectId: string;
   profileId: string;
+  model: ModelSelection;
   title: string;
   status: ThreadStatus;
   createdAt: string;
@@ -35,7 +37,8 @@ export type TranscriptItem =
   | { kind: 'notice'; id: string; turnId: string; tone: 'info' | 'error'; text: string };
 
 const ThreadId = z.object({ threadId: z.string() });
-const Start = z.object({ checkoutId: z.string(), text: z.string().trim().min(1) });
+const Start = z.object({ checkoutId: z.string(), text: z.string().trim().min(1), model: ModelSelection.optional() });
+const SetModel = z.object({ threadId: z.string(), model: ModelSelection });
 const Snooze = z.object({ threadId: z.string(), until: z.iso.datetime({ offset: true }) });
 const Send = z.object({ threadId: z.string(), text: z.string().trim().min(1) });
 const Rename = z.object({ threadId: z.string(), title: z.string().trim().min(1).max(120) });
@@ -46,6 +49,7 @@ export const threadMethods = {
   'threads.start': method<typeof Start, ThreadView>(Start),
   'threads.transcript': method<typeof ThreadId, TranscriptItem[]>(ThreadId),
   'threads.send': method<typeof Send, null>(Send),
+  'threads.setModel': method<typeof SetModel, ThreadView>(SetModel),
   /** Stops the running turn; the thread becomes interrupted. */
   'threads.stop': method<typeof ThreadId, null>(ThreadId),
   /** Continues an interrupted turn on the same Claude session. */
