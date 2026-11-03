@@ -235,8 +235,46 @@ it('enforces review-only instructions and verifies PR/check state rather than tr
   expect(await manager.verify(workspace, intent)).toMatchObject({ status: 'ready', revision });
   checks = [{ conclusion: null, status: 'IN_PROGRESS' }];
   await expect(manager.verify(workspace, intent)).rejects.toThrow(/Waiting for checks/);
+  checks = [
+    { name: 'verify', conclusion: 'SUCCESS' },
+    { name: 'image', conclusion: null, status: 'IN_PROGRESS', detailsUrl: 'https://github.com/test/fixture/actions/runs/10/job/20' },
+    { context: 'external CI', state: 'PENDING', targetUrl: 'https://ci.example.com/run/1' },
+  ];
+  hosting.mockImplementation(async (_cwd, args) => {
+    if (args[0] === 'pr') return [{ url: 'https://github.com/test/fixture/pull/1', state: 'OPEN', headRefOid: revision, baseRefName: 'main', statusCheckRollup: checks, isDraft: false }];
+    if (args[1]!.endsWith('/actions/jobs/20')) return { steps: [
+      { number: 1, name: 'Checkout', status: 'completed' },
+      { number: 6, name: 'Build image', status: 'in_progress' },
+      { number: 10, name: 'Cleanup', status: 'pending' },
+    ] };
+    return { total_count: 0, statuses: [] };
+  });
+  await expect(manager.verify(workspace, intent)).rejects.toMatchObject({ ci: {
+    revision, updatedAt: expect.any(String), checks: [
+      { name: 'verify', status: 'success' },
+      { name: 'image', status: 'in_progress', step: { name: 'Build image', current: 2, total: 3 } },
+      { name: 'external CI', status: 'pending' },
+    ],
+  } });
+  hosting.mockImplementation(async (_cwd, args) => {
+    if (args[0] === 'pr') return [{ url: 'https://github.com/test/fixture/pull/1', state: 'OPEN', headRefOid: revision, baseRefName: 'main', statusCheckRollup: checks }];
+    throw new Error('Actions permission unavailable');
+  });
+  await expect(manager.verify(workspace, intent)).rejects.toMatchObject({ continueAgent: false, ci: { checks: [
+    { name: 'verify', status: 'success' }, { name: 'image', status: 'in_progress' }, { name: 'external CI', status: 'pending' },
+  ] } });
   checks = [{ conclusion: 'FAILURE' }];
   await expect(manager.verify(workspace, intent)).rejects.toThrow(/Checks are failing/);
+  // A check can appear in the REST commit checks before the PR rollup catches up.
+  hosting.mockImplementation(async (_cwd, args) => {
+    if (args[0] === 'pr') return [{ url: 'https://github.com/test/fixture/pull/1', state: 'OPEN', headRefOid: revision, baseRefName: 'main', statusCheckRollup: [] }];
+    if (args[1]!.includes('/check-runs')) return { total_count: 1, check_runs: [{ name: 'test', conclusion: null, status: 'in_progress', html_url: 'https://github.com/test/fixture/actions/runs/10/job/21' }] };
+    if (args[1]!.endsWith('/actions/jobs/21')) return { steps: [{ name: 'Run tests', status: 'in_progress' }] };
+    return { total_count: 0, statuses: [] };
+  });
+  await expect(manager.verify(workspace, intent)).rejects.toMatchObject({ ci: { revision, checks: [
+    { name: 'test', step: { name: 'Run tests', current: 1, total: 1 } },
+  ] } });
   expect(await stat(workspace.path)).toBeDefined();
 });
 
@@ -341,7 +379,9 @@ it('waits without running the agent again and verifies delivery when checks fini
   const verify = DeliveryGit.prototype.verify;
   let pending = true;
   vi.spyOn(DeliveryGit.prototype, 'verify').mockImplementation(function(workspace, delivery) {
-    return pending ? Promise.reject(new DeliveryPending('Waiting for checks to finish.')) : verify.call(this, workspace, delivery);
+    return pending ? Promise.reject(new DeliveryPending('Waiting for checks to finish.', false, 'checks', {
+      revision: workspace.startRevision, updatedAt: new Date().toISOString(), checks: [{ name: 'image', status: 'in_progress', step: { name: 'Build image', current: 2, total: 3 } }],
+    })) : verify.call(this, workspace, delivery);
   });
   await c.call('threads.deliver', { threadId: thread.id, mode: 'ship' });
   await wait(c, thread.id, x => x.status === 'idle' && x.delivery?.status === 'waiting');
@@ -352,10 +392,12 @@ it('waits without running the agent again and verifies delivery when checks fini
   t = await startTestApp({ harness: restarted }, t.home);
   const next = await t.connect();
   expect((await next.call('threads.list', {}))[0]!.delivery!.status).toBe('waiting');
+  expect((await next.call('threads.list', {}))[0]!.delivery!.ci?.checks[0]?.step?.name).toBe('Build image');
   expect(restarted.runs).toHaveLength(0);
   pending = false;
   await next.call('threads.checkDelivery', { threadId: thread.id });
   expect((await next.call('threads.list', {}))[0]!.delivery!.status).toBe('delivered');
+  expect((await next.call('threads.list', {}))[0]!.delivery!.ci).toBeUndefined();
   expect(harness.runs).toHaveLength(2);
   expect(restarted.runs).toHaveLength(0);
 });

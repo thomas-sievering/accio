@@ -4,6 +4,32 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
+test('CI wait shows current job and step, refreshes, survives reload and clears on delivery', async ({ page, baseURL }, testInfo) => {
+  await page.goto(`${baseURL}/#token=isolated-chat-test-token`);
+  await page.getByRole('button', { name: 'New thread', exact: true }).first().click();
+  await page.getByRole('option', { name: /ci-progress-project/ }).click();
+  await page.locator('.composer textarea').fill('Build CI progress fixture');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect(page.getByText('CI fixture ready.', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Ship', exact: true }).click();
+  const status = page.locator('.delivery-row [role="status"]');
+  await expect(status).toContainText('CI · image · Build image · step 2 of 4');
+  await expect(page.locator('.row-project').filter({ hasText: 'CI · image · Build image' })).toBeVisible();
+  await page.getByText('CI details · 1 of 2 checks complete', { exact: true }).click();
+  await expect(page.getByRole('link', { name: 'image ↗', exact: true })).toHaveAttribute('href', 'https://github.com/test/fixture/actions/runs/10/job/20');
+  await expect(page.locator('.delivery-progress')).toContainText('Last checked');
+  await page.screenshot({ path: testInfo.outputPath('ci-progress.png') });
+  await page.reload();
+  await expect(status).toContainText('Build image · step 2 of 4');
+  await page.getByRole('button', { name: 'Check now', exact: true }).click();
+  await expect(status).toContainText('Push image · step 3 of 4');
+  await page.getByRole('button', { name: 'Check now', exact: true }).click();
+  await expect(page.locator('.delivery-actions [role="status"]')).toContainText('Shipped to main');
+  await expect(page.locator('.delivery-progress')).toHaveCount(0);
+  await expect(page.locator('.row-project').filter({ hasText: 'CI ·' })).toHaveCount(0);
+  await expect(page.getByText('Ship to main when ready.', { exact: true })).toHaveCount(1);
+});
+
 test('a conversation with no changes stops Ship without waiting for checks', async ({ page, baseURL }, testInfo) => {
   await page.goto(`${baseURL}/#token=isolated-chat-test-token`);
   await page.getByRole('button', { name: 'New thread', exact: true }).first().click();

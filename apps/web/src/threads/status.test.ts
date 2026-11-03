@@ -120,11 +120,44 @@ describe('integration and verification', () => {
   });
 });
 
+describe('live CI progress', () => {
+  const ci = (step = 'Build image') => ({ revision: 'a'.repeat(40), updatedAt: '2026-11-03T11:00:00Z', checks: [
+    { name: 'lint', status: 'success' }, { name: 'image', status: 'in_progress', step: { name: step, current: 2, total: 4 } }] });
+
+  it('names the current job and step while waiting on checks, in the row and the sidebar', () => {
+    const t = thread({ delivery: delivery({ waitingOn: 'checks', pullRequest: pr(), ci: ci() }) });
+    expect(deliveryStatus(t)).toMatchObject({ phase: 'waiting', label: 'CI · image · Build image · step 2 of 4', glyph: 'pr', ci: ci() });
+    expect(sidebar(t).label).toBe('CI · image · Build image · step 2 of 4 · #123');
+  });
+
+  it('keeps a direct push visible while target checks run', () => {
+    const s = deliveryStatus(thread({ delivery: delivery({ policy: 'direct', integratedAt: '2026-11-03T11:00:00Z', ci: ci('Push image') }) }))!;
+    expect(s).toMatchObject({ phase: 'integrated', label: 'CI · image · Push image · step 2 of 4', glyph: 'push', detail: 'Pushed · waiting for checks on main' });
+  });
+
+  it('never lets stale CI override a known outcome', () => {
+    const stale = { ci: ci() };
+    const read = (t: ThreadView) => { const s = deliveryStatus(t)!; return { phase: s.phase, label: s.label, ci: s.ci }; };
+    expect(read(thread({ delivery: delivery({ status: 'delivered', policy: 'direct', ...stale }) }))).toEqual({ phase: 'delivered', label: 'Shipped to main', ci: undefined });
+    expect(read(thread({ delivery: delivery({ status: 'delivered', pullRequest: pr({ state: 'merged' }), ...stale }) }))).toEqual({ phase: 'delivered', label: 'Merged into main', ci: undefined });
+    expect(read(thread({ workVersion: 2, delivery: delivery({ waitingOn: 'checks', ...stale }) }))).toEqual({ phase: 'superseded', label: 'New work', ci: undefined });
+    expect(read(thread({ delivery: delivery({ waitingOn: 'review', pullRequest: pr(), ...stale }) }))).toEqual({ phase: 'waiting', label: 'Waiting for review', ci: undefined });
+    expect(read(thread({ delivery: delivery({ status: 'blocked', pullRequest: pr(), ...stale }) }))).toEqual({ phase: 'attention', label: 'Needs attention', ci: undefined });
+  });
+});
+
 describe('problems', () => {
   it('a blocked delivery needs attention with its reason, even after a known merge', () => {
     const t = thread({ delivery: delivery({ status: 'blocked', pullRequest: pr({ state: 'merged' }), integratedAt: '2026-11-03T11:00:00Z', detail: 'Checks on main failed: build' }) });
     expect(sidebar(t)).toEqual({ label: 'Needs attention · #123', glyph: 'alert', tone: 'attention' });
     expect(deliveryStatus(t)).toMatchObject({ detail: 'Checks on main failed: build', canShip: true, canCheck: true });
+  });
+
+  it('an unpublished blocker such as Nothing to ship offers Ship, not Check now', () => {
+    const s = deliveryStatus(thread({ delivery: delivery({ status: 'blocked', policy: 'direct', detail: 'Nothing to ship: this thread has no new commits.' }) }))!;
+    expect(s).toMatchObject({ phase: 'attention', detail: 'Nothing to ship: this thread has no new commits.', canShip: true, canCheck: false });
+    const outage = deliveryStatus(thread({ delivery: delivery({ status: 'blocked', policy: 'direct', observationError: 'gh: unavailable' }) }))!;
+    expect(outage).toMatchObject({ phase: 'unavailable', canCheck: true });
   });
 
   it('a closed PR is never delivered', () => {

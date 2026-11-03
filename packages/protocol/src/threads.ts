@@ -88,6 +88,18 @@ export type ThreadDelivery = {
   /** Manual Reopen or stopping follow-ups wins over automatic settlement. */
   keepOpen?: boolean;
   followUpsStoppedAt?: string;
+  ci?: DeliveryCI;
+};
+
+export type DeliveryCI = {
+  revision: string;
+  updatedAt: string;
+  checks: {
+    name: string;
+    status: string;
+    url?: string;
+    step?: { name: string; current: number; total: number };
+  }[];
 };
 
 export type DeliverySummary = {

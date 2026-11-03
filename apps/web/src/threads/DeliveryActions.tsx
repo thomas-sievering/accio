@@ -3,6 +3,7 @@ import type { DeliveryMode, DeliverySummary, ProjectView, ThreadView } from '@ac
 import { useClient, useConnectionStatus } from '../app/connection';
 import { Archive, Check, ChevronDown, Close, Play, Refresh, Ship, StopSquare, Undo } from '../app/icons';
 import { useAction } from '../app/useAction';
+import { DeliveryProgress } from './DeliveryProgress';
 import { StatusGlyphIcon } from './StatusMark';
 import { checkedAgo, deliveryStatus, statusText } from './status';
 import { useThreads } from './threads';
@@ -119,6 +120,7 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
       title={status?.phase === 'unavailable' ? thread.delivery?.observationError : undefined}>
       <span className="delivery-dot" aria-hidden="true" /><span className="delivery-hint-text">{hint}</span>
     </p>}
+    {status?.ci && <DeliveryProgress ci={status.ci} />}
     <div id={id} ref={menu} className="menu delivery-menu" popover="auto" role="menu" aria-label="Shipping options" style={position}
       onToggle={e => {
         if (e.newState === 'open' && trigger.current) {

@@ -598,7 +598,7 @@ export class Threads {
       const exhausted = pending && error.continueAgent && (!budget || !!d.followUpsStoppedAt || !!d.integratedAt);
       return { ...t, delivery: { ...d, status: pending && !exhausted ? 'waiting' : 'blocked',
         detail: exhausted ? d.followUpsStoppedAt ? 'Automatic follow-ups stopped. PR observation continues.' : d.integratedAt ? 'Checks on the published revision need attention. Observation continues; the workspace has been kept.' : 'Delivery needs attention after its automatic follow-up budget. The workspace has been kept.' : error.message,
-        waitingOn: pending ? error.waitingOn : undefined, observationError: undefined, observationFailures: 0 } };
+        waitingOn: pending ? error.waitingOn : undefined, ci: pending ? error.ci : undefined, observationError: undefined, observationFailures: 0 } };
     });
     this.scheduleDeliveryCheck(threadId);
   }
@@ -619,7 +619,7 @@ export class Threads {
       const canContinue = continueAgent && pending && error.continueAgent && !d.followUpsStoppedAt && !d.integratedAt
         && !current.queuedMessages?.length && !this.messageOps.has(threadId)
         && current.status === 'idle' && (d.continuationAttempts ?? 0) < 3 && Date.now() - Date.parse(d.requestedAt) < 60 * 60_000;
-      if (canContinue) await this.update(threadId, t => ({ ...t, delivery: { ...t.delivery!, status: 'queued', continuationAttempts: (d.continuationAttempts ?? 0) + 1, detail: (error as Error).message } }));
+      if (canContinue) await this.update(threadId, t => ({ ...t, delivery: { ...t.delivery!, ci: undefined, status: 'queued', continuationAttempts: (d.continuationAttempts ?? 0) + 1, detail: (error as Error).message } }));
       else await this.recordDeliveryWait(threadId, error as Error);
       return;
     }

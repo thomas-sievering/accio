@@ -4,20 +4,20 @@ Status: implemented and verified on 2026-11-03. The approved React UI was implem
 
 Give every delivery a visible outcome. A thread awaiting a PR merge should say **Waiting for merge**. A confirmed merge should remain visible in the conversation and sidebar. Successful delivery should automatically move the thread to **Settled**, while retaining its workspace until **Archive**.
 
-This extends [thread delivery](thread-delivery.md) and follows [ADR 0011](../adr/0011-threads-own-delivery-with-optional-pull-requests.md). Direct publication remains the default; PRs remain a project policy or an explicit review action.
+This extends [thread delivery](thread-delivery.md) and follows [ADR 0015](../adr/0015-threads-own-delivery-with-optional-pull-requests.md). Direct publication remains the default; PRs remain a project policy or an explicit review action.
 
 ## Implementation record
 
 The server now saves PR identity before readiness checks, continues passive observation after review preparation and across restarts, records integration separately from final verification, and auto-settles newly verified deliveries without releasing their workspaces. Delivery IDs, work versions and organization versions fence stale observations. Reopen and stopped follow-ups retain their keep-open choice. Completion receipts are idempotent and recover after a restart. A failed completion-state write does not broadcast or retain automatic settlement.
 
-The sidebar and composer now share a [status resolver](../../apps/web/src/threads/status.ts). Waiting has a static amber mark, completed merges retain a green badge in Settled, and ordinary completed turns say Ready. The selected thread stays selected when its shelf opens after automatic settlement. The delivery receipt exposes Reopen and Archive separately. Blocked and unavailable observations retain their reason or last known fact. Review-only preparation also exposes Stop automatic follow-ups because later check failures can otherwise continue fixes under its original limited grant.
+The sidebar and composer now share a [status resolver](../../apps/web/src/threads/status.ts). Waiting has a static amber mark, completed merges retain a green badge in Settled, and ordinary completed turns say Ready. While checks run, the sidebar and composer show the current CI job and step with expandable details. Stale CI cannot override a completed or superseded delivery. The selected thread stays selected when its shelf opens after automatic settlement. The delivery receipt exposes Reopen and Archive separately. Blocked and unavailable observations retain their reason or last known fact. Review-only preparation also exposes Stop automatic follow-ups because later check failures can otherwise continue fixes under its original limited grant.
 
 Validation completed:
 
-- The full unit suite passes 360 tests across 59 files, including 25 status-resolver tests. The resolver tests were rerun after the final stop-follow-ups predicate correction.
+- After integration with main at `a2dd7cd`, the full unit suite passes 436 tests across 64 files, including 29 status-resolver tests.
 - `pnpm typecheck` and `pnpm build` pass.
-- `pnpm test:chat` passes all eight scenarios present at that run, covering delivery, inline chat and the hidden Electron shell. The final [merge spec](../../tests/delivery-merge.spec.ts), including the additional stop-follow-ups scenario, passes both tests after the final change. Together these cover nine distinct browser/Electron scenarios.
-- The isolated production smoke passed with doctor and cleanup evidence in `out/verify/2026-11-03T22-11-16-159Z-1ad1b181`. Its signed-out profile/project coverage is separate from the authenticated harness fixtures.
+- `pnpm test:chat` passes all 16 browser/Electron scenarios, including external merge and stop-follow-ups, CI progress, Nothing to ship, delivery and Archive, previews, effort, steering, inline chat, skills and MCP.
+- The integrated production smoke passed with doctor and cleanup evidence in `out/verify/2026-11-03T22-36-52-450Z-bdbaf490`. Its signed-out profile/project coverage is separate from the authenticated harness fixtures.
 
 [Observation tests](../../apps/server/src/threads/deliveryObservation.test.ts) exercise real disposable Git repositories with deterministic hosting responses, including external squash merges after source-branch deletion, pending target checks, long waits, restart recovery, stopped follow-ups, stale results, snoozing and failed persistence. The merge browser tests use the production UI and real Git with injected coding-harness and hosting boundaries. They demonstrate action-to-state transitions, persisted receipts and Reopen, without setting thread state from test endpoints. Screenshots of waiting and merged sidebar/receipt states and stopped follow-ups were inspected. Live GitHub authentication, actual human review and live coding-provider turns remain unverified.
 

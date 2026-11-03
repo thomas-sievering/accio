@@ -1,4 +1,5 @@
 import type { ThreadDelivery, ThreadView } from '@accio/protocol';
+import { ciSummary } from './DeliveryProgress';
 
 /**
  * One reading of a thread's turn and delivery, shared by the sidebar row and the
@@ -57,7 +58,10 @@ export type DeliveryStatus = {
   canCancel: boolean;
   /** Stop agent continuations while keeping the PR link and passive observation. */
   canStopFollowUps: boolean;
+  /** Observing again can change what is known: a pending wait, a published change, or a failed observation. */
   canCheck: boolean;
+  /** Live CI jobs and steps while checks are the open question; never kept once the outcome is known. */
+  ci?: ThreadDelivery['ci'];
   /** A fresh Ship/Prepare for review is the way forward. */
   canShip: boolean;
 };
@@ -100,7 +104,8 @@ export function deliveryStatus(t: ThreadView): DeliveryStatus | undefined {
     // Review-only requests may still continue fixes when later checks fail.
     canStopFollowUps: published && !stopped && !superseded
       && ['queued', 'waiting', 'blocked', 'ready'].includes(d.status),
-    canCheck: !superseded && ['waiting', 'ready', 'blocked'].includes(d.status),
+    // A blocked request that never published (e.g. Nothing to ship) has nothing to observe; Ship again instead.
+    canCheck: !superseded && (['waiting', 'ready'].includes(d.status) || (d.status === 'blocked' && published)),
     canShip: false,
   };
 
@@ -128,7 +133,7 @@ export function deliveryStatus(t: ThreadView): DeliveryStatus | undefined {
 
   // Published, ready or blocked: what the last observation established.
   const merged = d.pullRequest?.state === 'merged';
-  let known: Pick<DeliveryStatus, 'phase' | 'label' | 'tone' | 'glyph' | 'badge' | 'detail'>;
+  let known: Pick<DeliveryStatus, 'phase' | 'label' | 'tone' | 'glyph' | 'badge' | 'detail' | 'ci'>;
   if (d.pullRequest?.state === 'closed') {
     known = { phase: 'closed', label: 'Closed without merging', tone: 'attention', glyph: 'pr', badge: `Closed #${pr!.number}`, detail: 'The PR was closed without merging. Ship again to publish this work.' };
   } else if (d.status === 'blocked') {
@@ -136,23 +141,28 @@ export function deliveryStatus(t: ThreadView): DeliveryStatus | undefined {
     known = { phase: 'attention', label: 'Needs attention', tone: 'attention', glyph: 'alert', badge: 'Needs attention',
       detail: d.detail ?? (merged || d.integratedAt ? `Merged, but checks on ${target} need attention` : 'Delivery needs attention') };
   } else if (merged || d.integratedAt) {
+    // Live CI replaces the generic label; the merge or push stays in the glyph, badge and detail.
+    const progress = d.status === 'waiting' && d.waitingOn !== 'agent' ? ciSummary(d.ci) : undefined;
     known = pr
-      ? { phase: 'integrated', label: `Merged · checking ${target}`, tone: 'waiting', glyph: 'merge', badge: `Merged #${pr.number}`, detail: `Waiting for checks on ${target}` }
-      : { phase: 'integrated', label: `Pushed · checking ${target}`, tone: 'waiting', glyph: 'push', badge: target, detail: `Waiting for checks on ${target}` };
+      ? { phase: 'integrated', label: progress ?? `Merged · checking ${target}`, tone: 'waiting', glyph: 'merge', badge: `Merged #${pr.number}`, detail: progress ? `Merged · waiting for checks on ${target}` : `Waiting for checks on ${target}` }
+      : { phase: 'integrated', label: progress ?? `Pushed · checking ${target}`, tone: 'waiting', glyph: 'push', badge: target, detail: progress ? `Pushed · waiting for checks on ${target}` : `Waiting for checks on ${target}` };
+    if (progress) known.ci = d.ci;
   } else {
     const on = d.status === 'ready' ? 'merge' : d.waitingOn ?? 'checks';
     const mergesItself = !review && d.policy === 'pull-request' && !stopped;
+    const progress = d.status === 'waiting' && on === 'checks' ? ciSummary(d.ci) : undefined;
     known = {
-      phase: 'waiting', label: on === 'agent' ? 'Continuing delivery' : `Waiting for ${on}`, tone: 'waiting', glyph: pr ? 'pr' : 'ship',
+      phase: 'waiting', label: progress ?? (on === 'agent' ? 'Continuing delivery' : `Waiting for ${on}`), tone: 'waiting', glyph: pr ? 'pr' : 'ship',
       badge: pr ? `#${pr.number}` : 'Waiting',
       detail: review && on === 'merge' ? 'Prepared for review; merge manually' : mergesItself ? 'Merges when GitHub allows' : undefined,
+      ...(progress ? { ci: d.ci } : {}),
     };
   }
   if (stopped && known.phase === 'waiting') known = { ...known, detail: pr ? `Automatic follow-ups stopped · still tracking #${pr.number}` : 'Automatic follow-ups stopped' };
   const canShip = known.phase === 'attention' || known.phase === 'closed';
   if (d.observationError) {
     return { ...base, phase: 'unavailable', label: 'Status unavailable', tone: 'unavailable', glyph: pr ? 'pr' : 'alert', badge: 'Unavailable',
-      detail: `Last known: ${known.label}${prSuffix}`, canShip, canCheck: !superseded };
+      detail: `Last known: ${known.label}${prSuffix}`, canShip, canCheck: true };
   }
   return { ...base, ...known, canShip };
 }
