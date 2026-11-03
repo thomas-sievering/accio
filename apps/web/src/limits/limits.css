@@ -241,6 +241,20 @@
   text-align: end;
   white-space: nowrap;
 }
+.limit-name .limit-pace.ahead {
+  color: var(--green);
+}
+.limit-name .limit-pace.behind {
+  color: var(--amber);
+}
+.limit-time-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--ink-strong);
+  transform: translateX(-1px);
+}
 .limit-meter.low .limit-track > span {
   background: var(--amber);
 }
