@@ -55,7 +55,14 @@ export async function repositorySkills(cwd: string): Promise<WorkspaceSkill[]> {
     }
     for (const entry of entries) if ((entry.isDirectory() || entry.isSymbolicLink()) && !['.git', 'node_modules'].includes(entry.name)) await walk(join(actual, entry.name), depth + 1);
   };
-  for (const folder of ['.agents', '.claude']) await walk(join(root, folder, 'skills'), 0);
+  await walk(join(root, '.agents', 'skills'), 0);
+  // .claude often contains compatibility wrappers for canonical .agents skills.
+  // Prefer the canonical root by declared name, while preserving conflicts
+  // within either root so unrelated duplicates still require a choice.
+  const canonicalNames = new Set(skills.map(skill => skill.name));
+  const canonicalCount = skills.length;
+  await walk(join(root, '.claude', 'skills'), 0);
+  skills.splice(canonicalCount, skills.length - canonicalCount, ...skills.slice(canonicalCount).filter(skill => !canonicalNames.has(skill.name)));
   return skills.sort((a, b) => a.name.localeCompare(b.name));
 }
 

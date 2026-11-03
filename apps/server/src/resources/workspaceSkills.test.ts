@@ -46,6 +46,19 @@ describe('workspace skill inventory and loading evidence', () => {
     expect(observedSkillLoads('Read', { file_path: 'README.md' }, '', cwd, [skill])).toEqual([]);
   });
 
+  it('prefers .agents by declared name across roots but preserves duplicates within a root', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'accio-skills-')); folders.push(root);
+    await put(join(root, '.agents', 'skills', 'canonical'), 'notes');
+    await put(join(root, '.claude', 'skills', 'wrapper'), 'notes');
+    await put(join(root, '.claude', 'skills', 'only-claude'), 'other');
+    await put(join(root, '.claude', 'skills', 'duplicate-claude'), 'other');
+    const skills = await repositorySkills(root);
+    expect(skills.filter(skill => skill.name === 'notes').map(skill => skill.id)).toEqual(['repository:.agents/skills/canonical/SKILL.md']);
+    expect(skills.filter(skill => skill.name === 'other')).toHaveLength(2);
+    await put(join(root, '.agents', 'skills', 'duplicate-agents'), 'notes');
+    expect((await repositorySkills(root)).filter(skill => skill.name === 'notes')).toHaveLength(2);
+  });
+
   async function fixture(harness = new FakeHarness()) {
     const t = await startTestApp({ harness }); stop = t.stop;
     const c = await t.connect(); await c.signedIn('Personal');
@@ -65,6 +78,21 @@ describe('workspace skill inventory and loading evidence', () => {
     await c.call('skills.setScope', { id: docs.id, scope: { global: false, profileIds: ['personal'], projectKeys: [] } });
     return { t, c, folder, checkout, review, docs, harness };
   }
+
+  it('lists the canonical copy without conflict and starts a turn when a compatibility copy exists', async () => {
+    const { c, checkout, folder, harness } = await fixture();
+    await put(join(folder, '.claude', 'skills', 'notes'), 'notes');
+    await runCommand('git', ['add', '.'], { cwd: folder });
+    await runCommand('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.test', 'commit', '--quiet', '-m', 'compatibility copy'], { cwd: folder });
+    const notes = (await c.call('threads.skills', { checkoutId: checkout.id })).skills.filter(skill => skill.name === 'notes');
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).not.toHaveProperty('conflict');
+    const thread = await c.call('threads.start', { checkoutId: checkout.id, text: 'work' });
+    await c.waitFor('threads.changed', threads => threads.some(t => t.id === thread.id && t.status === 'idle'));
+    expect(harness.runs).toHaveLength(1);
+    expect(harness.runs[0]?.resourceInstructions).toContain(join('.agents', 'skills', 'notes', 'SKILL.md'));
+    expect(harness.runs[0]?.resourceInstructions).not.toContain(join('.claude', 'skills', 'notes', 'SKILL.md'));
+  });
 
   it('resolves draft scopes and project selections without changing inherited selections', async () => {
     const { t, c, checkout, review, docs } = await fixture();
