@@ -34,6 +34,12 @@ export class Models {
     return selection.harnessId === 'codex' ? this.profiles.codexModels(profileId).find((m) => m.isDefault)?.id : undefined;
   }
 
+  /** The display name of the model a turn runs as, when this profile's list knows it. */
+  executionModelName(profileId: string, selection: ModelSelection): string | undefined {
+    const id = this.executionModel(profileId, selection);
+    return id ? this.list(profileId).models.find((m) => m.harnessId === selection.harnessId && m.id === id)?.name : undefined;
+  }
+
   require(profileId: string, selection: ModelSelection = this.default(profileId)): ModelSelection {
     if (!this.list(profileId).models.some((m) => m.harnessId === selection.harnessId && m.id === selection.modelId)) {
       throw new UserError('This model is not available to this profile on this machine.');

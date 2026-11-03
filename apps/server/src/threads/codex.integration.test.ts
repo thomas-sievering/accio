@@ -43,7 +43,7 @@ describe('Codex and ChatGPT accounts', () => {
     expect(runner.options.home).toBe(join(t.home, 'profiles', profile.id, 'codex'));
     expect(runner.options.env).not.toHaveProperty('ANTHROPIC_AUTH_TOKEN');
     expect(runner.options.env?.ACCIO_OPENAI_KEY).toMatch(/^accio-/);
-    expect(runner.requests.find((r) => r.method === 'thread/start')?.params).toMatchObject({ approvalPolicy: 'never', sandbox: 'danger-full-access', model: 'test-codex' });
+    expect(runner.requests.find((r) => r.method === 'thread/start')?.params).toMatchObject({ approvalPolicy: 'never', sandbox: 'danger-full-access', model: 'test-codex', developerInstructions: expect.stringContaining('# Inline media') });
     expect(runner.closed).toBe(true);
     const exposed = JSON.stringify([await c.call('accounts.list', {}), await c.call('profiles.list', {}), transcript, available]);
     expect(exposed).not.toMatch(/refresh-Personal|private-id-token|access_token|accessKey/);

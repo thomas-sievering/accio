@@ -3,3 +3,8 @@ packages:
   - apps/*
 allowBuilds:
   esbuild: true
+# Harness SDKs ship often and accio tracks them closely, so new releases of the
+# Claude Agent SDK and Codex skip pnpm's default minimum release age.
+minimumReleaseAgeExclude:
+  - '@anthropic-ai/*'
+  - '@openai/*'

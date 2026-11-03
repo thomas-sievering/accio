@@ -324,7 +324,7 @@ export class Threads {
       }
       const harness = this.harnesses[thread.model.harnessId];
       if (!harness) throw new UserError('This harness is not installed on this machine');
-      for await (const msg of harness.run({ ...run, sessionId: thread.sessionId, model: this.models.executionModel(thread.profileId, thread.model) })) {
+      for await (const msg of harness.run({ ...run, sessionId: thread.sessionId, model: this.models.executionModel(thread.profileId, thread.model), modelName: this.models.executionModelName(thread.profileId, thread.model) })) {
         for (const change of transcript.accept(msg)) {
           if (change.type === 'end') outcome = change.outcome;
           await this.apply(thread.id, change, run.cwd);
