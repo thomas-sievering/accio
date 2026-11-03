@@ -42,12 +42,12 @@ async function createWindow(ready: Ready) {
   const win = new BrowserWindow({
     width: 1280,
     height: 840,
-    backgroundColor: '#1d1d1d',
+    backgroundColor: '#18191d',
     title: 'accio',
     autoHideMenuBar: true,
     // Same chrome as botbot: native caption buttons over a hidden title bar.
     titleBarStyle: 'hidden',
-    titleBarOverlay: { color: '#00000000', symbolColor: '#d4d4d4', height: 52 },
+    titleBarOverlay: { color: '#00000000', symbolColor: '#898a92', height: 52 },
     webPreferences: {
       preload: join(here, '../preload.cjs'),
       additionalArguments: [`--accio-server-origin=${new URL(ready.url).origin}`],

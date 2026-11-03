@@ -7,15 +7,14 @@ import type { ShelfPlace } from './shelves';
 import { useThreads, type ThreadActions } from './threads';
 
 /**
- * Open threads are two-line cards (project and status above the title), shelved
- * ones slim rows, as in T3 Code. Hover shows the one or two actions that fit the
- * thread right now; right-click shows them all.
+ * Compact rows keep project identity and activity secondary to the title.
+ * Hover shows the actions that fit the thread; right-click shows them all.
  */
 export function ThreadRow({ thread: t, place }: { thread: ThreadView; place: ShelfPlace }) {
   const { selectedId, select, now, act } = useThreads();
   const { state } = useProjects();
   const project = state?.projects.find((p) => p.id === t.projectId)?.name;
-  const card = place === 'open';
+  const open = place === 'open';
   const openMenu = useThreadMenu();
   const onContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -37,30 +36,16 @@ export function ThreadRow({ thread: t, place }: { thread: ThreadView; place: She
       ))}
     </span>
   );
-  const className = `row${card ? ' card' : ''}${t.id === selectedId ? ' active' : ''}${place === 'settled' ? ' settled' : ''}`;
-
-  if (card) {
-    return (
-      <div className={className} onContextMenu={onContextMenu}>
-        <button className="row-main" onClick={() => select(t.id)}>
-          <span className="card-top">
-            {t.projectId ? <ProjectMark id={t.projectId} /> : <span className="no-project-mark" />}
-            <span className="card-project">{project ?? 'No project'}</span>
-            <CardStatus thread={t} now={now} />
-          </span>
-          <span className="row-name">{t.title}</span>
-        </button>
-        {actions}
-      </div>
-    );
-  }
+  const className = `row${open ? ' open' : ''}${t.id === selectedId ? ' active' : ''}${place === 'settled' ? ' settled' : ''}`;
   return (
     <div className={className} onContextMenu={onContextMenu}>
-      <button className="row-main" onClick={() => select(t.id)}>
+      <button className="row-main" onClick={() => select(t.id)} title={`${t.title} · ${project ?? 'No project'}`} aria-current={t.id === selectedId ? 'page' : undefined}>
+        {open && (t.projectId ? <ProjectMark id={t.projectId} /> : <span className="no-project-mark" />)}
         <span className="row-name">
-          {t.title}
-          {project && <span className="row-project">{project}</span>}
+          <span className="row-title">{t.title}</span>
+          {(open || project) && <span className="row-project">{project ?? 'No project'}</span>}
         </span>
+        {open && <RowStatus thread={t} now={now} />}
         {place === 'snoozed' && t.snoozedUntil && <span className="row-meta">{wakeLabel(t.snoozedUntil, now)}</span>}
         {place === 'settled' && t.settledAt && <span className="row-meta">{timeAgo(t.settledAt, now)}</span>}
       </button>
@@ -82,17 +67,15 @@ function hoverActions(t: ThreadView, place: ShelfPlace): HoverAction[] {
   ];
 }
 
-function CardStatus({ thread: t, now }: { thread: ThreadView; now: Date }) {
-  if (t.status === 'running')
-    return (
-      <span className="card-status working">
-        <span className="row-working" />
-        Working
-      </span>
-    );
-  if (t.status === 'interrupted') return <span className="card-status interrupted">Interrupted</span>;
-  if (t.status === 'failed') return <span className="card-status failed">Failed</span>;
-  return <span className="card-status">{timeAgo(t.updatedAt, now)}</span>;
+function RowStatus({ thread: t, now }: { thread: ThreadView; now: Date }) {
+  const label = { running: 'Working', interrupted: 'Interrupted', failed: 'Failed', idle: 'Idle' }[t.status];
+  return (
+    <span className="row-status" title={label}>
+      <span className="row-meta">{timeAgo(t.updatedAt, now)}</span>
+      {t.status === 'running' && <span className="row-working" role="img" aria-label={label} />}
+      {(t.status === 'interrupted' || t.status === 'failed') && <span className={`row-flag ${t.status}`} role="img" aria-label={label} />}
+    </span>
+  );
 }
 
 export function timeAgo(iso: string, now: Date): string {
