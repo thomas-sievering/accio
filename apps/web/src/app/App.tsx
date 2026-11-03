@@ -56,16 +56,13 @@ function Shell() {
   return (
     <div className={`layout${panelOpen ? ' with-panel' : ''}`}>
       <aside className="sidebar">
-        <header className="side-top drag">
-          <span className="side-title">Threads</span>
-          <button className="side-icon" title="Add project" aria-label="Add project" disabled={!profiles?.length} onClick={() => setSheet({ kind: 'addProject' })}>
-            <FolderPlus />
-          </button>
-        </header>
-        <div className="side-controls">
+        <div className="side-controls drag">
           <div className="side-tools">
             <ThreadSearch />
             <ScopeMenu onOpenProject={(p) => setSheet({ kind: 'project', id: p.id })} />
+            <button className="side-icon" title="Add project" aria-label="Add project" disabled={!profiles?.length} onClick={() => setSheet({ kind: 'addProject' })}>
+              <FolderPlus />
+            </button>
             <NewThreadButton />
           </div>
           {filterLabel && (

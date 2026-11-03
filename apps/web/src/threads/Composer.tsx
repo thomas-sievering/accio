@@ -1,5 +1,5 @@
-import { useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { ArrowUp, StopSquare } from '../app/icons';
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { ArrowUp, Close, StopSquare } from '../app/icons';
 import { useAction } from '../app/useAction';
 
 /**
@@ -12,6 +12,7 @@ export function Composer({
   disabled,
   placeholder,
   toolbar,
+  attachment,
   actions,
 }: {
   onSend: (text: string) => Promise<void>;
@@ -21,6 +22,8 @@ export function Composer({
   placeholder: string;
   /** Shown left of the send button. */
   toolbar?: ReactNode;
+  /** A chip above the message, such as a picked option; with one, the message may be empty. */
+  attachment?: { label: string; onRemove: () => void };
   /** Compact thread delivery controls, outside the message input. */
   actions?: ReactNode;
 }) {
@@ -28,6 +31,9 @@ export function Composer({
   const { busy, error, run } = useAction();
   const sending = useRef(false);
   const input = useRef<HTMLTextAreaElement>(null);
+
+  // Picking an option is the start of a message: put the cursor there.
+  useEffect(() => { if (attachment) input.current?.focus(); }, [attachment?.label]);
 
   useLayoutEffect(() => {
     const el = input.current;
@@ -39,7 +45,7 @@ export function Composer({
   const submit = async (e?: FormEvent) => {
     e?.preventDefault();
     const value = text.trim();
-    if (!value || disabled || sending.current) return;
+    if ((!value && !attachment) || disabled || sending.current) return;
     sending.current = true;
     try {
       await run(async () => {
@@ -56,6 +62,12 @@ export function Composer({
       {actions}
       {error && <p className="error composer-error">{error}</p>}
       <form className="composer" onSubmit={submit}>
+        {attachment && <div className="composer-chips">
+          <span className="composer-chip">
+            {attachment.label}
+            <button type="button" aria-label={`Remove ${attachment.label}`} onClick={attachment.onRemove}><Close /></button>
+          </span>
+        </div>}
         <textarea
           ref={input}
           rows={1}
@@ -84,7 +96,7 @@ export function Composer({
               <StopSquare />
             </button>
           ) : (
-            <button type="submit" className="send" title="Send" aria-label="Send" disabled={disabled || busy || !text.trim()}>
+            <button type="submit" className="send" title="Send" aria-label="Send" disabled={disabled || busy || (!text.trim() && !attachment)}>
               <ArrowUp />
             </button>
           )}
