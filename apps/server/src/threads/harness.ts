@@ -1,3 +1,5 @@
+import type { ToolAccess } from '../tools/tools.js';
+
 /**
  * The port between threads and the harness that runs their turns. Claude wraps
  * the Agent SDK; Codex wraps app-server. Tests can replace either adapter.
@@ -22,7 +24,7 @@ export type StreamEvent =
 export type HarnessEvent =
   | { kind: 'session'; id: string }
   | { kind: 'text'; id: string; text: string; append?: boolean }
-  | { kind: 'tool'; id: string; name: string; summary: string; status: 'running' | 'done' | 'error'; output?: string }
+  | { kind: 'tool'; id: string; name: string; summary: string; status: 'running' | 'done' | 'error'; output?: string; input?: unknown }
   | { kind: 'end'; error?: string };
 
 export type HarnessMessage =
@@ -52,6 +54,8 @@ export type HarnessTurn = {
   /** The model's display name, when known; used in the system prompt. */
   modelName?: string;
   env: Record<string, string>;
+  /** This turn's access to accio's MCP tools; omitted when the machine serves none. */
+  tools?: ToolAccess;
   signal: AbortSignal;
 };
 

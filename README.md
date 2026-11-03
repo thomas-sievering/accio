@@ -18,6 +18,8 @@ To use Codex: **Settings / Accounts / Add ChatGPT account**, name it, then **Sig
 
 Chat shows expandable tool inputs and results, images, video/audio players and current-file download links. Successful tool calls start collapsed; failures open automatically. Tool-result images stay inside the tool details unless the assistant embeds them in its reply.
 
+When you ask Claude Code or Codex to prototype, try or mock up UI for a feature, it shows its variants as a **choice**: cropped screenshots side by side. Click one to see it full size (arrow keys browse), tick one to put it in the composer, add feedback and send. The harness receives `I pick B ("Label") for "Question".` followed by your text. The choice comes from **accio tools**: each machine serves them to its own harnesses over MCP at `/mcp` on its port, with a token per turn (ADR 0011).
+
 Local media embedded by the assistant is copied into the thread's storage when its message arrives. Editing or deleting the source does not change that saved media. Ordinary file links download the current file; remote media remains hosted at its original URL. Missing or unsupported media shows an explanation. Inline snapshots support PNG, JPEG, GIF, WebP, AVIF and common video/audio formats; SVG is not accepted as an inline snapshot. Limits are 10 MiB per image, 100 MiB per video/audio/file download, 64 result parts per tool/message, 1,000,000 saved result text characters and 100,000 saved input characters per tool. Exceeded limits are shown explicitly. Older transcripts keep their saved text; discarded historical input and image bytes cannot be recovered.
 
 ## Run
@@ -43,11 +45,11 @@ State lives in `~/.accio` (`ACCIO_HOME` overrides it; `ACCIO_PORT` and `ACCIO_HU
 
 ## Layout
 
-Code is grouped by domain, one vertical slice each: `machine`, `profiles`, `projects`, `threads`.
+Code is grouped by domain, one vertical slice each: `machine`, `profiles`, `projects`, `threads`, `tools`.
 
 - `packages/protocol`: client–server messages (zod).
 - `packages/codex`: pinned Codex executable, isolated environment and stdio app-server client, shared by hub authentication and machine execution.
 - `apps/hub`: the hub: Claude and ChatGPT sign-in, token refresh, and the proxy threads call. Runs inside this machine's server in v0.1; later it runs alone, always on (ADR 0001).
-- `apps/server`: Node server. Pure domain rules sit next to their infrastructure (`profile.ts` and `profiles.ts`, `project.ts` and `git.ts`, `thread.ts`/`transcript.ts` and `claudeCode.ts`).
+- `apps/server`: Node server. `src/tools` serves accio tools to harnesses over MCP. Pure domain rules sit next to their infrastructure (`profile.ts` and `profiles.ts`, `project.ts` and `git.ts`, `thread.ts`/`transcript.ts` and `claudeCode.ts`).
 - `apps/web`: React client, plain web.
 - `apps/desktop`: Electron shell that starts the local server.

@@ -15,6 +15,8 @@ import { claudeCode, claudeCodeInstall } from './threads/claudeCode.js';
 import { codexHarness } from './threads/codex.js';
 import { codexInstall, type CodexFactory } from '@accio/codex';
 import { OpenAIAuth } from '@accio/hub';
+import { AccioTools } from './tools/tools.js';
+import { offerChoice } from './threads/choice.js';
 
 export type AppOptions = {
   home: string;
@@ -81,12 +83,16 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
   await projects.load();
   projects.register(router);
 
-  const threads = new Threads(opts.home, profiles, projects, { claudeCode: deps.harness ?? claudeCode, codex: deps.codexHarness ?? codexHarness(deps.codexFactory) }, broadcast, models, machines);
+  // Served by this machine to its own harnesses (ADR 0011).
+  const tools = new AccioTools([offerChoice]);
+  const threads = new Threads(opts.home, profiles, projects, { claudeCode: deps.harness ?? claudeCode, codex: deps.codexHarness ?? codexHarness(deps.codexFactory) }, broadcast, models, machines, tools);
   await threads.load();
   threads.register(router);
 
-  const transport = await startTransport({ ...opts, router, serveAsset: (req, res) => threads.assets.handle(req, res) });
+  const transport = await startTransport({ ...opts, router, serveHttp: async (req, res) => await tools.handle(req, res) || threads.assets.handle(req, res) });
   send = transport.broadcast;
+  // Harnesses run on this computer, so they reach the server on loopback even when it listens on every interface.
+  tools.listen(`http://${['0.0.0.0', '::', ''].includes(opts.host) ? '127.0.0.1' : opts.host.includes(':') ? `[${opts.host}]` : opts.host}:${transport.port}`);
   let closing: Promise<void> | undefined;
   return {
     ...transport,
@@ -94,6 +100,7 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
     profiles,
     projects,
     threads,
+    tools,
     hub,
     settings,
     machines,

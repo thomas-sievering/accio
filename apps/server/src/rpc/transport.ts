@@ -30,7 +30,8 @@ export type TransportOptions = {
   router: Router;
   /** Built web client to serve; omitted in dev, where Vite serves it. */
   webRoot?: string;
-  serveAsset?: (req: IncomingMessage, res: ServerResponse) => Promise<boolean>;
+  /** Other HTTP routes, such as thread assets and accio's MCP tools; resolves true when it answered. */
+  serveHttp?: (req: IncomingMessage, res: ServerResponse) => Promise<boolean>;
 };
 
 /**
@@ -40,7 +41,7 @@ export type TransportOptions = {
 export async function startTransport(opts: TransportOptions) {
   const http = createServer((req, res) => {
     void (async () => {
-      if (opts.serveAsset && await opts.serveAsset(req, res)) return;
+      if (opts.serveHttp && await opts.serveHttp(req, res)) return;
       await serveStatic(opts.webRoot, req, res);
     })().catch(() => {
       if (!res.headersSent) res.writeHead(500, { 'content-type': 'text/plain' }).end('Content unavailable');

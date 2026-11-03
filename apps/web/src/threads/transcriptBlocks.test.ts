@@ -28,6 +28,11 @@ describe('layoutTranscript', () => {
       .toEqual(['q', { work: ['plan', ['1', '2'], 'note', ['3']] }, 'a1', 'a2']);
   });
 
+  it('keeps a choice outside the fold with the answer, since it waits for you', () => {
+    const choice: TranscriptItem = { kind: 'choice', id: 'c', turnId: 't1', question: 'Which?', options: [] };
+    expect(shape(layoutTranscript([ask('q'), tool('1'), choice, say('a'), done()]))).toEqual(['q', { work: [['1']] }, 'c', 'a']);
+  });
+
   it('carries the duration, failures and a stable id on the work block', () => {
     const [, work] = layoutTranscript([ask('q'), tool('1', 'Bash', 't1', 'error'), tool('2'), say('a'), done('t1', 42_000)]);
     expect(work).toMatchObject({ kind: 'work', id: 't1:work', live: false, ms: 42_000, failed: 1 });
