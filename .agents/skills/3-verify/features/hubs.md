@@ -5,6 +5,7 @@ Run `node .agents/skills/3-verify/scripts/verify.mjs .agents/skills/3-verify/scr
 Mapped entry points:
 
 - `hubs/pair`: Settings / Hubs → Hub name, Hub address, Pairing code → Connect hub. Require the independent hub's onboarding and identity. Reusing a code or pairing the same saved hub must fail.
+- `hubs/first-run`: Set up accio → radio `Remote hub` → `Continue` → Hub address and Pairing code (named after its host) → `Connect hub`. `Back` returns to the local/remote question. Joining a hub with a signed-in profile must skip to the project question.
 - `hubs/switch`: sidebar Hub combobox and Settings / Hubs selector or Use hub. Switching restores that hub's own profiles, accounts, projects and threads without pairing again.
 - `hubs/windows`: two windows select different hubs independently. Reload preserves each window's selection. Matching profile names and IDs must not mix accounts, local settings or events.
 - `hubs/offline`: stop only the journey's additional hub. Require Offline for that saved connection and normal access to the other hub. Restart with the same state; require reconnection without repeating a mutation or turn.

@@ -14,7 +14,7 @@ export default async function ({page, context, home, runDir, action, capture}) {
     const code=output.match(/First-device pairing code: ([A-F0-9-]+)/)[1];
     const button=name=>page.getByRole('button',{name,exact:true});
     await action('hubs/local: create a profile through onboarding',async()=>{
-      await page.getByPlaceholder(/^personal, work/).fill('Same profile'); await button('Add').click();
+      await button('Continue').click(); await page.getByPlaceholder(/^personal, work/).fill('Same profile'); await button('Continue').click();
       await page.getByText('Choose an account for Same profile',{exact:true}).waitFor();
     });
     await action('hubs/pair: add an independent hub using its first-device code',async()=>{
@@ -26,7 +26,7 @@ export default async function ({page, context, home, runDir, action, capture}) {
       assert.equal(await page.getByRole('combobox',{name:'Hub',exact:true}).inputValue(),ready.hubId);
     });
     await action('hubs/isolation: a new hub starts with separate profiles',async()=>{
-      await page.getByPlaceholder(/^personal, work/).fill('Same profile'); await button('Add').click();
+      await page.getByPlaceholder(/^personal, work/).fill('Same profile'); await button('Continue').click();
       await page.getByText('Choose an account for Same profile',{exact:true}).waitFor();
       await button('Settings').click(); await page.locator('.sidebar nav').getByRole('button',{name:'Accounts',exact:true}).click();
       await page.getByRole('button',{name:/^Add ChatGPT account /}).click();
