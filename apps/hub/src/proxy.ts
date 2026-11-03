@@ -19,7 +19,7 @@ const DROP_REQUEST = new Set([
 ]);
 const DROP_RESPONSE = new Set(['content-encoding', 'content-length', 'transfer-encoding', 'connection', 'keep-alive']);
 
-export type ProxyOptions = { hub: Hub; host: string; port: number; upstream?: string; fetchImpl?: Fetch };
+export type ProxyOptions = { hub: Hub; host: string; port: number; upstream?: string; fetchImpl?: Fetch; openaiUpstream?: string; openaiFetch?: Fetch };
 
 /**
  * The hub's front door for threads. Claude Code calls it with a profile's access
@@ -27,11 +27,12 @@ export type ProxyOptions = { hub: Hub; host: string; port: number; upstream?: st
  * profile's OAuth token and forwards to Anthropic. The caller is the real Claude
  * Code, so nothing else about the request changes (ADR 0007).
  */
-export async function startHubProxy({ hub, host, port, upstream = ANTHROPIC_API, fetchImpl = fetch }: ProxyOptions) {
+export async function startHubProxy({ hub, host, port, upstream = ANTHROPIC_API, fetchImpl = fetch, openaiUpstream = 'https://chatgpt.com/backend-api/codex', openaiFetch = fetch }: ProxyOptions) {
   const server = createServer((req, res) => {
     handle(req, res).catch((err) => {
+      if (res.destroyed) return;
       console.error('[hub] proxy error', err);
-      if (!res.headersSent) sendError(res, 502, 'api_error', `accio hub could not reach Anthropic: ${(err as Error).message}`);
+      if (!res.headersSent) sendError(res, 502, 'api_error', 'accio hub could not reach the provider. Check the account sign-in and connection.');
       else res.destroy();
     });
   });
@@ -40,6 +41,7 @@ export async function startHubProxy({ hub, host, port, upstream = ANTHROPIC_API,
     const key = keyOf(req);
     const profile = key ? hub.profileForKey(key) : undefined;
     if (!profile) return sendError(res, 401, 'authentication_error', 'Unknown accio hub key');
+    if (req.url?.startsWith('/openai/')) return handleOpenAI(req, res, profile.id);
 
     let token = await hub.accessToken(profile.id);
     if (!token) return sendError(res, 401, 'authentication_error', `accio profile ${profile.id} is not signed in with Claude`);
@@ -57,6 +59,7 @@ export async function startHubProxy({ hub, host, port, upstream = ANTHROPIC_API,
       // The token may have been revoked or rotated early: refresh once and retry.
       await upstreamRes.body?.cancel();
       token = await hub.accessToken(profile.id, { force: true });
+      if (!token) return sendError(res, 401, 'authentication_error', 'This profile is no longer signed in');
       upstreamRes = await send(token!);
     }
 
@@ -67,6 +70,42 @@ export async function startHubProxy({ hub, host, port, upstream = ANTHROPIC_API,
     res.writeHead(upstreamRes.status, headers);
     if (!upstreamRes.body) return void res.end();
     Readable.fromWeb(upstreamRes.body as import('node:stream/web').ReadableStream).pipe(res);
+  }
+
+  async function handleOpenAI(req: IncomingMessage, res: ServerResponse, profileId: string) {
+    const path = req.url?.split('?')[0];
+    if (req.method !== 'POST' || !['/openai/responses', '/openai/responses/compact'].includes(path ?? '')) return sendError(res, 404, 'invalid_request_error', 'Unknown Codex endpoint');
+    let credentials = await hub.openaiCredentials(profileId);
+    if (!credentials) return sendError(res, 401, 'authentication_error', 'Select a signed-in ChatGPT account for this profile');
+    const body = await readBody(req);
+    const controller = new AbortController();
+    res.once('close', () => controller.abort());
+    const send = (auth: NonNullable<typeof credentials>) => {
+      const headers = new Headers();
+      for (const [key, value] of Object.entries(req.headers)) {
+        if (value === undefined || DROP_REQUEST.has(key.toLowerCase()) || /^(chatgpt-|openai-organization$|openai-project$|cookie$|anthropic-)/i.test(key)) continue;
+        headers.set(key, Array.isArray(value) ? value.join(', ') : value);
+      }
+      headers.set('authorization', `Bearer ${auth.accessToken}`);
+      headers.set('chatgpt-account-id', auth.accountId);
+      return openaiFetch(`${openaiUpstream}${path!.slice('/openai'.length)}`, {
+        method: 'POST', headers, body: new Uint8Array(body), signal: controller.signal,
+      });
+    };
+    let response = await send(credentials);
+    if (response.status === 401) {
+      await response.body?.cancel();
+      credentials = await hub.openaiCredentials(profileId, true);
+      if (!credentials) return sendError(res, 401, 'authentication_error', 'This profile is no longer signed in');
+      response = await send(credentials);
+    }
+    const headers: Record<string, string> = {};
+    response.headers.forEach((value, key) => { if (!DROP_RESPONSE.has(key) && key !== 'set-cookie') headers[key] = value; });
+    res.writeHead(response.status, headers);
+    if (!response.body) return void res.end();
+    const stream = Readable.fromWeb(response.body as import('node:stream/web').ReadableStream);
+    stream.once('error', () => res.destroy());
+    stream.pipe(res);
   }
 
   await new Promise<void>((done, fail) => {

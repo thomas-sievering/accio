@@ -9,10 +9,10 @@ export type Profile = {
 };
 
 /** Profiles expose selected accounts without credentials. */
-export function toView(profile: Profile, account: AccountView | null): ProfileView {
+export function toView(profile: Profile, account: AccountView | null, openai: AccountView | null = null): ProfileView {
   return {
     ...profile,
-    providers: PROVIDERS.map((p) => ({ ...p, accounts: p.id === 'anthropic' && account ? [account] : [] })),
+    providers: PROVIDERS.map((p) => ({ ...p, accounts: (p.id === 'anthropic' ? account : openai) ? [p.id === 'anthropic' ? account! : openai!] : [] })),
   };
 }
 

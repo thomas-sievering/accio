@@ -16,6 +16,10 @@ const INHERITED_BLOCKLIST = [
   /^CLAUDE_CONFIG_DIR$/,
   /^AWS_BEARER_TOKEN_BEDROCK$/,
   /^ELECTRON_RUN_AS_NODE$/,
+  /^CODEX_/,
+  /^OPENAI_/,
+  /^CHATGPT_/,
+  /^ACCIO_OPENAI_/,
 ];
 
 export function harnessEnv(base: NodeJS.ProcessEnv, access: HubAccess, configDir: string): Record<string, string> {

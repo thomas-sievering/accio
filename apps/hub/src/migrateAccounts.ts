@@ -3,8 +3,9 @@ import { dirname, join } from 'node:path';
 import { JsonFile } from '@accio/persistence';
 import type { ClaudeAccount } from './claudeOAuth.js';
 import type { HubProfile } from './hub.js';
+import type { OpenAIAccount } from './openaiAuth.js';
 
-export type StoredAccount = { id: string; name: string; account: ClaudeAccount | null };
+export type StoredAccount = { id: string; name: string; providerId?: 'anthropic' | 'openai'; account: ClaudeAccount | null; openai?: OpenAIAccount | null };
 export type AccountData = { profiles: HubProfile[]; accounts: StoredAccount[] };
 type LegacyProfile = { id: string; accessKey: string; account?: ClaudeAccount; login?: ClaudeAccount };
 

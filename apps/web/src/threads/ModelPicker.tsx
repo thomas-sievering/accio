@@ -3,8 +3,9 @@ import { modelKey, type ModelSelection, type ModelsState } from '@accio/protocol
 import { useClient, useConnectionStatus } from '../app/connection';
 
 /** A profile-scoped picker: favourites first, then each provider/harness pair. */
-export function ModelPicker({ profileId, value, onChange, disabled = false }: {
+export function ModelPicker({ profileId, harnessId, value, onChange, disabled = false }: {
   profileId?: string;
+  harnessId?: string;
   value: ModelSelection;
   onChange: (model: ModelSelection) => Promise<void>;
   disabled?: boolean;
@@ -44,7 +45,8 @@ export function ModelPicker({ profileId, value, onChange, disabled = false }: {
     panel.current?.hidePopover();
   }, [profileId]);
 
-  const models = data?.models ?? [];
+  const models = (data?.models ?? []).filter((m) => !harnessId || m.harnessId === harnessId);
+  const fallbackName = value.modelId === 'default' ? `${value.harnessId === 'codex' ? 'Codex' : 'Claude Code'} default` : value.modelId;
   const favorites = new Set(data?.favorites.map(modelKey));
   const groups = [...new Map(models.map((m) => [JSON.stringify([m.providerId, m.harnessId]), {
     id: JSON.stringify([m.providerId, m.harnessId]), provider: m.providerName, harness: m.harnessName,
@@ -83,7 +85,7 @@ export function ModelPicker({ profileId, value, onChange, disabled = false }: {
   };
 
   return <>
-    <button type="button" className="model-trigger" popoverTarget={id} disabled={disabled || busy || !profileId || status !== 'open'} aria-label={`Select model: ${selected?.name ?? 'Claude Code default'}`}
+    <button type="button" className="model-trigger" popoverTarget={id} disabled={disabled || busy || !profileId || status !== 'open'} aria-label={`Select model: ${selected?.name ?? fallbackName}`}
       onClick={(event) => {
         const rect = event.currentTarget.getBoundingClientRect();
         const width = Math.min(520, window.innerWidth - 24);
@@ -91,7 +93,7 @@ export function ModelPicker({ profileId, value, onChange, disabled = false }: {
         setPosition({ width, left: Math.max(12, Math.min(rect.left, window.innerWidth - width - 12)),
           ...(above ? { bottom: window.innerHeight - rect.top + 8, top: 'auto', maxHeight: rect.top - 20 } : { top: rect.bottom + 8, bottom: 'auto', maxHeight: window.innerHeight - rect.bottom - 20 }) });
       }}>
-      {selected?.name ?? (value.modelId === 'default' ? 'Claude Code default' : `Claude ${value.modelId}`)} <span aria-hidden="true">⌄</span>
+      {selected?.name ?? fallbackName} <span aria-hidden="true">⌄</span>
     </button>
     <div id={id} ref={panel} popover="auto" className="model-picker" style={position} role="dialog" aria-label="Choose a model"
       onToggle={(event) => { if (event.newState === 'open') { setQuery(''); search.current?.focus(); } }}>

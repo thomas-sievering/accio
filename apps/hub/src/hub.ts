@@ -13,17 +13,19 @@ import {
 } from './claudeOAuth.js';
 import { JsonFile } from '@accio/persistence';
 import { loadAccounts, type AccountData, type StoredAccount } from './migrateAccounts.js';
+import { OpenAIAuth } from './openaiAuth.js';
 
 /**
- * GLOSSARY: Hub. Holds named Claude accounts selected by profiles and hands out one access
+ * GLOSSARY: Hub. Holds named provider accounts selected by profiles and hands out one access
  * key per profile; a key only ever unlocks its own profile's account (ADR 0007).
- * Profiles here are just ids: names and rules live in accio. For now a profile
- * has at most one account, at Claude, with its tokens.
+ * Profiles here are just ids: names and rules live in accio. A profile selects
+ * at most one Claude account and one ChatGPT account.
  */
 export type HubProfile = {
   id: string;
   accessKey: string;
   accountId: string | null;
+  openaiAccountId?: string | null;
 };
 
 /** What the hub tells accio about a profile's sign-in. Never the tokens. */
@@ -43,10 +45,12 @@ export class Hub {
   private accounts: StoredAccount[] = [];
   private pending = new Map<string, PendingSignIn & { accountId: string; startedAt: number }>();
   private refreshing = new Map<string, Promise<ClaudeAccount>>();
+  private openaiPending = new Map<string, string>();
 
   constructor(
     home: string,
     private fetchImpl: Fetch = fetch,
+    private openai: OpenAIAuth = new OpenAIAuth(home),
   ) {
     this.file = new JsonFile(join(home, 'hub', 'profiles.json'), () => ({ profiles: [], accounts: [] }));
   }
@@ -76,12 +80,14 @@ export class Hub {
   /** Serializes selection with account deletion and prepares the machine before publication.
    * If preparation fails, restore the previous durable hub state without publishing it.
    */
-  configureProfile(id: string, accountId: string | null | undefined, prepare: (key: string) => Promise<void>) {
+  configureProfile(id: string, accountId: string | null | undefined, prepare: (key: string) => Promise<void>, openaiAccountId?: string | null) {
     return this.change(async () => {
-      if (accountId !== undefined && accountId !== null) this.requireAccount(accountId);
+      if (accountId != null) this.requireProvider(accountId, 'anthropic');
+      if (openaiAccountId != null) this.requireProvider(openaiAccountId, 'openai');
       const existing = this.profiles.find((p) => p.id === id);
       const profile = { ...(existing ?? this.newProfile(id)) };
       if (accountId !== undefined) profile.accountId = accountId;
+      if (openaiAccountId !== undefined) profile.openaiAccountId = openaiAccountId;
       const next = existing ? this.profiles.map((p) => p.id === id ? profile : p) : [...this.profiles, profile];
       await this.prepareProfiles(next, () => prepare(profile.accessKey));
     });
@@ -121,7 +127,7 @@ export class Hub {
   }
 
   beginAccountSignIn(accountId: string): { signInId: string; url: string } {
-    this.requireAccount(accountId);
+    this.requireProvider(accountId, 'anthropic');
     const now = Date.now();
     for (const [key, p] of this.pending) if (now - p.startedAt > SIGN_IN_TTL_MS || p.accountId === accountId) this.pending.delete(key);
     const signInId = randomUUID();
@@ -141,6 +147,55 @@ export class Hub {
       this.pending.delete(signInId);
       return this.accountView(p.accountId);
     });
+  }
+
+  async beginOpenAISignIn(accountId: string) {
+    return this.change(async () => {
+      this.requireProvider(accountId, 'openai');
+      await this.cancelOpenAISignIn(accountId);
+      const result = await this.openai.begin();
+      this.openaiPending.set(result.signInId, accountId);
+      return result;
+    });
+  }
+
+  openaiSignInStatus(signInId: string) {
+    return this.change(async () => {
+      const id = this.openaiPending.get(signInId);
+      if (!id) throw new SignInError('This sign-in has expired or was cancelled. Start it again.');
+      this.requireProvider(id, 'openai');
+      const result = await this.openai.status(signInId);
+      if (result.status === 'pending') return result;
+      const previous = this.requireAccount(id).openai;
+      await this.commit(this.profiles, this.accounts.map((a) => a.id === id ? { ...a, openai: result.account } : a));
+      this.openaiPending.delete(signInId);
+      await this.openai.finish(signInId);
+      if (previous) await this.openai.remove(previous.credentialId);
+      return { status: 'complete' as const, account: this.accountView(id) };
+    });
+  }
+
+  cancelAccountSignIn(signInId: string) {
+    return this.change(async () => {
+      this.pending.delete(signInId);
+      this.openaiPending.delete(signInId);
+      await this.openai.cancel(signInId);
+    });
+  }
+
+  codexModels(profileId: string) {
+    const id = this.profiles.find((p) => p.id === profileId)?.openaiAccountId;
+    return this.accounts.find((a) => a.id === id)?.openai?.models ?? [];
+  }
+
+  async openaiCredentials(profileId: string, force = false) {
+    const id = this.require(profileId).openaiAccountId;
+    const account = this.accounts.find((a) => a.id === id)?.openai;
+    if (!account) return null;
+    const credentials = await this.openai.credentials(account, force);
+    // A sign-out or account switch during refresh must not unlock the previous account.
+    const current = this.profiles.find((p) => p.id === profileId)?.openaiAccountId;
+    return current === id && this.accounts.find((a) => a.id === id)?.openai === account ? credentials : null;
   }
 
   /** The profile a request's key belongs to, or undefined for an unknown key. */
@@ -181,6 +236,7 @@ export class Hub {
 
   async close(): Promise<void> {
     await this.queue.catch(() => {});
+    await this.openai.close();
     await this.file.idle();
   }
 
@@ -196,21 +252,24 @@ export class Hub {
 
   accountView(id: string) {
     const a = this.requireAccount(id);
+    if (a.providerId === 'openai') return { id: a.id, name: a.name, providerId: 'openai' as const, signedIn: !!a.openai, email: a.openai?.email ?? null, organization: null };
     return { id: a.id, name: a.name, providerId: 'anthropic' as const, signedIn: !!a.account, email: a.account?.email ?? null, organization: a.account?.organization ?? null };
   }
 
-  selectedAccount(profileId: string) {
-    const id = this.profiles.find((p) => p.id === profileId)?.accountId;
+  selectedAccount(profileId: string, providerId: 'anthropic' | 'openai' = 'anthropic') {
+    const profile = this.profiles.find((p) => p.id === profileId);
+    const id = providerId === 'openai' ? profile?.openaiAccountId : profile?.accountId;
     return id ? this.accountView(id) : null;
   }
 
-  saveAccount(name: string, id?: string) {
+  saveAccount(name: string, id?: string, providerId?: 'anthropic' | 'openai') {
     return this.change(async () => {
       name = name.trim();
       if (!name || name.length > 80) throw new SignInError('Account name must have 1 to 80 characters.');
       if (id) this.requireAccount(id);
+      if (id && providerId && (this.requireAccount(id).providerId ?? 'anthropic') !== providerId) throw new SignInError('An account cannot change provider.');
       const saved = id ?? randomUUID();
-      const accounts = id ? this.accounts.map((a) => a.id === id ? { ...a, name } : a) : [...this.accounts, { id: saved, name, account: null }];
+      const accounts = id ? this.accounts.map((a) => a.id === id ? { ...a, name } : a) : [...this.accounts, { id: saved, name, providerId: providerId ?? 'anthropic', account: null }];
       await this.commit(this.profiles, accounts);
       return this.accountView(saved);
     });
@@ -218,7 +277,7 @@ export class Hub {
 
   selectAccount(profileId: string, accountId: string | null) {
     return this.change(async () => {
-      if (accountId !== undefined && accountId !== null) this.requireAccount(accountId);
+      if (accountId != null) this.requireProvider(accountId, 'anthropic');
       this.require(profileId);
       await this.commit(this.profiles.map((p) => p.id === profileId ? { ...p, accountId } : p));
     });
@@ -226,23 +285,40 @@ export class Hub {
 
   deleteAccount(id: string) {
     return this.change(async () => {
-      this.requireAccount(id);
-      if (this.profiles.some((p) => p.accountId === id)) throw new SignInError('Remove this account from its profiles before deleting it.');
+      const account = this.requireAccount(id);
+      if (this.profiles.some((p) => p.accountId === id || p.openaiAccountId === id)) throw new SignInError('Remove this account from its profiles before deleting it.');
       await this.commit(this.profiles, this.accounts.filter((a) => a.id !== id));
       this.cancelSignIn(id);
+      await this.cancelOpenAISignIn(id);
+      if (account.openai) await this.openai.remove(account.openai.credentialId);
     });
   }
 
   signOutAccount(id: string) {
     return this.change(async () => {
-      await this.setAccount(id, null);
+      const account = this.requireAccount(id);
+      await this.commit(this.profiles, this.accounts.map((a) => a.id === id ? { ...a, account: null, openai: null } : a));
       this.cancelSignIn(id);
+      await this.cancelOpenAISignIn(id);
+      if (account.openai) await this.openai.remove(account.openai.credentialId);
       return this.accountView(id);
     });
   }
 
   private cancelSignIn(id: string) {
     for (const [key, p] of this.pending) if (p.accountId === id) this.pending.delete(key);
+  }
+
+  private async cancelOpenAISignIn(id: string) {
+    for (const [key, accountId] of this.openaiPending) if (accountId === id) {
+      this.openaiPending.delete(key); await this.openai.cancel(key);
+    }
+  }
+
+  private requireProvider(id: string, providerId: 'anthropic' | 'openai') {
+    const account = this.requireAccount(id);
+    if ((account.providerId ?? 'anthropic') !== providerId) throw new SignInError(`Choose a ${providerId} account.`);
+    return account;
   }
 
   private requireAccount(id: string) {
