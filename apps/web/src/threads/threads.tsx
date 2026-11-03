@@ -2,13 +2,20 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import type { ThreadView, TranscriptItem } from '@accio/protocol';
 import { useClient, useConnectionStatus } from '../app/connection';
 import { useLive, useLocalState } from '../app/useLive';
+import { nextMorning, shelveThreads, type ShelfMarks, type ThreadShelves } from './shelves';
 
 type ThreadsCtx = {
   threads: ThreadView[] | undefined;
-  /** Newest first. */
-  threadsOf: (projectId: string) => ThreadView[];
   selectedId: string;
   select: (id: string) => void;
+  /** Open threads by project, plus the Working, Snoozed and Settled shelves. */
+  shelves: ThreadShelves;
+  marks: ShelfMarks;
+  now: Date;
+  settle: (id: string) => void;
+  snooze: (id: string) => void;
+  /** Takes a thread off the Snoozed or Settled shelf. */
+  reopen: (id: string) => void;
 };
 
 const Ctx = createContext<ThreadsCtx | null>(null);
@@ -17,18 +24,28 @@ export function ThreadsProvider({ children }: { children: ReactNode }) {
   const client = useClient();
   const threads = useLive(() => client.call('threads.list', {}), 'threads.changed');
   const [selectedId, select] = useLocalState<string>('accio.thread', '');
+  const [marks, setMarks] = useShelfMarks();
+  const now = useMinuteClock();
+  const mark = (id: string, next: ShelfMarks[string] | undefined) => {
+    const { [id]: _, ...rest } = marks;
+    setMarks(next ? { ...rest, [id]: next } : rest);
+  };
 
   const value = useMemo<ThreadsCtx>(
     () => ({
       threads,
-      threadsOf: (projectId) =>
-        (threads ?? []).filter((t) => t.projectId === projectId).sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
       selectedId,
       select,
+      shelves: shelveThreads(threads ?? [], marks, now),
+      marks,
+      now,
+      settle: (id) => mark(id, { settledAt: new Date().toISOString() }),
+      snooze: (id) => mark(id, { snoozedUntil: nextMorning(new Date()).toISOString() }),
+      reopen: (id) => mark(id, undefined),
     }),
-    // select is stable in behaviour; recreate only when data changes.
+    // select and mark are stable in behaviour; recreate only when data changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [threads, selectedId],
+    [threads, selectedId, marks, now],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
@@ -86,4 +103,36 @@ export function useTranscript(threadId: string): TranscriptItem[] | undefined {
   }, [client, status, threadId]);
 
   return items;
+}
+
+/**
+ * Snooze and settle marks in localStorage: a stand-in so the shelves can be
+ * tried before the server keeps them (GLOSSARY: Client holds no state of its own).
+ */
+function useShelfMarks(): [ShelfMarks, (m: ShelfMarks) => void] {
+  const key = 'accio.shelfMarks';
+  const [marks, setMarks] = useState<ShelfMarks>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(key) ?? '{}') as ShelfMarks;
+    } catch {
+      return {};
+    }
+  });
+  return [
+    marks,
+    (m) => {
+      localStorage.setItem(key, JSON.stringify(m));
+      setMarks(m);
+    },
+  ];
+}
+
+/** The current time, updated every minute so snoozed threads wake on their own. */
+function useMinuteClock(): Date {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+  return now;
 }
