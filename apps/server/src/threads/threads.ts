@@ -134,9 +134,14 @@ export class Threads {
           releaseProfile();
         }
       }))
-      .on('threads.transcript', async ({ threadId }) => (await this.transcript(this.require(threadId).id)).items)
+      .on('threads.transcript', async ({ threadId }) => {
+        const live = await this.transcript(this.require(threadId).id);
+        this.require(threadId);
+        return live.items;
+      })
       .on('threads.observe', async ({ threadId }) => {
         const live = await this.transcript(this.require(threadId).id);
+        this.require(threadId);
         // No await between reading items and cursor. All mutations replace the
         // array/items, so this snapshot stays fixed even before RPC serialization.
         return { items: live.items, cursor: live.cursor };
@@ -197,6 +202,12 @@ export class Threads {
     const saved = this.commit(this.list.filter((t) => !ids.has(t.id)));
     const writes: Promise<void>[] = [];
     for (const id of ids) {
+      const loading = this.loadingTranscripts.get(id);
+      if (loading) {
+        this.loadingTranscripts.delete(id);
+        // Discard its result and let any open file handle close before removal.
+        writes.push(loading.then(() => {}, () => {}));
+      }
       const live = this.transcripts.get(id);
       if (live) {
         clearTimeout(live.saveTimer);
@@ -296,13 +307,22 @@ export class Threads {
         await this.addItem(thread.id, { kind: 'notice', id: `${turnId}:err`, turnId, tone: 'error', text: (err as Error).message });
       }
     } finally {
-      if (outcome === 'interrupted') {
-        await this.addItem(thread.id, { kind: 'notice', id: `${turnId}:stop`, turnId, tone: 'info', text: 'Stopped.' });
+      try {
+        if (outcome === 'interrupted') {
+          await this.addItem(thread.id, { kind: 'notice', id: `${turnId}:stop`, turnId, tone: 'info', text: 'Stopped.' });
+        }
+        for (const item of transcript.unfinishedTools()) await this.addItem(thread.id, item);
+        await this.flush(thread.id);
+      } catch (error) {
+        if (outcome !== 'interrupted') outcome = 'failed';
+        const detail = error instanceof Error ? error.message : String(error);
+        await this.addItem(thread.id, { kind: 'notice', id: `${turnId}:save`, turnId, tone: 'error', text: `Could not save this turn: ${detail}` });
+        throw error;
+      } finally {
+        // A storage failure must never leave a finished turn holding its slot.
+        this.running.delete(thread.id);
+        await this.update(thread.id, (t) => endTurn(t, outcome ?? 'failed', now()));
       }
-      for (const item of transcript.unfinishedTools()) await this.addItem(thread.id, item);
-      await this.flush(thread.id);
-      this.running.delete(thread.id);
-      await this.update(thread.id, (t) => endTurn(t, outcome ?? 'failed', now()));
     }
   }
 
@@ -356,10 +376,13 @@ export class Threads {
     if (!loading) {
       const file = new JsonFile<TranscriptItem[]>(this.transcriptPath(id), () => []);
       loading = file.read().then((items) => {
+        if (this.loadingTranscripts.get(id) !== loading) throw new UserError('No such thread');
         const loaded = { items, file, cursor: 0 };
         this.transcripts.set(id, loaded);
         return loaded;
-      }).finally(() => this.loadingTranscripts.delete(id));
+      }).finally(() => {
+        if (this.loadingTranscripts.get(id) === loading) this.loadingTranscripts.delete(id);
+      });
       this.loadingTranscripts.set(id, loading);
     }
     return loading;
