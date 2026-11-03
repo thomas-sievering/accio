@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 
 /** Wheel distance that counts as one step, so a trackpad's many small deltas move one level, not five. */
 const WHEEL_STEP = 50;
@@ -7,17 +7,14 @@ const SAVE_AFTER_MS = 400;
 
 export type Step<T> = {
   value: T;
-  /** Shown on the chip and read out, such as "Extra high". */
+  /** Read out and shown in the chip's tooltip, such as "Extra high". */
   label: string;
-  /** Under the slider, short enough to fit five or six side by side, such as "XHigh". */
-  short: string;
-  /** Why it cannot be chosen now; scrolling passes over it. */
+  /** Why it cannot be chosen now; stepping passes over it. */
   unavailable?: string;
 };
 
 /**
- * A few ordered levels that preview at once and save once scrolling or dragging
- * settles. `index` is the current level, or -1 when the current choice matches none.
+ * A few ordered levels that preview at once and save once scrolling settles. `index` is the current level, or -1 when the current choice matches none.
  */
 export function useSteps<T>(steps: Step<T>[], index: number, onChange: (value: T) => Promise<void>, onError: (message: string | undefined) => void) {
   const [pending, setPending] = useState<number>();
@@ -72,28 +69,3 @@ export function useWheelSteps(target: RefObject<HTMLElement | null>, step: (by: 
   }, [target]);
 }
 
-/** A slider that locks into each level, with short labels under its stops and a line about the level shown. */
-export function StepSlider<T>({ name, steps, shown, settle, tone, detail }: {
-  name: string;
-  steps: Step<T>[];
-  shown: number;
-  settle: (to: number) => void;
-  tone: string;
-  detail?: ReactNode;
-}) {
-  const at = (i: number) => `${(i / Math.max(1, steps.length - 1)) * 100}%`;
-  const label = steps[shown]?.label ?? 'Custom';
-  const note = steps[shown]?.unavailable ?? detail;
-  return <section className={`step-slider tone-${tone}${shown < 0 ? ' off' : ''}`} aria-label={name}>
-    <p className="step-slider-title"><span>{name}</span><b>{label}</b></p>
-    {/* A native range locks into each level and handles keys, touch and screen readers. */}
-    <input type="range" min={0} max={steps.length - 1} step={1} value={Math.max(0, shown)} aria-label={name} aria-valuetext={label}
-      style={{ '--at': shown < 0 ? '0%' : at(shown) } as CSSProperties}
-      onChange={(event) => settle(Number(event.currentTarget.value))} />
-    <span className="step-ticks" aria-hidden>
-      {steps.map((s, i) => <button type="button" tabIndex={-1} key={i} className={[i === shown && 'on', s.unavailable && 'unavailable'].filter(Boolean).join(' ') || undefined}
-        style={{ left: at(i) }} onClick={() => settle(i)}>{s.short}</button>)}
-    </span>
-    {note && <p className={steps[shown]?.unavailable ? 'step-slider-detail unavailable' : 'step-slider-detail'}>{note}</p>}
-  </section>;
-}

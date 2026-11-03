@@ -50,10 +50,6 @@ _Avoid_: Agent, runtime, coding tool, provider (as T3 Code uses it)
 How hard a model thinks before it answers, such as low, medium or high. Each model accepts its own levels, as its harness reports them. A thread keeps its effort with its model and uses it on every turn until you change it.
 _Avoid_: Thinking level, reasoning effort, thinking budget
 
-**Preset**:
-One of four levels each harness has, Low, Medium, High and Ultra, that stands for a model and an effort, such as Opus at high effort. Choosing one sets both. Presets are a shared setting; a level you leave alone uses accio's default. A thread only moves between its own harness's presets, and a level whose model's limit is used up cannot be chosen until it resets. A model and effort chosen any other way is custom.
-_Avoid_: Mode, tier, profile (which is a side of your life)
-
 **Accio tools**:
 Tools accio gives every harness, such as offer_choice. Each machine serves them to its own harnesses over MCP, under the name `accio`; each turn may use them only while it runs.
 _Avoid_: Accio MCP, custom tools, plugins

@@ -14,5 +14,4 @@ export {
   type MachineHello,
   type MachineRecord,
   type HarnessInstall,
-  type PresetChoice,
 } from './sharedSettings.js';

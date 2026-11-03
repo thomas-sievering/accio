@@ -23,12 +23,8 @@ export type MachineRecord = MachineHello & {
 export type SharedSeed = { profiles: SharedProfile[]; machines: MachineRecord[] };
 
 type FavoriteModel = { harnessId: string; modelId: string };
-/** GLOSSARY: Preset. What one level was set to in settings. */
-export type PresetChoice = { modelId: string; effort?: string };
 type Data = SharedSeed & {
   modelFavorites?: Record<string, FavoriteModel[]>;
-  /** Harness id → level → choice. Levels left out use accio's defaults. */
-  presets?: Record<string, Record<string, PresetChoice>>;
 };
 
 /** GLOSSARY: Provider. The ones accio knows; only Anthropic can be signed in to so far. */
@@ -108,18 +104,6 @@ export class SharedSettings {
         ...this.data,
         modelFavorites: { ...this.data.modelFavorites, [profileId]: favorite ? [...remaining, model] : remaining },
       });
-    });
-  }
-
-  /** The levels set for a harness; the rest use accio's defaults. */
-  presets(harnessId: string): Record<string, PresetChoice> {
-    return { ...this.data.presets?.[harnessId] };
-  }
-
-  async setPreset(harnessId: string, level: string, choice: PresetChoice | null) {
-    return this.change(async () => {
-      const { [level]: _, ...rest } = this.presets(harnessId);
-      await this.commit({ ...this.data, presets: { ...this.data.presets, [harnessId]: choice ? { ...rest, [level]: { ...choice } } : rest } });
     });
   }
 

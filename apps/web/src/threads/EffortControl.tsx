@@ -2,7 +2,6 @@ import type { ModelView } from '@accio/protocol';
 import type { Step } from './steps';
 
 const NAMES: Record<string, string> = { none: 'None', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
-const SHORT: Record<string, string> = { none: 'None', minimal: 'Min', low: 'Low', medium: 'Med', high: 'High', xhigh: 'XHigh', max: 'Max' };
 export const effortName = (id: string) => NAMES[id] ?? id.replace(/^./, (c) => c.toUpperCase());
 
 /**
@@ -14,7 +13,7 @@ export function effortSteps(model: ModelView, value: string | undefined) {
   const levels = model.efforts.map((e) => e.id);
   const fallback = model.defaultEffort && levels.includes(model.defaultEffort) ? model.defaultEffort : undefined;
   const ids: (string | undefined)[] = fallback ? levels : [undefined, ...levels];
-  const steps: Step<string | undefined>[] = ids.map((id) => ({ value: id === fallback ? undefined : id, label: id ? effortName(id) : 'Auto', short: id ? SHORT[id] ?? effortName(id) : 'Auto' }));
+  const steps: Step<string | undefined>[] = ids.map((id) => ({ value: id === fallback ? undefined : id, label: id ? effortName(id) : 'Auto' }));
   const filled = (i: number) => { const id = ids[i]; return id ? levels.indexOf(id) + 1 : 0; };
   return { steps, index: ids.indexOf(value ?? fallback), levels: levels.length, filled, tone: (i: number) => toneOf(filled(i), levels.length) };
 }

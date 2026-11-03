@@ -22,7 +22,7 @@ describe('profile model choices', () => {
     expect(available.models.map((m) => [m.harnessId, m.providerId, m.id])).toEqual([
       ['claudeCode', 'anthropic', 'opus'], ['claudeCode', 'anthropic', 'sonnet'], ['claudeCode', 'anthropic', 'haiku'],
     ]);
-    expect(await c.call('models.list', { profileId: work.id })).toEqual({ models: [], favorites: [], usedUp: [], presets: [] });
+    expect(await c.call('models.list', { profileId: work.id })).toEqual({ models: [], favorites: [], usedUp: [] });
     await expect(c.call('models.favorite', { profileId: work.id, model: opus, favorite: true })).rejects.toThrow(/not available/);
     const machine = (await c.call('machines.list', {})).find((m) => m.thisMachine)!;
     await t.app.settings.machineConnected({ id: 'other', name: 'Remote', platform: 'linux', version: '1', harnesses: [{ harnessId: 'claudeCode', version: '1' }] });
@@ -163,30 +163,6 @@ describe('profile model choices', () => {
     await c.waitFor('models.changed');
     expect((await c.call('models.list', { profileId: 'personal' })).models.find((m) => m.id === 'fable')?.limited).toBeUndefined();
     expect(await c.call('threads.setModel', { threadId: thread.id, model: fable })).toMatchObject({ model: fable });
-  });
-
-  it('shares presets set in settings with every profile, refuses ones no model fits, and returns a level to its default', async () => {
-    const t = await startTestApp({ harness: new FakeHarness() }); stop = t.stop;
-    const c = await t.connect(); const other = await t.connect();
-    await c.signedIn('Personal'); await c.signedIn('Work');
-    const levels = async (profileId: string) => (await c.call('models.list', { profileId })).presets.map((p) => [p.level, p.model.modelId, p.model.effort ?? null, p.custom]);
-    // The fallback catalog has no Fable, so Ultra is Opus at its highest effort.
-    expect(await levels('personal')).toEqual([['low', 'haiku', 'low', false], ['medium', 'sonnet', 'medium', false], ['high', 'opus', 'high', false], ['ultra', 'opus', 'max', false]]);
-    await expect(c.call('presets.save', { harnessId: 'claudeCode', level: 'low', choice: { modelId: 'made-up' } })).rejects.toThrow(/No profile/);
-    await expect(c.call('presets.save', { harnessId: 'claudeCode', level: 'low', choice: { modelId: 'haiku', effort: 'turbo' } })).rejects.toThrow(/does not accept turbo/);
-    await expect(c.call('presets.save', { harnessId: 'other', level: 'low', choice: null })).rejects.toThrow(/harness/);
-    await c.call('presets.save', { harnessId: 'claudeCode', level: 'low', choice: { modelId: 'sonnet', effort: 'low' } });
-    await other.waitFor('models.changed');
-    expect((await levels('work'))[0]).toEqual(['low', 'sonnet', 'low', true]);
-    const [claude] = await c.call('harnesses.list', {});
-    expect(claude?.presets.find((p) => p.level === 'low')).toMatchObject({ model: { modelId: 'sonnet', effort: 'low' }, custom: true });
-    expect(claude?.models.map((m) => m.id)).toEqual(['opus', 'sonnet', 'haiku']);
-    await t.stop({ keepHome: true }); stop = undefined;
-    const restarted = await startTestApp({ harness: new FakeHarness() }, t.home); stop = restarted.stop;
-    const next = await restarted.connect();
-    expect((await next.call('models.list', { profileId: 'personal' })).presets[0]).toMatchObject({ level: 'low', model: { modelId: 'sonnet' }, custom: true });
-    await next.call('presets.save', { harnessId: 'claudeCode', level: 'low', choice: null });
-    expect((await next.call('models.list', { profileId: 'personal' })).presets[0]).toMatchObject({ level: 'low', model: { modelId: 'haiku', effort: 'low' }, custom: false });
   });
 
   it('loads threads and hub settings from before model selection existed', async () => {

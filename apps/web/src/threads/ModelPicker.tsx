@@ -1,16 +1,14 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
-import { modelKey, type ModelSelection, type ModelsState } from '@accio/protocol';
+import { modelKey, type ModelSelection, type ModelsState, type UsedUpLimit } from '@accio/protocol';
 import { useClient, useConnectionStatus } from '../app/connection';
 import { Check, ProviderLogo, Star } from '../app/icons';
 import { Meter, effortSteps } from './EffortControl';
-import { choiceDetail, presetSteps, usedUpText } from './PresetControl';
-import { StepSlider, useSteps, useWheelSteps } from './steps';
+import { useSteps, useWheelSteps } from './steps';
 
 /**
- * GLOSSARY: Preset, Effort. One chip for what a thread runs: the preset level when the
- * model and effort are one, else the model and an effort meter. Scrolling over it steps
- * presets. Its panel has the preset slider, the profile's models (favourites first,
- * then each provider/harness pair) and the effort slider.
+ * GLOSSARY: Effort. One chip for what a thread runs: the model and a small effort meter.
+ * Scrolling over it, or the up and down keys, change the effort; clicking lists the
+ * profile's models, favourites first, then each provider/harness pair.
  */
 export function ModelPicker({ profileId, harnessId, value, onChange, disabled = false }: {
   profileId?: string;
@@ -112,56 +110,39 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
     buttons[next]?.focus();
   };
 
-  // Presets never cross harnesses: a thread's are its own harness's, a draft's those of the model it has.
-  const presets = (data?.presets ?? []).filter((p) => p.harnessId === (harnessId ?? current.harnessId));
-  const preset = presetSteps(presets, models, current);
-  const presetStepper = useSteps(preset.steps, preset.index, onChange, setError);
-  useWheelSteps(trigger, presetStepper.step);
   const effort = selected && selected.efforts.length > 0 ? effortSteps(selected, current.effort) : undefined;
-  const effortStepper = useSteps(effort?.steps ?? [], effort?.index ?? -1,
+  const stepper = useSteps(effort?.steps ?? [], effort?.index ?? -1,
     (next) => onChange({ harnessId: current.harnessId, modelId: current.modelId, ...(next ? { effort: next } : {}) }), setError);
-  const shownPreset = presets[presetStepper.shown];
-  const description = shownPreset ? `${preset.steps[presetStepper.shown]!.label} preset · ${choiceDetail(shownPreset.model, models)}` : choiceDetail(current, models);
+  useWheelSteps(trigger, stepper.step);
+  const shownEffort = effort?.steps[stepper.shown];
+  // "Claude Opus · High effort"; Auto leaves the effort to the harness.
+  const description = `${selected?.name ?? fallbackName}${shownEffort ? ` · ${shownEffort.label === 'Auto' ? 'default' : shownEffort.label} effort` : ''}`;
 
   return <span className="model-choice">
-    <button type="button" ref={trigger} className={`model-trigger${shownPreset ? ` on-preset tone-${shownPreset.level}` : ` tone-${effort?.tone(effortStepper.shown) ?? 'none'}`}`} popoverTarget={id}
-      disabled={disabled || busy || !profileId || status !== 'open'} aria-label={`Select model: ${description}`} title={`${description}${presets.length ? ' · scroll to change preset' : ''}`}
+    <button type="button" ref={trigger} className={`model-trigger tone-${effort?.tone(stepper.shown) ?? 'none'}`} popoverTarget={id}
+      disabled={disabled || busy || !profileId || status !== 'open'} aria-label={`Select model: ${description}`} title={effort ? `${description} · scroll to change effort` : description}
       onKeyDown={(event) => {
-        if (!presets.length) return;
-        if (event.key === 'ArrowUp') { event.preventDefault(); presetStepper.step(1); }
-        if (event.key === 'ArrowDown') { event.preventDefault(); presetStepper.step(-1); }
+        if (!effort) return;
+        if (event.key === 'ArrowUp') { event.preventDefault(); stepper.step(1); }
+        if (event.key === 'ArrowDown') { event.preventDefault(); stepper.step(-1); }
       }}
       onClick={(event) => {
         const rect = event.currentTarget.getBoundingClientRect();
         const width = Math.min(340, window.innerWidth - 24);
         const above = rect.top >= window.innerHeight - rect.bottom;
         const room = (above ? rect.top : window.innerHeight - rect.bottom) - 20;
-        // One height for every tab: the longest list or the rail, whichever is taller, plus the sliders.
+        // One height for every tab: the longest list or the rail, whichever is taller.
         const longest = Math.max(favorites.size * 33, ...groups.map((g) => models.filter((m) => JSON.stringify([m.providerId, m.harnessId]) === g.id).length * 33));
-        const sliders = (presets.length ? 96 : 0) + (effort ? 76 : 0);
-        const height = Math.min(Math.max(longest + 14, (groups.length + 1) * 40 + 12, 172) + sliders, 560, room);
+        const height = Math.min(Math.max(longest + 14, (groups.length + 1) * 40 + 12, 172), 420, room);
         setPosition({ width, height, left: Math.max(12, Math.min(rect.left, window.innerWidth - width - 12)),
           ...(above ? { bottom: window.innerHeight - rect.top + 8, top: 'auto' } : { top: rect.bottom + 8, bottom: 'auto' }) });
       }}>
-      <span key={presetStepper.bump} className={presetStepper.bump ? 'model-trigger-content bumped' : 'model-trigger-content'}>
-        {shownPreset ? <><i className="preset-dot" aria-hidden />{preset.steps[presetStepper.shown]!.label}</> : <>
-          <ProviderLogo providerId={selected?.providerId ?? (value.harnessId === 'codex' ? 'openai' : 'anthropic')} />
-          <span>{shortName}</span>
-          {effort && <Meter levels={effort.levels} filled={effort.filled(effortStepper.shown)} />}
-        </>}
-      </span>
+      <ProviderLogo providerId={selected?.providerId ?? (value.harnessId === 'codex' ? 'openai' : 'anthropic')} />
+      <span>{shortName}</span>
+      {effort && <Meter key={stepper.bump} levels={effort.levels} filled={effort.filled(stepper.shown)} />}
     </button>
-    <div id={id} ref={panel} popover="auto" className="model-picker" style={position} role="dialog" aria-label="Choose a model"
-      onKeyDown={(event) => { if (!(event.target instanceof HTMLInputElement)) move(event); }}
-      onToggle={(event) => {
-        if (event.newState !== 'open') return;
-        setTab(openingTab());
-        // With presets, the arrow keys step them straight away; Tab reaches the models.
-        if (presets.length) requestAnimationFrame(() => panel.current?.querySelector<HTMLInputElement>('input[aria-label="Preset"]')?.focus());
-        else focusRow();
-      }}>
-      {presets.length > 0 && <StepSlider name="Preset" steps={preset.steps} shown={presetStepper.shown} settle={presetStepper.settle}
-        tone={preset.tone(presetStepper.shown)} detail={shownPreset ? choiceDetail(shownPreset.model, models) : 'Your own model and effort'} />}
+    <div id={id} ref={panel} popover="auto" className="model-picker" style={position} role="dialog" aria-label="Choose a model" onKeyDown={move}
+      onToggle={(event) => { if (event.newState === 'open') { setTab(openingTab()); focusRow(); } }}>
       <nav className="model-picker-tabs" aria-label="Model groups">
         <button type="button" className="favorite" aria-pressed={activeTab === 'favorites'} aria-label="Favourites" title="Favourites" onClick={() => setTab('favorites')}>
           <Star filled />
@@ -198,10 +179,15 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
           </div>;
         })}
       </div>
-      {effort && <StepSlider name="Effort" steps={effort.steps} shown={effortStepper.shown} settle={effortStepper.settle} tone={effort.tone(effortStepper.shown)} />}
       {error && <p className="error model-picker-error" role="alert">{error}</p>}
     </div>
   </span>;
+}
+
+/** "Fable's weekly limit is used up · resets Thu 13:00" */
+function usedUpText(limit: UsedUpLimit) {
+  const at = limit.resetsAt && new Date(limit.resetsAt).toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+  return `${limit.label} is used up${at ? ` · resets ${at}` : ''}`;
 }
 
 /** The provider logo already names the brand, so a name beside it drops the "Claude " prefix. */

@@ -704,8 +704,7 @@ button.row {
   overflow: hidden;
   font-size: 13px;
 }
-.model-picker:popover-open { display: grid; grid-template-columns: 44px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto auto; }
-.model-picker-tabs, .model-picker-models { grid-row: 2; }
+.model-picker:popover-open { display: grid; grid-template-columns: 44px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
 .model-picker small { display: block; font-size: 11.5px; color: var(--muted); font-weight: 400; }
 /* An icon rail, as in T3 Code: names live in each tab's tooltip. */
 .model-picker-tabs { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 0; border-right: 1px solid var(--line); overflow-y: auto; }
@@ -734,66 +733,19 @@ button.row {
 div.model-picker-empty { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 div.model-picker-empty b { color: var(--ink); font-weight: 500; }
 .model-picker-empty-icon { display: grid; place-items: center; width: 32px; height: 32px; margin-bottom: 4px; border: 1px solid var(--line); border-radius: 8px; color: var(--amber); }
-.model-picker-error { grid-row: 4; grid-column: 1 / -1; margin: 0; padding: 10px 12px; border-top: 1px solid var(--line); }
+.model-picker-error { grid-column: 1 / -1; margin: 0; padding: 10px 12px; border-top: 1px solid var(--line); }
 
-/* GLOSSARY: Preset, Effort. One colour per level, from calm to costly; effort's top level shares Ultra's. */
-.tone-none { --tone: var(--muted); }
-.tone-low { --tone: var(--ink); }
-.tone-medium { --tone: var(--green); }
+/* GLOSSARY: Effort. A small meter on the model chip that warms as the model thinks harder. */
+.tone-none, .tone-low { --tone: var(--ink); }
 .tone-high { --tone: var(--blue); }
-.tone-ultra, .tone-top { --tone: var(--amber); }
-.model-trigger.on-preset { color: var(--ink); font-weight: 500; }
-.model-trigger-content { display: inline-flex; align-items: center; gap: 6px; }
-.model-trigger-content.bumped { animation: step-bump 260ms ease-out; }
-@keyframes step-bump { from { color: var(--tone); transform: translateY(-2px); } to { transform: none; } }
-.preset-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--tone); }
+.tone-top { --tone: var(--amber); }
 .effort-meter { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; margin-left: 2px; }
 .effort-meter i { width: 3px; border-radius: 1px; background: var(--line-2); transition: background-color 160ms ease, height 160ms ease; }
-.effort-meter i.on { background: var(--tone, var(--ink)); }
-
-/* A slider that locks into each level, inside the model panel. */
-.step-slider { --tone: var(--muted); grid-column: 1 / -1; padding: 10px 14px 12px; }
-.model-picker > .step-slider:first-child { grid-row: 1; border-bottom: 1px solid var(--line); }
-.model-picker > .step-slider:not(:first-child) { grid-row: 3; border-top: 1px solid var(--line); }
-.step-slider-title { display: flex; justify-content: space-between; margin: 0 0 6px; color: var(--muted); font-size: 12px; }
-.step-slider-title b { color: var(--tone); font-weight: 600; }
-.step-slider.off .step-slider-title b { color: var(--muted); font-weight: 400; }
-.step-slider input[type="range"] { appearance: none; display: block; width: 100%; height: 18px; margin: 0; background: transparent; cursor: pointer; }
-.step-slider input[type="range"]:focus-visible { outline: none; }
-.step-slider input[type="range"]::-webkit-slider-runnable-track {
-  height: 4px;
-  border-radius: 2px;
-  background: linear-gradient(to right, var(--tone) var(--at), var(--line-2) var(--at));
-}
-.step-slider input[type="range"]::-webkit-slider-thumb {
-  appearance: none;
-  width: 14px;
-  height: 14px;
-  margin-top: -5px;
-  border: 2px solid var(--raised);
-  border-radius: 50%;
-  background: var(--tone);
-  box-shadow: 0 0 0 1px var(--tone);
-  transition: transform 120ms ease;
-}
-/* On a custom choice no level is current, so the thumb is only an outline. */
-.step-slider.off input[type="range"]::-webkit-slider-thumb { background: var(--raised); box-shadow: 0 0 0 1px var(--line-2); }
-.step-slider input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone) 40%, transparent); }
-.step-slider input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.15); }
-/* Inset by half the thumb so each label sits under its stop. */
-.step-ticks { position: relative; display: block; height: 16px; margin: 4px 7px 0; }
-.step-ticks button { position: absolute; top: 0; transform: translateX(-50%); padding: 0 2px; color: var(--dim); font-size: 11px; white-space: nowrap; }
-.step-ticks button:hover { color: var(--ink); }
-.step-ticks button.on { color: var(--ink-strong); }
-.step-ticks button.unavailable { text-decoration: line-through; opacity: 0.6; }
-.step-slider-detail { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
-.step-slider-detail.unavailable { color: var(--amber); }
+.effort-meter i.on { background: var(--tone); }
 .model-picker-row.limited .model-picker-name { opacity: 0.55; }
 .model-picker-limited { color: var(--amber) !important; }
 @media (prefers-reduced-motion: reduce) {
-  .model-trigger-content.bumped { animation: none; }
   .effort-meter i { transition: none; }
-  .step-slider input[type="range"]::-webkit-slider-thumb { transition: none; }
 }
 .composer-machine {
   max-width: 240px;

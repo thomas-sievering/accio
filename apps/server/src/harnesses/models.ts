@@ -1,9 +1,8 @@
-import { DEFAULT_MODEL, modelKey, type HarnessModel, type ModelSelection, type ModelsState, type ModelView, type PresetView } from '@accio/protocol';
+import { DEFAULT_MODEL, modelKey, type HarnessModel, type ModelSelection, type ModelsState, type ModelView } from '@accio/protocol';
 import { HARNESSES, type SharedSettings } from '@accio/hub';
 import type { Profiles } from '../profiles/profiles.js';
 import { UserError, type Broadcast, type Router } from '../rpc/router.js';
 import type { ClaudeModels } from './claudeModels.js';
-import { resolvePresets } from './presets.js';
 import { generalLimits, modelLimit, nextReset, usedUpMessage } from './modelLimits.js';
 
 /** ChatGPT reports its models in no useful order; list them newest version first ("GPT-6.1-Sol" before "GPT-6-Astra"). */
@@ -40,13 +39,7 @@ export class Models {
     });
     const keys = new Set(models.map((m) => modelKey({ harnessId: m.harnessId, modelId: m.id })));
     const usedUp = (['anthropic', 'openai'] as const).flatMap((providerId) => generalLimits(windows(providerId), now).map((limit) => ({ ...limit, providerId })));
-    const presets = HARNESSES.flatMap((h) => this.presets(h.id, models.filter((m) => m.harnessId === h.id)));
-    return { models, favorites: this.settings.modelFavorites(profileId).filter((m) => keys.has(modelKey(m))), usedUp, presets };
-  }
-
-  /** GLOSSARY: Preset. A harness's levels resolved against the models given. */
-  presets(harnessId: string, models: HarnessModel[]): PresetView[] {
-    return resolvePresets(harnessId, models, this.settings.presets(harnessId));
+    return { models, favorites: this.settings.modelFavorites(profileId).filter((m) => keys.has(modelKey(m))), usedUp };
   }
 
   /** Every model the harness offers any profile on this machine, for settings shared by all of them. */
@@ -133,18 +126,6 @@ export class Models {
       this.find(profileId, model);
       await this.settings.setModelFavorite(profileId, { harnessId: model.harnessId, modelId: model.modelId }, favorite);
       return this.list(profileId);
-    });
-    router.on('presets.save', async ({ harnessId, level, choice }) => {
-      if (!HARNESSES.some((h) => h.id === harnessId)) throw new UserError('accio does not know this harness.');
-      if (choice) {
-        await Promise.all(this.profiles.all().map((p) => this.ready(p.id)));
-        const model = this.harnessModels(harnessId).find((m) => m.id === choice.modelId);
-        if (!model) throw new UserError('No profile on this machine can use this model.');
-        if (choice.effort && !model.efforts.some((e) => e.id === choice.effort)) throw new UserError(`${model.name} does not accept ${choice.effort} effort.`);
-      }
-      await this.settings.setPreset(harnessId, level, choice && { modelId: choice.modelId, ...(choice.effort ? { effort: choice.effort } : {}) });
-      broadcast('models.changed', null);
-      return null;
     });
   }
 

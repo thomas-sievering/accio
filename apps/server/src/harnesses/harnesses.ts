@@ -14,7 +14,6 @@ export function registerHarnesses(router: Router, settings: SharedSettings, mode
       name: h.name,
       providers: [...h.providers],
       models: offered,
-      presets: models.presets(h.id, offered),
       machines: settings
         .machines()
         .flatMap((m) => m.harnesses.filter((i) => i.harnessId === h.id).map((i) => ({ machineId: m.id, version: i.version }))),
