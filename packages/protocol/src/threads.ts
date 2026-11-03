@@ -61,6 +61,18 @@ export type ThreadDelivery = {
   detail?: string;
   continuationAttempts?: number;
   waitingOn?: 'checks' | 'review' | 'agent';
+  ci?: DeliveryCI;
+};
+
+export type DeliveryCI = {
+  revision: string;
+  updatedAt: string;
+  checks: {
+    name: string;
+    status: string;
+    url?: string;
+    step?: { name: string; current: number; total: number };
+  }[];
 };
 
 export type DeliverySummary = {

@@ -7,13 +7,35 @@ import { startApp } from '../apps/server/src/app.js';
 import { FakeHarness, SESSION, replyWith } from '../apps/server/src/testing/fakeHarness.js';
 import { fakeClaudeFetch, TestClient } from '../apps/server/src/testing/testApp.js';
 import type { HarnessMessage } from '../apps/server/src/threads/harness.js';
-import { git } from '../apps/server/src/threads/delivery.js';
+import { DeliveryGit, DeliveryPending, git } from '../apps/server/src/threads/delivery.js';
 
 const home = await mkdtemp(join(tmpdir(), 'accio-chat-browser-'));
 const fixture = (name: string) => readFile(resolve('tests/fixtures', name));
 const token = 'isolated-chat-test-token';
 const image = await fixture('chat.png');
+// The delivery verification boundary supplies deterministic CI snapshots; Git publication stays real.
+const verifyDelivery = DeliveryGit.prototype.verify;
+const ciPolls = new Map<string, number>();
+DeliveryGit.prototype.verify = async function(workspace, delivery) {
+  if (ciPolls.has(workspace.path)) {
+    const poll = (ciPolls.get(workspace.path) ?? 0) + 1;
+    ciPolls.set(workspace.path, poll);
+    if (poll < 3) throw new DeliveryPending('Waiting for checks to finish.', false, 'checks', {
+      revision: await git(workspace.path, 'rev-parse', 'HEAD'), updatedAt: new Date().toISOString(), checks: [
+        { name: 'verify', status: 'success' },
+        { name: 'image', status: 'in_progress', url: 'https://github.com/test/fixture/actions/runs/10/job/20', step: { name: poll === 1 ? 'Build image' : 'Push image', current: poll === 1 ? 2 : 3, total: 4 } },
+      ],
+    });
+  }
+  return verifyDelivery.call(this, workspace, delivery);
+};
 const harness = new FakeHarness(async function* (run) {
+  if (run.prompt === 'Build CI progress fixture') {
+    ciPolls.set(run.cwd, 0);
+    await writeFile(join(run.cwd, 'ci-fixture.txt'), 'CI progress');
+    yield* replyWith('CI fixture ready.');
+    return;
+  }
   if (run.prompt === 'Steering fixture') {
     const messages: string[] = [];
     let finished = false;
@@ -118,7 +140,7 @@ const harness = new FakeHarness(async function* (run) {
   await writeFile(join(run.cwd, 'my notes.txt'), 'Notes with spaces.');
   yield { type: 'assistant', parent_tool_use_id: null, session_id: SESSION, message: { id: 'tools', content: [
     { type: 'tool_use', id: 'success-tool', name: 'Read', input: { file_path: 'chat.png', offset: 3 } },
-    { type: 'tool_use', id: 'failed-tool', name: 'Bash', input: { command: 'fixture-failure' } },
+      { type: 'tool_use', id: 'failed-tool', name: 'Bash', input: { command: String.raw`"C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'fixture-failure'` } },
   ] } } as HarnessMessage;
   yield { type: 'user', parent_tool_use_id: null, session_id: SESSION, message: { content: [
     { type: 'tool_result', tool_use_id: 'success-tool', content: [
@@ -157,6 +179,14 @@ await git(deliveryFolder, 'push', '--quiet', '-u', 'origin', 'main');
 await git(deliveryFolder, 'remote', 'set-head', 'origin', '-a');
 const deliveryCheckout = await client.call('checkouts.add', { path: deliveryFolder, profileId: 'personal' });
 await client.call('projects.setDelivery', { projectId: deliveryCheckout.projectId, deliveryPolicy: 'direct', previewCommand: 'node preview.cjs' });
+// CI progress publishes to a separate disposable origin, preserving other delivery scenarios' starting main.
+const ciOrigin = join(home, 'ci-origin.git');
+const ciFolder = join(home, 'ci-progress-project');
+await git(home, 'clone', '--quiet', '--bare', deliveryFolder, ciOrigin);
+await git(home, 'clone', '--quiet', ciOrigin, ciFolder);
+await git(ciFolder, 'config', 'user.name', 'Accio Browser Test');
+await git(ciFolder, 'config', 'user.email', 'browser@example.test');
+await client.call('checkouts.add', { path: ciFolder, profileId: 'personal' });
 // Skills panel: a project with one repository skill, and a library source with one profile skill and one optional.
 const skillsFolder = join(home, 'skills-project');
 const skillsLibrary = join(home, 'skills-library');

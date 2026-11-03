@@ -67,7 +67,11 @@ async function mediaAndTools(page: Page, desktop?: ElectronApplication) {
   const success = page.locator('.tool.done').first();
   const failed = page.locator('.tool.error').first();
   await expect(success.locator('.tool-toggle')).toHaveAttribute('aria-expanded', 'false');
-  await expect(failed.locator('.tool-toggle')).toHaveAttribute('aria-expanded', 'true');
+  await expect(failed.locator('.tool-toggle')).toHaveAttribute('aria-expanded', 'false');
+  await expect(failed.locator('.tool-details')).toHaveCount(0);
+  await expect(failed.locator('.tool-summary')).toHaveText('fixture-failure');
+  await failed.locator('.tool-toggle').click();
+  await expect(failed.locator('[aria-label="Tool input"]')).toContainText('powershell.exe');
   await expect(failed).toContainText('Expected fixture failure');
   await success.locator('.tool-toggle').click();
   await expect(success).toContainText('FULL_OUTPUT_TAIL');
@@ -167,12 +171,12 @@ test('web chat replays snapshots, full ordered tool details and playable stable 
 
 test('a running turn shows one status line of what it is doing, then folds under Worked for', async ({ page, baseURL }) => {
   await openChat(page, baseURL!);
-  // Inside a fold, calls sit bare on the rail; the failed one opens itself.
+  // Inside a fold, calls sit bare on the rail and failures stay collapsed.
   const fixture = page.locator('.turn-work').first();
   await fixture.locator('.turn-work-toggle').click();
   await expect(fixture.locator('.tool-group-toggle')).toHaveCount(0);
   await expect(fixture.locator('.tool')).toHaveCount(2);
-  await expect(fixture.locator('.tool.error .tool-toggle')).toHaveAttribute('aria-expanded', 'true');
+  await expect(fixture.locator('.tool.error .tool-toggle')).toHaveAttribute('aria-expanded', 'false');
 
   await page.locator('textarea').fill('explore tools');
   await page.locator('textarea').press('Enter');

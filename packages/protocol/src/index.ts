@@ -23,6 +23,7 @@ export * from './limits.js';
 export * from './projects.js';
 export * from './threads.js';
 export * from './media.js';
+export * from './shellCommand.js';
 export * from './secrets.js';
 
 export const methods = {

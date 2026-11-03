@@ -534,7 +534,7 @@ export class Threads {
     const delivery = this.require(threadId).delivery!;
     const withinBudget = Date.now() - Date.parse(delivery.requestedAt) < 60 * 60_000;
     const waiting = error instanceof DeliveryPending && withinBudget;
-    await this.update(threadId, t => ({ ...t, delivery: { ...t.delivery!, status: waiting ? 'waiting' : 'blocked', detail: error.message, waitingOn: error instanceof DeliveryPending ? error.continueAgent ? 'agent' : error.waitingOn : undefined } }));
+    await this.update(threadId, t => ({ ...t, delivery: { ...t.delivery!, status: waiting ? 'waiting' : 'blocked', detail: error.message, ci: error instanceof DeliveryPending ? error.ci : undefined, waitingOn: error instanceof DeliveryPending ? error.continueAgent ? 'agent' : error.waitingOn : undefined } }));
     if (waiting) this.scheduleDeliveryCheck(threadId);
     else this.clearDeliveryCheck(threadId);
   }
@@ -553,7 +553,7 @@ export class Threads {
       } catch (error) {
         const attempts = thread.delivery.continuationAttempts ?? 0;
         if (error instanceof DeliveryPending && error.continueAgent && thread.status === 'idle' && attempts < 3 && Date.now() - Date.parse(thread.delivery.requestedAt) < 60 * 60_000) {
-          await this.update(threadId, t => ({ ...t, delivery: { ...t.delivery!, status: 'queued', continuationAttempts: attempts + 1, detail: error.message } }));
+          await this.update(threadId, t => ({ ...t, delivery: { ...t.delivery!, ci: undefined, status: 'queued', continuationAttempts: attempts + 1, detail: error.message } }));
           this.clearDeliveryCheck(threadId);
         } else if (error instanceof DeliveryPending && error.continueAgent && attempts >= 3) {
           await this.recordDeliveryWait(threadId, new UserError('Delivery needs attention after three follow-ups. The workspace has been kept.'));

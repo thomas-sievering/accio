@@ -1,4 +1,4 @@
-import type { TranscriptItem } from '@accio/protocol';
+import { shellCommandSummary, type TranscriptItem } from '@accio/protocol';
 
 export type ToolItem = Extract<TranscriptItem, { kind: 'tool' }>;
 export type TranscriptBlock =
@@ -90,7 +90,11 @@ const doing: Record<Kind, string> = { run: 'Running', read: 'Reading', edit: 'Ed
 export function describeActivity(item: ToolItem): string {
   const kind = kinds[item.name] ?? 'other';
   if (kind === 'other') return `${doing.other} ${toolLabel(item.name)}`;
-  return item.summary ? `${doing[kind]} ${item.summary}` : `${doing[kind]}…`;
+  return item.summary ? `${doing[kind]} ${toolSummary(item)}` : `${doing[kind]}…`;
+}
+
+export function toolSummary(item: ToolItem): string {
+  return item.name === 'Shell' || item.name === 'Bash' ? shellCommandSummary(item.summary, true) : item.summary;
 }
 
 /** MCP tools arrive as mcp__server__tool (Claude) or server/tool (Codex). */
