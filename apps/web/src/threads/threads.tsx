@@ -17,7 +17,7 @@ type ThreadsCtx = {
   /** A new thread not yet started: just the checkout it will run in. It exists on the server only once its first message is sent. */
   draft: { checkoutId: string; profileId?: string } | null;
   openDraft: (checkoutId: string, profileId?: string) => void;
-  /** The open list plus the Snoozed and Settled shelves, after the project scope and search. */
+  /** The open list plus the Working, Snoozed and Settled shelves, after the project scope and search. */
   shelves: ThreadShelves;
   /** The one project the sidebar is narrowed to, or '' for every visible project. */
   projectScope: string;

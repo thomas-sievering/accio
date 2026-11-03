@@ -100,7 +100,7 @@ Marking a thread as done. It stays readable and can be reopened.
 _Avoid_: Archive, close, resolve
 
 **Shelf**:
-A group of threads in the sidebar apart from the open list: Snoozed and Settled. A running thread stays in the open list.
+A group of threads in the sidebar apart from the open list: Working (a turn is running), Snoozed and Settled.
 _Avoid_: Folder, inbox, tab
 
 ## Skills
