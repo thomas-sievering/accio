@@ -1,5 +1,5 @@
 import { createContext, useContext, type ReactNode } from 'react';
-import type { AccountView, ProfileView } from '@accio/protocol';
+import type { AccountView, ProfileView, ModelSelection } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { useLive, useLocalState } from '../app/useLive';
 
@@ -34,4 +34,14 @@ export function useProfiles(): ProfilesState {
 /** The account Claude Code uses for this profile. */
 export function claudeAccount(profile: ProfileView) {
   return profile.providers.find((p) => p.id === 'anthropic')?.accounts[0] ?? null;
+}
+
+export function accountForModel(profile: ProfileView, model: ModelSelection) {
+  return profile.providers.find((p) => p.id === (model.harnessId === 'codex' ? 'openai' : 'anthropic'))?.accounts[0] ?? null;
+}
+export function hasSignedInAccount(profile: ProfileView) {
+  return profile.providers.some((p) => p.available && p.accounts.some((a) => a.signedIn));
+}
+export function defaultModel(profile?: ProfileView): ModelSelection {
+  return { harnessId: profile && !claudeAccount(profile)?.signedIn && profile.providers.some((p) => p.id === 'openai' && p.accounts.some((a) => a.signedIn)) ? 'codex' : 'claudeCode', modelId: 'default' };
 }

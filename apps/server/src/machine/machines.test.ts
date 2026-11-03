@@ -16,11 +16,15 @@ describe('machines on the hub', () => {
     const [machine, ...others] = await c.call('machines.list', {});
     expect(others).toEqual([]);
     expect(machine).toMatchObject({ id: here.id, name: here.name, connected: true, thisMachine: true, profileFolders: {} });
-    expect(machine?.harnesses).toEqual([{ harnessId: 'claudeCode', version: expect.stringMatching(/^\d+\.\d+/) }]);
+    expect(machine?.harnesses).toEqual([
+      { harnessId: 'claudeCode', version: expect.stringMatching(/^\d+\.\d+/) },
+      { harnessId: 'codex', version: expect.stringMatching(/^\d+\.\d+/) },
+    ]);
 
     const harnesses = await c.call('harnesses.list', {});
     expect(harnesses).toMatchObject([
       { id: 'claudeCode', name: 'Claude Code', providers: ['anthropic'], machines: [{ machineId: here.id, version: expect.any(String) }] },
+      { id: 'codex', name: 'Codex', providers: ['openai'], machines: [{ machineId: here.id, version: expect.any(String) }] },
     ]);
   });
 

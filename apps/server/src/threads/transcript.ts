@@ -1,5 +1,5 @@
 import type { TranscriptItem } from '@accio/protocol';
-import type { HarnessMessage, ContentBlock, StreamEvent } from './harness.js';
+import type { HarnessMessage, HarnessEvent, ContentBlock, StreamEvent } from './harness.js';
 
 export type TranscriptChange =
   | { type: 'item'; item: TranscriptItem }
@@ -31,6 +31,7 @@ export class TurnTranscript {
   }
 
   accept(msg: HarnessMessage): TranscriptChange[] {
+    if (msg.type === 'harness_event') return this.onEvent(msg.event as HarnessEvent);
     const out: TranscriptChange[] = [];
     if (msg.type === 'system' && msg.subtype === 'init' && typeof msg.session_id === 'string') {
       out.push({ type: 'session', sessionId: msg.session_id });
@@ -60,6 +61,26 @@ export class TurnTranscript {
       }
     }
     return out;
+  }
+
+  private onEvent(event: HarnessEvent): TranscriptChange[] {
+    if (event.kind === 'session') return [{ type: 'session', sessionId: event.id }];
+    if (event.kind === 'end') return event.error ? [
+      { type: 'item', item: { kind: 'notice', id: this.nextId('n'), turnId: this.turnId, tone: 'error', text: event.error } },
+      { type: 'end', outcome: 'failed', error: event.error },
+    ] : [{ type: 'end', outcome: 'completed' }];
+    const id = `${this.turnId}:${event.id}`;
+    if (event.kind === 'text') {
+      const previous = this.assistantText.get(id);
+      const text = event.append ? (previous ?? '') + event.text : event.text;
+      this.assistantText.set(id, text);
+      return event.append && previous !== undefined ? [{ type: 'delta', itemId: id, text: event.text }]
+        : [{ type: 'item', item: { kind: 'assistant', id, turnId: this.turnId, text } }];
+    }
+    const item = { kind: 'tool' as const, id, turnId: this.turnId, name: event.name, summary: event.summary.slice(0, 200), status: event.status,
+      ...(event.output !== undefined ? { output: truncate(event.output) } : {}) };
+    this.tools.set(id, item);
+    return [{ type: 'item', item }];
   }
 
   /** Tools still marked running when a turn stops early. */

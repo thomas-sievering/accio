@@ -28,11 +28,11 @@ type Data = SharedSeed & { modelFavorites?: Record<string, FavoriteModel[]> };
 /** GLOSSARY: Provider. The ones accio knows; only Anthropic can be signed in to so far. */
 export const PROVIDERS = [
   { id: 'anthropic', name: 'Anthropic', accountName: 'Claude account', available: true },
-  { id: 'openai', name: 'OpenAI', accountName: 'ChatGPT account', available: false },
+  { id: 'openai', name: 'OpenAI', accountName: 'ChatGPT account', available: true },
 ] as const;
 
 /** GLOSSARY: Harness. The ones accio knows and the providers each can use. */
-export const HARNESSES = [{ id: 'claudeCode', name: 'Claude Code', providers: ['anthropic'] }] as const;
+export const HARNESSES = [{ id: 'claudeCode', name: 'Claude Code', providers: ['anthropic'] }, { id: 'codex', name: 'Codex', providers: ['openai'] }] as const;
 
 /**
  * GLOSSARY: Shared settings (ADR 0004). Profiles, the paired machines and the

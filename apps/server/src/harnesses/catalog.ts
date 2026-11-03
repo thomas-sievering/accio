@@ -9,5 +9,6 @@ export const CLAUDE_MODELS: HarnessModel[] = [
 ];
 
 export function harnessModels(harnessId: string): HarnessModel[] {
+  if (harnessId === 'codex') return [{ id: 'default', name: 'Codex default', providerId: 'openai', description: 'Use the default model for this ChatGPT account.' }];
   return harnessId === 'claudeCode' ? CLAUDE_MODELS : [];
 }

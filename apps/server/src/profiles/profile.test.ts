@@ -31,7 +31,7 @@ describe('profile helpers', () => {
           available: true,
           accounts: [account],
         },
-        { id: 'openai', name: 'OpenAI', accountName: 'ChatGPT account', available: false, accounts: [] },
+        { id: 'openai', name: 'OpenAI', accountName: 'ChatGPT account', available: true, accounts: [] },
       ],
     });
     expect(toView(hrc, null).providers[0]?.accounts).toEqual([]);

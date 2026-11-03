@@ -51,7 +51,7 @@ export class Threads {
     private home: string,
     private profiles: Profiles,
     private projects: Projects,
-    private harness: Harness,
+    private harnesses: Record<string, Harness>,
     private broadcast: Broadcast,
     private models: Models,
     private machines: Machines,
@@ -113,9 +113,10 @@ export class Threads {
         try {
           if (checkout) release = this.projects.useCheckout(checkout.id);
           // Refuse before anything is stored, so a thread that cannot run never appears.
-          await this.profiles.hubAccess(profileId);
+          const choice = model ?? this.models.default(profileId);
+          await this.profiles.hubAccess(profileId, choice.harnessId === 'codex' ? 'openai' : 'anthropic');
           if (this.closing) throw new UserError('This machine is shutting down');
-          const selected = this.models.require(profileId, model);
+          const selected = this.models.require(profileId, choice);
           // GLOSSARY: a thread keeps the profile it started with for its whole life.
           const thread = newThread({ checkoutId: checkout?.id ?? '', projectId: project?.id ?? '', profileId, model: selected }, now());
           if (!checkout) await mkdir(join(this.home, 'workspaces', thread.id), { recursive: true });
@@ -244,7 +245,7 @@ export class Threads {
       if (resume) assertResumable(thread);
       if (options.retry) ({ text, resume } = retryOf(thread, (await this.transcript(threadId)).items));
       if (!this.profiles.get(thread.profileId)) throw new UserError('The profile this thread started with no longer exists');
-      const access = await this.profiles.hubAccess(thread.profileId);
+      const access = await this.profiles.hubAccess(thread.profileId, thread.model.harnessId === 'codex' ? 'openai' : 'anthropic');
       if (controller.signal.aborted || this.closing) throw new UserError('Turn interrupted before starting');
       thread = this.require(threadId);
       this.models.require(thread.profileId, thread.model);
@@ -255,6 +256,12 @@ export class Threads {
       await this.update(thread.id, () => next);
       await this.addItem(thread.id, { kind: 'user', id: `${turnId}:u`, turnId, text, at: now(), ...(resume ? { resume } : {}) });
       const env = harnessEnv(process.env, access, configFolderOf(this.home, thread.profileId));
+      if (thread.model.harnessId === 'codex') {
+        delete env.ANTHROPIC_AUTH_TOKEN; delete env.ANTHROPIC_BASE_URL; delete env.CLAUDE_CONFIG_DIR;
+        env.CODEX_HOME = join(this.home, 'profiles', thread.profileId, 'codex');
+        env.ACCIO_OPENAI_URL = `${access.baseUrl}/openai`;
+        env.ACCIO_OPENAI_KEY = access.accessKey;
+      }
       const turn = this.runTurn(next, turnId, { cwd, prompt: text, env, signal: controller.signal });
       this.turns.add(turn);
       void turn.then(() => this.turns.delete(turn), (err) => {
@@ -282,7 +289,9 @@ export class Threads {
         outcome = 'interrupted';
         return;
       }
-      for await (const msg of this.harness.run({ ...run, sessionId: thread.sessionId, model: thread.model.modelId === 'default' ? undefined : thread.model.modelId })) {
+      const harness = this.harnesses[thread.model.harnessId];
+      if (!harness) throw new UserError('This harness is not installed on this machine');
+      for await (const msg of harness.run({ ...run, sessionId: thread.sessionId, model: this.models.executionModel(thread.profileId, thread.model) })) {
         for (const change of transcript.accept(msg)) {
           if (change.type === 'end') outcome = change.outcome;
           await this.apply(thread.id, change);
@@ -297,7 +306,7 @@ export class Threads {
           id: `${turnId}:end`,
           turnId,
           tone: 'error',
-          text: 'Claude Code stopped without finishing the turn.',
+          text: `${thread.model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} stopped without finishing the turn.`,
         });
       }
     } catch (err) {

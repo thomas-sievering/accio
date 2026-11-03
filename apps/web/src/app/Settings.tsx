@@ -32,7 +32,7 @@ export function Settings({ route, onRoute, onClose }: { route: SettingsRoute; on
   const { profiles, accounts } = useProfiles();
   const profileId = route.section === 'profiles' ? route.profileId : undefined;
   const accountId = route.section === 'accounts' ? route.accountId : undefined;
-  const accountLabel = accountId === 'new' ? 'New account' : accounts?.find((a) => a.id === accountId)?.name;
+  const accountLabel = accountId === 'new' || accountId === 'new-openai' ? 'New account' : accounts?.find((a) => a.id === accountId)?.name;
   const profileLabel = profileId === 'new' ? 'New profile' : profiles?.find((p) => p.id === profileId)?.name;
 
   useEffect(() => {
