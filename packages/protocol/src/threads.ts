@@ -24,6 +24,44 @@ export type ThreadView = {
   snoozedUntil: string | null;
   /** GLOSSARY: Settle. When it was marked done; null while open. */
   settledAt: string | null;
+  /** Absent on older threads that still use their original, shared checkout. */
+  workspace?: ThreadWorkspace;
+  delivery?: ThreadDelivery;
+};
+
+export type ThreadWorkspace = {
+  path: string;
+  sourcePath: string;
+  branch: string;
+  startRevision: string;
+  releasedAt: string | null;
+  /** Durable cleanup intent, written before any worktree removal. */
+  releaseRequestedAt?: string;
+};
+
+export type DeliveryMode = 'ship' | 'review';
+export type ThreadDelivery = {
+  mode: DeliveryMode;
+  policy: 'direct' | 'pull-request';
+  status: 'queued' | 'running' | 'waiting' | 'blocked' | 'ready' | 'delivered';
+  baseBranch: string;
+  requestedAt: string;
+  revision?: string;
+  publishedRevision?: string;
+  pullRequestUrl?: string;
+  detail?: string;
+  continuationAttempts?: number;
+  waitingOn?: 'checks' | 'review' | 'agent';
+};
+
+export type DeliverySummary = {
+  available: boolean;
+  reason?: string;
+  baseBranch?: string;
+  added: number;
+  removed: number;
+  files: number;
+  previewAvailable: boolean;
 };
 
 /**
@@ -35,7 +73,7 @@ export type ThreadStatus = 'idle' | 'running' | 'interrupted' | 'failed';
 
 /** One entry of a thread's transcript. */
 export type TranscriptItem =
-  | { kind: 'user'; id: string; turnId: string; text: string; at: string; resume?: boolean }
+  | { kind: 'user'; id: string; turnId: string; text: string; at: string; resume?: boolean; delivery?: DeliveryMode }
   | { kind: 'assistant'; id: string; turnId: string; text: string; media?: MediaBinding[] }
   | { kind: 'tool'; id: string; turnId: string; name: string; summary: string; status: 'running' | 'done' | 'error' | 'interrupted'; output?: string; detailRevision?: number }
   | { kind: 'notice'; id: string; turnId: string; tone: 'info' | 'error'; text: string }
@@ -62,6 +100,7 @@ const Rename = z.object({ threadId: z.string(), title: z.string().trim().min(1).
 const ToolDetailRequest = z.object({ threadId: z.string(), itemId: z.string().min(1).max(512) });
 const AssetRequest = z.object({ threadId: z.string(), assetId: z.string().uuid(), download: z.boolean().optional() });
 const FileRequest = z.object({ threadId: z.string(), path: z.string().min(1).max(4096) });
+const Deliver = z.object({ threadId: z.string(), mode: z.enum(['ship', 'review']) });
 
 export const threadMethods = {
   'threads.list': method<z.ZodObject<{}>, ThreadView[]>(z.object({})),
@@ -75,6 +114,14 @@ export const threadMethods = {
   /** A download grant for a current file explicitly linked in the thread. */
   'threads.fileUrl': method<typeof FileRequest, AssetUrl>(FileRequest),
   'threads.send': method<typeof Send, null>(Send),
+  'threads.deliverySummary': method<typeof ThreadId, DeliverySummary>(ThreadId),
+  /** Durable intent: a running work turn completes before the delivery turn starts. */
+  'threads.deliver': method<typeof Deliver, ThreadView>(Deliver),
+  'threads.cancelDelivery': method<typeof ThreadId, ThreadView>(ThreadId),
+  'threads.checkDelivery': method<typeof ThreadId, ThreadView>(ThreadId),
+  /** Recheck delivery, stop owned previews, release only this thread's worktree, retain history. */
+  'threads.archive': method<typeof ThreadId, ThreadView>(ThreadId),
+  'threads.openPreview': method<typeof ThreadId, { url: string }>(ThreadId),
   'threads.setModel': method<typeof SetModel, ThreadView>(SetModel),
   /** Stops the running turn; the thread becomes interrupted. */
   'threads.stop': method<typeof ThreadId, null>(ThreadId),

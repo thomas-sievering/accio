@@ -13,6 +13,12 @@ async function openChat(page: Page, baseURL: string, navigate = true) {
 }
 
 async function mediaAndTools(page: Page, desktop?: ElectronApplication) {
+  // A completed turn folds its tool calls under "Worked for"; a failure is flagged on the fold.
+  const work = page.locator('.turn-work').first();
+  await expect(work.locator('.turn-work-toggle')).toHaveAttribute('aria-expanded', 'false');
+  await expect(work.locator('.turn-work-failed')).toHaveText('1 failed');
+  await expect(work.locator('.tool')).toHaveCount(0);
+  await work.locator('.turn-work-toggle').click();
   const success = page.locator('.tool.done').first();
   const failed = page.locator('.tool.error').first();
   await expect(success.locator('.tool-toggle')).toHaveAttribute('aria-expanded', 'false');
@@ -114,8 +120,47 @@ test('web chat replays snapshots, full ordered tool details and playable stable 
   expect(errors).toEqual([]);
 });
 
+test('a running turn shows one status line of what it is doing, then folds under Worked for', async ({ page, baseURL }) => {
+  await openChat(page, baseURL!);
+  // Inside a fold, calls sit bare on the rail; the failed one opens itself.
+  const fixture = page.locator('.turn-work').first();
+  await fixture.locator('.turn-work-toggle').click();
+  await expect(fixture.locator('.tool-group-toggle')).toHaveCount(0);
+  await expect(fixture.locator('.tool')).toHaveCount(2);
+  await expect(fixture.locator('.tool.error .tool-toggle')).toHaveAttribute('aria-expanded', 'true');
+
+  await page.locator('textarea').fill('explore tools');
+  await page.locator('textarea').press('Enter');
+  const live = page.locator('.turn-work.live');
+  const status = live.getByRole('status');
+  await expect(status).toHaveText('Running ls -la');
+  await expect(live.locator('.turn-work-elapsed')).toHaveText(/^(<1s|\d+s)$/);
+  await expect(live.locator('.tool')).toHaveCount(0);
+  await expect(status).toHaveText('Reading README.md');
+  // Opening it while running shows the steps so far, and it stays open once the turn completes.
+  await live.locator('.turn-work-toggle').click();
+  await expect(live.locator('.tool.done').first()).toBeVisible();
+  await expect(status).toHaveText('Searching TODO');
+
+  await expect(page.getByText('Explored the folder.')).toBeVisible();
+  await expect(live).toHaveCount(0);
+  const work = page.locator('.turn-work').last();
+  await expect(work.locator('.turn-work-toggle')).toHaveText(/^Worked for \d+s$/);
+  await expect(work.locator('.turn-work-toggle')).toHaveAttribute('aria-expanded', 'true');
+  await expect(work.locator('.tool.done')).toHaveCount(3);
+  await expect(work.locator('.tool-summary')).toHaveText(['ls -la', 'README.md', 'TODO']);
+  await expect(work.getByText('Explored the folder.')).toHaveCount(0);
+  await work.locator('.turn-work-toggle').click();
+  await expect(work.locator('.tool')).toHaveCount(0);
+});
+
 test('reading position stays put through updates and jump-to-latest restores following', async ({ page, baseURL }) => {
   await openChat(page, baseURL!);
+  // Opening follows the bottom even as media above finishes loading late.
+  const opened = page.locator('.messages');
+  await page.waitForTimeout(500);
+  expect(await opened.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop)).toBeLessThan(5);
+  await expect(page.getByRole('button', { name: /Jump to latest/ })).toHaveCount(0);
   await page.locator('textarea').fill('long context');
   await page.locator('textarea').press('Enter');
   await expect(page.getByText('Paragraph 70:', { exact: false }).last()).toBeVisible();

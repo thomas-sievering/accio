@@ -8,6 +8,7 @@ import { FolderLink } from '../projects/FolderLink';
 import { ProjectMark } from '../projects/ProjectMark';
 import { useProjects } from '../projects/projects';
 import { Composer } from './Composer';
+import { DeliveryActions } from './DeliveryActions';
 import { ModelPicker } from './ModelPicker';
 import { ThreadNotice } from './ThreadNotice';
 import { ThreadActionsMenu } from './ThreadActionsMenu';
@@ -38,7 +39,7 @@ export function ThreadPane({ thread, onOpenProfile }: { thread: ThreadView; onOp
 
   return (
     <>
-      <PaneHeader title={thread.title} {...place} actions={<ThreadActionsMenu key={thread.id} thread={thread} items={items} />} />
+      <PaneHeader title={thread.title} {...place} checkout={thread.workspace && !thread.workspace.releasedAt && place.checkout ? { ...place.checkout, path: thread.workspace.path } : place.checkout} actions={<ThreadActionsMenu key={thread.id} thread={thread} items={items} />} />
       {visibleItems ? <Transcript threadId={thread.id} items={visibleItems} working={running} /> : (
         <div className="empty">
           {error && <>
@@ -49,7 +50,8 @@ export function ThreadPane({ thread, onOpenProfile }: { thread: ThreadView; onOp
       )}
       <ThreadNotice thread={thread} profile={place.profile} detail={detail} onOpenProfile={onOpenProfile} />
       <Composer
-        disabled={running || savingModel || !place.profile || !accountForModel(place.profile, thread.model)?.signedIn}
+        disabled={running || savingModel || thread.delivery?.status === 'queued' || !place.profile || !accountForModel(place.profile, thread.model)?.signedIn}
+        actions={<DeliveryActions key={thread.id} thread={thread} project={place.project} canRun={!!place.profile && !!accountForModel(place.profile, thread.model)?.signedIn} />}
         onStop={running ? async () => void (await client.call('threads.stop', { threadId: thread.id })) : undefined}
         placeholder={running ? 'Working…' : `Ask ${thread.model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}
         onSend={async (text) => void (await client.call('threads.send', { threadId: thread.id, text }))}
