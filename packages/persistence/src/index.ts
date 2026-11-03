@@ -1,14 +1,15 @@
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { dirname } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 /**
  * One JSON document on disk. Writes go to a temp file first and are renamed
- * into place, so a crash never leaves half a file. Writes are serialised.
+ * into place, so readers see a complete document. Writes are serialised per
+ * instance. New directories/files are private to the current user.
  */
 export class JsonFile<T> {
   private queue: Promise<void> = Promise.resolve();
-  private seq = 0;
 
   constructor(
     readonly path: string,
@@ -33,10 +34,10 @@ export class JsonFile<T> {
   write(value: T): Promise<void> {
     const body = JSON.stringify(value, null, 2);
     const run = async () => {
-      await mkdir(dirname(this.path), { recursive: true });
-      const tmp = `${this.path}.${process.pid}.${this.seq++}.tmp`;
-      await writeFile(tmp, body, { mode: this.mode });
+      await mkdir(dirname(this.path), { recursive: true, mode: 0o700 });
+      const tmp = `${this.path}.${process.pid}.${randomUUID()}.tmp`;
       try {
+        await writeFile(tmp, body, { mode: this.mode, flag: 'wx' });
         await renameWithRetry(tmp, this.path);
       } catch (err) {
         await rm(tmp, { force: true });

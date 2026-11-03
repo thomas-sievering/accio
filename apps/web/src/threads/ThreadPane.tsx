@@ -26,7 +26,7 @@ function usePlace(checkoutId: string, profileId?: string) {
 export function ThreadPane({ thread, onOpenProfile }: { thread: ThreadView; onOpenProfile: (profileId: string) => void }) {
   const client = useClient();
   const place = usePlace(thread.checkoutId, thread.profileId);
-  const items = useTranscript(thread.id);
+  const { items, error, retry } = useTranscript(thread.id);
   const running = thread.status === 'running';
   const [savingModel, setSavingModel] = useState(false);
   const lastTurn = items?.findLast((item) => item.kind === 'user')?.turnId;
@@ -38,7 +38,14 @@ export function ThreadPane({ thread, onOpenProfile }: { thread: ThreadView; onOp
   return (
     <>
       <PaneHeader title={thread.title} {...place} />
-      {visibleItems ? <Transcript items={visibleItems} working={running} /> : <div className="empty" />}
+      {visibleItems ? <Transcript items={visibleItems} working={running} /> : (
+        <div className="empty">
+          {error && <>
+            <p className="error" role="alert">Could not load transcript: {error}</p>
+            <button className="ghost" onClick={retry}>Retry</button>
+          </>}
+        </div>
+      )}
       <ThreadNotice thread={thread} profile={place.profile} detail={detail} onOpenProfile={onOpenProfile} />
       <Composer
         disabled={running || savingModel || !place.profile || !claudeAccount(place.profile)?.signedIn}

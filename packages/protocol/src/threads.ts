@@ -38,6 +38,13 @@ export type TranscriptItem =
   | { kind: 'tool'; id: string; turnId: string; name: string; summary: string; status: 'running' | 'done' | 'error'; output?: string }
   | { kind: 'notice'; id: string; turnId: string; tone: 'info' | 'error'; text: string };
 
+/**
+ * Cursor increases per thread within one machine process. Start a fresh
+ * observation on reconnect; never persist/reuse it across connections.
+ * Transcript files remain arrays of TranscriptItem.
+ */
+export type TranscriptSnapshot = { items: TranscriptItem[]; cursor: number };
+
 const ThreadId = z.object({ threadId: z.string() });
 const StartCommon = { text: z.string().trim().min(1), model: ModelSelection.optional(), machineId: z.string().optional() };
 const Start = z.union([
@@ -54,6 +61,8 @@ export const threadMethods = {
   /** Creates a thread in a checkout and sends its first message: a thread exists only once something was said. */
   'threads.start': method<typeof Start, ThreadView>(Start),
   'threads.transcript': method<typeof ThreadId, TranscriptItem[]>(ThreadId),
+  /** Items and cursor captured together; subscribe before requesting, then ignore events through this cursor. */
+  'threads.observe': method<typeof ThreadId, TranscriptSnapshot>(ThreadId),
   'threads.send': method<typeof Send, null>(Send),
   'threads.setModel': method<typeof SetModel, ThreadView>(SetModel),
   /** Stops the running turn; the thread becomes interrupted. */
@@ -73,7 +82,7 @@ export const threadMethods = {
 export type ThreadEvents = {
   'threads.changed': ThreadView[];
   /** A transcript item was added or replaced. */
-  'thread.item': { threadId: string; item: TranscriptItem };
+  'thread.item': { threadId: string; cursor: number; item: TranscriptItem };
   /** Streamed text appended to an assistant item. */
-  'thread.delta': { threadId: string; itemId: string; text: string };
+  'thread.delta': { threadId: string; cursor: number; itemId: string; text: string };
 };

@@ -15,6 +15,7 @@ const HARD_STOP_AFTER_MS = 3000;
  */
 export const claudeCode: Harness = {
   async *run({ cwd, prompt, sessionId, model, env, signal }: HarnessTurn) {
+    if (signal.aborted) return;
     const abortController = new AbortController();
     const stderr: string[] = [];
     const q = query({
@@ -37,13 +38,18 @@ export const claudeCode: Harness = {
       },
     });
 
-    // Stop ends the turn for accio at once. The harness is asked to interrupt
-    // gracefully (so its session stays resumable) and is killed if it lingers.
+    // Give Claude a bounded chance to acknowledge interruption, then terminate
+    // and await its cleanup before releasing the turn or exiting the server.
+    let stopTimer: ReturnType<typeof setTimeout> | undefined;
+    let interruption: Promise<unknown> | undefined;
+    let onAbort = () => {};
     const stopped = new Promise<'stopped'>((resolve) => {
-      const onAbort = () => {
+      onAbort = () => {
+        interruption = Promise.race([
+          q.interrupt().catch(() => {}),
+          new Promise<void>((done) => { stopTimer = setTimeout(done, HARD_STOP_AFTER_MS); }),
+        ]);
         resolve('stopped');
-        q.interrupt().catch(() => {});
-        setTimeout(() => abortController.abort(), HARD_STOP_AFTER_MS).unref();
       };
       if (signal.aborted) onAbort();
       else signal.addEventListener('abort', onAbort, { once: true });
@@ -62,6 +68,12 @@ export const claudeCode: Harness = {
       if (signal.aborted) return;
       const detail = stderr.join('').trim().split('\n').slice(-5).join('\n');
       throw new Error(detail ? `${(err as Error).message}\n${detail}` : (err as Error).message);
+    } finally {
+      signal.removeEventListener('abort', onAbort);
+      await interruption;
+      clearTimeout(stopTimer);
+      q.close();
+      await q.return();
     }
   },
 };

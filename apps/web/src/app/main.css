@@ -1,0 +1,24 @@
+
+/* Main */
+.main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.main-top {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: var(--caption-h);
+  padding: 0 calc(var(--caption) + 16px) 0 16px;
+  background: var(--side);
+  border-bottom: 1px solid var(--line);
+}
+.empty {
+  margin: auto;
+  color: var(--dim);
+  text-align: center;
+  padding: 0 20px;
+}

@@ -22,7 +22,7 @@ pnpm test          # vitest
 pnpm typecheck
 ```
 
-State lives in `~/.accio` (`ACCIO_HOME` overrides it; `ACCIO_PORT` and `ACCIO_HUB_PORT` the ports, default 47321 and 47322). Hub accounts are in `~/.accio/hub/profiles.json`. State from before the Account → Profile rename moves to the new names on first start.
+State lives in `~/.accio` (`ACCIO_HOME` overrides it; `ACCIO_PORT` and `ACCIO_HUB_PORT` the ports, default 47321 and 47322). Named accounts, credentials and profile selections are in `~/.accio/hub/profiles.json`; shared profile names, machine folders and model favorites are in `~/.accio/hub/settings.json`. Both use the shared atomic JSON writer in `packages/persistence`. State from before the Account → Profile rename moves to the new names on first start.
 
 ## Layout
 

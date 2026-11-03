@@ -91,7 +91,8 @@ describe('profile model choices', () => {
     await expect(c.call('threads.setModel', { threadId: thread.id, model: opus })).rejects.toThrow(/finish/);
     held.release();
     await c.waitFor('threads.changed', (ts) => ts.some((t) => t.id === thread.id && t.status === 'idle'));
-    await c.call('profiles.signOut', { profileId: 'personal' });
+    const [account] = await c.call('accounts.list', {});
+    await c.call('accounts.signOut', { id: account!.id });
     await expect(c.call('threads.setModel', { threadId: thread.id, model: opus })).rejects.toThrow(/not available/);
   });
 

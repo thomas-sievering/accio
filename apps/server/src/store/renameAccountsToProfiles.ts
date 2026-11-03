@@ -1,5 +1,6 @@
-import { access, readFile, rename, writeFile } from 'node:fs/promises';
+import { access, rename } from 'node:fs/promises';
 import { join } from 'node:path';
+import { JsonFile } from '@accio/persistence';
 
 /**
  * Before the glossary renamed Account to Profile, accio stored `accounts.json`,
@@ -27,7 +28,8 @@ async function moveIfNew(from: string, to: string) {
 
 async function renameField<T>(file: string, recordsOf: (data: T) => Record<string, unknown>[]) {
   if (!(await exists(file))) return;
-  const data = JSON.parse(await readFile(file, 'utf8')) as T;
+  const json = new JsonFile<T>(file, () => { throw new Error(`Missing migration input ${file}`); });
+  const data = await json.read();
   let changed = false;
   for (const r of recordsOf(data)) {
     if ('accountId' in r && !('profileId' in r)) {
@@ -36,5 +38,5 @@ async function renameField<T>(file: string, recordsOf: (data: T) => Record<strin
       changed = true;
     }
   }
-  if (changed) await writeFile(file, JSON.stringify(data, null, 2), { mode: 0o600 });
+  if (changed) await json.write(data);
 }

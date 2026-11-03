@@ -1,0 +1,99 @@
+/* Herdr reference: near-black chrome, charcoal content, soft grey text. */
+:root {
+  color-scheme: dark;
+  --bg: #18191d;
+  --side: #101115;
+  --panel: #1b1c20;
+  --raised: #202125;
+  --raised-2: #28292d;
+  --code: #141519;
+  --hover: #1f2024;
+  --active: #262628;
+  --line: #26272b;
+  --line-2: #34353a;
+  --ink: #c8c9cd;
+  --ink-strong: #dedfe3;
+  --muted: #898a92;
+  --dim: #696a70;
+  --green: #6bc694;
+  --blue: #8b9db8;
+  --amber: #bca777;
+  --red: #c47f84;
+  /* Width of the native caption buttons (titleBarOverlay in the desktop app). */
+  --caption: 138px;
+  --caption-h: 52px;
+  -webkit-font-smoothing: antialiased;
+  overflow-wrap: break-word;
+}
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+html,
+body {
+  height: 100%;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font:
+    14px/1.45 'Segoe UI Variable Text',
+    'Segoe UI',
+    system-ui,
+    sans-serif;
+  overflow: clip;
+}
+[hidden] {
+  display: none !important;
+}
+button {
+  color: inherit;
+  font: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  user-select: none;
+}
+.folder-link {
+  text-decoration: none;
+  text-underline-offset: 3px;
+}
+.folder-link:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+code,
+pre {
+  font-family: 'Cascadia Code', Consolas, monospace;
+  font-size: 12.5px;
+}
+.drag {
+  -webkit-app-region: drag;
+}
+.drag :is(button, input, select) {
+  -webkit-app-region: no-drag;
+}
+::-webkit-scrollbar {
+  width: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line-2);
+  border: 3px solid transparent;
+  border-radius: 6px;
+  background-clip: padding-box;
+}
+
+.center-screen {
+  height: 100dvh;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  color: var(--muted);
+}

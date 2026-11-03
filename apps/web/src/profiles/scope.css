@@ -1,0 +1,16 @@
+
+/* Scope menu: profiles with their projects beneath */
+.scope-menu {
+  max-height: min(70vh, 560px);
+  overflow-y: auto;
+}
+.scope-project .menu-split-main {
+  padding-left: 18px;
+}
+.scope-project .row-action {
+  opacity: 0;
+}
+.scope-project:hover .row-action,
+.scope-project:focus-within .row-action {
+  opacity: 1;
+}

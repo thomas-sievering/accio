@@ -2,8 +2,9 @@ import { createServer, type IncomingHttpHeaders } from 'node:http';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CLAUDE_OAUTH, type Fetch } from './claudeOAuth.js';
+import { JsonFile } from '@accio/persistence';
 import { Hub } from './hub.js';
 import { startHubProxy } from './proxy.js';
 
@@ -57,14 +58,15 @@ async function fakeAnthropicApi() {
 describe('hub', () => {
   const cleanup: (() => Promise<unknown>)[] = [];
   afterEach(async () => {
+    vi.restoreAllMocks();
     for (const c of cleanup.splice(0).reverse()) await c();
   });
 
-  async function setup() {
+  async function setup(fetchImpl?: Fetch) {
     const home = await mkdtemp(join(tmpdir(), 'accio-hub-'));
     const auth = fakeAnthropicAuth();
     const api = await fakeAnthropicApi();
-    const hub = new Hub(home, auth.f);
+    const hub = new Hub(home, fetchImpl ?? auth.f);
     await hub.load();
     const proxy = await startHubProxy({ hub, host: '127.0.0.1', port: 0, upstream: api.url, fetchImpl: auth.f });
     cleanup.push(
@@ -82,25 +84,25 @@ describe('hub', () => {
     return { home, hub, auth, api, call };
   }
 
-  it('signs a profile in from a pasted code and stores only on the hub', async () => {
+  it('signs a named account in from a pasted code and stores only on the hub', async () => {
     const { hub, home } = await setup();
     await hub.ensureProfile('personal');
-    const { signInId, url } = hub.beginSignIn('personal');
+    const { signInId, url } = await beginForProfile(hub, 'personal');
     const state = new URL(url).searchParams.get('state');
-    await hub.completeSignIn(signInId, `good#${state}`);
+    await hub.completeAccountSignIn(signInId, `good#${state}`);
     expect(hub.summary('personal')).toEqual({ signedIn: true, email: 'me@example.com', organization: null, claudeAccountId: 'claude-me' });
     await hub.close();
     const stored = JSON.parse(await readFile(join(home, 'hub', 'profiles.json'), 'utf8'));
     expect(stored.accounts[0].account.accessToken).toBe('token-1');
     // A sign-in is used once.
-    await expect(hub.completeSignIn(signInId, 'good')).rejects.toThrow(/expired/);
+    await expect(hub.completeAccountSignIn(signInId, 'good')).rejects.toThrow(/expired/);
   });
 
   it('migrates inline logins, preserving profile keys and account selections', async () => {
     const { hub, home } = await setup();
     const key = await hub.ensureProfile('personal');
-    const start = hub.beginSignIn('personal');
-    await hub.completeSignIn(start.signInId, 'good');
+    const start = await beginForProfile(hub, 'personal');
+    await hub.completeAccountSignIn(start.signInId, 'good');
     await hub.close();
     const data = JSON.parse(await readFile(hub.storePath, 'utf8'));
     await writeFile(hub.storePath, JSON.stringify([{ id: 'personal', accessKey: key, account: data.accounts[0].account }]));
@@ -129,26 +131,14 @@ describe('hub', () => {
     expect(auth.grants).toEqual(['authorization_code', 'refresh_token']);
   });
 
-  it('lets accio refuse an account before it is stored', async () => {
-    const { hub } = await setup();
-    await hub.ensureProfile('hrc');
-    const { signInId } = hub.beginSignIn('hrc');
-    await expect(
-      hub.completeSignIn(signInId, 'job', () => {
-        throw new Error('already used by Personal');
-      }),
-    ).rejects.toThrow(/Personal/);
-    expect(hub.summary('hrc').signedIn).toBe(false);
-  });
-
   it('forwards a profile’s requests with its own token, and only its own', async () => {
     const { hub, api, call } = await setup();
     const personalKey = await hub.ensureProfile('personal');
     const hrcKey = await hub.ensureProfile('hrc');
-    const a = hub.beginSignIn('personal');
-    await hub.completeSignIn(a.signInId, 'good');
-    const b = hub.beginSignIn('hrc');
-    await hub.completeSignIn(b.signInId, 'job');
+    const a = await beginForProfile(hub, 'personal');
+    await hub.completeAccountSignIn(a.signInId, 'good');
+    const b = await beginForProfile(hub, 'hrc');
+    await hub.completeAccountSignIn(b.signInId, 'job');
 
     const res = await call(personalKey, { 'anthropic-beta': 'claude-code-20250219', 'user-agent': 'claude-cli/2.1' });
     expect(res.status).toBe(200);
@@ -178,8 +168,8 @@ describe('hub', () => {
   it('refreshes a token close to expiry, and retries once after a 401', async () => {
     const { hub, auth, api, call } = await setup();
     const key = await hub.ensureProfile('personal');
-    const s = hub.beginSignIn('personal');
-    await hub.completeSignIn(s.signInId, 'short'); // expires within the refresh margin
+    const s = await beginForProfile(hub, 'personal');
+    await hub.completeAccountSignIn(s.signInId, 'short'); // expires within the refresh margin
 
     await (await call(key)).text();
     expect(auth.grants).toEqual(['authorization_code', 'refresh_token']);
@@ -191,4 +181,126 @@ describe('hub', () => {
     await res.text();
     expect(api.seen.slice(1).map((s) => s.headers.authorization)).toEqual(['Bearer token-2', 'Bearer token-3']);
   });
+  it('does not publish account writes that fail and keeps its mutation queue usable', async () => {
+    const { hub, home } = await setup();
+    const account = await hub.saveAccount('Original');
+    await hub.ensureProfile('personal');
+    vi.spyOn(JsonFile.prototype, 'write').mockRejectedValueOnce(new Error('disk full'));
+    await expect(hub.saveAccount('Changed', account.id)).rejects.toThrow('disk full');
+    expect(hub.accountView(account.id).name).toBe('Original');
+    vi.spyOn(JsonFile.prototype, 'write').mockRejectedValueOnce(new Error('disk full'));
+    await expect(hub.selectAccount('personal', account.id)).rejects.toThrow('disk full');
+    expect(hub.selectedAccount('personal')).toBeNull();
+    await Promise.all([hub.saveAccount('Second'), hub.saveAccount('Third')]);
+    expect(hub.accountViews().map((a) => a.name)).toEqual(['Original', 'Second', 'Third']);
+    const reloaded = new Hub(home);
+    await reloaded.load();
+    expect(reloaded.accountViews()).toEqual(hub.accountViews());
+    await reloaded.close();
+  });
+
+  it('serializes account deletion against a prepared profile selection', async () => {
+    const { hub } = await setup();
+    const account = await hub.saveAccount('Shared');
+    let release!: () => void;
+    let preparing!: () => void;
+    const ready = new Promise<void>((r) => { preparing = r; });
+    const wait = new Promise<void>((r) => { release = r; });
+    const save = hub.configureProfile('personal', account.id, async () => { preparing(); await wait; });
+    await ready;
+    const deletion = hub.deleteAccount(account.id);
+    const result = expect(deletion).rejects.toThrow(/profiles/);
+    release();
+    await save;
+    await result;
+    expect(hub.selectedAccount('personal')?.id).toBe(account.id);
+    await hub.removeProfile('personal');
+    await hub.deleteAccount(account.id);
+    expect(hub.accountViews()).toEqual([]);
+  });
+
+  it('cancels an in-flight sign-in on sign-out or account deletion', async () => {
+    const auth = fakeAnthropicAuth();
+    let release!: () => void;
+    let exchanged!: () => void;
+    let entered = new Promise<void>((r) => { exchanged = r; });
+    let wait = new Promise<void>((r) => { release = r; });
+    const { hub } = await setup(async (url, init) => {
+      exchanged();
+      await wait;
+      return auth.f(url, init);
+    });
+    const account = await hub.saveAccount('Personal');
+    let start = hub.beginAccountSignIn(account.id);
+    let completion = hub.completeAccountSignIn(start.signInId, 'good');
+    await entered;
+    await hub.signOutAccount(account.id);
+    release();
+    await expect(completion).rejects.toThrow(/cancelled/);
+    expect(hub.accountView(account.id).signedIn).toBe(false);
+
+    entered = new Promise<void>((r) => { exchanged = r; });
+    wait = new Promise<void>((r) => { release = r; });
+    start = hub.beginAccountSignIn(account.id);
+    completion = hub.completeAccountSignIn(start.signInId, 'good');
+    await entered;
+    await hub.deleteAccount(account.id);
+    release();
+    await expect(completion).rejects.toThrow(/cancelled/);
+    expect(hub.accountViews()).toEqual([]);
+  });
+
+  it('does not let a late refresh undo sign-out, sign-in, selection, or profile removal', async () => {
+    const auth = fakeAnthropicAuth();
+    let release!: () => void;
+    let refreshing!: () => void;
+    let entered = new Promise<void>((r) => { refreshing = r; });
+    let wait = new Promise<void>((r) => { release = r; });
+    const { hub } = await setup(async (url, init) => {
+      if (JSON.parse(String(init?.body)).grant_type === 'refresh_token') {
+        refreshing(); await wait;
+      }
+      return auth.f(url, init);
+    });
+    const account = await hub.saveAccount('Shared');
+    const other = await hub.saveAccount('Other');
+    for (const id of ['personal', 'work', 'removed']) {
+      await hub.ensureProfile(id);
+      await hub.selectAccount(id, account.id);
+    }
+    const signIn = async (id: string, code: string) => hub.completeAccountSignIn(hub.beginAccountSignIn(id).signInId, code);
+    await signIn(account.id, 'short');
+    const token = hub.accessToken('personal');
+    const removed = hub.accessToken('removed');
+    await entered;
+    await hub.signOutAccount(account.id);
+    await hub.removeProfile('removed');
+    release();
+    expect(await token).toBeNull();
+    expect(await removed).toBeNull();
+    expect(hub.summary('work').signedIn).toBe(false);
+
+    entered = new Promise<void>((r) => { refreshing = r; });
+    wait = new Promise<void>((r) => { release = r; });
+    await signIn(account.id, 'short');
+    const pending = hub.accessToken('personal');
+    const shared = hub.accessToken('work');
+    await entered;
+    await signIn(account.id, 'good');
+    const fresh = await hub.accessToken('work');
+    await signIn(other.id, 'job');
+    await hub.selectAccount('personal', other.id);
+    const switched = await hub.accessToken('personal');
+    release();
+    expect(await pending).toBe(switched);
+    expect(await shared).toBe(fresh);
+    expect(await hub.accessToken('work')).toBe(fresh);
+  });
+
 });
+
+async function beginForProfile(hub: Hub, profileId: string) {
+  const account = await hub.saveAccount(`${profileId} Claude`);
+  await hub.selectAccount(profileId, account.id);
+  return hub.beginAccountSignIn(account.id);
+}

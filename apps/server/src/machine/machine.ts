@@ -5,7 +5,7 @@ import type { MachineInfo, MachineView } from '@accio/protocol';
 import type { HarnessInstall, SharedSettings } from '@accio/hub';
 import type { Broadcast, Router } from '../rpc/router.js';
 import { UserError } from '../rpc/router.js';
-import { JsonFile } from '../store/jsonFile.js';
+import { JsonFile } from '@accio/persistence';
 
 export const SERVER_VERSION = '0.1.0';
 

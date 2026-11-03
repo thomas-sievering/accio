@@ -4,5 +4,10 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "scripts": { "build": "tsc -p ." }
+  "scripts": {
+    "build": "tsc -p ."
+  },
+  "dependencies": {
+    "@accio/persistence": "workspace:*"
+  }
 }

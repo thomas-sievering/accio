@@ -1,0 +1,189 @@
+
+/* Settings: replace the whole window while open (as in T3 Code). */
+.machine {
+  border-radius: 8px;
+  text-align: start;
+}
+.machine:hover {
+  background: var(--hover);
+}
+.settings-group + .settings-group {
+  margin-top: 14px;
+}
+.settings-group-label {
+  padding: 4px 8px;
+  color: var(--dim);
+  font-size: 12px;
+}
+.settings-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: 8px;
+  color: var(--muted);
+  text-align: start;
+}
+.settings-link:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.settings-link.active {
+  background: var(--active);
+  color: var(--ink);
+  font-weight: 600;
+}
+.settings-back {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 13.5px;
+}
+.settings-back:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 13.5px;
+}
+.crumbs b {
+  color: var(--ink);
+  font-weight: 600;
+}
+.crumbs button:hover {
+  color: var(--ink);
+}
+.crumbs .sep {
+  color: var(--dim);
+}
+.settings-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  border-top: 1px solid var(--line);
+}
+.settings-page {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  width: min(840px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 28px 0 64px;
+}
+.settings-section h2 {
+  margin: 0 0 10px 14px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.settings-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  overflow: clip;
+}
+.setting {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  min-height: 60px;
+  padding: 12px 16px;
+  text-align: start;
+}
+.setting + .setting {
+  border-top: 1px solid var(--line);
+}
+.setting-link:hover {
+  background: var(--hover);
+}
+.setting-link > svg {
+  flex: none;
+  color: var(--dim);
+}
+.setting-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.setting-text b {
+  font-weight: 600;
+}
+.setting-text small {
+  color: var(--muted);
+  font-size: 12.5px;
+  max-width: 62ch;
+}
+.setting-value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 50%;
+}
+.setting-value code {
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--raised);
+  font:
+    12.5px/1.5 'Cascadia Code',
+    Consolas,
+    monospace;
+  overflow-wrap: anywhere;
+}
+.setting-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+}
+.setting-form + .setting-form {
+  border-top: 1px solid var(--line);
+}
+.setting-form > button {
+  align-self: flex-end;
+}
+.settings-profile-form {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+.settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 13px;
+  border: 1px solid var(--line-2);
+  color: var(--muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.pill.ok .dot {
+  background: var(--green);
+}
+.pill.bad {
+  color: var(--red);
+}
+.pill.bad .dot {
+  background: var(--red);
+}

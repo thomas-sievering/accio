@@ -1,11 +1,12 @@
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { JsonFile } from '@accio/persistence';
 import { claudeAccount, startTestApp } from '../testing/testApp.js';
 
 describe('profiles slice', () => {
   let t: Awaited<ReturnType<typeof startTestApp>>;
-  afterEach(() => t?.stop());
+  afterEach(async () => { vi.restoreAllMocks(); await t?.stop(); });
 
   it('creates a profile whose config folder points at the hub with a key of its own', async () => {
     t = await startTestApp();
@@ -24,23 +25,25 @@ describe('profiles slice', () => {
     expect(a.ANTHROPIC_AUTH_TOKEN).not.toBe(b.ANTHROPIC_AUTH_TOKEN);
   });
 
-  it('signs a profile in with a pasted code and tells every client who it is', async () => {
+  it('signs a selected named account in with a pasted code and tells every client who it is', async () => {
     t = await startTestApp();
     const a = await t.connect();
     const b = await t.connect();
     const profile = await a.call('profiles.save', { name: 'Personal' });
-    const { signInId, url } = await a.call('profiles.beginSignIn', { profileId: profile.id });
+    const account = await a.call('accounts.save', { name: 'My Claude' });
+    await a.call('profiles.save', { id: profile.id, name: profile.name, accountId: account.id });
+    const { signInId, url } = await a.call('accounts.beginSignIn', { id: account.id });
     expect(url).toMatch(/^https:\/\/claude\.ai\/oauth\/authorize\?/);
     const state = new URL(url).searchParams.get('state');
 
-    await expect(a.call('profiles.completeSignIn', { signInId, code: 'me#wrong-state' })).rejects.toThrow(/different sign-in/);
-    const signed = await a.call('profiles.completeSignIn', { signInId, code: `me#${state}` });
-    expect(claudeAccount(signed)).toMatchObject({ email: 'me@example.com', organization: null });
+    await expect(a.call('accounts.completeSignIn', { signInId, code: 'me#wrong-state' })).rejects.toThrow(/different sign-in/);
+    const signed = await a.call('accounts.completeSignIn', { signInId, code: `me#${state}` });
+    expect(signed).toMatchObject({ email: 'me@example.com', organization: null });
     const pushed = await b.waitFor('profiles.changed', (list) => !!list[0] && claudeAccount(list[0]) !== null);
     expect(JSON.stringify(pushed)).not.toMatch(/oauth-|refresh-|accio-/);
 
-    const out = await a.call('profiles.signOut', { profileId: profile.id });
-    expect(claudeAccount(out)?.signedIn).toBe(false);
+    const out = await a.call('accounts.signOut', { id: account.id });
+    expect(out.signedIn).toBe(false);
   });
 
   it('manages named accounts separately, shares selections, and protects accounts in use', async () => {
@@ -83,4 +86,64 @@ describe('profiles slice', () => {
       ['personal', 'Personal', 'claude-personal@example.com'],
     ]);
   });
+  it('preserves simultaneous creates and validates later renames against the committed list', async () => {
+    t = await startTestApp();
+    const a = await t.connect();
+    const b = await t.connect();
+    const [alpha, beta] = await Promise.all([
+      a.call('profiles.save', { name: 'Alpha' }),
+      b.call('profiles.save', { name: 'Beta' }),
+    ]);
+    expect((await a.call('profiles.list', {})).map((p) => p.name)).toEqual(['Alpha', 'Beta']);
+    const results = await Promise.allSettled([
+      a.call('profiles.save', { id: alpha.id, name: 'Same' }),
+      b.call('profiles.save', { id: beta.id, name: 'Same' }),
+    ]);
+    expect(results.map((r) => r.status)).toEqual(['fulfilled', 'rejected']);
+    const home = t.home;
+    await t.stop({ keepHome: true });
+    t = await startTestApp({}, home);
+    expect((await (await t.connect()).call('profiles.list', {})).map((p) => p.name)).toEqual(['Same', 'Beta']);
+  });
+
+  it('does not publish failed saves or selections, and accepts the next mutation', async () => {
+    t = await startTestApp();
+    const c = await t.connect();
+    const profile = await c.call('profiles.save', { name: 'Personal' });
+    const first = await c.call('accounts.save', { name: 'First' });
+    const second = await c.call('accounts.save', { name: 'Second' });
+    await c.call('profiles.save', { ...profile, accountId: first.id });
+    const write = JsonFile.prototype.write;
+    vi.spyOn(JsonFile.prototype, 'write').mockImplementation(function (value) {
+      if (this.path === join(t.home, 'hub', 'settings.json')) return Promise.reject(new Error('settings disk full'));
+      return write.call(this, value);
+    });
+    const eventCount = c.events.filter((e) => e.event === 'profiles.changed').length;
+    await expect(c.call('profiles.save', { id: profile.id, name: 'Changed', accountId: second.id })).rejects.toThrow('disk full');
+    expect((await c.call('profiles.list', {}))[0]).toMatchObject({ name: 'Personal' });
+    expect(claudeAccount((await c.call('profiles.list', {}))[0]!)?.id).toBe(first.id);
+    expect(c.events.filter((e) => e.event === 'profiles.changed')).toHaveLength(eventCount);
+    const stored = JSON.parse(await readFile(join(t.home, 'hub', 'profiles.json'), 'utf8'));
+    expect(stored.profiles[0].accountId).toBe(first.id);
+    await expect(c.call('profiles.delete', { id: profile.id })).rejects.toThrow('disk full');
+    expect((await c.call('profiles.list', {}))[0]?.name).toBe('Personal');
+    vi.restoreAllMocks();
+    await c.call('profiles.save', { id: profile.id, name: 'Changed', accountId: second.id });
+    expect(claudeAccount((await c.call('profiles.list', {}))[0]!)?.id).toBe(second.id);
+  });
+
+  it('does not retain a hub profile when config folder preparation fails', async () => {
+    t = await startTestApp();
+    const c = await t.connect();
+    await mkdir(join(t.home, 'profiles'), { recursive: true });
+    const block = join(t.home, 'profiles', 'blocked');
+    await writeFile(block, 'not a directory');
+    await expect(c.call('profiles.save', { name: 'Blocked' })).rejects.toThrow();
+    expect(await c.call('profiles.list', {})).toEqual([]);
+    const stored = JSON.parse(await readFile(join(t.home, 'hub', 'profiles.json'), 'utf8'));
+    expect(stored.profiles).toEqual([]);
+    await rm(block);
+    expect(await c.call('profiles.save', { name: 'Blocked' })).toMatchObject({ id: 'blocked' });
+  });
+
 });

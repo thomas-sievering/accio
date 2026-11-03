@@ -96,8 +96,10 @@ export class TestClient {
   async signedIn(name: string, opts: { claudeAccount?: string } = {}) {
     const profiles = await this.call('profiles.list', {});
     const profile = profiles.find((a) => a.name === name) ?? (await this.call('profiles.save', { name }));
-    const { signInId } = await this.call('profiles.beginSignIn', { profileId: profile.id });
-    return this.call('profiles.completeSignIn', { signInId, code: opts.claudeAccount ?? `claude-${profile.id}` });
+    const account = claudeAccount(profile) ?? await this.call('accounts.save', { name: `${name} Claude` });
+    const { signInId } = await this.call('accounts.beginSignIn', { id: account.id });
+    await this.call('accounts.completeSignIn', { signInId, code: opts.claudeAccount ?? `claude-${profile.id}` });
+    return this.call('profiles.save', { id: profile.id, name, accountId: account.id });
   }
 
   /** Waits until an event matching `pred` has arrived (including earlier ones). */

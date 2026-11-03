@@ -1,41 +1,35 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ServerProcess, type Ready } from './serverProcess.js';
 import { stat } from 'node:fs/promises';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 
-type Ready = { url: string; token: string };
-
-let server: ChildProcess | undefined;
+let server: ServerProcess | undefined;
 let localServerOrigin: string | undefined;
+let quitting = false;
+let quitAllowed = false;
 
-/**
- * The desktop app carries the local machine's server (GLOSSARY: Client holds no
- * threads of its own). It runs as a separate process under Electron's Node, so
- * closing a window never stops a turn, and quitting the app does.
- */
+/** The last window closing quits the app and interrupts the local machine's turns. */
 function startServer(): Promise<Ready> {
   const entry = require.resolve('@accio/server');
-  server = spawn(process.execPath, [entry], {
+  const child = spawn(process.execPath, [entry], {
     env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
     windowsHide: true,
   });
-  server.stderr?.on('data', (d) => process.stderr.write(d));
-  return new Promise((resolve, reject) => {
-    let buffer = '';
-    server!.stdout?.on('data', (chunk: Buffer) => {
-      process.stdout.write(chunk);
-      buffer += chunk.toString();
-      const match = buffer.match(/^ACCIO_READY (.+)$/m);
-      if (match?.[1]) resolve(JSON.parse(match[1]) as Ready);
-    });
-    server!.once('exit', (code) => reject(new Error(`accio server exited with code ${code}`)));
+  child.stderr?.on('data', (d) => process.stderr.write(d));
+  server = new ServerProcess(child, (error) => {
+    console.error(error);
+    dialog.showErrorBox('accio server stopped', `${error.message}. Quit and reopen accio to reconnect. Interrupted threads can be resumed.`);
+    app.quit();
   });
+  child.stdout?.on('data', (d) => process.stdout.write(d));
+  return server.ready;
 }
 
 async function createWindow(ready: Ready) {
@@ -94,4 +88,13 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => app.quit());
-app.on('quit', () => server?.kill());
+app.on('before-quit', (event) => {
+  if (quitAllowed) return;
+  event.preventDefault();
+  if (quitting) return;
+  quitting = true;
+  void (server?.close() ?? Promise.resolve()).finally(() => {
+    quitAllowed = true;
+    app.quit();
+  });
+});

@@ -7,7 +7,7 @@ import { configFolderOf } from '../profiles/claudeConfigFolder.js';
 import type { Projects } from '../projects/projects.js';
 import type { Broadcast, Router } from '../rpc/router.js';
 import { UserError } from '../rpc/router.js';
-import { JsonFile } from '../store/jsonFile.js';
+import { JsonFile } from '@accio/persistence';
 import type { Harness } from './harness.js';
 import type { Models } from '../harnesses/models.js';
 import { harnessEnv } from './harnessEnv.js';
@@ -33,14 +33,18 @@ import {
 import { TurnTranscript, type TranscriptChange } from './transcript.js';
 import type { Machines } from '../machine/machine.js';
 
-type Live = { items: TranscriptItem[]; file: JsonFile<TranscriptItem[]>; saveTimer?: ReturnType<typeof setTimeout> };
+type Live = { cursor: number; items: TranscriptItem[]; file: JsonFile<TranscriptItem[]>; saveTimer?: ReturnType<typeof setTimeout> };
 
 /** Threads on this machine, their transcripts, and the turns running in them. */
 export class Threads {
   private file: JsonFile<Thread[]>;
   private list: Thread[] = [];
   private transcripts = new Map<string, Live>();
+  private loadingTranscripts = new Map<string, Promise<Live>>();
   private running = new Map<string, AbortController>();
+  private closing = false;
+  private starts = new Set<Promise<unknown>>();
+  private preparing = new Set<Promise<void>>();
   private turns = new Set<Promise<void>>();
 
   constructor(
@@ -53,6 +57,7 @@ export class Threads {
     private machines: Machines,
   ) {
     this.file = new JsonFile(join(home, 'threads.json'), () => []);
+    projects.onRemoveThreads((id) => this.deleteThreads(this.list.filter((t) => t.checkoutId === id)));
     projects.onCheckInUse((checkoutId) => this.countUsing((t) => t.checkoutId === checkoutId));
     projects.onCheckProjectInUse((projectId) => this.countUsing((t) => t.projectId === projectId));
     profiles.onCheckInUse((profileId) => this.countUsing((t) => t.profileId === profileId));
@@ -91,7 +96,7 @@ export class Threads {
   register(router: Router) {
     router
       .on('threads.list', () => this.list.map(toView))
-      .on('threads.start', async (input) => {
+      .on('threads.start', (input) => this.trackStart(async () => {
         const { text, model, machineId } = input;
         if (machineId) {
           const machine = this.machines.views().find((m) => m.id === machineId);
@@ -99,28 +104,55 @@ export class Threads {
           if (!machine.connected) throw new UserError('This machine is offline');
           if (!machine.thisMachine) throw new UserError('Running threads on another machine is not available yet');
         }
+        if (this.closing) throw new UserError('This machine is shutting down');
         const checkout = 'checkoutId' in input ? this.projects.checkout(input.checkoutId) : undefined;
         const project = checkout ? this.projects.projectOf(checkout) : undefined;
         const profileId = project?.profileId ?? ('profileId' in input ? input.profileId : '');
-        // Refuse before anything is stored, so a thread that cannot run never appears.
-        await this.profiles.hubAccess(profileId);
-        const selected = this.models.require(profileId, model);
-        // GLOSSARY: a thread keeps the profile it started with for its whole life.
-        const thread = newThread({ checkoutId: checkout?.id ?? '', projectId: project?.id ?? '', profileId, model: selected }, now());
-        if (!checkout) await mkdir(join(this.home, 'workspaces', thread.id), { recursive: true });
-        // Quiet: clients first see the thread once its turn is running, never as an idle empty thread.
-        await this.commit([...this.list, thread], { quiet: true });
-        await this.beginTurn(thread.id, text);
-        return toView(this.require(thread.id));
+        const releaseProfile = this.profiles.useProfile(profileId);
+        let release = () => {};
+        try {
+          if (checkout) release = this.projects.useCheckout(checkout.id);
+          // Refuse before anything is stored, so a thread that cannot run never appears.
+          await this.profiles.hubAccess(profileId);
+          if (this.closing) throw new UserError('This machine is shutting down');
+          const selected = this.models.require(profileId, model);
+          // GLOSSARY: a thread keeps the profile it started with for its whole life.
+          const thread = newThread({ checkoutId: checkout?.id ?? '', projectId: project?.id ?? '', profileId, model: selected }, now());
+          if (!checkout) await mkdir(join(this.home, 'workspaces', thread.id), { recursive: true });
+          // Quiet: clients first see the thread once its turn is running, never as an idle empty thread.
+          const stored = this.commit([...this.list, thread], { quiet: true });
+          try {
+            // Reserve synchronously with insertion, before persistence yields to another intent.
+            await this.beginTurn(thread.id, text, {}, stored);
+          } catch (err) {
+            await this.deleteThreads([this.require(thread.id)]);
+            throw err;
+          }
+          return toView(this.require(thread.id));
+        } finally {
+          release();
+          releaseProfile();
+        }
+      }))
+      .on('threads.transcript', async ({ threadId }) => {
+        const live = await this.transcript(this.require(threadId).id);
+        this.require(threadId);
+        return live.items;
       })
-      .on('threads.transcript', async ({ threadId }) => (await this.transcript(this.require(threadId).id)).items)
+      .on('threads.observe', async ({ threadId }) => {
+        const live = await this.transcript(this.require(threadId).id);
+        this.require(threadId);
+        // No await between reading items and cursor. All mutations replace the
+        // array/items, so this snapshot stays fixed even before RPC serialization.
+        return { items: live.items, cursor: live.cursor };
+      })
       .on('threads.send', async ({ threadId, text }) => {
         await this.beginTurn(threadId, text);
         return null;
       })
       .on('threads.setModel', async ({ threadId, model }) => {
         const thread = this.require(threadId);
-        if (thread.status === 'running') throw new UserError('Wait for this turn to finish before changing its model.');
+        if (this.running.has(threadId) || thread.status === 'running') throw new UserError('Wait for this turn to finish before changing its model.');
         const selected = this.models.require(thread.profileId, model);
         if (selected.harnessId !== thread.model.harnessId) throw new UserError('Start a new thread to change its harness.');
         return toView(await this.update(threadId, (t) => ({ ...t, model: selected })));
@@ -132,14 +164,11 @@ export class Threads {
         return null;
       })
       .on('threads.resume', async ({ threadId }) => {
-        assertResumable(this.require(threadId));
         await this.beginTurn(threadId, RESUME_PROMPT, { resume: true });
         return null;
       })
       .on('threads.retry', async ({ threadId }) => {
-        const thread = this.require(threadId);
-        const { text, resume } = retryOf(thread, (await this.transcript(thread.id)).items);
-        await this.beginTurn(thread.id, text, { resume });
+        await this.beginTurn(threadId, '', { retry: true });
         return null;
       })
       .on('threads.snooze', async ({ threadId, until }) => toView(await this.update(threadId, (t) => snooze(t, until))))
@@ -150,35 +179,95 @@ export class Threads {
         return toView(updated);
       })
       .on('threads.delete', async ({ threadId }) => {
-        const thread = this.require(threadId);
-        if (this.running.has(thread.id)) throw new UserError('Stop the thread before deleting it');
-        this.transcripts.delete(thread.id);
-        await this.commit(this.list.filter((t) => t.id !== thread.id));
-        await rm(this.transcriptPath(thread.id), { force: true });
+        await this.deleteThreads([this.require(threadId)]);
         return null;
       });
   }
 
   // ---- turns ----
 
-  private async beginTurn(threadId: string, text: string, { resume = false } = {}) {
+  private trackStart<T>(start: () => Promise<T>): Promise<T> {
+    const pending = start();
+    this.starts.add(pending);
+    void pending.then(() => this.starts.delete(pending), () => this.starts.delete(pending));
+    return pending;
+  }
+
+  private async deleteThreads(threads: Thread[]) {
+    // Validate the entire current membership before any effect.
+    if (threads.some((t) => this.running.has(t.id) || t.status === 'running')) {
+      throw new UserError('Stop the thread before deleting it');
+    }
+    const ids = new Set(threads.map((t) => t.id));
+    const saved = this.commit(this.list.filter((t) => !ids.has(t.id)));
+    const writes: Promise<void>[] = [];
+    for (const id of ids) {
+      const loading = this.loadingTranscripts.get(id);
+      if (loading) {
+        this.loadingTranscripts.delete(id);
+        // Discard its result and let any open file handle close before removal.
+        writes.push(loading.then(() => {}, () => {}));
+      }
+      const live = this.transcripts.get(id);
+      if (live) {
+        clearTimeout(live.saveTimer);
+        writes.push(live.file.idle());
+      }
+      this.transcripts.delete(id);
+    }
+    await saved;
+    await Promise.all(writes);
+    for (const id of ids) await rm(this.transcriptPath(id), { force: true });
+  }
+
+  private beginTurn(threadId: string, text: string, options: { resume?: boolean; retry?: boolean } = {}, stored?: Promise<void>) {
+    if (this.closing) throw new UserError('This machine is shutting down');
     const thread = this.require(threadId);
-    if (!this.profiles.get(thread.profileId)) throw new UserError('The profile this thread started with no longer exists');
-    const access = await this.profiles.hubAccess(thread.profileId);
-    this.models.require(thread.profileId, thread.model);
-    const cwd = thread.checkoutId ? this.projects.checkout(thread.checkoutId).path : join(this.home, 'workspaces', thread.id);
-
-    const started = startTurn(thread, text, now());
-    const turnId = randomUUID();
-    await this.update(thread.id, () => started);
-    await this.addItem(thread.id, { kind: 'user', id: `${turnId}:u`, turnId, text, at: now(), ...(resume ? { resume } : {}) });
-
+    if (options.resume) assertResumable(thread);
+    if (this.running.has(threadId) || thread.status === 'running') throw new UserError('This thread is already working. Stop it or wait for it to finish.');
     const controller = new AbortController();
-    this.running.set(thread.id, controller);
-    const env = harnessEnv(process.env, access, configFolderOf(this.home, thread.profileId));
-    const turn = this.runTurn(started, turnId, { cwd, prompt: text, env, signal: controller.signal });
-    this.turns.add(turn);
-    void turn.finally(() => this.turns.delete(turn));
+    this.running.set(threadId, controller);
+    const preparation = this.prepareTurn(threadId, text, options, controller, stored);
+    this.preparing.add(preparation);
+    void preparation.then(() => this.preparing.delete(preparation), () => this.preparing.delete(preparation));
+    return preparation;
+  }
+
+  private async prepareTurn(threadId: string, text: string, options: { resume?: boolean; retry?: boolean }, controller: AbortController, stored?: Promise<void>) {
+    let release = () => {};
+    let started = false;
+    try {
+      if (stored) await stored;
+      let thread = this.require(threadId);
+      if (thread.checkoutId) release = this.projects.useCheckout(thread.checkoutId);
+      let resume = options.resume ?? false;
+      if (resume) assertResumable(thread);
+      if (options.retry) ({ text, resume } = retryOf(thread, (await this.transcript(threadId)).items));
+      if (!this.profiles.get(thread.profileId)) throw new UserError('The profile this thread started with no longer exists');
+      const access = await this.profiles.hubAccess(thread.profileId);
+      if (controller.signal.aborted || this.closing) throw new UserError('Turn interrupted before starting');
+      thread = this.require(threadId);
+      this.models.require(thread.profileId, thread.model);
+      const cwd = thread.checkoutId ? this.projects.checkout(thread.checkoutId).path : join(this.home, 'workspaces', thread.id);
+      const next = startTurn(thread, text, now());
+      const turnId = randomUUID();
+      started = true;
+      await this.update(thread.id, () => next);
+      await this.addItem(thread.id, { kind: 'user', id: `${turnId}:u`, turnId, text, at: now(), ...(resume ? { resume } : {}) });
+      const env = harnessEnv(process.env, access, configFolderOf(this.home, thread.profileId));
+      const turn = this.runTurn(next, turnId, { cwd, prompt: text, env, signal: controller.signal });
+      this.turns.add(turn);
+      void turn.then(() => this.turns.delete(turn), (err) => {
+        this.turns.delete(turn);
+        console.error('[threads] finishing turn failed', err);
+      });
+    } catch (err) {
+      this.running.delete(threadId);
+      if (started) await this.update(threadId, (t) => endTurn(t, controller.signal.aborted ? 'interrupted' : 'failed', now()));
+      throw err;
+    } finally {
+      release();
+    }
   }
 
   private async runTurn(
@@ -189,6 +278,10 @@ export class Threads {
     const transcript = new TurnTranscript(turnId);
     let outcome: TurnOutcome | null = null;
     try {
+      if (run.signal.aborted) {
+        outcome = 'interrupted';
+        return;
+      }
       for await (const msg of this.harness.run({ ...run, sessionId: thread.sessionId, model: thread.model.modelId === 'default' ? undefined : thread.model.modelId })) {
         for (const change of transcript.accept(msg)) {
           if (change.type === 'end') outcome = change.outcome;
@@ -214,13 +307,22 @@ export class Threads {
         await this.addItem(thread.id, { kind: 'notice', id: `${turnId}:err`, turnId, tone: 'error', text: (err as Error).message });
       }
     } finally {
-      if (outcome === 'interrupted') {
-        await this.addItem(thread.id, { kind: 'notice', id: `${turnId}:stop`, turnId, tone: 'info', text: 'Stopped.' });
+      try {
+        if (outcome === 'interrupted') {
+          await this.addItem(thread.id, { kind: 'notice', id: `${turnId}:stop`, turnId, tone: 'info', text: 'Stopped.' });
+        }
+        for (const item of transcript.unfinishedTools()) await this.addItem(thread.id, item);
+        await this.flush(thread.id);
+      } catch (error) {
+        if (outcome !== 'interrupted') outcome = 'failed';
+        const detail = error instanceof Error ? error.message : String(error);
+        await this.addItem(thread.id, { kind: 'notice', id: `${turnId}:save`, turnId, tone: 'error', text: `Could not save this turn: ${detail}` });
+        throw error;
+      } finally {
+        // A storage failure must never leave a finished turn holding its slot.
+        this.running.delete(thread.id);
+        await this.update(thread.id, (t) => endTurn(t, outcome ?? 'failed', now()));
       }
-      for (const item of transcript.unfinishedTools()) await this.addItem(thread.id, item);
-      this.running.delete(thread.id);
-      await this.update(thread.id, (t) => endTurn(t, outcome ?? 'failed', now()));
-      await this.flush(thread.id);
     }
   }
 
@@ -233,7 +335,7 @@ export class Threads {
       const live = await this.transcript(threadId);
       live.items = live.items.map((i) => (i.id === change.itemId && i.kind === 'assistant' ? { ...i, text: i.text + change.text } : i));
       this.scheduleSave(threadId, live);
-      this.broadcast('thread.delta', { threadId, itemId: change.itemId, text: change.text });
+      this.broadcast('thread.delta', { threadId, cursor: ++live.cursor, itemId: change.itemId, text: change.text });
     }
   }
 
@@ -266,20 +368,31 @@ export class Threads {
   }
 
   private async transcript(id: string): Promise<Live> {
-    let live = this.transcripts.get(id);
-    if (!live) {
+    const live = this.transcripts.get(id);
+    if (live) return live;
+    // Share cold reads: observing while a turn starts must use the same cursor
+    // and items as the writer, rather than installing two independent copies.
+    let loading = this.loadingTranscripts.get(id);
+    if (!loading) {
       const file = new JsonFile<TranscriptItem[]>(this.transcriptPath(id), () => []);
-      live = { items: await file.read(), file };
-      this.transcripts.set(id, live);
+      loading = file.read().then((items) => {
+        if (this.loadingTranscripts.get(id) !== loading) throw new UserError('No such thread');
+        const loaded = { items, file, cursor: 0 };
+        this.transcripts.set(id, loaded);
+        return loaded;
+      }).finally(() => {
+        if (this.loadingTranscripts.get(id) === loading) this.loadingTranscripts.delete(id);
+      });
+      this.loadingTranscripts.set(id, loading);
     }
-    return live;
+    return loading;
   }
 
   private async addItem(threadId: string, item: TranscriptItem) {
     const live = await this.transcript(threadId);
     live.items = upsertItem(live.items, item);
     this.scheduleSave(threadId, live);
-    this.broadcast('thread.item', { threadId, item });
+    this.broadcast('thread.item', { threadId, cursor: ++live.cursor, item });
   }
 
   private scheduleSave(_threadId: string, live: Live) {
@@ -298,8 +411,12 @@ export class Threads {
     await live.file.write(live.items);
   }
 
-  /** Waits for running turns to settle and every write to land. */
+  /** Interrupts turns and flushes their resumable state before the machine exits. */
   async close() {
+    this.closing = true;
+    for (const controller of this.running.values()) controller.abort();
+    await Promise.allSettled([...this.starts]);
+    await Promise.allSettled([...this.preparing]);
     await Promise.allSettled([...this.turns]);
     for (const id of this.transcripts.keys()) await this.flush(id);
     await this.file.idle();

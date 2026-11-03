@@ -1,6 +1,6 @@
 import { access } from 'node:fs/promises';
 import { join } from 'node:path';
-import { SecretFile } from './store.js';
+import { JsonFile } from '@accio/persistence';
 
 /** A profile as the hub stores it. Its accounts are in the hub's secret store (hub.ts). */
 export type SharedProfile = { id: string; name: string };
@@ -40,13 +40,14 @@ export const HARNESSES = [{ id: 'claudeCode', name: 'Claude Code', providers: ['
  * profiles still live in accio's server in v0.1.
  */
 export class SharedSettings {
-  private file: SecretFile<Data>;
+  private queue: Promise<unknown> = Promise.resolve();
+  private file: JsonFile<Data>;
   private data: Data = { profiles: [], machines: [] };
   private connected = new Set<string>();
   private listeners = new Set<() => void>();
 
   constructor(home: string) {
-    this.file = new SecretFile(join(home, 'hub', 'settings.json'), () => ({ profiles: [], machines: [] }));
+    this.file = new JsonFile(join(home, 'hub', 'settings.json'), () => ({ profiles: [], machines: [] }));
   }
 
   get storePath(): string {
@@ -77,14 +78,16 @@ export class SharedSettings {
   }
 
   async setProfiles(profiles: SharedProfile[]) {
-    const ids = new Set(profiles.map((p) => p.id));
-    // A deleted profile's folders go with it, on every machine.
-    const machines = this.data.machines.map((m) => ({
-      ...m,
-      profileFolders: Object.fromEntries(Object.entries(m.profileFolders).filter(([id]) => ids.has(id))),
-    }));
-    const modelFavorites = Object.fromEntries(Object.entries(this.data.modelFavorites ?? {}).filter(([id]) => ids.has(id)));
-    await this.commit({ ...this.data, profiles, machines, modelFavorites });
+    return this.change(async () => {
+      const ids = new Set(profiles.map((p) => p.id));
+      // A deleted profile's folders go with it, on every machine.
+      const machines = this.data.machines.map((m) => ({
+        ...m,
+        profileFolders: Object.fromEntries(Object.entries(m.profileFolders).filter(([id]) => ids.has(id))),
+      }));
+      const modelFavorites = Object.fromEntries(Object.entries(this.data.modelFavorites ?? {}).filter(([id]) => ids.has(id)));
+      await this.commit({ ...this.data, profiles, machines, modelFavorites });
+    });
   }
 
   modelFavorites(profileId: string): FavoriteModel[] {
@@ -92,10 +95,13 @@ export class SharedSettings {
   }
 
   async setModelFavorite(profileId: string, model: FavoriteModel, favorite: boolean) {
-    const remaining = this.modelFavorites(profileId).filter((m) => m.harnessId !== model.harnessId || m.modelId !== model.modelId);
-    await this.commit({
-      ...this.data,
-      modelFavorites: { ...this.data.modelFavorites, [profileId]: favorite ? [...remaining, model] : remaining },
+    return this.change(async () => {
+      this.requireProfile(profileId);
+      const remaining = this.modelFavorites(profileId).filter((m) => m.harnessId !== model.harnessId || m.modelId !== model.modelId);
+      await this.commit({
+        ...this.data,
+        modelFavorites: { ...this.data.modelFavorites, [profileId]: favorite ? [...remaining, model] : remaining },
+      });
     });
   }
 
@@ -109,39 +115,59 @@ export class SharedSettings {
 
   /** Records the machine (pairing is not built yet, so any machine that connects is known) and marks it connected. */
   async machineConnected(hello: MachineHello) {
-    this.connected.add(hello.id);
-    const existing = this.machine(hello.id);
-    const record: MachineRecord = { profileFolders: {}, ...existing, ...hello, name: existing?.customName ?? hello.name, lastSeen: new Date().toISOString() };
-    await this.commit({
-      ...this.data,
-      machines: existing ? this.data.machines.map((m) => (m.id === hello.id ? record : m)) : [...this.data.machines, record],
+    return this.change(async () => {
+      const existing = this.machine(hello.id);
+      const record: MachineRecord = { profileFolders: {}, ...existing, ...hello, name: existing?.customName ?? hello.name, lastSeen: new Date().toISOString() };
+      await this.commit({
+        ...this.data,
+        machines: existing ? this.data.machines.map((m) => (m.id === hello.id ? record : m)) : [...this.data.machines, record],
+      }, () => this.connected.add(hello.id));
     });
   }
 
   async machineDisconnected(id: string) {
-    this.connected.delete(id);
-    if (this.machine(id)) await this.updateMachine(id, (m) => ({ ...m, lastSeen: new Date().toISOString() }));
+    return this.change(async () => {
+      if (!this.machine(id)) { this.connected.delete(id); return; }
+      await this.commit({ ...this.data, machines: this.data.machines.map((m) => m.id === id ? { ...m, lastSeen: new Date().toISOString() } : m) }, () => this.connected.delete(id));
+    });
   }
 
   async setProfileFolders(machineId: string, profileId: string, folders: string[]) {
-    await this.updateMachine(machineId, (m) => ({ ...m, profileFolders: { ...m.profileFolders, [profileId]: [...new Set(folders)] } }));
+    await this.updateMachine(machineId, (m) => {
+      this.requireProfile(profileId);
+      return { ...m, profileFolders: { ...m.profileFolders, [profileId]: [...new Set(folders)] } };
+    });
   }
 
   async renameMachine(machineId: string, name: string) {
     await this.updateMachine(machineId, (m) => ({ ...m, name, customName: name }));
   }
 
-  close(): Promise<void> {
-    return this.file.idle();
+  async close(): Promise<void> {
+    await this.queue.catch(() => {});
+    await this.file.idle();
   }
 
   private async updateMachine(id: string, fn: (m: MachineRecord) => MachineRecord) {
-    await this.commit({ ...this.data, machines: this.data.machines.map((m) => (m.id === id ? fn(m) : m)) });
+    return this.change(async () => {
+      await this.commit({ ...this.data, machines: this.data.machines.map((m) => (m.id === id ? fn(m) : m)) });
+    });
   }
 
-  private async commit(next: Data) {
-    this.data = next;
+  private change<T>(run: () => Promise<T>): Promise<T> {
+    const result = this.queue.then(run, run);
+    this.queue = result.catch(() => {});
+    return result;
+  }
+
+  private requireProfile(id: string) {
+    if (!this.data.profiles.some((p) => p.id === id)) throw new Error(`No profile ${id}`);
+  }
+
+  private async commit(next: Data, afterWrite: () => void = () => {}) {
     await this.file.write(next);
+    this.data = next;
+    afterWrite();
     for (const listener of this.listeners) listener();
   }
 }
