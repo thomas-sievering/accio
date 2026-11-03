@@ -127,8 +127,9 @@ describe('Codex and ChatGPT accounts', () => {
     }, body: '{}' });
     expect(await response.text()).toBe('data: ok\n\n');
     expect(calls.map((x) => x.url)).toEqual(['https://chatgpt.com/backend-api/codex/responses', 'https://chatgpt.com/backend-api/codex/responses']);
-    expect(calls[0]?.headers.get('authorization')).toBe(`Bearer ${testJWT('Work')}`);
-    expect(calls[1]?.headers.get('authorization')).toBe(`Bearer ${testJWT('Work-refreshed')}`);
+    // Compare the token's subject only: its expiry comes from the clock and can tick between sign-in and here.
+    const subject = (header?: string | null) => JSON.parse(Buffer.from(header?.replace(/^Bearer /, '').split('.')[1] ?? '', 'base64url').toString()).sub;
+    expect(calls.map((x) => subject(x.headers.get('authorization')))).toEqual(['Work', 'Work-refreshed']);
     for (const call of calls) {
       expect(call.headers.get('chatgpt-account-id')).toBe('Work');
       expect(call.headers.has('openai-organization')).toBe(false); expect(call.headers.has('cookie')).toBe(false);
