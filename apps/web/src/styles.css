@@ -1344,3 +1344,9 @@ button.row {
 .hero-chip.push {
   margin-left: auto;
 }
+
+.project-mark {
+  flex: none;
+  display: block;
+  border-radius: 3px;
+}

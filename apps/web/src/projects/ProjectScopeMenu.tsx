@@ -1,7 +1,7 @@
 import { useRef } from 'react';
 import type { ProjectView } from '@accio/protocol';
 import { Check, ListFilter, Settings } from '../app/icons';
-import { ProfileTile, useProfiles } from '../profiles/profiles';
+import { ProjectMark } from './ProjectMark';
 import { useProjects } from './projects';
 
 /**
@@ -13,7 +13,6 @@ export function ProjectScopeMenu(props: {
   onScope: (projectId: string) => void;
   onOpenProject: (p: ProjectView) => void;
 }) {
-  const { profiles = [], filter } = useProfiles();
   const { visible } = useProjects();
   const menu = useRef<HTMLDivElement>(null);
   const scoped = visible.find((p) => p.id === props.scope);
@@ -47,7 +46,7 @@ export function ProjectScopeMenu(props: {
               title={p.repoKey ?? undefined}
               onClick={() => pick(p.id)}
             >
-              {filter === 'all' && <ProfileTile profile={profiles.find((a) => a.id === p.profileId)} size="xs" />}
+              <ProjectMark id={p.id} />
               <span className="menu-text">{p.name}</span>
               {p.id === props.scope && <Check />}
             </button>
