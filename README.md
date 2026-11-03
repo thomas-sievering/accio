@@ -29,9 +29,13 @@ pnpm server        # server only; open the printed http://127.0.0.1:47321/#token
 pnpm test          # vitest
 pnpm typecheck
 pnpm test:chat     # build, then run isolated Chromium and hidden Electron chat checks
+pnpm exec playwright install chromium # one-time browser setup for verification
+pnpm verify        # build, drive the real UI in isolation, retain proof in out/verify
 ```
 
 Install the Chromium test browser once with `pnpm exec playwright install chromium` before running `test:chat`. The fixtures use a fake harness and a temporary Accio home; they do not call a model or use your profiles. Interactive HTML/charts and composer uploads are separate milestones.
+
+Agents can use the project-local [3-verify skill](.agents/skills/3-verify/SKILL.md) and its [feature map](.agents/skills/3-verify/features/README.md) to drive additional user journeys. Verification owns a disposable home and ports; the default smoke covers profiles, signed-out account selection, machine settings and local projects. Provider sign-in, coding turns and Electron's native controls require the additional prerequisites listed in the map.
 
 State lives in `~/.accio` (`ACCIO_HOME` overrides it; `ACCIO_PORT` and `ACCIO_HUB_PORT` the ports, default 47321 and 47322). Named accounts, Claude credentials, ChatGPT account metadata and profile selections are in `~/.accio/hub/profiles.json`; Codex stores ChatGPT credentials under `~/.accio/hub/codex/<credential-id>/auth.json`. Shared profile names, machine folders and model favorites are in `~/.accio/hub/settings.json`. Both JSON stores use the shared atomic writer in `packages/persistence`. State from before the Account → Profile rename moves to the new names on first start.
 

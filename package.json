@@ -8,6 +8,8 @@
     "server": "pnpm --filter \"@accio/server...\" --filter @accio/web build && node apps/server/dist/main.js",
     "test": "vitest run",
     "test:chat": "pnpm build && playwright test",
+    "verify": "pnpm build && node .agents/skills/3-verify/scripts/verify.mjs",
+    "verify:doctor": "node .agents/skills/3-verify/scripts/verify.mjs doctor",
     "typecheck": "tsc -b && tsc -p apps/web",
     "postinstall": "node scripts/ensure-electron.mjs"
   },
@@ -15,6 +17,7 @@
     "@playwright/test": "^1.64.0",
     "@types/node": "^26.6.6",
     "@types/ws": "^8.18.2",
+    "playwright": "^1.64.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^5.1.0"
