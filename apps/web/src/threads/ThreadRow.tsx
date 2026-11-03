@@ -2,6 +2,7 @@ import type { ThreadView } from '@accio/protocol';
 import { Check, Clock, Undo } from '../app/icons';
 import { ProfileTile, useProfiles } from '../profiles/profiles';
 import { useProjects } from '../projects/projects';
+import { useThreadMenu } from './ThreadMenu';
 import { useThreads } from './threads';
 
 /** Where the row is shown decides its look, trailing mark and hover actions. */
@@ -18,6 +19,11 @@ export function ThreadRow({ thread: t, place }: { thread: ThreadView; place: Row
   const project = state?.projects.find((p) => p.id === t.projectId)?.name;
   const mark = marks[t.id];
   const card = place === 'open' || place === 'working';
+  const openMenu = useThreadMenu();
+  const onContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    openMenu(t, e.clientX, e.clientY);
+  };
 
   const actions = (
     <span className="row-actions">
@@ -47,7 +53,7 @@ export function ThreadRow({ thread: t, place }: { thread: ThreadView; place: Row
 
   if (card) {
     return (
-      <div className={className}>
+      <div className={className} onContextMenu={onContextMenu}>
         <button className="row-main" onClick={() => select(t.id)}>
           <span className="card-top">
             {filter === 'all' && <ProfileTile profile={profiles.find((a) => a.id === t.profileId)} size="xs" />}
@@ -61,7 +67,7 @@ export function ThreadRow({ thread: t, place }: { thread: ThreadView; place: Row
     );
   }
   return (
-    <div className={className}>
+    <div className={className} onContextMenu={onContextMenu}>
       <button className="row-main" onClick={() => select(t.id)}>
         <span className="row-name">
           {t.title}
