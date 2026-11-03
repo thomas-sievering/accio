@@ -1,22 +1,50 @@
-
 /* First run: profile, sign-in and project as steps, done in place */
 .first-run {
-  width: min(560px, calc(100% - 32px));
+  width: min(520px, calc(100% - 32px));
   margin: auto;
   padding-bottom: 8vh;
 }
+.first-run-head {
+  margin-bottom: 24px;
+}
 .first-run h1 {
   margin: 0;
-  font-size: 26px;
-  font-weight: 500;
+  font-size: 24px;
+  font-weight: 600;
   letter-spacing: -0.02em;
-  color: var(--ink);
+  color: var(--ink-strong);
 }
 .first-run-sub {
-  margin: 6px 0 22px;
-  font-size: 13px;
-  color: var(--dim);
+  margin: 6px 0 18px;
+  font-size: 13.5px;
+  color: var(--muted);
 }
+.first-run-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.first-run-progress small {
+  flex: none;
+  color: var(--dim);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.first-run-bar {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+  overflow: hidden;
+}
+.first-run-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--green);
+  transition: width 0.4s ease;
+}
+
 .steps {
   display: flex;
   flex-direction: column;
@@ -26,48 +54,86 @@
   list-style: none;
 }
 .step {
-  padding: 12px 14px;
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px;
   border: 1px solid var(--line);
   border-radius: 12px;
+  transition:
+    background 0.2s,
+    border-color 0.2s;
 }
 .step.current {
+  padding: 16px;
   border-color: var(--line-2);
+  background: var(--panel);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.25);
 }
 .step.later {
-  opacity: 0.5;
+  border-style: dashed;
 }
-.step-head {
+.step.later .step-title,
+.step.later .step-about {
+  opacity: 0.55;
+}
+.step-main {
+  flex: 1;
+  min-width: 0;
   display: flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--ink);
+  flex-direction: column;
+  gap: 2px;
 }
-.step-head b {
+.step-title {
   font-weight: 600;
+  color: var(--ink-strong);
 }
-.step.done .step-head {
+.step-about {
+  font-size: 12.5px;
+  color: var(--dim);
+}
+.step.current .step-about {
   color: var(--muted);
 }
+.step.done .step-title {
+  color: var(--muted);
+  font-weight: 500;
+}
+.step.done .step-about {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
 .step-n {
+  flex: none;
   display: grid;
   place-items: center;
   width: 22px;
   height: 22px;
+  margin-top: -1px;
   border-radius: 50%;
   border: 1px solid var(--line-2);
-  font-size: 12px;
+  color: var(--dim);
+  font-size: 11.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.step.current .step-n {
+  border-color: var(--ink);
+  background: var(--ink-strong);
+  color: var(--bg);
 }
 .step.done .step-n {
   border-color: transparent;
-  background: var(--green);
-  color: var(--bg);
+  background: rgb(107 198 148 / 0.16);
+  color: var(--green);
 }
 .step-n svg {
   width: 12px;
   height: 12px;
+  stroke-width: 3;
 }
 .step-body {
-  margin-top: 12px;
+  margin-top: 14px;
 }
 .step-body .sheet-body {
   padding: 0;
@@ -75,4 +141,49 @@
 .step-body .sheet-foot {
   padding: 12px 0 0;
   border: 0;
+}
+
+/* Sign-in step: the two providers as cards rather than a select */
+.provider-choice {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.provider-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  background: var(--bg);
+  text-align: left;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+.provider-card:hover {
+  background: var(--hover);
+}
+.provider-card.on {
+  border-color: var(--muted);
+  background: var(--raised);
+}
+.provider-card svg {
+  flex: none;
+  width: 20px;
+  height: 20px;
+}
+.provider-card > span {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+.provider-card b {
+  font-weight: 600;
+  color: var(--ink-strong);
+}
+.provider-card small {
+  font-size: 11.5px;
+  color: var(--dim);
 }
