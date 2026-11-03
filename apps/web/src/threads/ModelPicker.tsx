@@ -2,11 +2,11 @@ import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEv
 import { modelKey, type ModelSelection, type ModelsState, type UsedUpLimit } from '@accio/protocol';
 import { useClient, useConnectionStatus } from '../app/connection';
 import { Check, ProviderLogo, Star } from '../app/icons';
-import { Meter, effortSteps } from './EffortControl';
+import { EffortWord, effortSteps } from './EffortControl';
 import { useSteps, useWheelSteps } from './steps';
 
 /**
- * GLOSSARY: Effort. One chip for what a thread runs: the model and a small effort meter.
+ * GLOSSARY: Effort. One chip for what a thread runs: the model and a muted effort word.
  * Scrolling over it, or the up and down keys, change the effort; clicking lists the
  * profile's models, favourites first, then each provider/harness pair.
  */
@@ -119,7 +119,7 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
   const description = `${selected?.name ?? fallbackName}${shownEffort ? ` · ${shownEffort.label === 'Auto' ? 'default' : shownEffort.label} effort` : ''}`;
 
   return <span className="model-choice">
-    <button type="button" ref={trigger} className={`model-trigger tone-${effort?.tone(stepper.shown) ?? 'none'}`} popoverTarget={id}
+    <button type="button" ref={trigger} className="model-trigger" popoverTarget={id}
       disabled={disabled || busy || !profileId || status !== 'open'} aria-label={`Select model: ${description}`} title={effort ? `${description} · scroll to change effort` : description}
       onKeyDown={(event) => {
         if (!effort) return;
@@ -139,7 +139,7 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
       }}>
       <ProviderLogo providerId={selected?.providerId ?? (value.harnessId === 'codex' ? 'openai' : 'anthropic')} />
       <span>{shortName}</span>
-      {effort && <Meter key={stepper.bump} levels={effort.levels} filled={effort.filled(stepper.shown)} />}
+      {effort && <EffortWord key={modelKey(current)} steps={effort.steps} index={stepper.shown} />}
     </button>
     <div id={id} ref={panel} popover="auto" className="model-picker" style={position} role="dialog" aria-label="Choose a model" onKeyDown={move}
       onToggle={(event) => { if (event.newState === 'open') { setTab(openingTab()); focusRow(); } }}>

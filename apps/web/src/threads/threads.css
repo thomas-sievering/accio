@@ -735,18 +735,14 @@ div.model-picker-empty b { color: var(--ink); font-weight: 500; }
 .model-picker-empty-icon { display: grid; place-items: center; width: 32px; height: 32px; margin-bottom: 4px; border: 1px solid var(--line); border-radius: 8px; color: var(--amber); }
 .model-picker-error { grid-column: 1 / -1; margin: 0; padding: 10px 12px; border-top: 1px solid var(--line); }
 
-/* GLOSSARY: Effort. A small meter on the model chip that warms as the model thinks harder. */
-.tone-none, .tone-low { --tone: var(--ink); }
-.tone-high { --tone: var(--blue); }
-.tone-top { --tone: var(--amber); }
-.effort-meter { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; margin-left: 2px; }
-.effort-meter i { width: 3px; border-radius: 1px; background: var(--line-2); transition: background-color 160ms ease, height 160ms ease; }
-.effort-meter i.on { background: var(--tone); }
+/* GLOSSARY: Effort. Quiet text at rest; the word rolls with a spring when changed. */
+.effort-word { display: inline-grid; position: relative; overflow: hidden; color: var(--muted); font-size: 11px; line-height: 20px; margin-left: 2px; text-align: left; }
+.effort-word > span { grid-area: 1 / 1; }
+.effort-word-size { visibility: hidden; }
+.effort-word-out { opacity: 0; }
+.effort-word-current, .effort-word-out { transform-origin: left center; }
 .model-picker-row.limited .model-picker-name { opacity: 0.55; }
 .model-picker-limited { color: var(--amber) !important; }
-@media (prefers-reduced-motion: reduce) {
-  .effort-meter i { transition: none; }
-}
 .composer-machine {
   max-width: 240px;
   min-width: 0;
