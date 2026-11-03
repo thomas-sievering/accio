@@ -5,6 +5,9 @@ export { Resources, enabled, optionalScope, type McpCredential } from './resourc
 export { startHubProxy } from './proxy.js';
 export { SignInError, type Fetch } from './claudeOAuth.js';
 export { OpenAIAuth, type OpenAIAccount, type CodexModel } from './openaiAuth.js';
+export { startHubService, type HubServiceOptions, type HubSnapshot, HUB_PROTOCOL } from './service.js';
+export { HubTrust } from './trust.js';
+export { HubClient, hubAddress, remoteSettings, type SettingsAccess } from './client.js';
 export {
   SharedSettings,
   PROVIDERS,

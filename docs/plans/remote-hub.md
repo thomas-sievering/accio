@@ -1,6 +1,6 @@
 # Home-server hub and local development hubs
 
-Status: proposed. Inspected on 2026-11-03. This document plans implementation; no application, server, tunnel, DNS, or deployment changes have been made.
+Status: implementation and deployment in progress on 2026-11-03. This is the accepted plan; the implemented decisions are in ADR 0013 and operating instructions in deploy/hub/README.md.
 
 ## Outcome and scope
 

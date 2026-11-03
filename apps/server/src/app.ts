@@ -1,151 +1,51 @@
 import { Router, type Broadcast } from './rpc/router.js';
 import { startTransport } from './rpc/transport.js';
-import { Machines, loadMachineId, machineInfo } from './machine/machine.js';
-import { Hub, SharedSettings, Resources, McpGateway, startHubProxy, type Fetch } from '@accio/hub';
-import { ResourceManager } from './resources/resources.js';
-import type { CommandRunner } from './resources/process.js';
+import { loadMachineId, machineInfo } from './machine/machine.js';
+import { SharedSettings, startHubService, type Fetch } from '@accio/hub';
 import { moveProfilesToHub } from './store/moveProfilesToHub.js';
-import { registerHarnesses } from './harnesses/harnesses.js';
-import { Models } from './harnesses/models.js';
-import { Profiles } from './profiles/profiles.js';
-import { registerHub } from './hub/hub.js';
 import { renameAccountsToProfiles } from './store/renameAccountsToProfiles.js';
-import { Projects } from './projects/projects.js';
-import { Threads } from './threads/threads.js';
 import type { Harness } from './threads/harness.js';
 import { claudeCode, claudeCodeInstall } from './threads/claudeCode.js';
 import { codexHarness } from './threads/codex.js';
 import { codexInstall, type CodexFactory } from '@accio/codex';
-import { OpenAIAuth, SecretsVault } from '@accio/hub';
-import { AccioTools } from './tools/tools.js';
-import { offerChoice } from './threads/choice.js';
+import { HubConnections } from './hub/connections.js';
 
-export type AppOptions = {
-  home: string;
-  host: string;
-  port: number;
-  token: string;
-  /** Port of the hub that threads call (ADR 0007). 0 picks a free one. */
-  hubPort: number;
-  webRoot?: string;
-};
+export type AppOptions = { home: string; host: string; port: number; token: string; hubPort: number; webRoot?: string };
+export type AppDeps = { harness: Harness; claudeFetch: Fetch; anthropicUrl: string; codexHarness: Harness; codexFactory: CodexFactory; openaiUrl: string; openaiFetch: Fetch };
 
-/** Infrastructure a test can swap out. Grows as slices need it. */
-export type AppDeps = {
-  resourceCommand: CommandRunner;
-  mcpFetch: typeof fetch;
-  harness: Harness;
-  /** Reaches Anthropic for sign-in, token refresh and account limits. */
-  claudeFetch: Fetch;
-  /** Where the hub forwards threads' requests. */
-  anthropicUrl: string;
-  codexHarness: Harness;
-  codexFactory: CodexFactory;
-  openaiUrl: string;
-  openaiFetch: Fetch;
-};
-
-/** Composition root: wires each domain slice into the router and transport. */
+/** The local machine hosts clients and work; all hubs use the standalone service protocol. */
 export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
-  const router = new Router();
-  // Domain modules get a broadcast that becomes live once the transport is up.
-  let send: Broadcast = () => {};
-  const broadcast: Broadcast = (event, data) => send(event, data);
-
+  let send: (event: any, data: any, hubId?: string) => void = () => {};
   await renameAccountsToProfiles(opts.home);
   const here = machineInfo(await loadMachineId(opts.home));
-
-  // In v0.1 this machine runs the hub in-process.
-  const hub = new Hub(opts.home, deps.claudeFetch ?? fetch, new OpenAIAuth(opts.home, deps.codexFactory));
-  await hub.load();
-  const settings = new SharedSettings(opts.home);
-  await moveProfilesToHub(opts.home, here, settings);
-  const resourceStore = new Resources(opts.home);
-  await resourceStore.load();
-  const mcpGateway = new McpGateway(resourceStore, deps.mcpFetch);
-  const hubProxy = await startHubProxy({
-    hub,
-    host: '127.0.0.1',
-    port: opts.hubPort,
-    upstream: deps.anthropicUrl,
-    fetchImpl: deps.claudeFetch,
-    openaiUpstream: deps.openaiUrl,
-    openaiFetch: deps.openaiFetch,
-    handleMcp: (req, res) => mcpGateway.handle(req, res),
-  });
-  mcpGateway.setUrl(hubProxy.url);
-
-  const machines = new Machines(here, settings, broadcast);
   const codex = await codexInstall();
-  await machines.connect([await claudeCodeInstall(), ...(codex.version ? [codex] : [])]);
-  machines.register(router);
-  registerHarnesses(router, settings);
-
-  const profiles = new Profiles(opts.home, hub, settings, hubProxy.url, broadcast);
-  await profiles.load();
-  profiles.register(router);
-  const models = new Models(profiles, settings, here.id);
-  models.register(router, broadcast);
-  registerHub(router, { hub, settings, url: hubProxy.url });
-
-  const projects = new Projects(opts.home, profiles, machines, broadcast);
-  await projects.load();
-  projects.register(router);
-
-  const secrets = new SecretsVault(opts.home);
-  await secrets.load();
-  // Served by this machine to its own harnesses (ADR 0011).
-  const tools = new AccioTools([offerChoice]);
-  const threads = new Threads(opts.home, profiles, projects, { claudeCode: deps.harness ?? claudeCode, codex: deps.codexHarness ?? codexHarness(deps.codexFactory) }, broadcast, models, machines, secrets, tools);
-  await threads.load();
-  threads.register(router);
-  const resources = new ResourceManager(opts.home, here.id, resourceStore, mcpGateway, profiles, projects, broadcast, async (tool, detail) => {
-    const candidates = tool.repairProfileId ? [profiles.require(tool.repairProfileId)] : profiles.all();
-    const profile = candidates.find(p => models.list(p.id).models.length > 0);
-    if (!profile) throw new Error('Sign in to a provider and select its account in a profile to start a repair thread.');
-    const folder = resources.tools.folder(tool);
-    const thread = await threads.start({ profileId: profile.id, machineId: here.id, text: `Repair ${tool.name} on this machine\n\nAccio could not install or verify this managed tool. Diagnose the failure, fix the installation, test it and verify the result. Work on this machine only.\n\nPackage: ${tool.package}@${tool.version}\nExecutable: ${tool.executable}\nManaged installation folder: ${folder}\nInstall with npm install --prefix <that folder> ${tool.package}@${tool.version}. Keep the installation inside that managed folder.\nHealth check arguments: ${JSON.stringify(tool.checkArgs)}\nFailure:\n${detail}\n\nAccio will rerun the health check after this thread completes. Report what you changed and the commands and results that prove it works.` }, { repairToolId: tool.id });
-    return thread.id;
-  }, deps.resourceCommand);
-  resources.register(router);
-  threads.resources = resources;
-  threads.onRepairFinished = id => resources.tools.afterRepair(id);
-
-  const transport = await startTransport({ ...opts, router, serveHttp: async (req, res) => await tools.handle(req, res) || threads.assets.handle(req, res) });
-  send = transport.broadcast;
-  // Harnesses run on this computer, so they reach the server on loopback even when it listens on every interface.
-  tools.listen(`http://${['0.0.0.0', '::', ''].includes(opts.host) ? '127.0.0.1' : opts.host.includes(':') ? `[${opts.host}]` : opts.host}:${transport.port}`);
-  const reconciliation = resources.reconcile().catch(error => console.error('[resources] startup check failed', error));
-  let closing: Promise<void> | undefined;
-  return {
-    ...transport,
-    router,
-    profiles,
-    projects,
-    threads,
-    tools,
-    hub,
-    secrets,
-    settings,
-    machines,
-    resources,
-    hubUrl: hubProxy.url,
-    close: () => closing ??= (async () => {
-      const turnsClosed = threads.close();
-      const resourcesClosed = resources.close();
-      const profilesClosed = profiles.close();
-      await transport.close();
-      await turnsClosed;
-      await secrets.close();
-      await resourcesClosed;
-      await reconciliation;
-      await profilesClosed;
-      await projects.close();
-      await machines.disconnect();
-      await hubProxy.close();
-      await hub.close();
-      await resourceStore.close();
-      await settings.close();
-    })(),
-  };
+  const harnesses = [await claudeCodeInstall(), ...(codex.version ? [codex] : [])];
+  const connections = new HubConnections(opts.home, here, harnesses, { claudeCode: deps.harness ?? claudeCode, codex: deps.codexHarness ?? codexHarness(deps.codexFactory) }, (...args) => send(...args));
+  await connections.load();
+  const shouldStartLocal = !connections.initialized || connections.saved.some((s) => s.managed);
+  let local: Awaited<ReturnType<typeof startHubService>> | undefined;
+  try {
+    if (shouldStartLocal) {
+      const settings = new SharedSettings(opts.home);
+      await moveProfilesToHub(opts.home, here, settings); await settings.close();
+      local = await startHubService({ home: opts.home, host: '127.0.0.1', port: opts.hubPort, claudeFetch: deps.claudeFetch, codexFactory: deps.codexFactory, anthropicUrl: deps.anthropicUrl, openaiUrl: deps.openaiUrl, openaiFetch: deps.openaiFetch });
+      const saved = connections.saved.find((s) => s.managed);
+      if (saved) { if (saved.id !== local.trust.id) throw new Error('The managed local hub identity has changed. Restore its state before reconnecting.'); saved.url = local.url; }
+      else {
+        const code = await local.createPairingCode();
+        const paired = await fetch(local.url + '/pair', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code: code.code, machineId: here.id }) }).then((r) => r.json()) as any;
+        if (typeof paired.token !== 'string') throw new Error('Could not pair this machine with its local hub');
+        await connections.add({ id: local.trust.id, name: 'Local dev', url: local.url, token: paired.token, local: true, managed: true, home: opts.home });
+      }
+    }
+    for (const saved of connections.saved) if (!connections.workspaces.has(saved.id)) await connections.open(saved);
+    connections.global.on('machine.get', () => here);
+    const transport = await startTransport({ ...opts, router: connections.router(null), routerFor: (id) => connections.router(id), serveAsset: (req, res) => connections.asset(req, res) });
+    send = transport.broadcast;
+    const first = connections.workspaces.get(connections.defaultId!)!;
+    let closing: Promise<void> | undefined;
+    return { ...transport, router: first?.router ?? connections.global, profiles: first?.profiles, projects: first?.projects, threads: first?.threads, machines: first?.machines,
+      hub: local?.hub!, settings: local?.settings!, hubUrl: first?.client.url ?? '', connections,
+      close: () => { connections.stopAccepting(); return closing ??= (async () => { await transport.close(); await connections.close(); await local?.close(); })(); } };
+  } catch (error) { await connections.close().catch(() => {}); await local?.close().catch(() => {}); throw error; }
 }

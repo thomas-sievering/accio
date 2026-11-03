@@ -19,6 +19,7 @@ Record feature IDs and entry points in `actions.json`. Pair the action trace wit
 
 ## Features
 
+- [Hubs](hubs.md): first-device pairing, switching, per-window selection, isolated state, offline status and revocation.
 - [Profiles](profiles.md): first-run creation, settings creation, editing, cancel, delete and provider-account selection.
 - [Accounts](accounts.md): named Claude and ChatGPT accounts, provider sign-in, sign-out and deletion guards.
 - [Limits](limits.md): sidebar/composer/account-settings entries, profile scope, shared accounts, refresh, reset confirmation and connection states.

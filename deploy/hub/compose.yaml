@@ -1,0 +1,19 @@
+name: accio
+services:
+  hub:
+    image: ${ACCIO_HUB_IMAGE:?Set ACCIO_HUB_IMAGE to an immutable image reference}
+    container_name: accio-hub
+    restart: unless-stopped
+    environment:
+      ACCIO_PUBLIC_URL: https://accio.mediatom.cc
+    volumes:
+      - /data/configs/accio:/data
+    networks:
+      media:
+        aliases: [accio-hub]
+    stop_grace_period: 30s
+    security_opt: [no-new-privileges:true]
+networks:
+  media:
+    external: true
+    name: media_server_default

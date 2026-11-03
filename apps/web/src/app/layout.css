@@ -1,5 +1,22 @@
 
 /* Layout */
+.hub-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.hub-selector select {
+  min-width: 0;
+  width: 100%;
+  height: 30px;
+  color: var(--ink);
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
 .layout {
   display: grid;
   grid-template-columns: var(--sidebar-w, 272px) minmax(0, 1fr);

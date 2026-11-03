@@ -9,7 +9,7 @@ One running accio server together with the computer, files and settings it contr
 _Avoid_: Environment, host, node
 
 **Hub**:
-accio's single always-on service, reachable from anywhere, that every machine and client connects to. It holds the profiles, their accounts and the shared settings, knows which machines are paired and which are connected right now, forwards each profile's requests to that profile's accounts and no others, and relays messages between machines and clients. It is a service, not a machine: the computer that runs it may also be a machine.
+An independent service that holds profiles, provider accounts and shared settings, trusts paired machines, and forwards their model requests to the selected accounts. A machine can save several hubs, such as Home server and Local dev; each client window selects one. Hubs have separate state and durable identities. The general thread relay is future work.
 _Avoid_: Home machine, accio hub, accio proxy, CLI proxy, gateway, master, connector
 
 **Pairing**:
@@ -59,7 +59,7 @@ One login at a provider, such as a personal Anthropic account. It has a custom n
 _Avoid_: Login, sign-in (as a noun for the account), subscription, provider instance
 
 **Sign-in**:
-Signing an account in on the provider's page. Claude shows a code to paste back into accio; ChatGPT asks you to enter the device code accio displays. The account is stored on the hub only. Signing out clears its credentials while preserving its name and profile selections.
+Signing an account in on the provider's page. Claude and ChatGPT finish automatically after browser approval, using a short-lived callback on the browser's PC. Provider credentials remain on the initiating hub. Signing out clears its credentials while preserving its name and profile selections.
 _Avoid_: Login (as a verb or action), auth, connect
 
 ## Work

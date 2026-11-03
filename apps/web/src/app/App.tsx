@@ -1,3 +1,4 @@
+import { HubSelector } from '../hub/HubSelector';
 import { useCallback, useRef, useState } from 'react';
 import { LimitsProvider } from '../limits/limits';
 import type { LimitsScope } from '../limits/limitsModel';
@@ -93,6 +94,7 @@ function Shell() {
       <div className={`layout${panelOpen ? ' with-panel' : ''}`} hidden={settings !== null}>
         <aside className="sidebar">
           <div className="side-controls drag">
+            <HubSelector />
             <div className="side-tools">
               <ThreadSearch />
               <ScopeMenu onOpenProject={(p) => setSheet({ kind: 'project', id: p.id })} />
@@ -121,7 +123,7 @@ function Shell() {
               <Limits />
             </button>
             {/* The Owl, accio's agent across all threads, is still to be designed. */}
-            <button className="side-icon" title="Owl Â· coming soon" aria-label="Owl, coming soon" aria-disabled="true">
+            <button className="side-icon" title="Owl · coming soon" aria-label="Owl, coming soon" aria-disabled="true">
               <Owl />
             </button>
             <ConnectionNotice />

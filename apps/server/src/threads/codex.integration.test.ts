@@ -12,7 +12,8 @@ describe('Codex and ChatGPT accounts', () => {
   async function signIn(client: TestClient, fake: FakeCodex, name = 'Personal') {
     const account = await client.call('accounts.save', { name: `${name} ChatGPT`, providerId: 'openai' });
     const login = await client.call('accounts.beginSignIn', { id: account.id });
-    expect(login.userCode).toBe('TEST-1234');
+    expect(new URL(login.url).pathname).toBe('/oauth/authorize');
+    expect(new URL(login.url).searchParams.get('redirect_uri')).toBe('http://127.0.0.1:1455/auth/callback');
     expect(await client.call('accounts.signInStatus', { signInId: login.signInId })).toEqual({ status: 'pending' });
     await fake.latest.complete(name);
     expect(await client.call('accounts.signInStatus', { signInId: login.signInId })).toMatchObject({ status: 'complete', account: { providerId: 'openai', signedIn: true } });
@@ -121,7 +122,7 @@ describe('Codex and ChatGPT accounts', () => {
       return calls.length === 1 ? new Response('', { status: 401 }) : new Response('data: ok\n\n', { headers: { 'content-type': 'text/event-stream' } });
     } });
     const c = await t.connect(); const { profile } = await signIn(c, fake, 'Work');
-    const key = await t.app.hub.ensureProfile(profile.id);
+    const { key } = await t.app.profiles.client.call('machine.modelKey', { profileId: profile.id });
     const response = await fetch(`${t.app.hubUrl}/openai/responses`, { method: 'POST', headers: {
       authorization: `Bearer ${key}`, 'chatgpt-account-id': 'forged', 'openai-organization': 'forged-org', cookie: 'secret-cookie',
     }, body: '{}' });
@@ -136,7 +137,7 @@ describe('Codex and ChatGPT accounts', () => {
     }
     expect((await fetch(`${t.app.hubUrl}/openai/responses`, { method: 'POST', headers: { authorization: 'Bearer invalid' } })).status).toBe(401);
     const other = await c.call('profiles.save', { name: 'No login' });
-    const otherKey = await t.app.hub.ensureProfile(other.id);
+    const { key: otherKey } = await t.app.profiles.client.call('machine.modelKey', { profileId: other.id });
     expect((await fetch(`${t.app.hubUrl}/openai/responses`, { method: 'POST', headers: { authorization: `Bearer ${otherKey}` } })).status).toBe(401);
     expect((await fetch(`${t.app.hubUrl}/openai/https://evil.test`, { method: 'POST', headers: { authorization: `Bearer ${key}` } })).status).toBe(404);
     expect(calls).toHaveLength(2);

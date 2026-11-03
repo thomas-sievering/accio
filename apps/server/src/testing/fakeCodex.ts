@@ -42,7 +42,7 @@ export class FakeCodexClient implements CodexClient {
     this.requests.push({ method, params });
     let result: any = {};
     switch (method) {
-      case 'account/login/start': result = { loginId: 'login-id', verificationUrl: 'https://auth.openai.com/codex/device', userCode: 'TEST-1234' }; break;
+      case 'account/login/start': result = params.type === 'chatgpt' ? { loginId: 'login-id', authUrl: 'https://auth.openai.com/oauth/authorize?state=test-state&redirect_uri=http%3A%2F%2F127.0.0.1%3A1455%2Fauth%2Fcallback' } : { loginId: 'login-id', verificationUrl: 'https://auth.openai.com/codex/device', userCode: 'TEST-1234' }; break;
       case 'account/read': {
         const auth = JSON.parse(await readFile(join(this.options.home, 'auth.json'), 'utf8'));
         if (params.refreshToken) {
