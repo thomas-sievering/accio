@@ -3,3 +3,10 @@ packages:
   - apps/*
 allowBuilds:
   esbuild: true
+# pnpm holds back releases younger than a day. The harness SDKs (Anthropic's Agent
+# SDK and API client, OpenAI's Codex) are first-party and bumped often, so a
+# lockfile on a fresh build would block every new worktree's install until the
+# day passed.
+minimumReleaseAgeExclude:
+  - '@anthropic-ai/*'
+  - '@openai/*'

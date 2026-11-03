@@ -14,7 +14,8 @@ export function ThreadRow({ thread: t, place }: { thread: ThreadView; place: She
   const { selectedId, select, now, act } = useThreads();
   const { state } = useProjects();
   const project = state?.projects.find((p) => p.id === t.projectId)?.name;
-  const open = place === 'open';
+  // Working rows keep the full open look: project mark and the spinning status.
+  const open = place === 'open' || place === 'working';
   const openMenu = useThreadMenu();
   const onContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();

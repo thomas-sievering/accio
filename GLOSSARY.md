@@ -46,6 +46,10 @@ _Avoid_: Vendor, backend, harness
 A coding program that runs a thread's turns, such as Claude Code, Codex or pi. Some harnesses can use several providers and models, such as pi; others only one provider's. Which harnesses exist and which providers each can use is a shared setting; each machine reports which harnesses it has installed.
 _Avoid_: Agent, runtime, coding tool, provider (as T3 Code uses it)
 
+**System prompt**:
+What accio adds to a harness's own instructions for every turn: titled sections that describe accio's chat, such as how to show images inline. Each harness receives it in its own way. Claude Code gets it after its built-in system prompt and Codex as developer instructions. It is read-only and shown under Settings → System prompt.
+_Avoid_: Instructions, preamble, custom prompt
+
 **Account**:
 One login at a provider, such as a personal Anthropic account. It has a custom name, is set up independently, and can be selected by profiles. An account at Anthropic is called a Claude account; an account at OpenAI is called a ChatGPT account.
 _Avoid_: Login, sign-in (as a noun for the account), subscription, provider instance
@@ -96,7 +100,7 @@ Marking a thread as done. It stays readable and can be reopened.
 _Avoid_: Archive, close, resolve
 
 **Shelf**:
-A group of threads in the sidebar apart from the open list: Snoozed and Settled. A running thread stays in the open list.
+A group of threads in the sidebar apart from the open list: Working (a turn is running), Snoozed and Settled.
 _Avoid_: Folder, inbox, tab
 
 ## Skills

@@ -11,9 +11,10 @@ export function ThreadList() {
   const { visible, state } = useProjects();
   const { filter } = useProfiles();
 
+  const listed = shelves.open.length + shelves.working.length;
   let empty: string | null = null;
-  if (state && visible.length === 0 && shelves.open.length === 0) empty = `No projects${filter === 'all' ? '' : ' for this profile'} yet.`;
-  else if (threads && query.trim() && shelves.open.length === 0) empty = 'No threads found.';
+  if (state && visible.length === 0 && listed === 0) empty = `No projects${filter === 'all' ? '' : ' for this profile'} yet.`;
+  else if (threads && query.trim() && listed === 0) empty = 'No threads found.';
 
   return (
     <ThreadMenuProvider>

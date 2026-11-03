@@ -49,6 +49,11 @@ export class Models {
     return fallback ? { harnessId: 'codex', modelId: fallback } : selection;
   }
 
+  /** The display name of a model, when this profile's list knows it. */
+  modelName(profileId: string, selection: ModelSelection): string | undefined {
+    return this.list(profileId).models.find((m) => m.harnessId === selection.harnessId && m.id === selection.modelId)?.name;
+  }
+
   require(profileId: string, choice: ModelSelection = this.default(profileId)): ModelSelection {
     const selection = this.resolve(profileId, choice);
     if (!this.list(profileId).models.some((m) => m.harnessId === selection.harnessId && m.id === selection.modelId)) {

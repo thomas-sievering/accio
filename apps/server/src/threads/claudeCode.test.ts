@@ -86,3 +86,12 @@ it('cleans up a query that fails, and never starts an already aborted turn', asy
   expect((await turn(controller.signal).next()).done).toBe(true);
   expect(queryMock).toHaveBeenCalledOnce();
 });
+
+it('tells Claude that the chat renders inline media', async () => {
+  const q = query();
+  q.next.mockResolvedValueOnce({ done: true, value: undefined });
+  queryMock.mockReturnValue(q);
+  const iterator = turn(new AbortController().signal);
+  await iterator.next();
+  expect(queryMock.mock.calls[0]![0].options.systemPrompt).toMatchObject({ type: 'preset', preset: 'claude_code', append: expect.stringContaining('# Inline media') });
+});
