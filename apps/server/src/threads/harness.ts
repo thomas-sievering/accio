@@ -45,6 +45,8 @@ export type HarnessMessage =
   | { type: string; session_id?: string; [k: string]: unknown };
 
 export type HarnessTurn = {
+  resourceInstructions?: string;
+  mcps?: Record<string, HarnessMcp>;
   cwd: string;
   prompt: string;
   /** Harness session to continue; null starts a new one. */
@@ -58,6 +60,9 @@ export type HarnessTurn = {
   tools?: ToolAccess;
   signal: AbortSignal;
 };
+
+export type HarnessMcp = { type: 'http'; url: string; headers: Record<string, string> } | { type: 'stdio'; command: string; args: string[] };
+export type TurnResources = { env: Record<string, string>; instructions: string; mcps: Record<string, HarnessMcp>; snapshot: { tools: { id: string; version: string }[]; skills: { id: string; revision: string }[]; mcps: string[] }; release: () => void };
 
 export interface Harness {
   run(run: HarnessTurn): AsyncIterable<HarnessMessage>;

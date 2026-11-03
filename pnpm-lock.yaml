@@ -206,6 +206,9 @@ importers:
       '@accio/persistence':
         specifier: workspace:*
         version: link:../../packages/persistence
+      '@accio/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
 
   apps/server:
     dependencies:

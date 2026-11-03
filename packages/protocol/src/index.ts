@@ -1,4 +1,6 @@
 import type { z } from 'zod';
+import { resourceMethods, type ResourceEvents } from './resources.js';
+export * from './resources.js';
 import { machineMethods, type MachineEvents } from './machine.js';
 import { harnessMethods } from './harnesses.js';
 import { modelMethods, type ModelEvents } from './models.js';
@@ -18,6 +20,7 @@ export * from './threads.js';
 export * from './media.js';
 
 export const methods = {
+  ...resourceMethods,
   ...machineMethods,
   ...hubMethods,
   ...harnessMethods,
@@ -33,7 +36,7 @@ export type ParamsOf<M extends MethodName> = z.input<Methods[M]['params']>;
 export type ResultOf<M extends MethodName> = Methods[M]['result'];
 
 /** Server-pushed events and their payloads. */
-export type Events = MachineEvents & ProfileEvents & ProjectEvents & ThreadEvents & ModelEvents;
+export type Events = MachineEvents & ProfileEvents & ProjectEvents & ThreadEvents & ModelEvents & ResourceEvents;
 export type EventName = keyof Events;
 
 export const DEFAULT_PORT = 47321;

@@ -735,10 +735,11 @@ div.model-picker-empty b { color: var(--ink); font-weight: 500; }
 .composer-machine {
   max-width: 240px;
   min-width: 0;
-  padding: 4px 6px;
+  padding: 4px 24px 4px 8px;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: var(--raised);
+  background-color: var(--raised);
+  background-position: right 8px center;
   color: var(--muted);
   font: inherit;
   font-size: 13px;

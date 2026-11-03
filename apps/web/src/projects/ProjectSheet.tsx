@@ -6,12 +6,14 @@ import { useAction } from '../app/useAction';
 import { useProfiles } from '../profiles/profiles';
 import { useThreads } from '../threads/threads';
 import { useProjects } from './projects';
+import { ResourcePicker } from '../resources/ResourcePicker';
+import type { SettingsRoute } from '../app/Settings';
 
 /**
  * A project's profile and its checkouts on this machine. A checkout with threads
  * is removed only after a second, explicit click that deletes those threads too.
  */
-export function ProjectSheet({ project, onClose }: { project: ProjectView; onClose: () => void }) {
+export function ProjectSheet({ project, onClose, onOpenSettings }: { project: ProjectView; onClose: () => void; onOpenSettings: (route: SettingsRoute) => void }) {
   const client = useClient();
   const { profiles = [] } = useProfiles();
   const { checkoutsOf } = useProjects();
@@ -102,6 +104,18 @@ export function ProjectSheet({ project, onClose }: { project: ProjectView; onClo
           </div>
         </div>
         {error && <p className="error">{error}</p>}
+        <div className="field">
+          <span>Tools, MCP servers and skills</span>
+          <small className="hint">
+            Turn on what this project needs, for every checkout and thread of it. Things on everywhere or for its profile are inherited. Changes save immediately.
+          </small>
+          <ResourcePicker context={{ kind: 'project', project }} />
+          <span className="signin-links">
+            <button type="button" className="link" onClick={() => onOpenSettings({ section: 'tools' })}>Manage tools</button>
+            <button type="button" className="link" onClick={() => onOpenSettings({ section: 'mcps' })}>MCP servers</button>
+            <button type="button" className="link" onClick={() => onOpenSettings({ section: 'skills' })}>Skills</button>
+          </span>
+        </div>
       </div>
     </Sheet>
   );

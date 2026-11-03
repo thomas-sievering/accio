@@ -1,0 +1,350 @@
+/* Tools, MCP servers and skills: scope editing, per-project/profile pickers and readiness cards. */
+.scope-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-size: 13.5px;
+}
+.scope-editor legend,
+.segmented legend {
+  padding: 0;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.scope-lists {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px 24px;
+  padding-left: 24px;
+}
+.scope-lists.covered {
+  opacity: 0.55;
+}
+.scope-list,
+.resource-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.scope-list-label {
+  color: var(--dim);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.check input:disabled + span {
+  cursor: default;
+}
+.check:has(input:disabled) {
+  cursor: default;
+}
+.dim {
+  color: var(--dim);
+}
+.on-text {
+  color: var(--green) !important;
+}
+
+/* Per-project / per-profile selection */
+.resource-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  color: var(--ink);
+  font-size: 13.5px;
+}
+.resource-search {
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+}
+.resource-search:focus {
+  outline: 2px solid var(--blue);
+  outline-offset: -1px;
+}
+.picker-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 2px 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--raised);
+}
+.picker-row .check span {
+  min-width: 0;
+}
+.picker-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.picker-status {
+  padding-top: 2px;
+  color: var(--dim);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.picker-status.own {
+  color: var(--green);
+}
+.picker-status.inherited {
+  color: var(--blue);
+}
+.picker-note {
+  grid-column: 1 / -1;
+  padding-left: 23px;
+  font-size: 12px;
+}
+.picker-note .link {
+  font-size: 12px;
+}
+
+/* Readiness per machine */
+.tool-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+.tool-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+.tool-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.tool-card-head b {
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.tool-card-text {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+.tool-card-text code {
+  font: 12px/1.5 'Cascadia Code', Consolas, monospace;
+}
+.tool-card-text.failed code {
+  display: block;
+  max-height: 7.5em;
+  overflow: auto;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--code);
+  color: var(--red);
+  white-space: pre-wrap;
+}
+.tool-card .hint {
+  margin: 0;
+}
+.tool-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: auto;
+}
+.pill.busy .dot {
+  background: var(--blue);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+.pill.warn-pill {
+  color: var(--amber);
+}
+.pill.warn-pill .dot {
+  background: var(--amber);
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pill.busy .dot {
+    animation: none;
+  }
+}
+
+/* Forms */
+.field-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.field-row .field.grow {
+  flex: 1 1 220px;
+}
+.version-field {
+  flex: 0 1 160px;
+  min-width: 120px;
+}
+.field input[aria-invalid='true'] {
+  border-color: var(--red);
+}
+.field small.error {
+  font-size: 12px;
+}
+.preset {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px dashed var(--line-2);
+  border-radius: 8px;
+  font-size: 13px;
+}
+.preset code,
+.section-note code,
+.update-preview code,
+.note code,
+.hint code {
+  font: 12px/1.5 'Cascadia Code', Consolas, monospace;
+}
+.segmented {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.segmented label {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13.5px;
+}
+.segmented label.on {
+  border-color: var(--blue);
+  background: var(--raised);
+}
+.segmented input {
+  margin: 3px 0 0;
+  accent-color: var(--blue);
+}
+.segmented span {
+  display: flex;
+  flex-direction: column;
+}
+.segmented small {
+  color: var(--dim);
+  font-size: 12px;
+}
+.revision {
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--raised);
+  color: var(--muted);
+  font: 12px/1.5 'Cascadia Code', Consolas, monospace;
+}
+
+/* Skill sources */
+.update-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.update-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--raised);
+}
+.update-changes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+.update-changes li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+.update-changes small {
+  color: var(--muted);
+}
+.tag {
+  padding: 1px 7px;
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+.tag.ok {
+  color: var(--green);
+}
+.tag.bad {
+  color: var(--red);
+}
+.section-note {
+  margin: 0 0 10px 14px;
+}
+.skill-row + .skill-row {
+  border-top: 1px solid var(--line);
+}
+.skill-row .setting-value {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.skill-panel {
+  margin: 0 16px 16px;
+  border-radius: 8px;
+  background: var(--raised);
+}
+.settings-section > .note {
+  margin-bottom: 10px;
+}
+
+@media (max-width: 640px) {
+  .setting {
+    flex-wrap: wrap;
+  }
+  .setting-value {
+    max-width: 100%;
+  }
+  .scope-lists {
+    padding-left: 0;
+  }
+  .picker-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .picker-status {
+    padding-left: 23px;
+  }
+}

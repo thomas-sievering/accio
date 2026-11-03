@@ -43,6 +43,8 @@ Agents can use the project-local [3-verify skill](.agents/skills/3-verify/SKILL.
 
 State lives in `~/.accio` (`ACCIO_HOME` overrides it; `ACCIO_PORT` and `ACCIO_HUB_PORT` the ports, default 47321 and 47322). Named accounts, Claude credentials, ChatGPT account metadata and profile selections are in `~/.accio/hub/profiles.json`; Codex stores ChatGPT credentials under `~/.accio/hub/codex/<credential-id>/auth.json`. Shared profile names, machine folders and model favorites are in `~/.accio/hub/settings.json`. Both JSON stores use the shared atomic writer in `packages/persistence`. State from before the Account → Profile rename moves to the new names on first start.
 
+Settings also manages **Tools**, **MCP servers** and **Skills**. Enable an item globally, for profiles or for projects, or keep it optional in the library. Tools use exact npm versions in Accio-owned folders; failed checks start a local repair thread when a signed-in profile is available, and a completed repair is checked again. Remote MCP sign-in and tokens stay on the hub. Git skill sources support update previews and returning to previous revisions; copying a skill into a project makes independent files for that project's Git history. See [ADR 0012](docs/adr/0012-the-hub-manages-tools-mcp-servers-and-skills.md) for execution, credentials and the current single-machine boundary.
+
 ## Layout
 
 Code is grouped by domain, one vertical slice each: `machine`, `profiles`, `projects`, `threads`, `tools`.

@@ -8,6 +8,7 @@ import type { AssetUrl, MediaBinding, ThreadAsset, ToolDetails } from './media.j
  * It keeps the profile it started with for its whole life.
  */
 export type ThreadView = {
+  repairToolId?: string;
   id: string;
   /** Empty for a thread started with No project. */
   checkoutId: string;
