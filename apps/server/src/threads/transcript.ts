@@ -1,5 +1,6 @@
 ﻿import { isDeepStrictEqual } from 'node:util';
 import type { TranscriptItem } from '@accio/protocol';
+import { shellCommandSummary } from '@accio/protocol';
 import type { HarnessMessage, HarnessEvent, ContentBlock, StreamEvent } from './harness.js';
 
 type ToolItem = Extract<TranscriptItem, { kind: 'tool' }>;
@@ -311,13 +312,14 @@ export class TurnTranscript {
 }
 
 /** One line that says what a tool call does, for the collapsed row. */
-export function summarizeTool(_name: string, input: unknown): string {
+export function summarizeTool(name: string, input: unknown): string {
   const i = input !== null && typeof input === 'object' ? input as Record<string, unknown> : {};
   const pick = (...keys: string[]) => keys.map((k) => i[k]).find((v) => typeof v === 'string' && v.length > 0) as string | undefined;
   const line =
     pick('command', 'file_path', 'notebook_path', 'pattern', 'url', 'query', 'description', 'prompt', 'skill') ??
     (typeof input === 'string' ? input : Object.keys(i).length ? JSON.stringify(i) : '');
-  const first = omitInlineData(line).split('\n')[0] ?? '';
+  const display = name === 'Shell' || name === 'Bash' ? shellCommandSummary(line) : line;
+  const first = omitInlineData(display).split('\n')[0] ?? '';
   return first.length > 200 ? `${first.slice(0, 199)}…` : first;
 }
 
