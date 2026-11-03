@@ -2,10 +2,16 @@ import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEv
 import { modelKey, type ModelSelection, type ModelsState } from '@accio/protocol';
 import { useClient, useConnectionStatus } from '../app/connection';
 import { Check, ProviderLogo, Star } from '../app/icons';
-import { EffortControl } from './EffortControl';
-import { PresetControl, isPreset, usedUpText } from './PresetControl';
+import { Meter, effortSteps } from './EffortControl';
+import { choiceDetail, presetSteps, usedUpText } from './PresetControl';
+import { StepSlider, useSteps, useWheelSteps } from './steps';
 
-/** A profile-scoped picker: favourites first, then each provider/harness pair. */
+/**
+ * GLOSSARY: Preset, Effort. One chip for what a thread runs: the preset level when the
+ * model and effort are one, else the model and an effort meter. Scrolling over it steps
+ * presets. Its panel has the preset slider, the profile's models (favourites first,
+ * then each provider/harness pair) and the effort slider.
+ */
 export function ModelPicker({ profileId, harnessId, value, onChange, disabled = false }: {
   profileId?: string;
   harnessId?: string;
@@ -17,6 +23,7 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
   const status = useConnectionStatus();
   const id = useId();
   const panel = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
   const [loaded, setLoaded] = useState<{ profileId: string; state: ModelsState }>();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -107,28 +114,54 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
 
   // Presets never cross harnesses: a thread's are its own harness's, a draft's those of the model it has.
   const presets = (data?.presets ?? []).filter((p) => p.harnessId === (harnessId ?? current.harnessId));
-  const onPreset = presets.some((p) => isPreset(p, current, models));
-  const controlsDisabled = disabled || !profileId || status !== 'open';
+  const preset = presetSteps(presets, models, current);
+  const presetStepper = useSteps(preset.steps, preset.index, onChange, setError);
+  useWheelSteps(trigger, presetStepper.step);
+  const effort = selected && selected.efforts.length > 0 ? effortSteps(selected, current.effort) : undefined;
+  const effortStepper = useSteps(effort?.steps ?? [], effort?.index ?? -1,
+    (next) => onChange({ harnessId: current.harnessId, modelId: current.modelId, ...(next ? { effort: next } : {}) }), setError);
+  const shownPreset = presets[presetStepper.shown];
+  const description = shownPreset ? `${preset.steps[presetStepper.shown]!.label} preset · ${choiceDetail(shownPreset.model, models)}` : choiceDetail(current, models);
 
   return <span className="model-choice">
-    {presets.length > 0 && <PresetControl presets={presets} models={models} value={current} disabled={controlsDisabled} onChange={onChange} />}
-    <button type="button" className="model-trigger" popoverTarget={id} disabled={disabled || busy || !profileId || status !== 'open'} aria-label={`Select model: ${selected?.name ?? fallbackName}`}
+    <button type="button" ref={trigger} className={`model-trigger${shownPreset ? ` on-preset tone-${shownPreset.level}` : ` tone-${effort?.tone(effortStepper.shown) ?? 'none'}`}`} popoverTarget={id}
+      disabled={disabled || busy || !profileId || status !== 'open'} aria-label={`Select model: ${description}`} title={`${description}${presets.length ? ' · scroll to change preset' : ''}`}
+      onKeyDown={(event) => {
+        if (!presets.length) return;
+        if (event.key === 'ArrowUp') { event.preventDefault(); presetStepper.step(1); }
+        if (event.key === 'ArrowDown') { event.preventDefault(); presetStepper.step(-1); }
+      }}
       onClick={(event) => {
         const rect = event.currentTarget.getBoundingClientRect();
         const width = Math.min(340, window.innerWidth - 24);
         const above = rect.top >= window.innerHeight - rect.bottom;
         const room = (above ? rect.top : window.innerHeight - rect.bottom) - 20;
-        // One height for every tab: the longest list or the rail, whichever is taller.
+        // One height for every tab: the longest list or the rail, whichever is taller, plus the sliders.
         const longest = Math.max(favorites.size * 33, ...groups.map((g) => models.filter((m) => JSON.stringify([m.providerId, m.harnessId]) === g.id).length * 33));
-        const height = Math.min(Math.max(longest + 14, (groups.length + 1) * 40 + 12, 172), 420, room);
+        const sliders = (presets.length ? 96 : 0) + (effort ? 76 : 0);
+        const height = Math.min(Math.max(longest + 14, (groups.length + 1) * 40 + 12, 172) + sliders, 560, room);
         setPosition({ width, height, left: Math.max(12, Math.min(rect.left, window.innerWidth - width - 12)),
           ...(above ? { bottom: window.innerHeight - rect.top + 8, top: 'auto' } : { top: rect.bottom + 8, bottom: 'auto' }) });
       }}>
-      <ProviderLogo providerId={selected?.providerId ?? (value.harnessId === 'codex' ? 'openai' : 'anthropic')} />
-      <span>{shortName}</span>
+      <span key={presetStepper.bump} className={presetStepper.bump ? 'model-trigger-content bumped' : 'model-trigger-content'}>
+        {shownPreset ? <><i className="preset-dot" aria-hidden />{preset.steps[presetStepper.shown]!.label}</> : <>
+          <ProviderLogo providerId={selected?.providerId ?? (value.harnessId === 'codex' ? 'openai' : 'anthropic')} />
+          <span>{shortName}</span>
+          {effort && <Meter levels={effort.levels} filled={effort.filled(effortStepper.shown)} />}
+        </>}
+      </span>
     </button>
-    <div id={id} ref={panel} popover="auto" className="model-picker" style={position} role="dialog" aria-label="Choose a model" onKeyDown={move}
-      onToggle={(event) => { if (event.newState === 'open') { setTab(openingTab()); focusRow(); } }}>
+    <div id={id} ref={panel} popover="auto" className="model-picker" style={position} role="dialog" aria-label="Choose a model"
+      onKeyDown={(event) => { if (!(event.target instanceof HTMLInputElement)) move(event); }}
+      onToggle={(event) => {
+        if (event.newState !== 'open') return;
+        setTab(openingTab());
+        // With presets, the arrow keys step them straight away; Tab reaches the models.
+        if (presets.length) requestAnimationFrame(() => panel.current?.querySelector<HTMLInputElement>('input[aria-label="Preset"]')?.focus());
+        else focusRow();
+      }}>
+      {presets.length > 0 && <StepSlider name="Preset" steps={preset.steps} shown={presetStepper.shown} settle={presetStepper.settle}
+        tone={preset.tone(presetStepper.shown)} detail={shownPreset ? choiceDetail(shownPreset.model, models) : 'Your own model and effort'} />}
       <nav className="model-picker-tabs" aria-label="Model groups">
         <button type="button" className="favorite" aria-pressed={activeTab === 'favorites'} aria-label="Favourites" title="Favourites" onClick={() => setTab('favorites')}>
           <Star filled />
@@ -165,10 +198,9 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
           </div>;
         })}
       </div>
+      {effort && <StepSlider name="Effort" steps={effort.steps} shown={effortStepper.shown} settle={effortStepper.settle} tone={effort.tone(effortStepper.shown)} />}
       {error && <p className="error model-picker-error" role="alert">{error}</p>}
     </div>
-    {selected && selected.efforts.length > 0 && <EffortControl key={modelKey(current)} model={selected} value={current.effort} disabled={controlsDisabled} quiet={onPreset}
-      onChange={(effort) => onChange({ harnessId: current.harnessId, modelId: current.modelId, ...(effort ? { effort } : {}) })} />}
   </span>;
 }
 

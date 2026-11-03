@@ -196,4 +196,3 @@
 }
 .preset-setting select:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .preset-setting-title { display: inline-flex; align-items: center; gap: 8px; padding-left: 12px; font-weight: 500; }
-.preset-setting-title.tone-high { --tone: var(--blue); }

@@ -1,6 +1,6 @@
 import type { ModelSelection, ModelView, PresetLevel, PresetView, UsedUpLimit } from '@accio/protocol';
 import { effortName } from './EffortControl';
-import { StepChip } from './StepChip';
+import type { Step } from './steps';
 
 const NAMES: Record<PresetLevel, [label: string, short: string]> = { low: ['Low', 'Low'], medium: ['Medium', 'Med'], high: ['High', 'High'], ultra: ['Ultra', 'Ultra'] };
 
@@ -17,31 +17,20 @@ export function usedUpText(limit: UsedUpLimit) {
   return `${limit.label} is used up${at ? ` · resets ${at}` : ''}`;
 }
 
+/** What a choice runs, such as "Claude Opus · High effort". */
+export function choiceDetail(model: ModelSelection, models: ModelView[]) {
+  const name = models.find((m) => m.harnessId === model.harnessId && m.id === model.modelId)?.name ?? model.modelId;
+  return `${name} · ${model.effort ? `${effortName(model.effort)} effort` : 'default effort'}`;
+}
+
 /**
- * GLOSSARY: Preset. The level chip on the left of the composer: Low, Medium, High or
- * Ultra, each a model and effort of the thread's harness. Scrolling passes over a level
- * whose model is used up. "Custom" when the model or effort was chosen another way.
+ * GLOSSARY: Preset. A harness's levels as steps: Low, Medium, High and Ultra. A level
+ * whose model is used up cannot be chosen until it resets.
  */
-export function PresetControl({ presets, models, value, onChange, disabled = false }: {
-  presets: PresetView[];
-  models: ModelView[];
-  value: ModelSelection;
-  onChange: (model: ModelSelection) => Promise<void>;
-  disabled?: boolean;
-}) {
-  const modelOf = (p: PresetView) => models.find((m) => m.harnessId === p.model.harnessId && m.id === p.model.modelId);
-  const steps = presets.map((p) => {
-    const limited = modelOf(p)?.limited;
+export function presetSteps(presets: PresetView[], models: ModelView[], value: ModelSelection) {
+  const steps: Step<ModelSelection>[] = presets.map((p) => {
+    const limited = models.find((m) => m.harnessId === p.model.harnessId && m.id === p.model.modelId)?.limited;
     return { value: p.model, label: NAMES[p.level][0], short: NAMES[p.level][1], ...(limited ? { unavailable: usedUpText(limited) } : {}) };
   });
-  return <StepChip name="Preset" className="preset-chip" steps={steps} index={presets.findIndex((p) => isPreset(p, value, models))} disabled={disabled}
-    onChange={onChange}
-    tone={(i) => presets[i]?.level ?? 'none'}
-    chip={(_, label) => <><i className="preset-dot" aria-hidden />{label}</>}
-    detail={(i) => {
-      const preset = presets[i];
-      if (!preset) return 'Your own model and effort';
-      const effort = preset.model.effort;
-      return `${modelOf(preset)?.name ?? preset.model.modelId} · ${effort ? `${effortName(effort)} effort` : 'default effort'}`;
-    }} />;
+  return { steps, index: presets.findIndex((p) => isPreset(p, value, models)), tone: (i: number) => presets[i]?.level ?? 'none' };
 }
