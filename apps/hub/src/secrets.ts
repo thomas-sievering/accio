@@ -6,6 +6,7 @@ import type { SecretSummary } from '@accio/protocol';
 
 type StoredSecret = SecretSummary & { ciphertext: string; nonce: string; tag: string };
 export type SecretScope = { profileId: string; projectId: string | null; slot: string };
+export type SecretsAccess = Pick<SecretsVault, 'status' | 'list' | 'inUse' | 'current' | 'save' | 'remove' | 'bind' | 'resolve' | 'used' | 'onChanged' | 'close'>;
 export class SecretStoreError extends Error {}
 const unavailable = 'Saved secrets are unavailable. Configure a 32-byte base64 ACCIO_SECRET_KEY on a headless Hub, or use Windows user-protected storage. You can still use a secret once.';
 

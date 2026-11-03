@@ -34,6 +34,9 @@ jobs:
       - run: pnpm --config.minimumReleaseAge=0 install --frozen-lockfile --ignore-scripts
       - run: pnpm --config.minimumReleaseAge=0 typecheck
       - run: pnpm --config.minimumReleaseAge=0 test
+        env:
+          # Disposable encryption backend for isolated Linux test homes.
+          ACCIO_SECRET_KEY: KioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKio=
   image:
     needs: verify
     runs-on: ubuntu-latest

@@ -5,6 +5,7 @@ import { request } from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
 import { startHubService } from './service.js';
 import { HubClient } from './client.js';
+import { remoteSecrets } from './secretClient.js';
 
 describe('standalone hub trust and network boundary', () => {
   const cleanup: (() => Promise<unknown>)[] = [];
@@ -14,7 +15,7 @@ describe('standalone hub trust and network boundary', () => {
     cleanup.push(() => rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
     const forwarded: string[] = [];
     const mcpForwarded: string[] = [];
-    const service = await startHubService({ home, port: 0, claudeFetch: async (url, init) => {
+    const service = await startHubService({ home, port: 0, secretKey: Buffer.alloc(32, 42).toString('base64'), claudeFetch: async (url, init) => {
       if (String(url).includes('/oauth/token')) return Response.json({ access_token: 'private-provider-token', refresh_token: 'private-refresh-token', expires_in: 3600, account: { uuid: 'me', email_address: 'me@example.com' } });
       forwarded.push(new Headers(init?.headers).get('authorization') ?? '');
       return new Response('data: hello\n\n', { headers: { 'content-type': 'text/event-stream' } });
@@ -109,5 +110,34 @@ describe('standalone hub trust and network boundary', () => {
     await second.client.call('hub.revokeMachine', { machineId: 'first' });
     expect((await send()).status).toBe(403);
     expect(second.client.snapshot.resources.mcps[0]?.signedIn).toBe(true);
+  });
+  it('shares secret metadata, authorizes values by scope, and invalidates remote copies after rotation and revocation', async () => {
+    const { home, service, pair } = await fixture();
+    const first = await pair('first'); const second = await pair('second');
+    const personal = await first.client.call('profiles.save', { name: 'Personal' });
+    const work = await first.client.call('profiles.save', { name: 'Work' });
+    const vault = remoteSecrets(first.client); cleanup.push(() => vault.close());
+    const scope = { profileId: personal.id, projectId: 'docs', slot: 'pages.deploy:docs' };
+    const saved = await vault.save({ profileId: personal.id, name: 'Deploy', slot: scope.slot, projectIds: ['docs'], value: 'private-secret-marker' });
+    const changes: string[] = []; vault.onChanged(id => { changes.push(id); });
+    expect((await vault.resolve(scope))?.value).toBe('private-secret-marker');
+    expect(await vault.resolve({ ...scope, profileId: work.id })).toBeNull();
+    expect(await vault.resolve({ ...scope, projectId: 'other' })).toBeNull();
+    await expect(vault.bind(saved.id, { ...scope, profileId: work.id })).rejects.toThrow('cannot be assigned');
+    await expect(second.client.call('profiles.delete', { id: personal.id })).rejects.toThrow('saved secrets');
+    const { key } = await first.client.call('machine.modelKey', { profileId: personal.id });
+    expect((await fetch(service.url + '/rpc', { method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' }, body: JSON.stringify({ method: 'secrets.resolve', params: scope }) })).status).toBe(401);
+    expect(JSON.stringify(first.client.snapshot)).not.toContain('private-secret-marker');
+    expect(await readFile(join(home, 'hub/secrets/values.json'), 'utf8')).not.toContain('private-secret-marker');
+    await second.client.call('secrets.save', { ...saved, value: 'replacement-secret-marker' });
+    await expect.poll(() => vault.current(saved.id, saved.version, scope)).toBe(false);
+    await expect(vault.used(saved.id, saved.version, scope)).rejects.toThrow('changed');
+    expect(changes).toContain(saved.id);
+    const replacement = await vault.resolve(scope); expect(replacement?.value).toBe('replacement-secret-marker');
+    await second.client.call('hub.revokeMachine', { machineId: 'first' });
+    await expect.poll(() => first.client.status).toBe('offline');
+    expect(vault.current(saved.id, replacement!.metadata.version, scope)).toBe(false);
+    await expect(vault.resolve(scope)).rejects.toThrow('not paired');
+    expect(JSON.stringify(first.client.snapshot)).not.toContain('replacement-secret-marker');
   });
 });

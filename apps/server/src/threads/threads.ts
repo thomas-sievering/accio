@@ -37,7 +37,7 @@ import { ThreadAssets } from './assets.js';
 import { ThreadContent } from './content.js';
 import { markdownReferences } from './markdown.js';
 import { SecretRequests } from '../secrets/secrets.js';
-import type { SecretsVault } from '@accio/hub';
+import type { SecretsAccess } from '@accio/hub';
 import { isChoiceTool, parseChoice, pickPrompt } from './choice.js';
 import type { AccioTools, ToolAccess } from '../tools/tools.js';
 import { DeliveryGit, DeliveryPending, deliveryPrompt } from './delivery.js';
@@ -80,7 +80,7 @@ export class Threads {
     private broadcast: Broadcast,
     private models: Models,
     private machines: Machines,
-    vault: SecretsVault,
+    vault: SecretsAccess,
     private tools?: AccioTools,
   ) {
     this.file = new JsonFile(join(home, 'threads.json'), () => []);

@@ -4,6 +4,7 @@ services:
     image: ${ACCIO_HUB_IMAGE:?Set ACCIO_HUB_IMAGE to an immutable image reference}
     container_name: accio-hub
     restart: unless-stopped
+    env_file: .secrets.env
     environment:
       ACCIO_PUBLIC_URL: https://accio.mediatom.cc
     volumes:

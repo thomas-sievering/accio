@@ -12,7 +12,7 @@ describe('named hub connections and work ownership', () => {
   async function fixture(harness = new FakeHarness()) {
     const home = await mkdtemp(join(tmpdir(), 'accio-other-hub-'));
     cleanup.push(() => rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
-    const other = await startHubService({ home, port: 0, claudeFetch: fakeClaudeFetch }); cleanup.push(() => other.close());
+    const other = await startHubService({ home, port: 0, secretKey: Buffer.alloc(32, 31).toString('base64'), claudeFetch: fakeClaudeFetch }); cleanup.push(() => other.close());
     const app = await startTestApp({ harness }); cleanup.push(() => app.stop());
     const local = await app.connect();
     const { code } = await other.createPairingCode();
@@ -73,4 +73,30 @@ describe('named hub connections and work ownership', () => {
     expect((await root.call('profiles.list', {})).map((p) => p.name)).toEqual(['Local']);
     expect((await otherClient.call('profiles.list', {})).map((p) => p.name)).toEqual(['Remote']);
   });
+  it('delivers a remote saved secret on the machine and removes the file when the hub revokes it', async () => {
+    const held = gate(); cleanup.push(async () => held.release());
+    let delivered: string | undefined;
+    const harness = new FakeHarness(async function* (run) {
+      const result = await run.requestSecret!({ slot: 'deploy:test', label: 'Deploy', reason: 'Verify remote delivery' });
+      if (result.status !== 'provided') throw new Error('Expected saved secret');
+      expect(await readFile(result.file, 'utf8')).toBe('remote-only-marker');
+      delivered = result.file;
+      await held.opened; yield* replyWith('done');
+    });
+    const { app, local, remote, home, saved } = await fixture(harness);
+    const a = await local.signedIn('Personal'); const b = await remote.signedIn('Personal');
+    expect(a.id).toBe(b.id);
+    const secret = await remote.call('secrets.save', { profileId: b.id, name: 'Deploy', slot: 'deploy:test', profileWide: true, projectIds: [], value: 'remote-only-marker' });
+    expect(await local.call('secrets.list', { profileId: a.id })).toEqual([]);
+    const thread = await remote.call('threads.start', { profileId: b.id, text: 'Use the saved credential' });
+    await expect.poll(() => delivered, { timeout: 10_000 }).toBeDefined();
+    expect(delivered!.startsWith(join(app.app.connections.workspace(saved.id).home, 'secret-delivery'))).toBe(true);
+    expect(await readFile(join(home, 'hub/secrets/values.json'), 'utf8')).not.toContain('remote-only-marker');
+    expect(await readFile(join(app.home, 'hub-connections.json'), 'utf8')).not.toContain('remote-only-marker');
+    await remote.call('secrets.delete', { id: secret.id });
+    await expect(readFile(delivered!)).rejects.toThrow();
+    expect(JSON.stringify(await remote.call('threads.transcript', { threadId: thread.id }))).not.toContain('remote-only-marker');
+    held.release();
+    await expect.poll(async () => (await remote.call('threads.list', {}))[0]?.status, { timeout: 10_000 }).toBe('idle');
+  }, 20_000);
 });

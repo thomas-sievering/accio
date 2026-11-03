@@ -1,7 +1,8 @@
 import { createServer, request as httpRequest, type IncomingMessage, type ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { WebSocket, WebSocketServer } from 'ws';
-import { methods, ResourceScope, type AccountView, type AccountLimitsView, type ProfileView, type ResourcesState } from '@accio/protocol';
+import { z } from 'zod';
+import { methods, ResourceScope, SecretSlot, type AccountView, type AccountLimitsView, type ProfileView, type ResourcesState, type SecretSummary } from '@accio/protocol';
 import { Hub } from './hub.js';
 import { SharedSettings, type MachineHello, type SharedSeed } from './sharedSettings.js';
 import { OpenAIAuth, type CodexModel } from './openaiAuth.js';
@@ -13,6 +14,7 @@ import { profileViews, saveSharedProfile } from './profile.js';
 import { Resources } from './resources.js';
 import { McpGateway } from './mcp.js';
 import { RESOURCE_WRITES } from './resourceClient.js';
+import { SecretsVault, SecretStoreError } from './secrets.js';
 
 export const HUB_PROTOCOL = 1;
 export type HubSnapshot = {
@@ -24,11 +26,19 @@ export type HubSnapshot = {
   store: string; settingsStore: string;
   resources: ResourcesState;
   limits: AccountLimitsView[];
+  secrets: SecretSummary[];
 };
 export type HubServiceOptions = {
   home: string; host?: string; port?: number; seed?: () => Promise<SharedSeed>;
   claudeFetch?: Fetch; codexFactory?: CodexFactory; anthropicUrl?: string;
-  openaiUrl?: string; openaiFetch?: Fetch; mcpFetch?: Fetch; publicUrl?: string;
+  openaiUrl?: string; openaiFetch?: Fetch; mcpFetch?: Fetch; publicUrl?: string; secretKey?: string;
+};
+const SecretId = z.string().min(1).max(160);
+const SecretScope = z.object({ profileId: SecretId, projectId: SecretId.nullable(), slot: SecretSlot });
+const secretCalls = {
+  'secrets.resolve': SecretScope,
+  'secrets.bind': z.object({ id: SecretId, scope: SecretScope }),
+  'secrets.used': z.object({ id: SecretId, version: z.number().int().positive(), scope: SecretScope }),
 };
 type Login = { machineId: string; accountId: string; startedAt: number; complete?: AccountView };
 
@@ -38,9 +48,10 @@ export async function startHubService(opts: HubServiceOptions) {
   const settings = new SharedSettings(opts.home);
   const trust = new HubTrust(opts.home);
   const resources = new Resources(opts.home);
+  const secrets = new SecretsVault(opts.home, opts.secretKey);
   const mcp = new McpGateway(resources, opts.mcpFetch);
   const grants = new Map<string, { machineId: string; release(): void }>();
-  await hub.load(); await settings.load(opts.seed); await trust.load(); await resources.load();
+  await hub.load(); await settings.load(opts.seed); await trust.load(); await resources.load(); await secrets.load();
   const proxy = await startHubProxy({ hub, host: '127.0.0.1', port: 0, upstream: opts.anthropicUrl, fetchImpl: opts.claudeFetch, openaiUpstream: opts.openaiUrl, openaiFetch: opts.openaiFetch });
   const sockets = new WebSocketServer({ noServer: true, maxPayload: 16_384 });
   const owners = new Map<WebSocket, string>();
@@ -54,11 +65,12 @@ export async function startHubService(opts: HubServiceOptions) {
     const profiles = settings.profiles();
     return { hubId: trust.id, protocol: HUB_PROTOCOL, revision, epoch, profiles: profileViews(profiles, hub), accounts: hub.accountViews(), machines: settings.machines(),
       favorites: Object.fromEntries(profiles.map((p) => [p.id, settings.modelFavorites(p.id)])),
-      models: Object.fromEntries(profiles.map((p) => [p.id, hub.codexModels(p.id)])), resources: resources.state(), limits: hub.limits.views(), store: hub.storePath, settingsStore: settings.storePath };
+      models: Object.fromEntries(profiles.map((p) => [p.id, hub.codexModels(p.id)])), resources: resources.state(), limits: hub.limits.views(), secrets: profiles.flatMap(p => secrets.list(p.id)), store: hub.storePath, settingsStore: settings.storePath };
   }
   function announce() { revision++; for (const ws of sockets.clients) if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ revision })); }
   settings.onMachinesChanged(announce);
   hub.limits.subscribe(announce);
+  secrets.onChanged(announce);
   function auth(req: IncomingMessage) { const token = /^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1]; return token ? trust.authenticate(token) : undefined; }
   function login(id: string, machineId: string) {
     const pending = logins.get(id);
@@ -66,7 +78,7 @@ export async function startHubService(opts: HubServiceOptions) {
     return pending;
   }
   async function execute(machineId: string, method: string, raw: any): Promise<unknown> {
-    const schema = (methods as Record<string, any>)[method]?.params;
+    const schema = (methods as Record<string, any>)[method]?.params ?? (secretCalls as Record<string, z.ZodType>)[method];
     const parsed = schema?.safeParse(raw);
     if (parsed && !parsed.success) throw new SignInError('Invalid hub request parameters');
     const p = parsed ? parsed.data : raw;
@@ -95,6 +107,16 @@ export async function startHubService(opts: HubServiceOptions) {
       case 'accounts.list': return hub.accountViews();
       case 'accounts.limits': return hub.limits.views();
       case 'accounts.refreshLimits': return hub.refreshLimits(p.accountIds, p.force);
+      case 'secrets.status': return secrets.status();
+      case 'secrets.list': return secrets.list(p.profileId);
+      case 'secrets.save': {
+        if (!settings.profiles().some(profile => profile.id === p.profileId)) throw new SecretStoreError('No such profile.');
+        return secrets.save(p);
+      }
+      case 'secrets.delete': await secrets.remove(p.id); return null;
+      case 'secrets.resolve': return secrets.resolve(p);
+      case 'secrets.bind': await secrets.bind(p.id, p.scope); return null;
+      case 'secrets.used': await secrets.used(p.id, p.version, p.scope); return null;
       case 'resources.write': {
         if (!RESOURCE_WRITES.includes(p.method) || !Array.isArray(p.args) || p.args.length > 2) throw new SignInError('Invalid resource mutation');
         const args = [...p.args];
@@ -170,6 +192,7 @@ export async function startHubService(opts: HubServiceOptions) {
       }
       case 'profiles.delete': {
         if (!settings.profiles().some((profile) => profile.id === p.id)) throw new SignInError(`No profile ${p.id}`);
+        if (secrets.inUse(p.id)) throw new SignInError('This profile still has saved secrets. Delete them first.');
         if (trust.referenced(p.id)) throw new SignInError('This profile is still used by projects or threads on a paired machine. Remove those references first.');
         await hub.removeProfile(p.id, () => settings.setProfiles(settings.profiles().filter((profile) => profile.id !== p.id))); return null;
       }
@@ -181,8 +204,8 @@ export async function startHubService(opts: HubServiceOptions) {
   }
   const server = createServer((req, res) => { void handle(req, res).catch((error) => {
     if (res.headersSent) { res.destroy(); return; }
-    const status = error instanceof SignInError ? 400 : 500;
-    json(res, status, { error: error instanceof SignInError ? error.message : 'Hub request failed. Check the hub service.' });
+    const safe = error instanceof SignInError || error instanceof SecretStoreError;
+    json(res, safe ? 400 : 500, { error: safe ? error.message : 'Hub request failed. Check the hub service.' });
   }); });
   async function handle(req: IncomingMessage, res: ServerResponse) {
     const target = new URL(req.url ?? '/', 'http://localhost');
@@ -265,8 +288,8 @@ export async function startHubService(opts: HubServiceOptions) {
   const port = typeof address === 'object' && address ? address.port : opts.port!;
   const url = `http://${opts.host ?? '127.0.0.1'}:${port}`;
   mcp.setUrl(opts.publicUrl ?? url);
-  return { hub, settings, resources, trust, port, url, snapshot, createPairingCode: () => HubTrust.createCode(opts.home),
-    async close() { closing = true; clearInterval(heartbeat); for (const ws of sockets.clients) ws.terminate(); await new Promise<void>((resolve) => server.close(() => resolve())); sockets.close(); await queue; for (const grant of grants.values()) grant.release(); await proxy.close(); await hub.close(); await resources.close(); await settings.close(); await trust.close(); } };
+  return { hub, settings, resources, secrets, trust, port, url, snapshot, createPairingCode: () => HubTrust.createCode(opts.home),
+    async close() { closing = true; clearInterval(heartbeat); for (const ws of sockets.clients) ws.terminate(); await new Promise<void>((resolve) => server.close(() => resolve())); sockets.close(); await queue; for (const grant of grants.values()) grant.release(); await proxy.close(); await hub.close(); await secrets.close(); await resources.close(); await settings.close(); await trust.close(); } };
 }
 
 function json(res: ServerResponse, status: number, value: unknown) { res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify(value)); }

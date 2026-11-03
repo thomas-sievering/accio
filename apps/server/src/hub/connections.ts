@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { access } from 'node:fs/promises';
 import { JsonFile } from '@accio/persistence';
-import { HubClient, hubAddress, remoteSettings, remoteResources, remoteMcp, type HubSnapshot, type HarnessInstall } from '@accio/hub';
+import { HubClient, hubAddress, remoteSettings, remoteResources, remoteMcp, remoteSecrets, type SecretsAccess, type HubSnapshot, type HarnessInstall } from '@accio/hub';
 import type { HubConnectionView, MachineInfo, MethodName } from '@accio/protocol';
 import { Router, UserError, type Broadcast } from '../rpc/router.js';
 import { Profiles } from '../profiles/profiles.js';
@@ -17,7 +17,7 @@ import { ResourceManager } from '../resources/resources.js';
 import type { CommandRunner } from '../resources/process.js';
 
 export type SavedHub = { id: string; name: string; url: string; token: string; home: string; local: boolean; managed?: boolean; snapshot?: HubSnapshot };
-export type HubWorkspace = { client: HubClient; router: Router; profiles: Profiles; machines: Machines; models: Models; projects: Projects; threads: Threads; tools: AccioTools; resources: ResourceManager; home: string; initialize(origin: string): void; close(): Promise<void> };
+export type HubWorkspace = { client: HubClient; router: Router; profiles: Profiles; machines: Machines; models: Models; projects: Projects; threads: Threads; tools: AccioTools; resources: ResourceManager; secrets: SecretsAccess; home: string; initialize(origin: string): void; close(): Promise<void> };
 
 /** One local workspace per hub: identical profile IDs cannot alias local work or configuration. */
 export class HubConnections {
@@ -64,7 +64,8 @@ export class HubConnections {
     router.on('hub.get', () => ({ runs: record.local ? 'local' : 'remote', hubId: record.id, url: record.url, reachable: client.status === 'connected', store: client.snapshot?.store ?? '', settingsStore: client.snapshot?.settingsStore ?? '' }));
     const projects = new Projects(record.home, profiles, machines, broadcast); await projects.load(); projects.register(router);
     const tools = new AccioTools([offerChoice]);
-    const threads = new Threads(record.home, profiles, projects, this.runners, broadcast, models, machines, tools); await threads.load(); threads.register(router);
+    const secrets = remoteSecrets(client);
+    const threads = new Threads(record.home, profiles, projects, this.runners, broadcast, models, machines, secrets, tools); await threads.load(); threads.register(router);
     const resources = new ResourceManager(record.home, this.here.id, remoteResources(client), remoteMcp(client), profiles, projects, broadcast, async (tool, detail) => {
       const candidates = tool.repairProfileId ? [profiles.require(tool.repairProfileId)] : profiles.all();
       const profile = candidates.find(p => models.list(p.id).models.length > 0);
@@ -75,9 +76,9 @@ export class HubConnections {
     resources.register(router); threads.resources = resources; threads.onRepairFinished = id => resources.tools.afterRepair(id);
     profiles.setReferenceSource(() => [...projects.state().projects.map((p) => p.profileId), ...threads.profileReferences()]);
     let reconciliation: Promise<unknown> = Promise.resolve();
-    workspace = { client, router, profiles, machines, models, projects, threads, tools, resources, home: record.home,
+    workspace = { client, router, profiles, machines, models, projects, threads, tools, resources, secrets, home: record.home,
       initialize: origin => { tools.listen(record.id === this.defaultId ? origin : `${origin}/hubs/${record.id}`); if (client.status === 'connected') reconciliation = resources.reconcile().catch(error => console.error('[resources] startup check failed', error)); },
-      close: async () => { await threads.close(); await resources.close(); await reconciliation; await profiles.close(); await projects.close(); await client.close(); } };
+      close: async () => { await threads.close(); await secrets.close(); await resources.close(); await reconciliation; await profiles.close(); await projects.close(); await client.close(); } };
     this.workspaces.set(record.id, workspace);
     client.onChanged(() => { this.announce(); broadcast('resources.changed', resources.state()); });
     if (client.status === 'connected') { await profiles.load(); await profiles.syncReferences(); }

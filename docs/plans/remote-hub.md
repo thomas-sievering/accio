@@ -1,6 +1,6 @@
 # Home-server hub and local development hubs
 
-Status: implementation and deployment in progress on 2026-11-03. This is the accepted plan; the implemented decisions are in ADR 0013 and operating instructions in deploy/hub/README.md.
+Status: implemented and manually deployed on 2026-11-03. Real state migration, browser authentication and provider streaming through Cloudflare are verified. Automatic deployment is configured; registry publication and timer activation follow the merge. Implemented decisions are in [ADR 0014](../adr/0014-independent-hubs-and-browser-sign-in.md) and operating instructions in [deploy/hub/README.md](../../deploy/hub/README.md).
 
 ## Outcome and scope
 
@@ -201,3 +201,9 @@ These are bounded setup tasks, not reasons to add a second architecture:
 - Decide GHCR package access and provision the minimum deployment credential after the manual release works.
 
 Document the implemented decision in a new ADR, update the affected glossary/README descriptions, and record the deployment procedure in the Mediatom workspace when implementation is complete. This plan does not change the original media-server operating rules.
+
+## Rollout evidence
+
+The production hub retains its durable identity through container restarts. The existing Windows machine kept both profiles, all four signed-in provider accounts and four threads, including continuation of an original Claude session. All four accounts returned live limits. Claude and ChatGPT completed automatic browser callbacks and streamed real turns through the public tunnel. The updated desktop runs against Home server; Local dev has a separate saved pairing and starts with `pnpm dev:hub`.
+
+Tests cover shared resources and MCP credentials/grants, account limits, and scoped saved-secret delivery across the standalone service. Saved-secret metadata is cached per hub; encrypted values remain on the hub and authorized temporary files stay on the machine. A persistent headless encryption key is provisioned separately from the state volume. The deterministic secrets UI journey covers save, reuse, replacement, access, deletion, use once and decline with disposable values. Live provider proofs and migration use protected local evidence under `out`; credentials and pairing material are excluded from Git.

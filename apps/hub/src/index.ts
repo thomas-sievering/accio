@@ -1,5 +1,6 @@
 export { Hub, type AccountSummary } from './hub.js';
-export { SecretsVault, SecretStoreError, checkValue, type SecretScope } from './secrets.js';
+export { SecretsVault, SecretStoreError, checkValue, type SecretScope, type SecretsAccess } from './secrets.js';
+export { remoteSecrets } from './secretClient.js';
 export { McpGateway, type McpAccess } from './mcp.js';
 export { Resources, enabled, optionalScope, type McpCredential, type ResourceAccess } from './resources.js';
 export { startHubProxy } from './proxy.js';

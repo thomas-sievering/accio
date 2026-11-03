@@ -12,7 +12,7 @@
     "@accio/protocol": "workspace:*",
     "@accio/persistence": "workspace:*",
     "@accio/codex": "workspace:*",
-    "@accio/protocol": "workspace:*",
-    "ws": "^8.22.1"
+    "ws": "^8.22.1",
+    "zod": "^4.6.7"
   }
 }
