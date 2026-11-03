@@ -17,6 +17,8 @@ type ThreadsCtx = {
   /** A new thread not yet started: just the checkout it will run in. It exists on the server only once its first message is sent. */
   draft: { checkoutId: string; profileId?: string } | null;
   openDraft: (checkoutId: string, profileId?: string) => void;
+  /** Counts thread and draft openings, so a view over the main pane can close on any of them, even reselecting the open thread. */
+  navigation: number;
   /** The open list plus the Working, Snoozed and Settled shelves, after the project scope and search. */
   shelves: ThreadShelves;
   /** The one project the sidebar is narrowed to, or '' for every visible project. */
@@ -44,6 +46,7 @@ export function ThreadsProvider({ children }: { children: ReactNode }) {
   const { value: threads, error: loadError, retry: retryLoad } = useLiveState(() => client.call('threads.list', {}), 'threads.changed');
   const [selectedId, setSelected] = useLocalState<string>('accio.thread', '');
   const [draft, setDraft] = useState<ThreadsCtx['draft']>(null);
+  const [navigation, setNavigation] = useState(0);
   const { filter } = useProfiles();
   const { visible } = useProjects();
   const [storedScope, setProjectScope] = useLocalState<string>('accio.projectScope', '');
@@ -62,9 +65,14 @@ export function ThreadsProvider({ children }: { children: ReactNode }) {
       select: (id) => {
         setDraft(null);
         setSelected(id);
+        setNavigation((n) => n + 1);
       },
       draft,
-      openDraft: (checkoutId, profileId) => setDraft({ checkoutId, profileId }),
+      openDraft: (checkoutId, profileId) => {
+        setDraft({ checkoutId, profileId });
+        setNavigation((n) => n + 1);
+      },
+      navigation,
       shelves: shelveThreads(filterThreads(
         (threads ?? []).filter((t) => t.projectId || filter === 'all' || t.profileId === filter),
         new Set(projectScope ? [projectScope] : ['', ...visible.map((p) => p.id)]), query,
@@ -83,7 +91,7 @@ export function ThreadsProvider({ children }: { children: ReactNode }) {
     }),
     // The setters are stable in behaviour; recreate only when data changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [client, threads, loadError, retryLoad, selectedId, draft, now, visible, projectScope, query, filter],
+    [client, threads, loadError, retryLoad, selectedId, draft, navigation, now, visible, projectScope, query, filter],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -2,7 +2,7 @@
 
 Runs coding threads in Claude Code and Codex on your own machines, keeping each profile, such as work and personal, apart. Terms are in [GLOSSARY.md](GLOSSARY.md), decisions in [docs/adr](docs/adr).
 
-For the delivery model, workspace ownership and optional pull requests, see [ADR 0013](docs/adr/0011-threads-own-delivery-with-optional-pull-requests.md) and the [delivery feature notes](docs/plans/thread-delivery.md).
+For the delivery model, workspace ownership and optional pull requests, see [ADR 0011](docs/adr/0011-threads-own-delivery-with-optional-pull-requests.md) and the [delivery feature notes](docs/plans/thread-delivery.md).
 
 ## v0.1
 
@@ -13,6 +13,7 @@ One machine, with the Claude Agent SDK and a bundled Codex app-server.
 - **Projects** are folders on this machine, matched by git remote. Each belongs to one profile; the profile folders suggest it.
 - **Threads** stream the harness's reply and keep their profile for life. **Stop** interrupts a turn; a turn cut off by Stop or by accio restarting waits for **Resume**.
 - **Models** come from the selected profile's signed-in providers. Codex's available models are discovered at ChatGPT sign-in; its default follows that account's reported default. A profile with only ChatGPT signed in starts Codex threads automatically. An existing thread can change models within its harness; changing harnesses requires a new thread.
+- **Limits** opens from the sidebar or the selected account's composer indicator. It follows profile → provider → account and shows each account's reported allowance windows and reset times. Profiles sharing an account share one allowance. The hub reads limits using its own credentials, caches each account for a minute, and keeps the last successful values with their timestamp when a refresh fails. Account settings show the same limits, including for accounts no profile selects. Usage outside accio counts too; a passed reset awaits provider confirmation.
 
 To use Codex: **Settings / Accounts / Add ChatGPT account**, name it, then **Sign in with ChatGPT**. Select that account under **Settings / Profiles**, then choose **OpenAI / Codex** in a new thread's model picker. Codex is bundled; no global CLI installation or API key is required.
 
@@ -24,7 +25,7 @@ Threads can request tokens through Accio's private `request_secret` tool. **Save
 
 Saved values are encrypted with AES-256-GCM in `hub/secrets/values.json`, separate from shared settings. On Windows the key is protected by DPAPI for the user running the Hub, and private directories use a verified owner-only ACL. On other platforms provision `ACCIO_SECRET_KEY` as a 32-byte standard-base64 key through the Hub's service environment; it is stripped from harness environments. Keep that key outside the data store and back it up separately. A Windows DPAPI key requires the original Windows identity/system; a portable backup needs an explicitly provisioned key. Changing or losing the key prevents decrypting existing values. Without a usable backend, Use once remains available and saving reports why it is unavailable. External token revocation is still done at its service. See [ADR 0013](docs/adr/0013-private-secrets-and-project-memory.md).
 
-When you ask Claude Code or Codex to prototype, try or mock up UI for a feature, it shows its variants as a **choice**: cropped screenshots side by side. Click one to see it full size (arrow keys browse), tick one to put it in the composer, add feedback and send. The harness receives `I pick B ("Label") for "Question".` followed by your text. The choice comes from **accio tools**: each machine serves them to its own harnesses over MCP at `/mcp` on its port, with a token per turn (ADR 0013).
+When you ask Claude Code or Codex to prototype, try or mock up UI for a feature, it shows its variants as a **choice**: cropped screenshots side by side. Click one to see it full size (arrow keys browse), tick one to put it in the composer, add feedback and send. The harness receives `I pick B ("Label") for "Question".` followed by your text. The choice comes from **accio tools**: each machine serves them to its own harnesses over MCP at `/mcp` on its port, with a token per turn (ADR 0011).
 
 Local media embedded by the assistant is copied into the thread's storage when its message arrives. Editing or deleting the source does not change that saved media. Ordinary file links download the current file; remote media remains hosted at its original URL. Missing or unsupported media shows an explanation. Inline snapshots support PNG, JPEG, GIF, WebP, AVIF and common video/audio formats; SVG is not accepted as an inline snapshot. Limits are 10 MiB per image, 100 MiB per video/audio/file download, 64 result parts per tool/message, 1,000,000 saved result text characters and 100,000 saved input characters per tool. Exceeded limits are shown explicitly. Older transcripts keep their saved text; discarded historical input and image bytes cannot be recovered.
 
@@ -40,6 +41,7 @@ pnpm test          # vitest
 pnpm typecheck
 pnpm test:chat     # build, then run isolated Chromium and hidden Electron chat checks
 pnpm test:secrets  # build, then drive secret entry/reuse and Settings with disposable markers
+pnpm test:limits   # build, then drive profiles/accounts/limits with fixture provider I/O
 pnpm exec playwright install chromium # one-time browser setup for verification
 pnpm verify        # build, drive the real UI in isolation, retain proof in out/verify
 ```

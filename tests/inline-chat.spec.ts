@@ -168,6 +168,10 @@ test('reading position stays put through updates and jump-to-latest restores fol
   await scroller.evaluate((element) => { element.scrollTop = element.scrollHeight / 2; });
   await expect(page.getByRole('button', { name: /Jump to latest/ })).toBeVisible();
   const before = await scroller.evaluate((element) => element.scrollTop);
+  await page.getByRole('button', { name: 'Limits', exact: true }).click();
+  await page.getByRole('button', { name: 'Close limits', exact: true }).click();
+  await expect(page.getByRole('button', { name: /Jump to latest/ })).toBeVisible();
+  await expect.poll(async () => Math.abs(await scroller.evaluate((element) => element.scrollTop) - before)).toBeLessThan(5);
   await page.locator('textarea').fill('stream update');
   await page.locator('textarea').press('Enter');
   await expect(page.getByText(/Stream complete/).last()).toBeAttached();
@@ -225,6 +229,9 @@ test('a choice shows screenshots full size and sends the pick with feedback', as
   await expect(viewer.getByRole('button', { name: 'Picked' })).toHaveAttribute('aria-pressed', 'true');
   await page.keyboard.press('Escape');
   await expect(viewer).toHaveCount(0);
+  await page.getByRole('button', { name: 'Limits', exact: true }).click();
+  await page.getByRole('button', { name: 'Close limits', exact: true }).click();
+  await expect(page.locator('.composer-chip')).toContainText('C · Grouped by provider');
   await page.getByRole('textbox').fill('but without the toggles');
   await page.getByRole('button', { name: 'Send' }).click();
 

@@ -9,6 +9,7 @@
     "test": "vitest run",
     "test:chat": "pnpm build && playwright test",
     "test:secrets": "pnpm build && playwright test --config playwright.secrets.config.ts",
+    "test:limits": "pnpm build && playwright test --config playwright.limits.config.ts",
     "verify": "pnpm build && node .agents/skills/3-verify/scripts/verify.mjs",
     "verify:doctor": "node .agents/skills/3-verify/scripts/verify.mjs doctor",
     "typecheck": "tsc -b && tsc -p apps/web",
