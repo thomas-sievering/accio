@@ -38,7 +38,7 @@ const wait = (c: TestClient, id: string, predicate = (t: ThreadView) => t.status
   c.waitFor('threads.changed', ts => ts.some(t => t.id === id && predicate(t)), 15_000);
 async function publish(cwd: string) {
   await git(cwd, 'add', '.');
-  if (await git(cwd, 'status', '--porcelain')) await git(cwd, 'commit', '--quiet', '-m', 'thread work');
+  await git(cwd, 'commit', '--quiet', '--allow-empty', '-m', 'thread work');
   await git(cwd, 'fetch', '--quiet', 'origin');
   await git(cwd, 'rebase', 'origin/main');
   await git(cwd, 'push', '--quiet', 'origin', 'HEAD:refs/heads/main');
@@ -141,6 +141,43 @@ it('keeps work when the assistant claims success without publishing it', async (
   await wait(c, thread.id, x => x.status === 'idle' && x.delivery?.status === 'blocked');
   await expect(c.call('threads.archive', { threadId: thread.id })).rejects.toThrow(/Ship the change/);
   expect(await readFile(join(thread.workspace!.path, 'feature.txt'), 'utf8')).toBe('unpublished');
+});
+
+it.each([false, true])('stops a no-op ship behind main before querying GitHub checks (persisted wait: %s)', async (waiting) => {
+  const harness = new FakeHarness();
+  const { c, checkout, source, origin } = await setup(harness);
+  const thread = await c.call('threads.start', { checkoutId: checkout.id, text: 'heyho' });
+  await wait(c, thread.id);
+  await writeFile(join(source, 'newer.txt'), 'main advanced\n');
+  await git(source, 'add', '.');
+  await git(source, 'commit', '--quiet', '-m', 'advance main');
+  await git(source, 'push', '--quiet');
+  await git(source, 'config', `url.${origin.replaceAll('\\', '/')}.insteadOf`, 'https://github.com/test/fixture.git');
+  await git(source, 'remote', 'set-url', 'origin', 'https://github.com/test/fixture.git');
+  const hosting = vi.fn(async () => { throw new Error('No checks should be queried'); });
+  const manager = new DeliveryGit(t.home, hosting);
+  const verify = manager.verify.bind(manager);
+  const verifier = vi.spyOn(DeliveryGit.prototype, 'verify').mockImplementation(verify);
+  if (waiting) verifier.mockRejectedValueOnce(new DeliveryPending('Waiting for GitHub to report checks for this revision.'));
+  c.events.length = 0;
+  await c.call('threads.deliver', { threadId: thread.id, mode: 'ship' });
+  if (waiting) {
+    await wait(c, thread.id, x => x.status === 'idle' && x.delivery?.status === 'waiting');
+    await t.stop({ keepHome: true });
+    t = await startTestApp({ harness }, t.home);
+    const next = await t.connect();
+    await next.call('threads.checkDelivery', { threadId: thread.id });
+    expect((await next.call('threads.list', {}))[0]!.delivery).toMatchObject({ status: 'blocked', detail: expect.stringContaining('Nothing to ship') });
+    expect(hosting).not.toHaveBeenCalled();
+    expect(harness.runs).toHaveLength(2);
+    return;
+  }
+  await wait(c, thread.id, x => x.status === 'idle' && x.delivery?.status === 'blocked');
+  expect((await c.call('threads.list', {}))[0]!.delivery).toMatchObject({ status: 'blocked', detail: expect.stringContaining('Nothing to ship') });
+  expect(hosting).not.toHaveBeenCalled();
+  expect(harness.runs).toHaveLength(2);
+  expect(await stat(thread.workspace!.path)).toBeDefined();
+  await expect(c.call('threads.archive', { threadId: thread.id })).rejects.toThrow(/Ship the change/);
 });
 
 it('never runs delivery after persisting its authorization fails', async () => {

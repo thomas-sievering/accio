@@ -79,6 +79,9 @@ export class DeliveryGit {
     const revision = await git(workspace.path, 'rev-parse', 'HEAD');
     try { await git(workspace.path, 'fetch', '--quiet', 'origin', `refs/heads/${delivery.baseBranch}:refs/remotes/origin/${delivery.baseBranch}`); }
     catch { throw new UserError('Could not verify the latest target branch on origin. The workspace has been kept.'); }
+    // An unchanged starting commit is not a publication by this thread, even
+    // when it is already an ancestor of the target. Its old CI may never run.
+    if (delivery.mode === 'ship' && revision === workspace.startRevision) throw new UserError('Nothing to ship: this thread has no new commits. The workspace has been kept.');
     const origin = await git(workspace.path, 'config', '--get', 'remote.origin.url');
     const slug = githubRepo(origin);
     let publishedRevision = revision;
