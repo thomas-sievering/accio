@@ -10,8 +10,7 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
   });
   page.on('pageerror', (error) => errors.push(error.message));
   // Sign-in is faked only at the provider boundary; every Accio action uses its UI.
-  await context.route('https://**/*', (route) => route.fulfill({ status: 200, body: 'Provider fixture: finish sign-in in Accio.' }));
-  context.on('page', (popup) => { if (popup !== page) void popup.close(); });
+  await context.route('https://**/*', (route) => route.fulfill({ status: 200, body: 'Scripted provider consent.' }));
   const button = (name: string) => page.getByRole('button', { name, exact: true });
   const section = (name: string) => page.locator('.sidebar nav').getByRole('button', { name, exact: true });
   const card = (name: string) => page.getByRole('article', { name: new RegExp(`^${name},`) });
@@ -25,16 +24,20 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
     await page.getByRole('textbox', { name: 'Account name' }).fill(name);
     await button('Add account').click();
     if (openai) {
-      await button('Sign in with ChatGPT').click();
+      const opened = page.waitForEvent('popup'); await button('Sign in with ChatGPT').click();
+      const popup = await opened; await popup.waitForURL(url => url.hostname === 'auth.openai.com'); await popup.close();
       await expect(page.getByText('Signed in as', { exact: false })).toBeVisible({ timeout: 10_000 });
     } else if (code) await signIn(code);
     await button('Cancel').click();
   };
   const signIn = async (code: string) => {
     const again = button('Sign in again');
-    await (await again.isVisible() ? again : button('Sign in with Claude')).click();
-    await page.getByPlaceholder('Code from Claude').fill(code);
-    await button('Finish').click();
+    const opened = page.waitForEvent('popup'); await (await again.isVisible() ? again : button('Sign in with Claude')).click();
+    const popup = await opened; await popup.waitForURL(url => url.hostname === 'claude.ai');
+    // The provider fixture redirects through the real loopback callback, as browser approval does.
+    const authorize = new URL(popup.url()); const callback = new URL(authorize.searchParams.get('redirect_uri')!);
+    callback.searchParams.set('code', code); callback.searchParams.set('state', authorize.searchParams.get('state')!);
+    await popup.goto(callback.href); await popup.close();
     await expect(page.getByText('Signed in as', { exact: false })).toBeVisible();
   };
   const selectAccounts = async (name: string, claude: string, chatgpt: string) => {

@@ -19,6 +19,7 @@ export class Profiles {
   private announcedProfiles = '';
   private announcedAccounts = '';
   private announcedModels = '';
+  private announcedLimits = '';
   readonly signIns: BrowserSignIns;
   private referenceSource = (): string[] => [];
   private referenceQueue: Promise<unknown> = Promise.resolve();
@@ -59,6 +60,8 @@ export class Profiles {
   stopAccepting() { this.closing = true; }
   register(router: Router) {
     router.on('accounts.list', () => this.client.snapshot?.accounts ?? [])
+      .on('accounts.limits', () => this.client.snapshot?.limits ?? [])
+      .on('accounts.refreshLimits', params => this.client.call('accounts.refreshLimits', params))
       .on('accounts.save', (p) => this.client.call('accounts.save', p))
       .on('accounts.delete', (p) => this.client.call('accounts.delete', p))
       .on('accounts.signOut', (p) => this.client.call('accounts.signOut', p))
@@ -103,6 +106,8 @@ export class Profiles {
     if (profileState !== this.announcedProfiles) { this.announcedProfiles = profileState; this.broadcast('profiles.changed', profiles); }
     if (accountState !== this.announcedAccounts) { this.announcedAccounts = accountState; this.broadcast('accounts.changed', accounts); }
     if (modelState !== this.announcedModels) { this.announcedModels = modelState; this.broadcast('models.changed', null); }
+    const limits = this.client.snapshot?.limits ?? [], limitState = JSON.stringify(limits);
+    if (limitState !== this.announcedLimits) { this.announcedLimits = limitState; this.broadcast('accounts.limitsChanged', limits); }
   }
   private change<T>(fn: () => Promise<T>): Promise<T> { if (this.closing) return Promise.reject(new UserError('This machine is shutting down')); const p = this.queue.then(fn); this.queue = p.catch(() => {}); return p; }
 }

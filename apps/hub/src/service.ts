@@ -1,7 +1,7 @@
 import { createServer, request as httpRequest, type IncomingMessage, type ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { WebSocket, WebSocketServer } from 'ws';
-import { methods, ResourceScope, type AccountView, type ProfileView, type ResourcesState } from '@accio/protocol';
+import { methods, ResourceScope, type AccountView, type AccountLimitsView, type ProfileView, type ResourcesState } from '@accio/protocol';
 import { Hub } from './hub.js';
 import { SharedSettings, type MachineHello, type SharedSeed } from './sharedSettings.js';
 import { OpenAIAuth, type CodexModel } from './openaiAuth.js';
@@ -23,6 +23,7 @@ export type HubSnapshot = {
   models: Record<string, CodexModel[]>;
   store: string; settingsStore: string;
   resources: ResourcesState;
+  limits: AccountLimitsView[];
 };
 export type HubServiceOptions = {
   home: string; host?: string; port?: number; seed?: () => Promise<SharedSeed>;
@@ -53,10 +54,11 @@ export async function startHubService(opts: HubServiceOptions) {
     const profiles = settings.profiles();
     return { hubId: trust.id, protocol: HUB_PROTOCOL, revision, epoch, profiles: profileViews(profiles, hub), accounts: hub.accountViews(), machines: settings.machines(),
       favorites: Object.fromEntries(profiles.map((p) => [p.id, settings.modelFavorites(p.id)])),
-      models: Object.fromEntries(profiles.map((p) => [p.id, hub.codexModels(p.id)])), resources: resources.state(), store: hub.storePath, settingsStore: settings.storePath };
+      models: Object.fromEntries(profiles.map((p) => [p.id, hub.codexModels(p.id)])), resources: resources.state(), limits: hub.limits.views(), store: hub.storePath, settingsStore: settings.storePath };
   }
   function announce() { revision++; for (const ws of sockets.clients) if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ revision })); }
   settings.onMachinesChanged(announce);
+  hub.limits.subscribe(announce);
   function auth(req: IncomingMessage) { const token = /^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1]; return token ? trust.authenticate(token) : undefined; }
   function login(id: string, machineId: string) {
     const pending = logins.get(id);
@@ -91,6 +93,8 @@ export async function startHubService(opts: HubServiceOptions) {
         await settings.machineDisconnected(p.machineId); return null;
       }
       case 'accounts.list': return hub.accountViews();
+      case 'accounts.limits': return hub.limits.views();
+      case 'accounts.refreshLimits': return hub.refreshLimits(p.accountIds, p.force);
       case 'resources.write': {
         if (!RESOURCE_WRITES.includes(p.method) || !Array.isArray(p.args) || p.args.length > 2) throw new SignInError('Invalid resource mutation');
         const args = [...p.args];
@@ -215,7 +219,7 @@ export async function startHubService(opts: HubServiceOptions) {
         const result = await execute(machineId, p.method, p.params); announce(); return { result, snapshot: snapshot() };
       };
       // MCP token exchanges must allow sign-out to invalidate an in-flight exchange.
-      const independent = p.method === 'mcp.completeSignIn' || p.method === 'mcp.beginSignIn';
+      const independent = p.method === 'mcp.completeSignIn' || p.method === 'mcp.beginSignIn' || p.method === 'accounts.refreshLimits';
       const operation = independent ? Promise.resolve().then(invoke) : queue.then(invoke);
       if (!independent) queue = operation.catch(() => {});
       return json(res, 200, await operation);

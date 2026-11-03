@@ -31,7 +31,7 @@ export default async function ({page, context, home, runDir, action, capture}) {
       await button('Settings').click(); await page.locator('.sidebar nav').getByRole('button',{name:'Accounts',exact:true}).click();
       await page.getByRole('button',{name:/^Add ChatGPT account /}).click();
       await page.getByRole('textbox',{name:'Account name',exact:true}).fill('Other account'); await button('Add account').click();
-      await button('Sign in with ChatGPT').waitFor(); await button('Done').click(); await button('Back').click();
+      await button('Sign in with ChatGPT').waitFor(); await button('Cancel').click(); await button('Back').click();
     });
     await capture('other-hub');
     await action('hubs/switch: restore the original hub without another pairing',async()=>{

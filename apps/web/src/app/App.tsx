@@ -123,7 +123,7 @@ function Shell() {
               <Limits />
             </button>
             {/* The Owl, accio's agent across all threads, is still to be designed. */}
-            <button className="side-icon" title="Owl · coming soon" aria-label="Owl, coming soon" aria-disabled="true">
+            <button className="side-icon" title="Owl Â· coming soon" aria-label="Owl, coming soon" aria-disabled="true">
               <Owl />
             </button>
             <ConnectionNotice />
