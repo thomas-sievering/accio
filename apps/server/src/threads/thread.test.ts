@@ -56,7 +56,7 @@ describe('thread lifecycle', () => {
       { kind: 'tool', id: 'x', turnId: 't', name: 'Bash', summary: 'sleep', status: 'running' },
       { kind: 'tool', id: 'y', turnId: 't', name: 'Read', summary: 'a', status: 'done' },
     ];
-    expect(closeOpenTools(items).map((i) => (i.kind === 'tool' ? i.status : ''))).toEqual(['error', 'done']);
+    expect(closeOpenTools(items).map((i) => (i.kind === 'tool' ? i.status : ''))).toEqual(['interrupted', 'done']);
   });
 
   it('shortens long titles', () => {

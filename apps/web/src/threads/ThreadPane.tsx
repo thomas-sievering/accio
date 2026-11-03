@@ -38,7 +38,7 @@ export function ThreadPane({ thread, onOpenProfile }: { thread: ThreadView; onOp
   return (
     <>
       <PaneHeader title={thread.title} {...place} />
-      {visibleItems ? <Transcript items={visibleItems} working={running} /> : (
+      {visibleItems ? <Transcript threadId={thread.id} items={visibleItems} working={running} /> : (
         <div className="empty">
           {error && <>
             <p className="error" role="alert">Could not load transcript: {error}</p>
