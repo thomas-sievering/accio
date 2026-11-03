@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { MachineBadge } from '../machine/MachineBadge';
-import { claudeAccount, ProfilesProvider, useProfiles } from '../profiles/profiles';
+import { hasSignedInAccount, ProfilesProvider, useProfiles } from '../profiles/profiles';
 import { ProjectsProvider, useProjects } from '../projects/projects';
 import { AddProjectSheet } from '../projects/AddProjectSheet';
 import { ProjectSheet } from '../projects/ProjectSheet';
@@ -12,6 +12,7 @@ import { ThreadSearch } from '../threads/ThreadSearch';
 import { FirstRun } from './FirstRun';
 import { Close, FolderPlus, Settings as Gear } from './icons';
 import { ScopeMenu } from './ScopeMenu';
+import { SidebarResizer } from './SidebarResizer';
 import { Settings, type SettingsRoute } from './Settings';
 
 type OpenSheet = { kind: 'addProject' } | { kind: 'project'; id: string } | null;
@@ -46,7 +47,7 @@ function Shell() {
   const close = () => setSheet(null);
   const openProject = sheet?.kind === 'project' ? state?.projects.find((p) => p.id === sheet.id) : undefined;
   const openProfile = (profileId: string) => setSettings({ section: 'profiles', profileId });
-  const setUp = profiles && state && profiles.length > 0 && profiles.some((p) => claudeAccount(p)?.signedIn) && state.projects.length > 0;
+  const setUp = profiles && state && profiles.length > 0 && profiles.some(hasSignedInAccount) && state.projects.length > 0;
 
   if (settings) return <Settings route={settings} onRoute={setSettings} onClose={closeSettings} />;
 
@@ -83,6 +84,7 @@ function Shell() {
           </button>
         </footer>
       </aside>
+      <SidebarResizer />
       <main className="main">
         {draft ? (
           <DraftPane key={`${draft.checkoutId}:${draft.profileId}`} {...draft} onOpenProfile={openProfile} />

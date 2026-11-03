@@ -1,6 +1,6 @@
 ﻿import { isDeepStrictEqual } from 'node:util';
 import type { TranscriptItem } from '@accio/protocol';
-import type { HarnessMessage, ContentBlock, StreamEvent } from './harness.js';
+import type { HarnessMessage, HarnessEvent, ContentBlock, StreamEvent } from './harness.js';
 
 type ToolItem = Extract<TranscriptItem, { kind: 'tool' }>;
 
@@ -45,6 +45,7 @@ export class TurnTranscript {
   private currentMessageId = '';
   private messages = new Map<string, MessageState>();
   private tools = new Map<string, ToolState>();
+  private assistantText = new Map<string, string>();
   private endResult?: string;
   private seq = 0;
 
@@ -64,6 +65,7 @@ export class TurnTranscript {
   }
 
   accept(msg: HarnessMessage): TranscriptChange[] {
+    if (msg.type === 'harness_event') return this.onEvent(msg.event as HarnessEvent);
     const out: TranscriptChange[] = [];
     if (msg.type === 'system' && msg.subtype === 'init' && typeof msg.session_id === 'string') {
       out.push({ type: 'session', sessionId: msg.session_id });
@@ -107,6 +109,35 @@ export class TurnTranscript {
       unfinished.push(tool.item);
     }
     return unfinished;
+  }
+
+  private onEvent(event: HarnessEvent): TranscriptChange[] {
+    if (event.kind === 'session') return [{ type: 'session', sessionId: event.id }];
+    if (event.kind === 'end') return event.error ? [
+      { type: 'item', item: { kind: 'notice', id: this.nextId('n'), turnId: this.turnId, tone: 'error', text: event.error } },
+      { type: 'end', outcome: 'failed', error: event.error },
+    ] : [{ type: 'end', outcome: 'completed' }];
+    const id = `${this.turnId}:${event.id}`;
+    if (event.kind === 'text') {
+      const previous = this.assistantText.get(id);
+      const text = event.append ? (previous ?? '') + event.text : event.text;
+      this.assistantText.set(id, text);
+      return event.append && previous !== undefined ? [{ type: 'delta', itemId: id, text: event.text }]
+        : [{ type: 'item', item: { kind: 'assistant', id, turnId: this.turnId, text } }];
+    }
+    const previous = this.tools.get(id);
+    const state: ToolState = {
+      item: { ...previous?.item, kind: 'tool', id, turnId: this.turnId, name: event.name,
+        summary: summarizeTool(event.name, event.summary), status: event.status,
+        ...(event.output !== undefined ? { output: truncate(resultText(event.output)) } : {}) },
+      input: event.summary,
+      inputComplete: true,
+      ...(event.status !== 'running' ? { result: { content: event.output, status: event.status } } : {}),
+    };
+    this.tools.set(id, state);
+    const out: TranscriptChange[] = [];
+    this.emitTool(state, out);
+    return out;
   }
 
   private onStream(event: StreamEvent, out: TranscriptChange[]) {

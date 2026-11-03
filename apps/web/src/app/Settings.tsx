@@ -6,6 +6,7 @@ import { AccountsSettings } from '../profiles/AccountsSettings';
 import { ProfilesSettings } from '../profiles/ProfilesSettings';
 import { useProfiles } from '../profiles/profiles';
 import { ArrowLeft, Hub, Layers, Monitor, Users } from './icons';
+import { SidebarResizer } from './SidebarResizer';
 
 /** Where Settings is open. `profileId` opens one profile ('new' to add one). */
 export type SettingsRoute = { section: 'profiles'; profileId?: string } | { section: 'accounts'; accountId?: string } | { section: 'hub' } | { section: 'harnesses' } | { section: 'machines'; machineId?: string };
@@ -32,7 +33,7 @@ export function Settings({ route, onRoute, onClose }: { route: SettingsRoute; on
   const { profiles, accounts } = useProfiles();
   const profileId = route.section === 'profiles' ? route.profileId : undefined;
   const accountId = route.section === 'accounts' ? route.accountId : undefined;
-  const accountLabel = accountId === 'new' ? 'New account' : accounts?.find((a) => a.id === accountId)?.name;
+  const accountLabel = accountId === 'new' || accountId === 'new-openai' ? 'New account' : accounts?.find((a) => a.id === accountId)?.name;
   const profileLabel = profileId === 'new' ? 'New profile' : profiles?.find((p) => p.id === profileId)?.name;
 
   useEffect(() => {
@@ -73,6 +74,7 @@ export function Settings({ route, onRoute, onClose }: { route: SettingsRoute; on
           ))}
         </nav>
       </aside>
+      <SidebarResizer />
       <main className="main">
         <header className="main-top drag">
           <nav className="crumbs">

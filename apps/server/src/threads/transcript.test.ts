@@ -10,6 +10,22 @@ const result = (content: unknown, is_error = false): HarnessMessage => ({ type: 
 const toolChanges = (changes: TranscriptChange[]) => changes.filter((change): change is Extract<TranscriptChange, { type: 'tool' }> => change.type === 'tool');
 
 describe('TurnTranscript', () => {
+  it('keeps full harness-neutral tool details separate from previews and closes interrupted tools', () => {
+    const t = new TurnTranscript('t1');
+    const tool = { kind: 'tool' as const, id: 'cmd', name: 'Shell', summary: 'git status\necho done' };
+    const start = toolChanges(t.accept({ type: 'harness_event', event: { ...tool, status: 'running' } }))[0]!;
+    expect(start).toMatchObject({ item: { id: 't1:cmd', summary: 'git status', status: 'running', detailRevision: 1 }, input: tool.summary });
+    const output = 'full output\n'.repeat(1_000);
+    const done = toolChanges(t.accept({ type: 'harness_event', event: { ...tool, status: 'done', output } }))[0]!;
+    expect(done.content).toBe(output);
+    expect(done.item.output?.length).toBeLessThanOrEqual(4_000);
+    expect(done.item.detailRevision).toBe(2);
+    expect(t.unfinishedTools()).toEqual([]);
+    t.accept({ type: 'harness_event', event: { ...tool, id: 'pending', status: 'running' } });
+    expect(t.unfinishedTools('interrupted')).toEqual([expect.objectContaining({ id: 't1:pending', status: 'interrupted' })]);
+    expect(t.unfinishedTools()).toEqual([]);
+  });
+
   it('streams text, then confirms it with the full message under the same id', () => {
     const t = new TurnTranscript('t1');
     const changes = [

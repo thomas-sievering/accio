@@ -12,6 +12,9 @@ import { Projects } from './projects/projects.js';
 import { Threads } from './threads/threads.js';
 import type { Harness } from './threads/harness.js';
 import { claudeCode, claudeCodeInstall } from './threads/claudeCode.js';
+import { codexHarness } from './threads/codex.js';
+import { codexInstall, type CodexFactory } from '@accio/codex';
+import { OpenAIAuth } from '@accio/hub';
 
 export type AppOptions = {
   home: string;
@@ -30,6 +33,10 @@ export type AppDeps = {
   claudeFetch: Fetch;
   /** Where the hub forwards threads' requests. */
   anthropicUrl: string;
+  codexHarness: Harness;
+  codexFactory: CodexFactory;
+  openaiUrl: string;
+  openaiFetch: Fetch;
 };
 
 /** Composition root: wires each domain slice into the router and transport. */
@@ -43,7 +50,7 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
   const here = machineInfo(await loadMachineId(opts.home));
 
   // In v0.1 this machine runs the hub in-process.
-  const hub = new Hub(opts.home, deps.claudeFetch ?? fetch);
+  const hub = new Hub(opts.home, deps.claudeFetch ?? fetch, new OpenAIAuth(opts.home, deps.codexFactory));
   await hub.load();
   const settings = new SharedSettings(opts.home);
   await moveProfilesToHub(opts.home, here, settings);
@@ -53,10 +60,13 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
     port: opts.hubPort,
     upstream: deps.anthropicUrl,
     fetchImpl: deps.claudeFetch,
+    openaiUpstream: deps.openaiUrl,
+    openaiFetch: deps.openaiFetch,
   });
 
   const machines = new Machines(here, settings, broadcast);
-  await machines.connect([await claudeCodeInstall()]);
+  const codex = await codexInstall();
+  await machines.connect([await claudeCodeInstall(), ...(codex.version ? [codex] : [])]);
   machines.register(router);
   registerHarnesses(router, settings);
 
@@ -71,7 +81,7 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
   await projects.load();
   projects.register(router);
 
-  const threads = new Threads(opts.home, profiles, projects, deps.harness ?? claudeCode, broadcast, models, machines);
+  const threads = new Threads(opts.home, profiles, projects, { claudeCode: deps.harness ?? claudeCode, codex: deps.codexHarness ?? codexHarness(deps.codexFactory) }, broadcast, models, machines);
   await threads.load();
   threads.register(router);
 

@@ -1,9 +1,8 @@
 /**
- * The port between threads and the harness that runs their turns. The real adapter wraps
- * the Claude Agent SDK (claudeCode.ts); tests use a scripted fake.
+ * The port between threads and the harness that runs their turns. Claude wraps
+ * the Agent SDK; Codex wraps app-server. Tests can replace either adapter.
  *
- * HarnessMessage is the subset of the SDK's message stream that the transcript
- * reads, kept structural so the domain does not depend on the SDK's types.
+ * Claude's existing messages stay structural; other adapters emit HarnessEvent.
  */
 
 export type ContentBlock =
@@ -19,7 +18,15 @@ export type StreamEvent =
   | { type: 'content_block_stop'; index: number }
   | { type: string; [k: string]: unknown };
 
+/** Harness-neutral events used by adapters that do not emit Claude SDK messages. */
+export type HarnessEvent =
+  | { kind: 'session'; id: string }
+  | { kind: 'text'; id: string; text: string; append?: boolean }
+  | { kind: 'tool'; id: string; name: string; summary: string; status: 'running' | 'done' | 'error'; output?: string }
+  | { kind: 'end'; error?: string };
+
 export type HarnessMessage =
+  | { type: 'harness_event'; event: HarnessEvent }
   | { type: 'system'; subtype: string; session_id: string; [k: string]: unknown }
   | { type: 'stream_event'; event: StreamEvent; parent_tool_use_id: string | null; session_id: string }
   | {
@@ -38,7 +45,7 @@ export type HarnessMessage =
 export type HarnessTurn = {
   cwd: string;
   prompt: string;
-  /** Claude session to continue; null starts a new one. */
+  /** Harness session to continue; null starts a new one. */
   sessionId: string | null;
   /** Harness model alias; omitted to use the account's default. */
   model?: string;
