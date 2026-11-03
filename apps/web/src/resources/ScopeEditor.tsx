@@ -4,7 +4,7 @@ import { useProjects } from '../projects/projects';
 import { isOptional, projectKey, toggled } from './resources';
 
 /**
- * Where a tool, MCP server or skill is enabled: everywhere, for chosen
+ * Where a skill is enabled: everywhere, for chosen
  * profiles, for chosen projects, or nowhere (optional, picked per project or profile).
  */
 export function ScopeEditor({ scope, onChange, disabled, globalLabel = 'Enable everywhere', globalHint = 'Every profile and project gets it.', name }: {

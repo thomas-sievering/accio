@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { JsonFile } from '@accio/persistence';
-import type { McpDefinition, ResourceScope, ResourcesState, SkillEntry, SkillSource, ToolDefinition, ToolStatus } from '@accio/protocol';
+import { McpDefinition, ToolDefinition } from '@accio/protocol';
+import type { ResourceScope, ResourcesState, SkillEntry, SkillSource, ToolStatus } from '@accio/protocol';
 
 export const optionalScope = (): ResourceScope => ({ global: false, profileIds: [], projectKeys: [] });
 export function enabled(scope: ResourceScope, profileId?: string, projectKey?: string): boolean {
@@ -20,7 +21,13 @@ export class Resources {
     this.file = new JsonFile(join(home, 'hub', 'resources.json'), () => this.data);
     this.secretsFile = new JsonFile(join(home, 'hub', 'mcp-credentials.json'), () => ({}));
   }
-  async load() { this.data = await this.file.read(); this.secrets = await this.secretsFile.read(); }
+  async load() {
+    this.data = await this.file.read();
+    // Parsing strips legacy tool/MCP scopes; only skills still have selections.
+    this.data.tools = this.data.tools.map(tool => ToolDefinition.parse(tool));
+    this.data.mcps = this.data.mcps.map(mcp => McpDefinition.parse(mcp));
+    this.secrets = await this.secretsFile.read();
+  }
   state(): ResourcesState { const { skillSnapshots = [], skillSelections: _selections, ...data } = this.data; return structuredClone({ ...data, skillVersions: skillSnapshots.map(s => ({ sourceId: s.sourceId, revision: s.revision, active: this.data.skills.some(skill => skill.sourceId === s.sourceId && skill.revision === s.revision) })), mcps: this.data.mcps.map(m => ({ ...m, signedIn: !!this.secrets[m.id] })) }); }
   credential(id: string) { return this.secrets[id] ? { ...this.secrets[id] } : undefined; }
   private change(fn: () => Promise<void>) { const result = this.queue.then(fn); this.queue = result.catch(() => {}); return result; }

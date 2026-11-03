@@ -30,7 +30,7 @@ export default async function journey({ page, runDir, home, fixture, action, cap
   const project = JSON.parse(await readFile(join(home, 'projects.json'), 'utf8')).projects[0];
   const key = project.repoKey ?? `local:${project.id}`;
 
-  await action('tools/settings: empty state, preset, validation and optional save', async () => {
+  await action('tools/settings: empty state, preset, validation and machine-wide save', async () => {
     await button('Settings').click();
     await nav('Tools').click();
     await page.getByText('No tools yet', { exact: true }).waitFor();
@@ -42,13 +42,12 @@ export default async function journey({ page, runDir, home, fixture, action, cap
     await textbox('Version').fill('1 2');
     await page.getByText('Use an exact version, such as 1.2.3.').waitFor();
     await textbox('Version').fill('0.1.23');
-    await page.getByRole('checkbox', { name: /^Install on all machines/ }).waitFor();
+    assert.equal(await page.getByRole('checkbox').count(), 0);
     await button('Add tool').click();
     await page.getByRole('heading', { name: 'Playwright CLI', exact: true }).waitFor();
-    await page.getByRole('group', { name: /\(this machine\): Pending$/ }).waitFor();
-    await page.getByText(/Optional and not selected anywhere/).waitFor();
+    await page.getByRole('group', { name: /\(this machine\): Ready$/ }).waitFor({ timeout: 180_000 });
     const tool = (await resources()).tools.find((t) => t.id === 'playwright-cli');
-    assert.deepEqual(tool.scope, { global: false, profileIds: [], projectKeys: [] });
+    assert(!('scope' in tool));
     assert.equal(tool.package, '@playwright/cli');
     log.push({ tool });
   });
@@ -63,7 +62,6 @@ export default async function journey({ page, runDir, home, fixture, action, cap
     await textbox('Executable').fill('accio-missing');
     await button('Add tool').click();
     await page.getByRole('heading', { name: 'Broken tool', exact: true }).waitFor();
-    await button('Install and check').click();
     await page.getByRole('group', { name: /\(this machine\): Needs attention$/ }).waitFor({ timeout: 180_000 });
     await page.getByText(/^No repair thread: Sign in to a provider/).waitFor();
     assert(await button('Start repair thread').isEnabled());
@@ -74,7 +72,7 @@ export default async function journey({ page, runDir, home, fixture, action, cap
   });
   await capture('tools-needs-attention');
 
-  await action('mcp/settings: bearer server with profile scope, token never shown', async () => {
+  await action('mcp/settings: bearer server available everywhere, token never shown', async () => {
     await nav('MCP servers').click();
     await page.getByText('No MCP servers yet', { exact: true }).waitFor();
     await page.getByRole('button', { name: /^Add MCP server / }).click();
@@ -83,7 +81,6 @@ export default async function journey({ page, runDir, home, fixture, action, cap
     await page.getByText(/Enter a full URL/).waitFor();
     await textbox('Server URL').fill('https://example.invalid/mcp');
     await page.getByRole('combobox', { name: 'Authentication' }).selectOption('bearer');
-    await page.getByRole('group', { name: 'Profiles' }).getByRole('checkbox', { name: 'Verify personal' }).check();
     await button('Add MCP server').click();
     await page.getByRole('heading', { name: 'Linear (work)', exact: true }).waitFor();
     await textbox('Bearer token').fill('verify-secret-token');
@@ -92,7 +89,7 @@ export default async function journey({ page, runDir, home, fixture, action, cap
     assert(!(await page.content()).includes('verify-secret-token'));
     const state = await resources();
     const m = state.mcps.find((x) => x.name === 'Linear (work)');
-    assert.equal(m.scope.profileIds.length, 1);
+    assert(!('scope' in m));
     assert(!JSON.stringify(state).includes('verify-secret-token'));
     const creds = JSON.parse(await readFile(join(home, 'hub/mcp-credentials.json'), 'utf8'));
     assert(Object.keys(creds).includes(m.id));
@@ -113,7 +110,7 @@ export default async function journey({ page, runDir, home, fixture, action, cap
     log.push({ oauthError: await alert.innerText() });
     await button('Done').click();
   });
-  await action('mcp/stdio: local command server saves optional', async () => {
+  await action('mcp/stdio: local command server available everywhere', async () => {
     await page.getByRole('button', { name: /^Add MCP server / }).click();
     await textbox('Name').fill('Local echo');
     await page.getByRole('radio', { name: /^Local command/ }).check();
@@ -175,13 +172,14 @@ export default async function journey({ page, runDir, home, fixture, action, cap
     await capture('skills-preview');
     await page.getByRole('button', { name: /^Apply / }).click();
     await page.getByText('Added later').waitFor();
+    await assertEventually(async () => (await resources()).skills[0].revision !== first);
     const applied = await resources();
     assert.notEqual(applied.skills[0].revision, first);
     assert.equal(applied.skills.find((s) => s.name === 'demo').scope.profileIds.length, 1, 'scope survives update');
     await button('Switch to this revision').click();
     await page.getByText('First description').waitFor();
     await page.getByText('Added later').waitFor({ state: 'detached' });
-    assert.equal((await resources()).skills[0].revision, first);
+    await assertEventually(async () => (await resources()).skills[0].revision === first);
   });
   await action('skills/copy: copy into project once, refuse overwrite', async () => {
     await button('Copy into project').click();
@@ -195,7 +193,7 @@ export default async function journey({ page, runDir, home, fixture, action, cap
   });
   await capture('skills-copied');
 
-  await action('projects/sheet: inherited status and project-only selection preserve scope', async () => {
+  await action('projects/sheet: only skills have project selections', async () => {
     await button('Back').click();
     await button('Filter threads').click();
     await button('verify-project settings').click();
@@ -204,35 +202,26 @@ export default async function journey({ page, runDir, home, fixture, action, cap
     assert(await skill.isChecked());
     assert(await skill.isDisabled());
     await dialog.getByText('On for profile Verify personal').first().waitFor();
-    const echo = dialog.getByRole('group', { name: 'MCP servers' }).getByRole('checkbox', { name: /^Local echo/ });
-    assert(!(await echo.isChecked()));
-    await echo.check();
-    await dialog.getByText('On for this project').waitFor();
-    const m = (await resources()).mcps.find((x) => x.name === 'Local echo');
-    assert.deepEqual(m.scope, { global: false, profileIds: [], projectKeys: [key] });
+    assert.equal(await dialog.getByRole('group', { name: 'MCP servers' }).count(), 0);
+    assert.equal(await dialog.getByRole('group', { name: 'Tools' }).count(), 0);
     await capture('project-sheet-resources');
     await button('Close').click();
   });
-  await action('profiles/settings: per-profile selection keeps project selections', async () => {
+  await action('profiles/settings: only skills have profile selections', async () => {
     await button('Settings').click();
     await page.getByRole('button', { name: /^Verify personal/ }).click();
-    const group = page.getByRole('group', { name: 'MCP servers' });
-    const work = group.getByRole('checkbox', { name: /^Linear \(work\)/ });
-    assert(await work.isChecked());
-    await work.uncheck();
-    await page.waitForFunction(() => true);
-    await assertEventually(async () => (await resources()).mcps.find((x) => x.name === 'Linear (work)').scope.profileIds.length === 0);
-    assert(!(await work.isChecked()));
-    assert.deepEqual((await resources()).mcps.find((x) => x.name === 'Local echo').scope.projectKeys, [key], 'project selection kept');
+    assert.equal(await page.getByRole('group', { name: 'MCP servers' }).count(), 0);
+    assert.equal(await page.getByRole('group', { name: 'Tools' }).count(), 0);
+    await page.getByRole('group', { name: 'Skills' }).waitFor();
     await capture('profile-resources');
-    await button('Done').click();
+    await button('Cancel').click();
   });
   await action('machines/detail: managed tool readiness reuses status cards', async () => {
     await nav('Machines').click();
     await page.getByRole('button', { name: /\(this machine\)/ }).click();
     await page.getByRole('heading', { name: 'Managed tools', exact: true }).waitFor();
     await page.getByRole('group', { name: 'Broken tool: Needs attention' }).waitFor();
-    await page.getByRole('group', { name: 'Playwright CLI: Pending' }).waitFor();
+    await page.getByRole('group', { name: 'Playwright CLI: Ready' }).waitFor();
   });
   await capture('machine-tools');
   await action('responsive: tool detail at narrow width', async () => {

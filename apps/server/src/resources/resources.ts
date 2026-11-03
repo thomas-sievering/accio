@@ -69,9 +69,9 @@ export class ResourceManager {
   register(router: Router) {
     router.on('resources.get', () => this.state())
       .on('tools.save', async tool => {
-        this.checkScope(tool.scope); if (tool.repairProfileId) this.profiles.require(tool.repairProfileId);
+        if (tool.repairProfileId) this.profiles.require(tool.repairProfileId);
         await this.store.saveTool(tool); this.announce();
-        if (enabled(tool.scope) || tool.scope.profileIds.length || tool.scope.projectKeys.length) void this.tools.check(tool).catch(console.error);
+        void this.tools.check(tool).catch(console.error);
         return tool;
       })
       .on('tools.delete', async ({ id }) => { await this.store.deleteTool(id); this.announce(); return null; })
@@ -94,7 +94,7 @@ export class ResourceManager {
       .on('skills.deleteSource', ({ id }) => this.sourceOperation(id, async () => { await this.store.deleteSource(id); this.announce(); return null; }))
       .on('skills.setScope', async ({ id, scope }) => { this.checkScope(scope); await this.store.setSkillScope(id, scope); this.announce(); return this.state().skills.find(s => s.id === id)!; })
       .on('skills.copy', async ({ id, checkoutId }) => { const skill = this.state().skills.find(s => s.id === id); if (!skill) throw new Error('No such skill'); const release = this.projects.useCheckout(checkoutId); try { return await this.skills.copy(await this.localSkill(skill), this.projects.checkout(checkoutId).path); } finally { release(); } })
-      .on('mcp.save', async mcp => { this.checkScope(mcp.scope); this.validateMcp(mcp); const old = this.state().mcps.find(m => m.id === mcp.id); if (old && (old.url !== mcp.url || old.auth !== mcp.auth || old.oauthClientId !== mcp.oauthClientId)) await this.gateway.signOut(mcp.id); await this.store.saveMcp(mcp); this.announce(); return this.state().mcps.find(m => m.id === mcp.id)!; })
+      .on('mcp.save', async mcp => { this.validateMcp(mcp); const old = this.state().mcps.find(m => m.id === mcp.id); if (old && (old.url !== mcp.url || old.auth !== mcp.auth || old.oauthClientId !== mcp.oauthClientId)) await this.gateway.signOut(mcp.id); await this.store.saveMcp(mcp); this.announce(); return this.state().mcps.find(m => m.id === mcp.id)!; })
       .on('mcp.delete', async ({ id }) => { await this.gateway.signOut(id); await this.store.deleteMcp(id); this.announce(); return null; })
       .on('mcp.setToken', async ({ id, token }) => { if (!this.state().mcps.some(m => m.id === id && m.auth === 'bearer')) throw new Error('Select a server with bearer authentication'); await this.store.setCredential(id, { accessToken: token }); this.announce(); return null; })
       .on('mcp.signOut', async ({ id }) => { await this.gateway.signOut(id); this.announce(); return null; })
@@ -113,7 +113,7 @@ export class ResourceManager {
     else { if (!mcp.command) throw new Error('Local MCP servers need a command'); if (mcp.auth !== 'none') throw new Error('Local MCP sign-in is managed by that server; use a remote MCP for hub-owned credentials'); }
   }
   async reconcile() {
-    for (const tool of this.state().tools) if (enabled(tool.scope) || tool.scope.profileIds.length || tool.scope.projectKeys.length) await this.tools.check(tool);
+    for (const tool of this.state().tools) await this.tools.check(tool);
   }
   private async localSkill(skill: SkillEntry): Promise<SkillEntry> {
     try { await this.skills.validate(skill); return skill; }
@@ -131,7 +131,7 @@ export class ResourceManager {
     const project = this.projects.state().projects.find(p => p.id === projectId);
     const key = project ? project.repoKey ?? `local:${project.id}` : undefined;
     const state = this.state();
-    const tools = state.tools.filter(t => enabled(t.scope, profileId, key));
+    const tools = state.tools;
     if (options.repair) return { env: this.tools.env(state.tools, env), instructions: '', mcps: {}, snapshot: { tools: [], skills: [], mcps: [] }, release: () => {} };
     if (!options.repair) for (const tool of tools) {
       const status = await this.tools.check(tool);
@@ -156,7 +156,7 @@ export class ResourceManager {
     const instructions = catalog.length ? `Skills enabled for this turn:\n${catalog.map(s => `- ${s.name}: ${s.description}\n  Read ${s.path} when relevant.${'revision' in s ? ` Source revision: ${s.revision}` : ''}`).join('\n')}\nRead a skill's SKILL.md before using it. Resolve its relative references against its own folder.` : '';
     const releases: (() => void)[] = [];
     const mcps: Record<string, HarnessMcp> = {};
-    for (const mcp of state.mcps.filter(m => enabled(m.scope, profileId, key))) {
+    for (const mcp of state.mcps) {
       if ([ACCIO_MCP_SERVER, SECRET_MCP_SERVER].includes(mcp.id)) throw new Error('Rename this managed MCP server: that name is reserved for built-in tools');
       if (mcp.transport === 'http') { const grant = await this.gateway.grant(mcp.id, profileId, key); releases.push(grant.release); mcps[mcp.id] = { type: 'http', url: grant.url, headers: { Authorization: `Bearer ${grant.token}` } }; }
       else mcps[mcp.id] = { type: 'stdio', command: mcp.command!, args: mcp.args };

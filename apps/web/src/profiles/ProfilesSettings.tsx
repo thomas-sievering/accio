@@ -113,7 +113,7 @@ function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: Pr
         </SettingsSection>
       )}
       {profile && (
-        <SettingsSection title="Tools, MCP servers and skills">
+        <SettingsSection title="Skills">
           <div className="setting-form">
             <small className="hint">Turned on for every project and thread of {profile.name}. Changes save immediately, separately from Save.</small>
             <ResourcePicker context={{ kind: 'profile', profile }} />
