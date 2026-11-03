@@ -4,6 +4,7 @@ import { Machines, loadMachineId, machineInfo } from './machine/machine.js';
 import { Hub, SharedSettings, startHubProxy, type Fetch } from '@accio/hub';
 import { moveProfilesToHub } from './store/moveProfilesToHub.js';
 import { registerHarnesses } from './harnesses/harnesses.js';
+import { Models } from './harnesses/models.js';
 import { Profiles } from './profiles/profiles.js';
 import { registerHub } from './hub/hub.js';
 import { renameAccountsToProfiles } from './store/renameAccountsToProfiles.js';
@@ -62,13 +63,15 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
   const profiles = new Profiles(opts.home, hub, settings, hubProxy.url, broadcast);
   await profiles.load();
   profiles.register(router);
+  const models = new Models(profiles, settings, here.id);
+  models.register(router, broadcast);
   registerHub(router, { hub, settings, url: hubProxy.url });
 
   const projects = new Projects(opts.home, profiles, machines, broadcast);
   await projects.load();
   projects.register(router);
 
-  const threads = new Threads(opts.home, profiles, projects, deps.harness ?? claudeCode, broadcast);
+  const threads = new Threads(opts.home, profiles, projects, deps.harness ?? claudeCode, broadcast, models);
   await threads.load();
   threads.register(router);
 

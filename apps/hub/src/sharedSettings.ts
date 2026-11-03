@@ -20,7 +20,8 @@ export type MachineRecord = MachineHello & {
 /** What a store seeds itself with when it does not exist yet. */
 export type SharedSeed = { profiles: SharedProfile[]; machines: MachineRecord[] };
 
-type Data = SharedSeed;
+type FavoriteModel = { harnessId: string; modelId: string };
+type Data = SharedSeed & { modelFavorites?: Record<string, FavoriteModel[]> };
 
 /** GLOSSARY: Provider. The ones accio knows; only Anthropic can be signed in to so far. */
 export const PROVIDERS = [
@@ -80,7 +81,20 @@ export class SharedSettings {
       ...m,
       profileFolders: Object.fromEntries(Object.entries(m.profileFolders).filter(([id]) => ids.has(id))),
     }));
-    await this.commit({ profiles, machines });
+    const modelFavorites = Object.fromEntries(Object.entries(this.data.modelFavorites ?? {}).filter(([id]) => ids.has(id)));
+    await this.commit({ ...this.data, profiles, machines, modelFavorites });
+  }
+
+  modelFavorites(profileId: string): FavoriteModel[] {
+    return (this.data.modelFavorites?.[profileId] ?? []).map((m) => ({ ...m }));
+  }
+
+  async setModelFavorite(profileId: string, model: FavoriteModel, favorite: boolean) {
+    const remaining = this.modelFavorites(profileId).filter((m) => m.harnessId !== model.harnessId || m.modelId !== model.modelId);
+    await this.commit({
+      ...this.data,
+      modelFavorites: { ...this.data.modelFavorites, [profileId]: favorite ? [...remaining, model] : remaining },
+    });
   }
 
   machines(): (MachineRecord & { connected: boolean })[] {
