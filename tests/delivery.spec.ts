@@ -4,6 +4,23 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
+test('a conversation with no changes stops Ship without waiting for checks', async ({ page, baseURL }, testInfo) => {
+  await page.goto(`${baseURL}/#token=isolated-chat-test-token`);
+  await page.getByRole('button', { name: 'New thread', exact: true }).first().click();
+  await page.getByRole('option', { name: /delivery-project/ }).click();
+  await page.locator('.composer textarea').fill('Delivery follow-up');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect(page.getByText('Fresh workspace ready.', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Ship', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Nothing to ship: this thread has no new commits.');
+  await expect(page.getByText('Waiting for checks', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Check now', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Archive', exact: true })).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole('alert')).toContainText('Nothing to ship');
+  await page.screenshot({ path: testInfo.outputPath('nothing-to-ship.png') });
+});
+
 test('Ship menu, queued cancellation, owned preview, delivery, Archive and follow-up work through the real UI', async ({ page, baseURL }, testInfo) => {
   await page.goto(`${baseURL}/#token=isolated-chat-test-token`);
   await page.getByRole('button', { name: 'New thread', exact: true }).first().click();

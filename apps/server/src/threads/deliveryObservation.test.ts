@@ -87,7 +87,12 @@ async function reviewProject(checks = 'SUCCESS') {
 
 it('settles verified direct publication once, retains the workspace, and respects Reopen through restart', async () => {
   const harness = new FakeHarness(async function* (run) {
-    if (run.prompt.startsWith('Deliver the current task')) await git(run.cwd, 'push', '--quiet', 'origin', 'HEAD:main');
+    if (run.prompt.startsWith('Deliver the current task')) {
+      await writeFile(join(run.cwd, 'feature'), 'published change\n');
+      await git(run.cwd, 'add', '.');
+      await git(run.cwd, 'commit', '--quiet', '-m', 'feature');
+      await git(run.cwd, 'push', '--quiet', 'origin', 'HEAD:main');
+    }
     yield* replyWith('done');
   });
   const { client, checkout } = await project(harness);

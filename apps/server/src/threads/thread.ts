@@ -4,11 +4,11 @@ import { DEFAULT_MODEL } from '@accio/protocol';
 import { UserError } from '../rpc/router.js';
 
 /** A thread as stored: what clients see, plus the harness session it continues. */
-export type Thread = ThreadView & { sessionId: string | null; organizationVersion?: number };
+export type Thread = ThreadView & { sessionId: string | null; organizationVersion?: number; resumeAfterRestart?: boolean };
 
 export const NEW_THREAD_TITLE = 'New thread';
 
-export function toView({ sessionId: _s, organizationVersion: _o, ...view }: Thread): ThreadView {
+export function toView({ sessionId: _s, organizationVersion: _o, resumeAfterRestart: _r, ...view }: Thread): ThreadView {
   return view;
 }
 
@@ -73,6 +73,7 @@ export function startTurn(thread: Thread, firstText: string, now: string): Threa
   return {
     ...reopen(thread),
     status: 'running',
+    resumeAfterRestart: undefined,
     title: thread.title === NEW_THREAD_TITLE ? titleFrom(firstText) : thread.title,
     updatedAt: now,
   };
@@ -97,17 +98,19 @@ export type TurnOutcome = 'completed' | 'failed' | 'interrupted';
 /** Where a thread stands once its turn has ended. */
 export function endTurn(thread: Thread, outcome: TurnOutcome, now: string): Thread {
   const status = outcome === 'completed' ? 'idle' : outcome;
-  return { ...thread, status, updatedAt: now };
+  return { ...thread, status, updatedAt: now, resumeAfterRestart: outcome === 'interrupted' ? thread.resumeAfterRestart : undefined };
 }
 
 /**
  * On startup no turn can still be running: the process that ran it is gone.
- * Those threads become interrupted and wait for you to resume them (no
- * automatic continue in v0.1, unlike T3).
+ * Recover their status before starting a fresh turn on the saved session.
+ * Delivery remains an explicit action, including queued publishing intent.
  */
 export function recoverAfterRestart(threads: readonly Thread[]): { threads: Thread[]; interrupted: Thread[] } {
   const interrupted = threads.filter((t) => t.status === 'running');
-  const next = threads.map((t) => (t.status === 'running' ? { ...t, status: 'interrupted' as const } : t));
+  const next = threads.map((t) => (t.status === 'running' ? { ...t, status: 'interrupted' as const,
+    resumeAfterRestart: t.resumeAfterRestart !== false && !!t.sessionId && !t.delivery,
+  } : t));
   return { threads: next, interrupted };
 }
 

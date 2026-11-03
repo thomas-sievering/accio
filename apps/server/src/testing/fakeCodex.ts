@@ -3,8 +3,10 @@ import { join } from 'node:path';
 import type { CodexClient, CodexFactory, CodexNotification } from '@accio/codex';
 
 export const fakeModels = [
-  { id: 'test-codex', model: 'test-codex', displayName: 'Test Codex', description: 'A test model', isDefault: true },
-  { id: 'test-fast', model: 'test-fast', displayName: 'Test Fast', description: 'Another test model', isDefault: false },
+  { id: 'test-codex', model: 'test-codex', displayName: 'Test Codex', description: 'A test model', isDefault: true,
+    supportedReasoningEfforts: [{ reasoningEffort: 'low', description: 'Fast' }, { reasoningEffort: 'medium', description: 'Balanced' }, { reasoningEffort: 'high', description: 'Deep' }], defaultReasoningEffort: 'medium' },
+  { id: 'test-fast', model: 'test-fast', displayName: 'Test Fast', description: 'Another test model', isDefault: false,
+    supportedReasoningEfforts: [{ reasoningEffort: 'low', description: 'Fast' }], defaultReasoningEffort: 'low' },
 ];
 export function testJWT(who: string, expired = false) {
   return `header.${Buffer.from(JSON.stringify({ sub: who, exp: Math.floor(Date.now() / 1000) + (expired ? -100 : 3600) })).toString('base64url')}.signature`;

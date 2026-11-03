@@ -10,6 +10,18 @@ const result = (content: unknown, is_error = false): HarnessMessage => ({ type: 
 const toolChanges = (changes: TranscriptChange[]) => changes.filter((change): change is Extract<TranscriptChange, { type: 'tool' }> => change.type === 'tool');
 
 describe('TurnTranscript', () => {
+  it('shortens shell summaries before clipping and preserves the full input', () => {
+    const t = new TurnTranscript('t1');
+    const script = 'Get-Content ' + 'a'.repeat(220);
+    const command = `"C:\\\\WINDOWS\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe" -Command '${script}'`;
+    const [change] = toolChanges(t.accept({ type: 'harness_event', event: {
+      kind: 'tool', id: 'shell', name: 'Shell', summary: command, input: { command }, status: 'running',
+    } }));
+    expect(change!.item.summary).toBe(script.slice(0, 199) + '…');
+    expect(change!.input).toEqual({ command });
+    expect(summarizeTool('Read', { file_path: command })).toBe(command.slice(0, 199) + '…');
+  });
+
   it('keeps full harness-neutral tool details separate from previews and closes interrupted tools', () => {
     const t = new TurnTranscript('t1');
     const tool = { kind: 'tool' as const, id: 'cmd', name: 'Shell', summary: 'git status\necho done' };

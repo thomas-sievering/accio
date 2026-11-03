@@ -9,7 +9,7 @@ import { runCommand } from './process.js';
 describe('hub resource management', () => {
   let stop: (() => Promise<void>) | undefined;
   afterEach(() => stop?.());
-  const definition = { id: 'playwright', name: 'Playwright CLI', package: '@playwright/cli', version: '1.0.0', executable: 'playwright-cli', checkArgs: ['--version'], scope: optionalScope() };
+  const definition = { id: 'playwright', name: 'Playwright CLI', package: '@playwright/cli', version: '1.0.0', executable: 'playwright-cli', checkArgs: ['--version'] };
   async function installed(prefix: string) {
     const folder = join(prefix, 'node_modules', '@playwright', 'cli');
     await mkdir(folder, { recursive: true });
@@ -32,6 +32,16 @@ describe('hub resource management', () => {
     await c.waitFor('resources.changed', state => state.toolStatuses.some(s => s.toolId === definition.id && s.status === 'ready'));
     expect((await c.call('resources.get', {})).toolStatuses[0]?.status).toBe('ready');
   });
+  it('adds managed tools to ordinary turns without project or profile selections', async () => {
+    const harness = new FakeHarness();
+    const t = await startTestApp({ harness, resourceCommand: async () => '1.0.0' }); stop = t.stop;
+    const c = await t.connect(); await c.signedIn('Personal');
+    await installed(t.app.resources.tools.folder(definition));
+    await c.call('tools.save', definition);
+    const thread = await c.call('threads.start', { profileId: 'personal', text: 'Use the browser' });
+    await c.waitFor('threads.changed', threads => threads.some(x => x.id === thread.id && x.status === 'idle'));
+    expect(harness.runs[0]?.env.PATH).toContain(t.app.resources.tools.bin(definition));
+  });
   it('keeps failed checks visible when no profile can run a repair', async () => {
     const t = await startTestApp({ resourceCommand: async () => { throw new Error('broken'); } }); stop = t.stop;
     const c = await t.connect(); await installed(t.app.resources.tools.folder(definition)); await c.call('tools.save', definition);
@@ -39,14 +49,14 @@ describe('hub resource management', () => {
     expect(status).toMatchObject({ status: 'error', repairError: expect.stringContaining('Sign in') });
     expect(await c.call('threads.list', {})).toEqual([]);
   });
-  it('stores MCP tokens only on the hub and grants access only during an enabled turn', async () => {
+  it('stores MCP tokens only on the hub and grants access only during a turn without project or profile selections', async () => {
     const held = gate(); const requests: RequestInit[] = [];
     const harness = new FakeHarness(async function* () { await held.opened; yield* replyWith('done'); });
     const t = await startTestApp({ harness, mcpFetch: async (_url, init) => { requests.push(init!); return Response.json({ result: 'ok' }); } }); stop = t.stop;
     const c = await t.connect(); await c.signedIn('Personal');
-    await expect(c.call('mcp.save', { id: 'accio', name: 'Reserved', transport: 'http', url: 'https://example.test/mcp', auth: 'none', scope: optionalScope() })).rejects.toThrow('reserved');
-    await expect(c.call('mcp.save', { id: 'accio_secrets', name: 'Reserved', transport: 'http', url: 'https://example.test/mcp', auth: 'none', scope: optionalScope() })).rejects.toThrow('reserved');
-    await c.call('mcp.save', { id: 'mobbin', name: 'Mobbin', transport: 'http', url: 'https://mcp.example.test/mcp', auth: 'bearer', scope: { ...optionalScope(), global: true } });
+    await expect(c.call('mcp.save', { id: 'accio', name: 'Reserved', transport: 'http', url: 'https://example.test/mcp', auth: 'none' })).rejects.toThrow('reserved');
+    await expect(c.call('mcp.save', { id: 'accio_secrets', name: 'Reserved', transport: 'http', url: 'https://example.test/mcp', auth: 'none' })).rejects.toThrow('reserved');
+    await c.call('mcp.save', { id: 'mobbin', name: 'Mobbin', transport: 'http', url: 'https://mcp.example.test/mcp', auth: 'bearer' });
     await c.call('mcp.setToken', { id: 'mobbin', token: 'private-mobbin-token' });
     expect(JSON.stringify(await c.call('resources.get', {}))).not.toContain('private-mobbin-token');
     expect(await readFile(join(t.home, 'hub', 'resources.json'), 'utf8')).not.toContain('private-mobbin-token');
@@ -58,10 +68,10 @@ describe('hub resource management', () => {
     const response = await fetch(mcp.url, { method: 'POST', headers: mcp.headers, body: '{}' });
     expect(response.status).toBe(200);
     expect(new Headers(requests[0]?.headers).get('authorization')).toBe('Bearer private-mobbin-token');
-    await c.call('mcp.save', { id: 'mobbin', name: 'Mobbin', transport: 'http', url: 'https://mcp.example.test/mcp', auth: 'bearer', scope: optionalScope() });
-    expect((await fetch(mcp.url, { headers: mcp.headers })).status).toBe(403);
+    await c.call('mcp.save', { id: 'mobbin', name: 'Mobbin', transport: 'http', url: 'https://mcp.example.test/mcp', auth: 'bearer' });
+    expect((await fetch(mcp.url, { headers: mcp.headers })).status).toBe(200);
     held.release(); await c.waitFor('threads.changed', threads => threads.some(x => x.id === thread.id && x.status === 'idle'));
-    expect((await fetch(mcp.url, { headers: mcp.headers })).status).toBe(403);
+    await expect.poll(async () => (await fetch(mcp.url, { headers: mcp.headers })).status).toBe(403);
   });
   it('imports real Git skills, applies project scope and copies without overwriting project content', async () => {
     const harness = new FakeHarness(); const t = await startTestApp({ harness }); stop = t.stop;
@@ -112,7 +122,7 @@ describe('hub resource management', () => {
     };
     const t = await startTestApp({ harness, mcpFetch }); stop = t.stop;
     const c = await t.connect(); await c.signedIn('Personal');
-    await c.call('mcp.save', { id: 'mobbin', name: 'Mobbin', transport: 'http', url: 'https://mcp.example.test/mcp', auth: 'oauth', scope: { ...optionalScope(), global: true } });
+    await c.call('mcp.save', { id: 'mobbin', name: 'Mobbin', transport: 'http', url: 'https://mcp.example.test/mcp', auth: 'oauth' });
     const { url } = await c.call('mcp.beginSignIn', { id: 'mobbin' });
     const auth = new URL(url); expect(auth.searchParams.get('code_challenge_method')).toBe('S256');
     const callback = new URL(auth.searchParams.get('redirect_uri')!); callback.searchParams.set('code', 'success'); callback.searchParams.set('state', auth.searchParams.get('state')!);

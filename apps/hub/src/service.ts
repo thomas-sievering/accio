@@ -71,6 +71,7 @@ export async function startHubService(opts: HubServiceOptions) {
   settings.onMachinesChanged(announce);
   hub.limits.subscribe(announce);
   secrets.onChanged(announce);
+  const modelsRefreshed = hub.refreshCodexModels().then((changed) => { if (changed) announce(); });
   function auth(req: IncomingMessage) { const token = /^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1]; return token ? trust.authenticate(token) : undefined; }
   function login(id: string, machineId: string) {
     const pending = logins.get(id);
@@ -131,6 +132,7 @@ export async function startHubService(opts: HubServiceOptions) {
           }
         }
         if (p.method === 'setSkillScope') args[1] = ResourceScope.parse(args[1]);
+        if (p.method === 'setSkillProject' && (!args[1] || typeof args[1].projectKey !== 'string' || !args[1].projectKey || args[1].projectKey.length > 512 || typeof args[1].enabled !== 'boolean')) throw new SignInError('Invalid project skill selection');
         if (p.method === 'setToolStatus' && (!args[0] || args[0].machineId !== machineId || typeof args[0].toolId !== 'string' || !['pending', 'installing', 'ready', 'error'].includes(args[0].status))) throw new SignInError('Invalid machine tool status');
         if (p.method === 'setCredential' && (!resources.state().mcps.some(value => value.id === args[0] && value.auth === 'bearer') || typeof args[1]?.accessToken !== 'string')) throw new SignInError('Select a bearer-authenticated MCP server');
         if (p.method === 'deleteMcp') await mcp.signOut(args[0]);
@@ -289,7 +291,7 @@ export async function startHubService(opts: HubServiceOptions) {
   const url = `http://${opts.host ?? '127.0.0.1'}:${port}`;
   mcp.setUrl(opts.publicUrl ?? url);
   return { hub, settings, resources, secrets, trust, port, url, snapshot, createPairingCode: () => HubTrust.createCode(opts.home),
-    async close() { closing = true; clearInterval(heartbeat); for (const ws of sockets.clients) ws.terminate(); await new Promise<void>((resolve) => server.close(() => resolve())); sockets.close(); await queue; for (const grant of grants.values()) grant.release(); await proxy.close(); await hub.close(); await secrets.close(); await resources.close(); await settings.close(); await trust.close(); } };
+    async close() { closing = true; clearInterval(heartbeat); for (const ws of sockets.clients) ws.terminate(); await new Promise<void>((resolve) => server.close(() => resolve())); sockets.close(); await queue; for (const grant of grants.values()) grant.release(); await proxy.close(); await modelsRefreshed; await hub.close(); await secrets.close(); await resources.close(); await settings.close(); await trust.close(); } };
 }
 
 function json(res: ServerResponse, status: number, value: unknown) { res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify(value)); }

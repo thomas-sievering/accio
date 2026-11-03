@@ -753,12 +753,14 @@ button.row {
   font-weight: 600;
   color: var(--muted);
 }
+/* The model and its effort sit together on the left of the composer bar. */
+.model-choice { display: inline-flex; align-items: center; gap: 2px; min-width: 0; margin-right: auto; }
+/* The first control's text lines up with the textarea's; its hover pill bleeds left. */
+.model-choice > :first-child { margin-left: -8px; }
 .model-trigger {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-left: -8px; /* Icon lines up with the textarea text; the hover pill bleeds left. */
-  margin-right: auto;
   padding: 5px 8px;
   border-radius: 6px;
   color: var(--muted);
@@ -811,6 +813,15 @@ div.model-picker-empty { display: flex; flex-direction: column; align-items: cen
 div.model-picker-empty b { color: var(--ink); font-weight: 500; }
 .model-picker-empty-icon { display: grid; place-items: center; width: 32px; height: 32px; margin-bottom: 4px; border: 1px solid var(--line); border-radius: 8px; color: var(--amber); }
 .model-picker-error { grid-column: 1 / -1; margin: 0; padding: 10px 12px; border-top: 1px solid var(--line); }
+
+/* GLOSSARY: Effort. Quiet text at rest; the word rolls with a spring when changed. */
+.effort-word { display: inline-grid; position: relative; overflow: hidden; color: var(--muted); font-size: 11px; line-height: 20px; margin-left: 2px; text-align: left; }
+.effort-word > span { grid-area: 1 / 1; }
+.effort-word-size { visibility: hidden; }
+.effort-word-out { opacity: 0; }
+.effort-word-current, .effort-word-out { transform-origin: left center; }
+.model-picker-row.limited .model-picker-name { opacity: 0.55; }
+.model-picker-limited { color: var(--amber) !important; }
 .composer-machine {
   max-width: 240px;
   min-width: 0;
@@ -850,19 +861,36 @@ div.model-picker-empty b { color: var(--ink); font-weight: 500; }
   height: 15px;
 }
 
-/* Stop: while a turn runs, the send slot becomes a red round stop button */
+/* Stop stays separate from the primary send action during a turn. */
 .send.stop {
   border-radius: 50%;
-  background: #e5484d;
-  color: #fff;
+  background: transparent;
+  border: 1px solid var(--line-2);
+  color: var(--red);
 }
 .send.stop:hover:not(:disabled) {
-  background: #d93d42;
+  background: color-mix(in srgb, var(--red) 12%, transparent);
 }
 .send.stop svg {
   width: 12px;
   height: 12px;
 }
+.send.queue { background: var(--blue); color: var(--bg); }
+.send.queue:hover:not(:disabled) { background: color-mix(in srgb, var(--blue) 80%, var(--ink-strong)); }
+.composer-queue { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px; color: var(--muted); font-size: 12px; border-radius: 5px; }
+.composer-queue:hover:not(:disabled) { background: var(--raised-2); color: var(--ink); }
+.composer-queue kbd { color: var(--dim); font: inherit; font-size: 11px; }
+.queue-tray { margin: 0 10px; padding: 4px 8px; background: var(--raised); border: 1px solid var(--line); border-bottom: 0; border-radius: 9px 9px 0 0; max-height: 200px; overflow: auto; }
+.queued-message { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 32px; font-size: 12px; }
+.queued-message > svg { width: 13px; height: 13px; flex: none; color: var(--dim); }
+.queued-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.queued-when { color: var(--dim); white-space: nowrap; }
+.queued-message button { flex: none; padding: 4px; color: var(--muted); border-radius: 4px; white-space: nowrap; }
+.queued-message button:hover:not(:disabled) { color: var(--ink-strong); background: var(--raised-2); }
+.queued-message button svg { width: 13px; height: 13px; }
+.queued-message form { display: flex; flex: 1; min-width: 0; gap: 6px; }
+.queued-message input { flex: 1; min-width: 0; padding: 4px 6px; }
+@media (max-width: 600px) { .queued-when, .composer-queue kbd { display: none; } }
 /* The one slot above the composer: why the thread can't go on, and the action that fixes it */
 .notice-bar {
   display: flex;

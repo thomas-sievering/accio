@@ -10,12 +10,11 @@ import { limitsLayout, retryBlockedUntil, type LimitsEntry, type LimitsScope } f
  * Profile → provider → selected account, with each account's own allowance
  * windows. Opening or navigating from here never changes a profile's accounts.
  */
-export function LimitsView({ scope, onScope, onClose, onOpenAccount, onOpenProfile }: {
+export function LimitsView({ scope, onScope, onClose, onOpenAccount }: {
   scope: LimitsScope;
   onScope: (scope: LimitsScope) => void;
   onClose: () => void;
   onOpenAccount: (accountId: string) => void;
-  onOpenProfile: (profileId: string) => void;
 }) {
   const { profiles } = useProfiles();
   const { views, loadError, retryLoad, refreshError, refresh, status, now } = useLimits();
@@ -54,7 +53,6 @@ export function LimitsView({ scope, onScope, onClose, onOpenAccount, onOpenProfi
       <div className="settings-scroll">
         <div className="limits-page">
           <ScopePicker scope={scope} onScope={onScope} />
-          <p className="limits-intro">Each account’s allowance is set by its provider and counts all its use, including use outside accio.</p>
           {disconnected && <p className="limits-banner" role="status">Not connected to accio’s server. Values below are last known and update once it reconnects.</p>}
           {!disconnected && loadError && (
             <div className="limits-banner error" role="alert">
@@ -79,10 +77,9 @@ export function LimitsView({ scope, onScope, onClose, onOpenAccount, onOpenProfi
             <section key={profile.id} className="limits-profile" aria-labelledby={`limits-profile-${profile.id}`}>
               {scope === 'all' && <h2 id={`limits-profile-${profile.id}`}>{profile.name}</h2>}
               {scope !== 'all' && <h2 id={`limits-profile-${profile.id}`} className="visually-hidden">{profile.name}</h2>}
-              {entries.length === 0 && <p className="limits-intro">No providers are available for this profile.</p>}
+              {entries.length === 0 && <p className="limits-intro">No accounts selected for this profile.</p>}
               {entries.map((entry) => (
-                <Entry key={entry.kind === 'none' ? entry.provider.id : `${entry.provider.id}:${entry.account.id}`} entry={entry} profileId={profile.id}
-                  onOpenAccount={onOpenAccount} onOpenProfile={onOpenProfile} />
+                <Entry key={`${entry.provider.id}:${entry.account.id}`} entry={entry} onOpenAccount={onOpenAccount} />
               ))}
             </section>
           ))}
@@ -92,8 +89,8 @@ export function LimitsView({ scope, onScope, onClose, onOpenAccount, onOpenProfi
   );
 }
 
-function Entry({ entry, profileId, onOpenAccount, onOpenProfile }: {
-  entry: LimitsEntry; profileId: string; onOpenAccount: (id: string) => void; onOpenProfile: (id: string) => void;
+function Entry({ entry, onOpenAccount }: {
+  entry: LimitsEntry; onOpenAccount: (id: string) => void;
 }) {
   const label = providerLabel(entry.provider);
   if (entry.kind === 'account') {
@@ -117,17 +114,6 @@ function Entry({ entry, profileId, onOpenAccount, onOpenProfile }: {
       </div>
     );
   }
-  return (
-    <div className="limits-row">
-      <span className="limits-provider-mark"><ProviderLogo providerId={entry.provider.id} /></span>
-      <div className="limits-identity">
-        <small>{entry.provider.name}</small>
-        <b>No {entry.provider.accountName} selected</b>
-        <small>Select one in this profile’s settings to use {entry.provider.name} models.</small>
-      </div>
-      <button type="button" className="ghost" onClick={() => onOpenProfile(profileId)}>Select account</button>
-    </div>
-  );
 }
 
 /** Profiles as a single-choice group; arrow keys move between them as in a tab list. */

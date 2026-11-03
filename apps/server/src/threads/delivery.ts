@@ -128,6 +128,7 @@ export class DeliveryGit {
     if (localRevision !== revision) throw new UserError('New commits need to be shipped before delivery can complete.');
     if (await git(workspace.path, 'branch', '--show-current') !== workspace.branch) throw new UserError('The worktree’s branch changed. Restore its owned branch before delivery.');
     if (await git(workspace.path, 'status', '--porcelain', '--untracked-files=all')) throw new UserError('Uncommitted work remains. The workspace has been kept.');
+    if (delivery.mode === 'ship' && revision === workspace.startRevision) throw new UserError('Nothing to ship: this thread has no new commits. The workspace has been kept.');
     await record({ revision, checkedAt });
     let publishedRevision = revision;
     if (pr) {
@@ -135,7 +136,7 @@ export class DeliveryGit {
         if (pr.isDraft || pr.reviewDecision === 'CHANGES_REQUESTED') throw new DeliveryPending('The PR needs review changes. Continuing in the owning thread.', true, 'review');
         if (pr.mergeable === 'CONFLICTING') throw new DeliveryPending('The PR has conflicts. Continuing in the owning thread.', true, 'merge');
         assertChecks(pr.statusCheckRollup ?? []);
-        await verifyGitHubChecks(workspace.sourcePath, slug!, revision!, this.hosting);
+        await verifyGitHubChecks(workspace.sourcePath, slug!, revision!, delivery.requestedAt, this.hosting);
         if (pr.reviewDecision === 'REVIEW_REQUIRED') throw new DeliveryPending('Waiting for the required PR review.', false, 'review');
         if (delivery.mode === 'review') return { ...result, status: 'ready', waitingOn: 'merge', detail: undefined, observationError: undefined, observationFailures: 0 };
         if (pr.autoMergeRequest || pr.mergeStateStatus === 'QUEUED') throw new DeliveryPending('Waiting for the PR to merge.', false, 'merge');
@@ -148,7 +149,7 @@ export class DeliveryGit {
     catch { throw new DeliveryUnavailable('Could not read the latest target branch on origin. Retrying without publishing again.'); }
     if (await maybeGit(workspace.path, 'merge-base', '--is-ancestor', publishedRevision, `refs/remotes/origin/${delivery.baseBranch}`) === null) throw new UserError('This revision has not reached the target branch. The workspace has been kept.');
     await record({ publishedRevision, integratedAt: result.integratedAt ?? checkedAt });
-    if (slug) await verifyGitHubChecks(workspace.sourcePath, slug, publishedRevision, this.hosting);
+    if (slug) await verifyGitHubChecks(workspace.sourcePath, slug, publishedRevision, result.integratedAt ?? delivery.requestedAt, this.hosting);
     // Host reads can take time. Files or commits added meanwhile still belong to this thread.
     if (await git(workspace.path, 'rev-parse', 'HEAD') !== revision || await git(workspace.path, 'branch', '--show-current') !== workspace.branch
       || await git(workspace.path, 'status', '--porcelain', '--untracked-files=all')) throw new UserError('The worktree changed during delivery verification. Its new work has been kept.');
@@ -195,7 +196,7 @@ function assertChecks(checks: any[]) {
   if (conclusions.some(c => ['failure', 'error', 'cancelled', 'timed_out', 'action_required', 'startup_failure'].includes(c))) throw new DeliveryPending('Checks are failing. Continuing fixes in the owning thread.', true);
   if (conclusions.some(c => !['success', 'neutral', 'skipped'].includes(c))) throw new DeliveryPending('Waiting for checks to finish.');
 }
-async function verifyGitHubChecks(cwd: string, slug: string, revision: string, hostingJson: typeof ghJson) {
+async function verifyGitHubChecks(cwd: string, slug: string, revision: string, requestedAt: string, hostingJson: typeof ghJson) {
   const checks = await hostingJson(cwd, ['api', `repos/${slug}/commits/${revision}/check-runs?per_page=100`]);
   const statuses = await hostingJson(cwd, ['api', `repos/${slug}/commits/${revision}/status?per_page=100`]);
   if (checks.total_count > 100 || statuses.total_count > 100) throw new UserError('Too many checks to verify automatically. The workspace has been kept.');
@@ -203,7 +204,12 @@ async function verifyGitHubChecks(cwd: string, slug: string, revision: string, h
   assertChecks(statuses.statuses ?? []);
   if (!(checks.check_runs?.length || statuses.statuses?.length)) {
     const workflows = await hostingJson(cwd, ['api', `repos/${slug}/actions/workflows?per_page=100`]);
-    if (workflows.workflows?.some((w: any) => w.state === 'active')) throw new DeliveryPending('Waiting for GitHub to report checks for this revision.');
+    if (workflows.workflows?.some((w: any) => w.state === 'active')) {
+      // Active workflows may exclude this branch or its changed paths. Allow
+      // registration time, but never infer that missing checks passed.
+      if (Date.now() - Date.parse(requestedAt) < 2 * 60_000) throw new DeliveryPending('Waiting for GitHub to report checks for this revision.');
+      throw new UserError('GitHub reported no checks for this revision within two minutes of the delivery request. Workflows may exclude its branch or changed paths. Run the applicable verification, then request delivery again. The workspace has been kept.');
+    }
   }
 }
 

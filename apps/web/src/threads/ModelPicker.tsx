@@ -1,9 +1,15 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
-import { modelKey, type ModelSelection, type ModelsState } from '@accio/protocol';
+import { modelKey, type ModelSelection, type ModelsState, type UsedUpLimit } from '@accio/protocol';
 import { useClient, useConnectionStatus } from '../app/connection';
 import { Check, ProviderLogo, Star } from '../app/icons';
+import { EffortWord, effortSteps } from './EffortControl';
+import { useSteps, useWheelSteps } from './steps';
 
-/** A profile-scoped picker: favourites first, then each provider/harness pair. */
+/**
+ * GLOSSARY: Effort. One chip for what a thread runs: the model and a muted effort word.
+ * Scrolling over it, or the up and down keys, change the effort; clicking lists the
+ * profile's models, favourites first, then each provider/harness pair.
+ */
 export function ModelPicker({ profileId, harnessId, value, onChange, disabled = false }: {
   profileId?: string;
   harnessId?: string;
@@ -15,6 +21,7 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
   const status = useConnectionStatus();
   const id = useId();
   const panel = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
   const [loaded, setLoaded] = useState<{ profileId: string; state: ModelsState }>();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -70,7 +77,10 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
     if (busy || disabled) return;
     setBusy(true);
     setError(undefined);
-    try { await onChange(model); panel.current?.hidePopover(); }
+    // Another model keeps the effort when it accepts it, so moving from Opus to Sonnet stays at high.
+    const next = models.find((m) => m.harnessId === model.harnessId && m.id === model.modelId);
+    const effort = value.effort && next?.efforts.some((e) => e.id === value.effort) ? value.effort : undefined;
+    try { await onChange(effort ? { ...model, effort } : model); panel.current?.hidePopover(); }
     catch (err) { setError((err as Error).message); }
     finally { setBusy(false); }
   };
@@ -100,8 +110,22 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
     buttons[next]?.focus();
   };
 
-  return <>
-    <button type="button" className="model-trigger" popoverTarget={id} disabled={disabled || busy || !profileId || status !== 'open'} aria-label={`Select model: ${selected?.name ?? fallbackName}`}
+  const effort = selected && selected.efforts.length > 0 ? effortSteps(selected, current.effort) : undefined;
+  const stepper = useSteps(effort?.steps ?? [], effort?.index ?? -1,
+    (next) => onChange({ harnessId: current.harnessId, modelId: current.modelId, ...(next ? { effort: next } : {}) }), setError);
+  useWheelSteps(trigger, stepper.step);
+  const shownEffort = effort?.steps[stepper.shown];
+  // "Claude Opus · High effort"; Auto leaves the effort to the harness.
+  const description = `${selected?.name ?? fallbackName}${shownEffort ? ` · ${shownEffort.label === 'Auto' ? 'default' : shownEffort.label} effort` : ''}`;
+
+  return <span className="model-choice">
+    <button type="button" ref={trigger} className="model-trigger" popoverTarget={id}
+      disabled={disabled || busy || !profileId || status !== 'open'} aria-label={`Select model: ${description}`} title={effort ? `${description} · scroll to change effort` : description}
+      onKeyDown={(event) => {
+        if (!effort) return;
+        if (event.key === 'ArrowUp') { event.preventDefault(); stepper.step(1); }
+        if (event.key === 'ArrowDown') { event.preventDefault(); stepper.step(-1); }
+      }}
       onClick={(event) => {
         const rect = event.currentTarget.getBoundingClientRect();
         const width = Math.min(340, window.innerWidth - 24);
@@ -115,6 +139,7 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
       }}>
       <ProviderLogo providerId={selected?.providerId ?? (value.harnessId === 'codex' ? 'openai' : 'anthropic')} />
       <span>{shortName}</span>
+      {effort && <EffortWord key={modelKey(current)} steps={effort.steps} index={stepper.shown} />}
     </button>
     <div id={id} ref={panel} popover="auto" className="model-picker" style={position} role="dialog" aria-label="Choose a model" onKeyDown={move}
       onToggle={(event) => { if (event.newState === 'open') { setTab(openingTab()); focusRow(); } }}>
@@ -139,10 +164,11 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
           const key = modelKey(choice);
           const isSelected = modelKey(current) === key;
           const isFavorite = favorites.has(key);
-          return <div className={`model-picker-row${isSelected ? ' selected' : ''}`} key={key}>
+          return <div className={`model-picker-row${isSelected ? ' selected' : ''}${m.limited ? ' limited' : ''}`} key={key} title={m.limited ? usedUpText(m.limited) : undefined}>
             <button type="button" data-model-choice aria-pressed={isSelected} onClick={() => void choose(choice)}>
               {/* Favourites mix providers, so each row carries its provider's logo instead of the full name. */}
               <span className="model-picker-name">{activeTab === 'favorites' ? <><ProviderLogo providerId={m.providerId} />{short(m.name)}</> : m.name}{m.isDefault && <span className="model-picker-badge">Default</span>}</span>
+              {m.limited && <small className="model-picker-limited">{usedUpText(m.limited)}</small>}
             </button>
             <button type="button" className="model-star" title={isFavorite ? 'Remove from favourites' : 'Add to favourites'}
               aria-label={`${isFavorite ? 'Remove' : 'Add'} ${m.name} ${isFavorite ? 'from' : 'to'} favourites`} aria-pressed={isFavorite}
@@ -155,7 +181,13 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
       </div>
       {error && <p className="error model-picker-error" role="alert">{error}</p>}
     </div>
-  </>;
+  </span>;
+}
+
+/** "Fable's weekly limit is used up · resets Thu 13:00" */
+function usedUpText(limit: UsedUpLimit) {
+  const at = limit.resetsAt && new Date(limit.resetsAt).toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+  return `${limit.label} is used up${at ? ` · resets ${at}` : ''}`;
 }
 
 /** The provider logo already names the brand, so a name beside it drops the "Claude " prefix. */

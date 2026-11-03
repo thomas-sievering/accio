@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { query } from '@anthropic-ai/claude-agent-sdk';
+import { query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { systemPromptText } from '../harnesses/systemPrompt.js';
 import { ACCIO_MCP_SERVER } from '../tools/tools.js';
 import type { Harness, HarnessMessage, HarnessTurn } from './harness.js';
@@ -18,15 +18,17 @@ const HARD_STOP_AFTER_MS = 3000;
  * the checkout's own .claude folder and CLAUDE.md.
  */
 export const claudeCode: Harness = {
-  async *run({ cwd, prompt, sessionId, model, modelName, env, tools, signal, resourceInstructions, mcps, requestSecret, secretPurposes }: HarnessTurn) {
+  async *run({ cwd, prompt, sessionId, model, effort, modelName, env, tools, signal, resourceInstructions, mcps, requestSecret, secretPurposes, registerSteer }: HarnessTurn) {
     if (signal.aborted) return;
     const abortController = new AbortController();
     const stderr: string[] = [];
+    const input = new SteeringInput(prompt, sessionId ?? '');
     const q = query({
-      prompt,
+      prompt: input.stream(),
       options: {
         cwd,
         model,
+        ...(effort ? { effort: effort as 'low' | 'medium' | 'high' | 'xhigh' | 'max' } : {}),
         env,
         abortController,
         resume: sessionId ?? undefined,
@@ -47,6 +49,7 @@ export const claudeCode: Harness = {
         },
       },
     });
+    registerSteer?.((text) => input.send(text));
 
     // Give Claude a bounded chance to acknowledge interruption, then terminate
     // and await its cleanup before releasing the turn or exiting the server.
@@ -72,6 +75,11 @@ export const claudeCode: Harness = {
         next.catch(() => {}); // may reject after we stop listening
         const step = await Promise.race([next, stopped]);
         if (step === 'stopped' || step.done) return;
+        if (step.value.type === 'result') {
+          registerSteer?.(undefined);
+          yield step.value as HarnessMessage;
+          return;
+        }
         yield step.value as HarnessMessage;
       }
     } catch (err) {
@@ -79,6 +87,8 @@ export const claudeCode: Harness = {
       const detail = stderr.join('').trim().split('\n').slice(-5).join('\n');
       throw new Error(detail ? `${(err as Error).message}\n${detail}` : (err as Error).message);
     } finally {
+      registerSteer?.(undefined);
+      input.close();
       signal.removeEventListener('abort', onAbort);
       await interruption;
       clearTimeout(stopTimer);
@@ -87,6 +97,36 @@ export const claudeCode: Harness = {
     }
   },
 };
+
+/** Keep stdin open for native mid-turn input; close it with this turn. */
+class SteeringInput {
+  private pending: { text: string; resolve: () => void; reject: (error: Error) => void }[] = [];
+  private wake = () => {};
+  private closed = false;
+  constructor(private prompt: string, private sessionId: string) {}
+  send(text: string) {
+    if (this.closed) return Promise.reject(new Error('This turn has finished'));
+    return new Promise<void>((resolve, reject) => { this.pending.push({ text, resolve, reject }); this.wake(); });
+  }
+  private message(text: string, steer = false): SDKUserMessage {
+    return { type: 'user', session_id: this.sessionId, parent_tool_use_id: null,
+      message: { role: 'user', content: text }, ...(steer ? { priority: 'now' as const } : {}) };
+  }
+  async *stream(): AsyncIterable<SDKUserMessage> {
+    yield this.message(this.prompt);
+    while (!this.closed) {
+      const next = this.pending.shift();
+      if (!next) { await new Promise<void>(resolve => { this.wake = resolve; }); continue; }
+      next.resolve();
+      yield this.message(next.text, true);
+    }
+  }
+  close() {
+    this.closed = true;
+    for (const next of this.pending.splice(0)) next.reject(new Error('This turn has finished'));
+    this.wake();
+  }
+}
 
 /** What this machine reports about Claude Code: the Agent SDK accio bundles. */
 export async function claudeCodeInstall(): Promise<{ harnessId: 'claudeCode'; version: string | null }> {

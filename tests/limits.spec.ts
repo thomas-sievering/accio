@@ -49,8 +49,14 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
   };
 
   await page.goto(`${baseURL}/#token=isolated-limits-test-token`);
+  await button('Continue').click();
   await page.getByPlaceholder('personal, work…').fill('Personal');
-  await button('Add').click();
+  await button('Continue').click();
+  await expect(page.getByRole('heading', { name: 'Choose an account for Personal' })).toBeVisible();
+  await button('Limits').click();
+  await expect(page.getByText('No accounts selected for this profile.', { exact: true })).toBeVisible();
+  await expect(page.locator('.limits-card, .limits-row')).toHaveCount(0);
+  await button('Close limits').click();
   await createAccount('Shared Claude', 'shared');
   await createAccount('Team Claude', 'work');
   await createAccount('Shared ChatGPT', undefined, true);
@@ -75,7 +81,7 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
   await button('Show limits').click();
   await expect(card('Shared ChatGPT')).toBeFocused();
   await expect(card('Shared Claude').getByRole('meter', { name: '5-hour allowance remaining' })).toHaveAttribute('aria-valuenow', '52');
-  await expect(card('Shared Claude').locator('.limits-meters').first().getByRole('meter')).toHaveCount(2);
+  await expect(card('Shared Claude').locator('.limits-meters').getByRole('meter')).toHaveCount(3);
   await expect(card('Shared Claude').getByRole('meter', { name: 'Weekly allowance remaining', exact: true })).toHaveCount(1);
   await expect(card('Shared Claude').locator('.limit-pace.ahead')).toHaveCount(2);
   await expect(card('Shared Claude').locator('.limit-time-marker')).toHaveCount(2);
@@ -83,7 +89,9 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
   await expect(card('Team Claude')).toContainText('Weekly limit reached.');
   await expect(card('Team Claude').getByRole('meter', { name: '5-hour allowance remaining' })).toHaveAttribute('aria-valuenow', '67');
   await expect(card('Team Claude').locator('.limit-meter.exhausted')).toHaveCSS('display', 'grid');
-  await card('Shared Claude').getByText('Model-specific limits', { exact: false }).click();
+  await expect(card('Shared Claude').locator('details')).toHaveCount(0);
+  await expect(card('Shared Claude').getByText('Unknown', { exact: true })).toHaveCount(0);
+  await expect(card('Shared Claude').getByRole('meter', { name: 'Fable weekly allowance remaining' })).toBeVisible();
   await expect(card('Shared Claude').getByRole('meter', { name: 'Fable weekly allowance remaining' })).toHaveAttribute('aria-valuenow', '99');
   await page.screenshot({ path: testInfo.outputPath('all-profiles.png'), fullPage: true });
 
@@ -125,7 +133,7 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
   // Account settings entered from Limits return to Limits and signing out removes meters.
   await card('Team Claude').getByRole('button', { name: 'Team Claude settings' }).click();
   await expect(page.getByRole('textbox', { name: 'Account name' })).toHaveValue('Team Claude');
-  await expect(page.locator('.account-limits').getByRole('meter')).toHaveCount(2);
+  await expect(page.locator('.account-limits').getByRole('meter')).toHaveCount(3);
   await expect(page.locator('.account-limits .limit-pace')).toHaveCount(2);
   await button('Sign out').click();
   await expect(page.locator('.account-limits')).toContainText('Signed out.');
@@ -133,7 +141,7 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
   await expect(card('Team Claude').getByRole('meter')).toHaveCount(0);
   await card('Team Claude').getByRole('button', { name: 'Sign in', exact: true }).click();
   await signIn('work');
-  await expect(page.locator('.account-limits').getByRole('meter')).toHaveCount(2);
+  await expect(page.locator('.account-limits').getByRole('meter')).toHaveCount(3);
   await button('Back').click();
 
   // Unselected account settings read limits too, and reauthentication rechecks immediately.
@@ -174,6 +182,22 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
   await page.getByRole('button', { name: /A fixture-only turn/ }).click();
   await expect(button('Close limits')).toHaveCount(0);
   await expect(page.locator('.composer textarea')).toHaveValue('Unsent follow-up');
+
+  // A provider selected by another profile stays hidden when unselected here.
+  await settings('Profiles');
+  await page.getByRole('button', { name: /^Work / }).click();
+  await page.getByRole('combobox', { name: /OpenAI · ChatGPT account/ }).selectOption('');
+  await button('Save').click();
+  await button('Back').click();
+  await button('Limits').click();
+  await page.getByRole('radio', { name: 'Work', exact: true }).click();
+  await expect(card('Team Claude')).toBeVisible();
+  await expect(page.locator('.limits-card')).toHaveCount(1);
+  await expect(page.locator('.limits-page')).not.toContainText('OpenAI');
+  await expect(button('Select account')).toHaveCount(0);
+  await page.getByRole('radio', { name: 'All profiles', exact: true }).click();
+  await expect(page.locator('.limits-profile').filter({ has: page.getByRole('heading', { name: 'Work', exact: true }) })).not.toContainText('OpenAI');
+  await expect(card('Shared ChatGPT')).toBeVisible();
   expect(errors).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath('composer.png'), fullPage: true });
 });

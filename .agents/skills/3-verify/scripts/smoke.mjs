@@ -10,8 +10,9 @@ export default async function smoke({ page, runDir, home, fixture, action, captu
   const settingsFile = () => readFile(join(home, 'hub/settings.json'), 'utf8').then(JSON.parse);
 
   await action('profiles/first-run: create Verify personal', async () => {
+    await button('Continue').click();
     await page.getByPlaceholder('personal, work…').fill('Verify personal');
-    await button('Add').click();
+    await button('Continue').click();
     await page.getByText('Choose an account for Verify personal', { exact: true }).waitFor();
     assert((await settingsFile()).profiles.some((p) => p.name === 'Verify personal'));
   });

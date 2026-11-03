@@ -26,10 +26,10 @@ describe('limitsLayout', () => {
   it('draws a shared account once in All profiles and references it from the others', () => {
     const groups = limitsLayout(profiles, 'all');
     expect(groups.map((g) => g.profile.id)).toEqual(['personal', 'work', 'side']);
-    const kinds = groups.map((g) => g.entries.map((e) => e.kind === 'none' ? `none:${e.provider.id}` : `${e.kind}:${e.account.id}`));
+    const kinds = groups.map((g) => g.entries.map((e) => `${e.kind}:${e.account.id}`));
     expect(kinds).toEqual([
       ['account:team', 'account:gpt'],
-      ['reference:team', 'none:openai'],
+      ['reference:team'],
       ['account:own', 'reference:gpt'],
     ]);
     const work = groups[1]!.entries[0]!;
@@ -45,9 +45,9 @@ describe('limitsLayout', () => {
     expect(side!.entries[0]).toMatchObject({ sharedWith: [] });
   });
 
-  it('shows a provider with no selected account, but skips unavailable empty providers', () => {
+  it('skips providers with no selected account regardless of availability', () => {
     const p: ProfileView = { id: 'p', name: 'p', providers: [provider('anthropic', []), provider('openai', [], false)] };
-    expect(limitsLayout([p], 'p')[0]!.entries.map((e) => e.kind)).toEqual(['none']);
+    expect(limitsLayout([p], 'p')[0]!.entries).toEqual([]);
   });
 
   it('returns nothing for a deleted profile', () => {
@@ -92,7 +92,7 @@ describe('windows', () => {
     expect(formatRemaining(0)).toBe('0%');
   });
 
-  it('orders general windows by length and groups model scopes for disclosure', () => {
+  it('orders general windows by length and groups model scopes', () => {
     const { general, scoped } = splitWindows([
       win({ id: 'week', kind: 'weekly', label: 'Weekly', durationMinutes: 10080 }),
       win({ id: 'opus', kind: 'weekly', label: 'Weekly', scope: 'opus' }),
@@ -100,6 +100,17 @@ describe('windows', () => {
     ]);
     expect(general.map((w) => w.id)).toEqual(['five', 'week']);
     expect(scoped).toEqual([{ scope: 'opus', windows: [expect.objectContaining({ id: 'opus' })] }]);
+  });
+
+  it('hides empty scoped placeholders while keeping reported limits and unknown general usage', () => {
+    const { general, scoped } = splitWindows([
+      win({ id: 'unknown', usedPercent: null }),
+      win({ id: 'breakdown', kind: 'weekly', scope: 'breakdown', usedPercent: null }),
+      win({ id: 'fable', kind: 'weekly', scope: 'Fable', usedPercent: 1 }),
+      win({ id: 'reset-only', scope: 'Opus', usedPercent: null, resetsAt: iso(60_000) }),
+    ]);
+    expect(general.map((w) => w.id)).toEqual(['unknown']);
+    expect(scoped.map((s) => s.windows.map((w) => w.id))).toEqual([['fable'], ['reset-only']]);
   });
 
   it('preserves the reported session value when the weekly window is used up', () => {

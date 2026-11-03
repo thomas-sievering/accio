@@ -66,6 +66,60 @@ describe('Codex and ChatGPT accounts', () => {
     expect((await c.call('models.list', { profileId: profile.id })).models).toEqual([]);
   });
 
+  it('runs the chosen effort, sends the model default otherwise, and refuses an effort the model does not accept', async () => {
+    const fake = new FakeCodex();
+    t = await startTestApp({ codexFactory: fake.factory });
+    const c = await t.connect();
+    const { profile } = await signIn(c, fake);
+    const listed = (await c.call('models.list', { profileId: profile.id })).models.find((m) => m.id === 'test-codex');
+    expect(listed).toMatchObject({ defaultEffort: 'medium', efforts: [{ id: 'low', description: 'Fast' }, { id: 'medium', description: 'Balanced' }, { id: 'high', description: 'Deep' }] });
+    const thread = await c.call('threads.start', { profileId: profile.id, model: { ...codex, effort: 'high' }, text: 'hello' });
+    expect(thread.model).toEqual({ ...codex, effort: 'high' });
+    await c.waitFor('threads.changed', (ts) => ts.some((x) => x.id === thread.id && x.status === 'idle'));
+    expect(fake.latest.requests.find((r) => r.method === 'turn/start')?.params).toMatchObject({ model: 'test-codex', effort: 'high' });
+    await expect(c.call('threads.setModel', { threadId: thread.id, model: { harnessId: 'codex', modelId: 'test-fast', effort: 'high' } })).rejects.toThrow(/does not accept high/);
+    // Codex keeps a turn's effort for later turns, so going back to the default sends it explicitly.
+    await c.call('threads.setModel', { threadId: thread.id, model: codex });
+    await c.call('threads.send', { threadId: thread.id, text: 'again' });
+    await c.waitFor('threads.changed', (ts) => ts.some((x) => x.id === thread.id && x.status === 'idle' && x.model.effort === undefined));
+    await expect.poll(() => fake.latest.requests.find((r) => r.method === 'turn/start')?.params.effort).toBe('medium');
+  });
+
+  it('reads the effort levels of accounts signed in before accio kept them', async () => {
+    const fake = new FakeCodex();
+    t = await startTestApp({ codexFactory: fake.factory });
+    const c = await t.connect();
+    const { profile } = await signIn(c, fake);
+    await t.stop({ keepHome: true });
+    const file = join(t.home, 'hub', 'profiles.json');
+    const stored = JSON.parse(await readFile(file, 'utf8'));
+    for (const account of stored.accounts) for (const model of account.openai?.models ?? []) { delete model.efforts; delete model.defaultEffort; }
+    await writeFile(file, JSON.stringify(stored));
+    t = await startTestApp({ codexFactory: fake.factory }, t.home);
+    const next = await t.connect();
+    await expect.poll(async () => (await next.call('models.list', { profileId: profile.id })).models[0]?.efforts.map((e) => e.id)).toEqual(['low', 'medium', 'high']);
+  });
+
+  it('automatically resumes an interrupted Codex session after desktop shutdown', async () => {
+    const fake = new FakeCodex();
+    t = await startTestApp({ codexFactory: fake.factory });
+    const c = await t.connect();
+    const { profile } = await signIn(c, fake);
+    fake.holdTurns = true;
+    const thread = await c.call('threads.start', { profileId: profile.id, text: 'work' });
+    await expect.poll(() => fake.latest.requests.some(r => r.method === 'turn/start')).toBe(true);
+    await t.stop({ keepHome: true });
+    fake.holdTurns = false;
+    const previous = fake.clients.length;
+    t = await startTestApp({ codexFactory: fake.factory }, t.home);
+    await expect.poll(() => fake.clients.slice(previous).some(client => client.requests.some(r => r.method === 'thread/resume'))).toBe(true);
+    const next = await t.connect();
+    await expect.poll(async () => (await next.call('threads.list', {})).find(x => x.id === thread.id)?.status).toBe('idle');
+    const runner = fake.clients.slice(previous).find(client => client.requests.some(r => r.method === 'thread/resume'))!;
+    expect(runner.requests.find(r => r.method === 'thread/resume')?.params.threadId).toBe('codex-session');
+    expect(runner.requests.filter(r => r.method === 'turn/start')).toHaveLength(1);
+  });
+
   it('keeps Claude and ChatGPT selections independent and rejects accounts from the wrong provider', async () => {
     const fake = new FakeCodex(); t = await startTestApp({ codexFactory: fake.factory });
     const c = await t.connect();

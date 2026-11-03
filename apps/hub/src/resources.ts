@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { JsonFile } from '@accio/persistence';
-import type { McpDefinition, ResourceScope, ResourcesState, SkillEntry, SkillSource, ToolDefinition, ToolStatus } from '@accio/protocol';
+import { McpDefinition, ToolDefinition } from '@accio/protocol';
+import type { ResourceScope, ResourcesState, SkillEntry, SkillSource, ToolStatus } from '@accio/protocol';
 
 export const optionalScope = (): ResourceScope => ({ global: false, profileIds: [], projectKeys: [] });
 export function enabled(scope: ResourceScope, profileId?: string, projectKey?: string): boolean {
@@ -20,7 +21,13 @@ export class Resources {
     this.file = new JsonFile(join(home, 'hub', 'resources.json'), () => this.data);
     this.secretsFile = new JsonFile(join(home, 'hub', 'mcp-credentials.json'), () => ({}));
   }
-  async load() { this.data = await this.file.read(); this.secrets = await this.secretsFile.read(); }
+  async load() {
+    this.data = await this.file.read();
+    // Parsing strips legacy tool/MCP scopes; only skills still have selections.
+    this.data.tools = this.data.tools.map(tool => ToolDefinition.parse(tool));
+    this.data.mcps = this.data.mcps.map(mcp => McpDefinition.parse(mcp));
+    this.secrets = await this.secretsFile.read();
+  }
   state(): ResourcesState { const { skillSnapshots = [], skillSelections: _selections, ...data } = this.data; return structuredClone({ ...data, skillVersions: skillSnapshots.map(s => ({ sourceId: s.sourceId, revision: s.revision, active: this.data.skills.some(skill => skill.sourceId === s.sourceId && skill.revision === s.revision) })), mcps: this.data.mcps.map(m => ({ ...m, signedIn: !!this.secrets[m.id] })) }); }
   credential(id: string) { return this.secrets[id] ? { ...this.secrets[id] } : undefined; }
   private change(fn: () => Promise<void>) { const result = this.queue.then(fn); this.queue = result.catch(() => {}); return result; }
@@ -37,6 +44,17 @@ export class Resources {
   async applySkills(id: string, revision: string) { const source = this.data.sources.find(s => s.id === id); const snapshot = this.data.skillSnapshots?.find(s => s.sourceId === id && s.revision === revision); if (!source || !snapshot) throw new Error('Preview this source revision before applying it'); await this.saveSource(source, snapshot.skills); }
   deleteSource(id: string) { return this.save(d => ({ ...d, sources: d.sources.filter(s => s.id !== id), skills: d.skills.filter(s => s.sourceId !== id), skillSelections: Object.fromEntries(Object.entries(d.skillSelections ?? {}).filter(([key]) => !key.startsWith(`${id}:`))), skillSnapshots: (d.skillSnapshots ?? []).filter(s => s.sourceId !== id) })); }
   setSkillScope(id: string, scope: ResourceScope) { return this.save(d => { if (!d.skills.some(s => s.id === id)) throw new Error('No such skill'); return { ...d, skillSelections: { ...d.skillSelections, [id]: scope }, skills: d.skills.map(s => s.id === id ? { ...s, scope } : s) }; }); }
+  /** Update just one project inside the store queue so concurrent selections keep each other. */
+  setSkillProject(id: string, selection: { projectKey: string; enabled: boolean }) {
+    return this.save(d => {
+      const skill = d.skills.find(skill => skill.id === id);
+      if (!skill) throw new Error('No such skill');
+      const projectKeys = skill.scope.projectKeys.filter(key => key !== selection.projectKey);
+      if (selection.enabled) projectKeys.push(selection.projectKey);
+      const scope = { ...skill.scope, projectKeys };
+      return { ...d, skillSelections: { ...d.skillSelections, [id]: scope }, skills: d.skills.map(skill => skill.id === id ? { ...skill, scope } : skill) };
+    });
+  }
   saveMcp(mcp: McpDefinition) { return this.save(d => ({ ...d, mcps: [...d.mcps.filter(m => m.id !== mcp.id), mcp] })); }
   async deleteMcp(id: string) { await this.setCredential(id); await this.save(d => ({ ...d, mcps: d.mcps.filter(m => m.id !== id) })); }
   setToolStatus(status: ToolStatus) { return this.save(d => ({ ...d, toolStatuses: [...d.toolStatuses.filter(s => s.toolId !== status.toolId || s.machineId !== status.machineId), status] })); }

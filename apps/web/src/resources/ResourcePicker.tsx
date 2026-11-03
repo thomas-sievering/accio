@@ -1,16 +1,15 @@
 import { useMemo, useState } from 'react';
-import type { McpView, ProfileView, ProjectView, ResourceScope, SkillEntry, ToolDefinition } from '@accio/protocol';
+import type { ProfileView, ProjectView, ResourceScope, SkillEntry } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { useAction } from '../app/useAction';
 import { useProfiles } from '../profiles/profiles';
 import { enabledBecause, projectKey, toggled, useResources } from './resources';
-import { mcpDefinition } from '../mcp/mcp';
 
 type Context = { kind: 'project'; project: ProjectView } | { kind: 'profile'; profile: ProfileView };
-type Item = { key: string; kind: 'tool' | 'mcp' | 'skill'; name: string; detail: string; scope: ResourceScope; save: (scope: ResourceScope) => Promise<unknown> };
+type Item = { key: string; kind: 'skill'; name: string; detail: string; scope: ResourceScope; save: (scope: ResourceScope) => Promise<unknown> };
 
 /**
- * Turn the hub's tools, MCP servers and skills on or off for one project or
+ * Turn the hub's skills on or off for one project or
  * profile. Only this project's (or profile's) own selection changes; the rest of
  * each resource's scope is kept as it is. Changes save immediately.
  */
@@ -26,13 +25,9 @@ export function ResourcePicker({ context }: { context: Context }) {
   const groups = useMemo(() => {
     if (!state) return [];
     const sourceName = (id: string) => state.sources.find((s) => s.id === id)?.name ?? id;
-    const tool = (t: ToolDefinition): Item => ({ key: `tool:${t.id}`, kind: 'tool', name: t.name, detail: `${t.package}@${t.version}`, scope: t.scope, save: (scope) => client.call('tools.save', { ...t, scope }) });
-    const mcp = (m: McpView): Item => ({ key: `mcp:${m.id}`, kind: 'mcp', name: m.name, detail: m.transport === 'http' ? (m.url ?? '') : [m.command, ...m.args].join(' '), scope: m.scope, save: (scope) => client.call('mcp.save', { ...mcpDefinition(m), scope }) });
     const skill = (s: SkillEntry): Item => ({ key: `skill:${s.id}`, kind: 'skill', name: s.name, detail: s.description || sourceName(s.sourceId), scope: s.scope, save: (scope) => client.call('skills.setScope', { id: s.id, scope }) });
     const byName = <T extends { name: string }>(a: T, b: T) => a.name.localeCompare(b.name);
     return [
-      { title: 'Tools', empty: 'No managed tools yet. Add one in Settings / Tools.', items: [...state.tools].sort(byName).map(tool) },
-      { title: 'MCP servers', empty: 'No MCP servers yet. Add one in Settings / MCP servers.', items: [...state.mcps].sort(byName).map(mcp) },
       { title: 'Skills', empty: 'No skills yet. Add a skill source in Settings / Skills.', items: [...state.skills].sort(byName).map(skill) },
     ];
   }, [state, client]);
@@ -43,15 +38,15 @@ export function ResourcePicker({ context }: { context: Context }) {
     return counts;
   }, [state, profileId, key]);
 
-  if (loadError && !state) return <p className="error" role="alert">Could not load tools, MCP servers and skills: {loadError} <button type="button" className="link" onClick={retry}>Retry</button></p>;
-  if (!state) return <p className="note" role="status">Loading tools, MCP servers and skills…</p>;
+  if (loadError && !state) return <p className="error" role="alert">Could not load skills: {loadError} <button type="button" className="link" onClick={retry}>Retry</button></p>;
+  if (!state) return <p className="note" role="status">Loading skills…</p>;
 
   const total = groups.reduce((n, g) => n + g.items.length, 0);
   const q = query.trim().toLowerCase();
   return (
     <div className="resource-picker">
       {total > 8 && (
-        <input className="resource-search" type="search" aria-label="Filter tools, MCP servers and skills" placeholder="Filter…" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <input className="resource-search" type="search" aria-label="Filter skills" placeholder="Filter…" value={query} onChange={(e) => setQuery(e.target.value)} />
       )}
       {groups.map((g) => {
         const items = q ? g.items.filter((i) => `${i.name} ${i.detail}`.toLowerCase().includes(q)) : g.items;

@@ -105,7 +105,7 @@ export function ProjectSheet({ project, onClose, onOpenSettings }: { project: Pr
         </div>
         {error && <p className="error">{error}</p>}
         <div className="field">
-          <span>Tools, MCP servers and skills</span>
+          <span>Skills</span>
           <small className="hint">
             Turn on what this project needs, for every checkout and thread of it. Things on everywhere or for its profile are inherited. Changes save immediately.
           </small>

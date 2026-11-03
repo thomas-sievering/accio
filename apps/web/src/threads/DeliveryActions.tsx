@@ -100,8 +100,8 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
           {receipt && status.revision && <span className="delivery-rev" title="Revision on the target">{status.revision}</span>}
         </span>}
         {offerShip && <span className="delivery-split">
-          <button disabled={busy || !canRun || !summary?.available} title={summary?.reason ?? (mode === 'review' ? 'Prepare a PR without merging' : `Finish, verify and ship to ${target}`)} onClick={() => deliver(mode)}><Ship />{mode === 'review' ? 'Prepare for review' : 'Ship'}</button>
-          <button ref={trigger} popoverTarget={id} disabled={busy || !summary?.available} aria-label="Shipping options" aria-haspopup="menu"><ChevronDown /></button>
+          <button disabled={busy || !canRun || !summary?.available || !!thread.queuedMessages?.length} title={thread.queuedMessages?.length ? 'Send or remove queued messages first' : summary?.reason ?? (mode === 'review' ? 'Prepare a PR without merging' : `Finish, verify and ship to ${target}`)} onClick={() => deliver(mode)}><Ship />{mode === 'review' ? 'Prepare for review' : 'Ship'}</button>
+          <button ref={trigger} popoverTarget={id} disabled={busy || !summary?.available || !!thread.queuedMessages?.length} aria-label="Shipping options" aria-haspopup="menu"><ChevronDown /></button>
         </span>}
         {status?.canCheck && <button className="delivery-pill" disabled={busy} onClick={() => call('threads.checkDelivery')}><Refresh />Check now</button>}
         {status?.canStopFollowUps && <button className="delivery-pill" disabled={busy} title="Keep tracking the PR without starting the agent again" onClick={() => call('threads.cancelDelivery')}><StopSquare />Stop automatic follow-ups</button>}

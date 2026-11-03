@@ -2,7 +2,7 @@ import type { HubClient } from './client.js';
 import type { ResourceAccess } from './resources.js';
 import type { McpAccess } from './mcp.js';
 
-export const RESOURCE_WRITES = ['saveTool', 'deleteTool', 'saveSource', 'stageSkills', 'applySkills', 'deleteSource', 'setSkillScope', 'saveMcp', 'deleteMcp', 'setCredential', 'setToolStatus'] as const;
+export const RESOURCE_WRITES = ['saveTool', 'deleteTool', 'saveSource', 'stageSkills', 'applySkills', 'deleteSource', 'setSkillScope', 'setSkillProject', 'saveMcp', 'deleteMcp', 'setCredential', 'setToolStatus'] as const;
 
 /** Definitions are shared; installing tools and materializing skills stays on the machine. */
 export function remoteResources(client: HubClient): ResourceAccess {

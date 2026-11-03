@@ -3,6 +3,7 @@ import type { ToolDetails, TranscriptItem } from '@accio/protocol';
 import { useClient, useConnectionStatus } from '../app/connection';
 import { Chevron } from '../app/icons';
 import { InlineMedia } from './InlineMedia';
+import { toolSummary } from './transcriptBlocks';
 
 type ToolItem = Extract<TranscriptItem, { kind: 'tool' }>;
 const statuses: Record<ToolItem['status'], string> = { running: 'Running', done: 'Completed', error: 'Failed', interrupted: 'Interrupted' };
@@ -11,9 +12,7 @@ export function ToolCallRow({ threadId, item }: { threadId: string; item: ToolIt
   const client = useClient();
   const connection = useConnectionStatus();
   const detailId = useId();
-  // An explicit choice wins over future status updates (including an arriving failure).
-  const [choice, setChoice] = useState<boolean>();
-  const open = choice ?? item.status === 'error';
+  const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState<ToolDetails>();
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(false);
@@ -32,10 +31,10 @@ export function ToolCallRow({ threadId, item }: { threadId: string; item: ToolIt
     return () => { active = false; };
   }, [client, threadId, item.id, item.detailRevision, open, retry, connection]);
 
-  return <div className={`tool ${item.status}${open ? ' open' : ''}`}>
-    <button className="tool-toggle" onClick={() => setChoice(!open)} aria-expanded={open} aria-controls={detailId}>
+  return <div className={`tool ${item.status}${open ? ' open' : ''}`} data-item-id={item.id}>
+    <button className="tool-toggle" onClick={() => setOpen(!open)} aria-expanded={open} aria-controls={detailId}>
       <span className="tool-name">{item.name}</span>
-      <span className="tool-summary" title={item.summary}>{item.summary}</span>
+      <span className="tool-summary" title={item.summary}>{toolSummary(item)}</span>
       <span className="tool-status">{statuses[item.status]}</span>
       <Chevron />
     </button>

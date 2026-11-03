@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { startHubService } from './service.js';
 import { HubClient } from './client.js';
 import { remoteSecrets } from './secretClient.js';
+import { remoteResources } from './resourceClient.js';
 
 describe('standalone hub trust and network boundary', () => {
   const cleanup: (() => Promise<unknown>)[] = [];
@@ -110,6 +111,26 @@ describe('standalone hub trust and network boundary', () => {
     await second.client.call('hub.revokeMachine', { machineId: 'first' });
     expect((await send()).status).toBe(403);
     expect(second.client.snapshot.resources.mcps[0]?.signedIn).toBe(true);
+  });
+  it('updates project skill selections through paired machines without losing other scopes', async () => {
+    const { service, pair } = await fixture();
+    const first = await pair('first'); const second = await pair('second');
+    const scope = { global: false, profileIds: ['personal'], projectKeys: ['existing'] };
+    await service.resources.saveSource({ id: 'library', name: 'Library', url: 'https://example.test/skills.git', ref: 'HEAD' }, [
+      { id: 'library:review', sourceId: 'library', name: 'review', description: 'Review changes', path: '/hub/skills/review', revision: 'abc', scope },
+    ]);
+    await service.resources.setSkillScope('library:review', scope);
+    const one = remoteResources(first.client); const two = remoteResources(second.client);
+    await Promise.all([
+      one.setSkillProject('library:review', { projectKey: 'project-one', enabled: true }),
+      two.setSkillProject('library:review', { projectKey: 'project-two', enabled: true }),
+    ]);
+    await first.client.refresh(true);
+    expect(one.state().skills[0]?.scope).toEqual({ ...scope, projectKeys: expect.arrayContaining(['existing', 'project-one', 'project-two']) });
+    await one.setSkillProject('library:review', { projectKey: 'project-one', enabled: false });
+    expect(one.state().skills[0]?.scope).toEqual({ ...scope, projectKeys: expect.arrayContaining(['existing', 'project-two']) });
+    expect(one.state().skills[0]?.scope.projectKeys).not.toContain('project-one');
+    await expect(first.client.call('resources.write', { method: 'setSkillProject', args: ['library:review', { projectKey: 'project', enabled: 'yes' }] })).rejects.toThrow('Invalid project skill selection');
   });
   it('shares secret metadata, authorizes values by scope, and invalidates remote copies after rotation and revocation', async () => {
     const { home, service, pair } = await fixture();

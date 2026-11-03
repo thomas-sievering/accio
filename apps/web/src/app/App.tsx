@@ -1,4 +1,3 @@
-import { HubSelector } from '../hub/HubSelector';
 import { useCallback, useRef, useState } from 'react';
 import { LimitsProvider } from '../limits/limits';
 import type { LimitsScope } from '../limits/limitsModel';
@@ -15,6 +14,7 @@ import { NewThreadButton } from '../threads/NewThreadButton';
 import { ThreadList } from '../threads/ThreadList';
 import { DraftPane, ThreadPane } from '../threads/ThreadPane';
 import { ThreadSearch } from '../threads/ThreadSearch';
+import { useAppEvent } from './appEvents';
 import { ConnectionNotice } from './ConnectionNotice';
 import { FirstRun } from './FirstRun';
 import { Close, FolderPlus, Limits, Owl, Settings as Gear } from './icons';
@@ -58,6 +58,7 @@ function Shell() {
   const [sheet, setSheet] = useState<OpenSheet>(null);
   const [settings, setSettings] = useState<SettingsRoute | null>(null);
   const closeSettings = useCallback(() => setSettings(null), []);
+  useAppEvent('settings.open', setSettings);
   const [panelOpen, togglePanel] = usePanelOpen();
   const openThread = (id: string) => {
     select(id);
@@ -86,7 +87,7 @@ function Shell() {
   };
   const draftProfileId = draft && (draft.profileId ?? state?.projects.find((p) => p.id === state.checkouts.find((c) => c.id === draft.checkoutId)?.projectId)?.profileId);
   const currentProfileId = draft ? draftProfileId ?? undefined : thread?.profileId;
-  const setUp = profiles && state && profiles.length > 0 && profiles.some(hasSignedInAccount) && state.projects.length > 0;
+  const setUp = profiles && state && profiles.length > 0 && profiles.some(hasSignedInAccount) && state.checkouts.length > 0;
 
   return (
     <>
@@ -94,7 +95,6 @@ function Shell() {
       <div className={`layout${panelOpen ? ' with-panel' : ''}`} hidden={settings !== null}>
         <aside className="sidebar">
           <div className="side-controls drag">
-            <HubSelector />
             <div className="side-tools">
               <ThreadSearch />
               <ScopeMenu onOpenProject={(p) => setSheet({ kind: 'project', id: p.id })} />
@@ -133,7 +133,7 @@ function Shell() {
         <main className="main">
           {limitsOpen && !settings && (
             <LimitsView scope={limits.scope} onScope={(scope) => setLimits({ scope, navigation })} onClose={closeLimits}
-              onOpenAccount={openAccount} onOpenProfile={openProfile} />
+              onOpenAccount={openAccount} />
           )}
           {/* Keep the composer and reading position mounted while checking limits/settings. */}
           <div className="thread-surface" hidden={limitsOpen || settings !== null}>

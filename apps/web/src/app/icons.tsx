@@ -31,6 +31,7 @@ export const Close = () => (
     <path d="M18 6 6 18M6 6l12 12" />
   </svg>
 );
+export const Queue = () => <svg {...base}><path d="M4 6h12M4 12h8M4 18h8M18 12v8m-4-4h8" /></svg>;
 export const Ship = () => <svg {...base}><path d="M12 15V3m-5 5 5-5 5 5M4 14v6h16v-6" /></svg>;
 export const Archive = () => <svg {...base}><rect x="3" y="3" width="18" height="5" rx="1" /><path d="M5 8v12h14V8m-10 4h6" /></svg>;
 /** An open pull request: two branches, the second still pointing back. */

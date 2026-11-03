@@ -10,6 +10,24 @@ import { codexEvents, codexHarness } from './codex.js';
 let home: string | undefined;
 afterEach(async () => { vi.useRealTimers(); if (home) await rm(home, { recursive: true, force: true }); home = undefined; });
 
+it('steers the expected native Codex turn and unregisters when it completes', async () => {
+  home = await mkdtemp(join(tmpdir(), 'accio-steer-codex-'));
+  const fake = new FakeCodex(); fake.holdTurns = true;
+  let send: ((text: string) => Promise<void>) | undefined;
+  const iterator = codexHarness(fake.factory).run({ cwd: home, prompt: 'work', sessionId: null,
+    env: { CODEX_HOME: home, ACCIO_OPENAI_URL: 'http://127.0.0.1:1234/openai', ACCIO_OPENAI_KEY: 'key' }, signal: new AbortController().signal,
+    registerSteer: value => { send = value; } })[Symbol.asyncIterator]();
+  await iterator.next();
+  const output = iterator.next();
+  await expect.poll(() => !!send).toBe(true);
+  await send!('correction');
+  expect(fake.latest.requests.find(r => r.method === 'turn/steer')?.params).toEqual({ threadId: 'codex-session', expectedTurnId: 'codex-turn', input: [{ type: 'text', text: 'correction' }] });
+  fake.latest.reply();
+  await output;
+  while (!(await iterator.next()).done) { /* drain */ }
+  expect(send).toBeUndefined();
+});
+
 it('removes inherited OpenAI and Codex credentials while keeping the profile proxy key', () => {
   const profile = harnessEnv({ OPENAI_API_KEY: 'other-key', OpenAI_Base_Url: 'https://other.test', CODEX_HOME: 'other-home',
     CODEX_ACCESS_TOKEN: 'other-token', CHATGPT_ACCOUNT_ID: 'other-account', ACCIO_OPENAI_KEY: 'other-profile-key', PATH: 'tools' },

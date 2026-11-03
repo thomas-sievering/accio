@@ -1,4 +1,4 @@
-import type { TranscriptItem } from '@accio/protocol';
+import { shellCommandSummary, type TranscriptItem } from '@accio/protocol';
 
 export type ToolItem = Extract<TranscriptItem, { kind: 'tool' }>;
 export type TranscriptBlock =
@@ -33,6 +33,8 @@ export function layoutTranscript(items: TranscriptItem[], runningTurn?: string):
 }
 
 function layoutTurn(turn: TranscriptItem[], running: boolean): TranscriptBlock[] {
+  // Mid-turn corrections belong in the visible conversation, in their original order.
+  if (turn.some(item => item.kind === 'user' && item.steered)) return groupTools(turn);
   const finished = turn.at(-1)?.kind === 'finished' ? turn.at(-1) as Extract<TranscriptItem, { kind: 'finished' }> : undefined;
   if (!finished && !running) return groupTools(turn);
   const body = finished ? turn.slice(0, -1) : turn;
@@ -88,7 +90,11 @@ const doing: Record<Kind, string> = { run: 'Running', read: 'Reading', edit: 'Ed
 export function describeActivity(item: ToolItem): string {
   const kind = kinds[item.name] ?? 'other';
   if (kind === 'other') return `${doing.other} ${toolLabel(item.name)}`;
-  return item.summary ? `${doing[kind]} ${item.summary}` : `${doing[kind]}…`;
+  return item.summary ? `${doing[kind]} ${toolSummary(item)}` : `${doing[kind]}…`;
+}
+
+export function toolSummary(item: ToolItem): string {
+  return item.name === 'Shell' || item.name === 'Bash' ? shellCommandSummary(item.summary, true) : item.summary;
 }
 
 /** MCP tools arrive as mcp__server__tool (Claude) or server/tool (Codex). */
@@ -119,4 +125,11 @@ export function describeTools(items: ToolItem[]): string {
     return `${verb} ${n} ${n === 1 ? one : many}`;
   }).join(', ');
   return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** Whether a block shows the item, directly or inside a fold. */
+export function blocksHaveItem(blocks: TranscriptBlock[], itemId: string): boolean {
+  return blocks.some((block) => block.kind === 'item' ? block.item.id === itemId
+    : block.kind === 'tools' ? block.items.some((item) => item.id === itemId)
+    : blocksHaveItem(block.blocks, itemId));
 }
