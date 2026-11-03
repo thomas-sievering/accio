@@ -80,7 +80,7 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
   await button('Show limits').click();
   await expect(card('Shared ChatGPT')).toBeFocused();
   await expect(card('Shared Claude').getByRole('meter', { name: '5-hour allowance remaining' })).toHaveAttribute('aria-valuenow', '52');
-  await expect(card('Shared Claude').locator('.limits-meters').first().getByRole('meter')).toHaveCount(2);
+  await expect(card('Shared Claude').locator('.limits-meters').getByRole('meter')).toHaveCount(3);
   await expect(card('Shared Claude').getByRole('meter', { name: 'Weekly allowance remaining', exact: true })).toHaveCount(1);
   await expect(card('Shared Claude').locator('.limit-pace.ahead')).toHaveCount(2);
   await expect(card('Shared Claude').locator('.limit-time-marker')).toHaveCount(2);
@@ -88,7 +88,9 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
   await expect(card('Team Claude')).toContainText('Weekly limit reached.');
   await expect(card('Team Claude').getByRole('meter', { name: '5-hour allowance remaining' })).toHaveAttribute('aria-valuenow', '67');
   await expect(card('Team Claude').locator('.limit-meter.exhausted')).toHaveCSS('display', 'grid');
-  await card('Shared Claude').getByText('Model-specific limits', { exact: false }).click();
+  await expect(card('Shared Claude').locator('details')).toHaveCount(0);
+  await expect(card('Shared Claude').getByText('Unknown', { exact: true })).toHaveCount(0);
+  await expect(card('Shared Claude').getByRole('meter', { name: 'Fable weekly allowance remaining' })).toBeVisible();
   await expect(card('Shared Claude').getByRole('meter', { name: 'Fable weekly allowance remaining' })).toHaveAttribute('aria-valuenow', '99');
   await page.screenshot({ path: testInfo.outputPath('all-profiles.png'), fullPage: true });
 
@@ -130,7 +132,7 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
   // Account settings entered from Limits return to Limits and signing out removes meters.
   await card('Team Claude').getByRole('button', { name: 'Team Claude settings' }).click();
   await expect(page.getByRole('textbox', { name: 'Account name' })).toHaveValue('Team Claude');
-  await expect(page.locator('.account-limits').getByRole('meter')).toHaveCount(2);
+  await expect(page.locator('.account-limits').getByRole('meter')).toHaveCount(3);
   await expect(page.locator('.account-limits .limit-pace')).toHaveCount(2);
   await button('Sign out').click();
   await expect(page.locator('.account-limits')).toContainText('Signed out.');
@@ -138,7 +140,7 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
   await expect(card('Team Claude').getByRole('meter')).toHaveCount(0);
   await card('Team Claude').getByRole('button', { name: 'Sign in', exact: true }).click();
   await signIn('work');
-  await expect(page.locator('.account-limits').getByRole('meter')).toHaveCount(2);
+  await expect(page.locator('.account-limits').getByRole('meter')).toHaveCount(3);
   await button('Back').click();
 
   // Unselected account settings read limits too, and reauthentication rechecks immediately.

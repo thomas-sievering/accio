@@ -53,7 +53,6 @@ export function LimitsView({ scope, onScope, onClose, onOpenAccount }: {
       <div className="settings-scroll">
         <div className="limits-page">
           <ScopePicker scope={scope} onScope={onScope} />
-          <p className="limits-intro">Each account’s allowance is set by its provider and counts all its use, including use outside accio.</p>
           {disconnected && <p className="limits-banner" role="status">Not connected to accio’s server. Values below are last known and update once it reconnects.</p>}
           {!disconnected && loadError && (
             <div className="limits-banner error" role="alert">
