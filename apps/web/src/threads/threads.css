@@ -690,10 +690,18 @@ div.model-picker-empty b { color: var(--ink); font-weight: 500; }
   height: 15px;
 }
 
-/* Stop and Resume */
+/* Stop: while a turn runs, the send slot becomes a red round stop button */
+.send.stop {
+  border-radius: 50%;
+  background: #e5484d;
+  color: #fff;
+}
+.send.stop:hover:not(:disabled) {
+  background: #d93d42;
+}
 .send.stop svg {
-  width: 13px;
-  height: 13px;
+  width: 12px;
+  height: 12px;
 }
 /* The one slot above the composer: why the thread can't go on, and the action that fixes it */
 .notice-bar {
