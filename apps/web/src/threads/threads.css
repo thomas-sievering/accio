@@ -237,6 +237,19 @@ button.row {
 }
 
 /* Thread header */
+.thread-actions-trigger {
+  flex: none;
+  width: 28px;
+  height: 28px;
+}
+.thread-actions-menu {
+  width: 220px;
+}
+.thread-copy-status {
+  margin: 6px 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
 .thread-title {
   display: flex;
   align-items: center;
