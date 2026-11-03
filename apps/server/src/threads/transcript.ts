@@ -130,7 +130,7 @@ export class TurnTranscript {
       item: { ...previous?.item, kind: 'tool', id, turnId: this.turnId, name: event.name,
         summary: summarizeTool(event.name, event.summary), status: event.status,
         ...(event.output !== undefined ? { output: truncate(resultText(event.output)) } : {}) },
-      input: event.summary,
+      input: event.input ?? event.summary,
       inputComplete: true,
       ...(event.status !== 'running' ? { result: { content: event.output, status: event.status } } : {}),
     };

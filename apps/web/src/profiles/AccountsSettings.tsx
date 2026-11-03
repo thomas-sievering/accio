@@ -14,7 +14,7 @@ export function AccountsSettings({ accountId, onOpen, onBack }: { accountId?: st
   const { accounts } = useProfiles();
   if (!accounts) return null;
   const account = accounts.find((a) => a.id === accountId);
-  if (accountId === 'new' || accountId === 'new-openai' || account) return <AccountForm key={accountId} account={account} providerId={account?.providerId ?? (accountId === 'new-openai' ? 'openai' : 'anthropic')} onSaved={(a) => onOpen(a.id)} onDone={onBack} />;
+  if (accountId === 'new' || accountId === 'new-openai' || account) return <AccountForm key={accountId} account={account} providerId={account?.providerId ?? (accountId === 'new-openai' ? 'openai' : 'anthropic')} onSaved={(a) => (account ? onBack() : onOpen(a.id))} onDone={onBack} />;
   return <>
     <SettingsSection title="Anthropic">
       {accounts.filter((a) => a.providerId === 'anthropic').map((a) => <button key={a.id} className="setting setting-link" onClick={() => onOpen(a.id)}>
@@ -67,8 +67,8 @@ function AccountForm({ account, providerId, onSaved, onDone }: { account?: Accou
     </SettingsSection>}
     <footer className="settings-actions">
       {account && <button type="button" className="ghost danger" disabled={busy || usedBy.length > 0} onClick={remove}>Delete</button>}
-      <span className="spacer" /><button type="button" className="ghost" onClick={onDone}>{account ? 'Done' : 'Cancel'}</button>
-      <button type="submit" className="ghost primary" disabled={busy}>{account ? 'Save' : 'Add account'}</button>
+      <span className="spacer" /><button type="button" className="ghost" onClick={onDone}>Cancel</button>
+      <button type="submit" className="ghost primary" disabled={busy || (!!account && name === account.name)}>{account ? 'Save' : 'Add account'}</button>
     </footer>
   </form>;
 }

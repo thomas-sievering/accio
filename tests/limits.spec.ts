@@ -28,7 +28,7 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
       await button('Sign in with ChatGPT').click();
       await expect(page.getByText('Signed in as', { exact: false })).toBeVisible({ timeout: 10_000 });
     } else if (code) await signIn(code);
-    await button('Done').click();
+    await button('Cancel').click();
   };
   const signIn = async (code: string) => {
     const again = button('Sign in again');
@@ -55,11 +55,17 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
   await page.getByRole('button', { name: /^Add profile / }).click();
   await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Work');
   await button('Add profile').click();
-  await button('Done').click();
+  await button('Cancel').click();
   await selectAccounts('Personal', 'Shared Claude', 'Shared ChatGPT');
   await selectAccounts('Work', 'Team Claude', 'Shared ChatGPT');
   await button('Back').click();
   await button('Limits').click();
+  await expect(button('Limits')).toHaveCount(1);
+  await expect(button('Limits')).toHaveAttribute('aria-pressed', 'true');
+  await button('Side panel').click();
+  await expect(page.getByRole('complementary', { name: 'Side panel', exact: true })).toBeVisible();
+  await expect(page.getByRole('radiogroup', { name: 'Profile' })).toBeVisible();
+  await button('Side panel').click();
   await expect(page.getByRole('radio', { name: 'All profiles' })).toHaveAttribute('aria-checked', 'true');
   await expect(page.locator('.limits-card')).toHaveCount(3);
   await expect(page.getByText('Shared with Personal. One allowance, shown under Personal.', { exact: true })).toBeVisible();

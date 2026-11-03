@@ -3,7 +3,6 @@
 @import "./app/layout.css";
 @import "./ui/context-menu.css";
 @import "./app/sidebar-footer.css";
-@import "./machine/machine.css";
 @import "./app/main.css";
 @import "./ui/menu.css";
 @import "./threads/new-thread.css";
@@ -11,6 +10,7 @@
 @import "./app/sidebar-toolbar.css";
 @import "./ui/forms.css";
 @import "./threads/threads.css";
+@import "./threads/delivery.css";
 @import "./profiles/sign-in.css";
 @import "./app/settings.css";
 @import "./threads/draft.css";
@@ -20,4 +20,5 @@
 @import "./profiles/folders.css";
 @import "./ui/with-icon.css";
 @import "./app/first-run.css";
+@import "./resources/resources.css";
 @import "./limits/limits.css";

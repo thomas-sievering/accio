@@ -2,11 +2,12 @@ import { mkdir } from 'node:fs/promises';
 import { startCodex, type CodexFactory, type CodexNotification } from '@accio/codex';
 import { systemPromptText } from '../harnesses/systemPrompt.js';
 import type { Harness, HarnessEvent } from './harness.js';
+import { ACCIO_MCP_SERVER } from '../tools/tools.js';
 
 /** Codex runs on this machine. Only the profile's scoped proxy key reaches it. */
 export function codexHarness(factory: CodexFactory = startCodex): Harness {
   return {
-    async *run({ cwd, prompt, sessionId, model, modelName, env, signal }) {
+    async *run({ cwd, prompt, sessionId, model, modelName, env, tools, signal, resourceInstructions, mcps }) {
       if (signal.aborted) return;
       const home = env.CODEX_HOME;
       const baseUrl = env.ACCIO_OPENAI_URL;
@@ -18,6 +19,12 @@ export function codexHarness(factory: CodexFactory = startCodex): Harness {
         'model_providers.accio.env_key="ACCIO_OPENAI_KEY"', 'model_providers.accio.wire_api="responses"',
         'model_providers.accio.supports_websockets=false',
         'approval_policy="never"', 'sandbox_mode="danger-full-access"',
+        ...Object.entries(mcps ?? {}).flatMap(([id, mcp]) => {
+          // Override keys are dot-separated paths, not TOML key expressions.
+          // IDs are validated as bare keys by the protocol.
+          const prefix = `mcp_servers.${id}`;
+          return mcp.type === 'http' ? [`${prefix}.url=${JSON.stringify(mcp.url)}`, ...Object.entries(mcp.headers).map(([key, value]) => `${prefix}.http_headers.${key}=${JSON.stringify(value)}`)] : [`${prefix}.command=${JSON.stringify(mcp.command)}`, `${prefix}.args=${JSON.stringify(mcp.args)}`];
+        }),
       ] });
       const events: CodexNotification[] = [];
       let wake = () => {};
@@ -36,7 +43,9 @@ export function codexHarness(factory: CodexFactory = startCodex): Harness {
       signal.addEventListener('abort', stop, { once: true });
       try {
         if (signal.aborted) return;
-        const params = { cwd, ...(model ? { model } : {}), approvalPolicy: 'never', sandbox: 'danger-full-access', developerInstructions: systemPromptText({ harnessId: 'codex', model, modelName }) };
+        // Config, unlike dynamic tools, applies on resume too, so resumed threads keep accio's tools.
+        const config = tools ? { [`mcp_servers.${ACCIO_MCP_SERVER}`]: { url: tools.url, http_headers: { Authorization: tools.authorization } } } : undefined;
+        const params = { cwd, ...(model ? { model } : {}), ...(config ? { config } : {}), approvalPolicy: 'never', sandbox: 'danger-full-access', developerInstructions: [systemPromptText({ harnessId: 'codex', model, modelName }), resourceInstructions].filter(Boolean).join('\n\n') };
         const result = await client.request(sessionId ? 'thread/resume' : 'thread/start', { ...params, ...(sessionId ? { threadId: sessionId } : {}) });
         threadId = result.thread.id;
         yield { type: 'harness_event', event: { kind: 'session', id: threadId! } };
@@ -83,7 +92,7 @@ export function codexEvents({ method, params }: CodexNotification): HarnessEvent
     case 'commandExecution': return [{ kind: 'tool', id: item.id, name: 'Shell', summary: item.command, status, output: item.aggregatedOutput ?? undefined }];
     case 'fileChange': return [{ kind: 'tool', id: item.id, name: 'Edit', summary: item.changes.map((c: any) => c.path).join(', '), status,
       ...(done ? { output: item.changes.map((c: any) => `${c.path}\n${c.diff ?? ''}`).join('\n') } : {}) }];
-    case 'mcpToolCall': return [{ kind: 'tool', id: item.id, name: `${item.server}/${item.tool}`, summary: JSON.stringify(item.arguments ?? {}), status,
+    case 'mcpToolCall': return [{ kind: 'tool', id: item.id, name: `${item.server}/${item.tool}`, summary: JSON.stringify(item.arguments ?? {}), input: item.arguments ?? {}, status,
       ...(done ? { output: JSON.stringify(item.error ?? item.result ?? '') } : {}) }];
     case 'webSearch': return [{ kind: 'tool', id: item.id, name: 'Search', summary: item.query ?? '', status }];
     default: return [];

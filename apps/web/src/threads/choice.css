@@ -1,0 +1,196 @@
+/* A choice: bare screenshots in a row, as in Krea and ChatGPT; picks show as an outline and a tick. */
+.choice {
+  align-self: stretch;
+  max-width: var(--message-width);
+  padding: 0 12px;
+}
+.choice-question {
+  margin: 0 0 10px;
+  color: var(--ink);
+}
+.choice-options {
+  display: grid;
+  grid-template-columns: repeat(var(--choice-columns, 2), minmax(0, 1fr));
+  gap: 14px 12px;
+}
+.choice-option {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+.choice-frame {
+  position: relative;
+  border-radius: 8px;
+  outline: 1px solid var(--line);
+  outline-offset: 0;
+}
+.choice-option.selected .choice-frame {
+  outline: 2px solid var(--ink-strong);
+  outline-offset: 2px;
+}
+.choice.answered .choice-option:not(.selected) {
+  opacity: 0.4;
+}
+.choice-open {
+  display: block;
+  width: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--code);
+  cursor: zoom-in;
+}
+.choice-open img {
+  display: block;
+  width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  object-position: top left;
+}
+.choice-missing {
+  display: grid;
+  place-items: center;
+  min-height: 96px;
+  padding: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+.choice-check {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #000a;
+  border: 1px solid var(--line-2);
+  color: transparent;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.choice-check svg { width: 13px; height: 13px; stroke-width: 3; }
+.choice-frame:hover .choice-check,
+.choice-check:focus-visible { opacity: 1; color: var(--muted); }
+.choice-check:hover { color: var(--ink-strong); }
+.choice-option.selected .choice-check {
+  opacity: 1;
+  background: var(--ink-strong);
+  border-color: var(--ink-strong);
+  color: #111;
+}
+.choice-check:disabled { cursor: default; }
+.choice-label {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.choice-option.selected .choice-label { color: var(--ink-strong); }
+
+/* Full size: black, one image, a counter, arrows and a single action (GetYourGuide, Higgsfield). */
+.choice-viewer {
+  width: 100vw;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: #08090b;
+  color: var(--ink);
+}
+.choice-viewer[open] {
+  display: grid;
+  grid-template-rows: 52px minmax(0, 1fr) 72px;
+}
+.choice-viewer::backdrop { background: #000; }
+.choice-viewer header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.choice-viewer-count { color: var(--dim); }
+.choice-viewer-name { color: var(--ink-strong); }
+.choice-viewer-close {
+  position: absolute;
+  right: 16px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  color: var(--muted);
+}
+.choice-viewer-close:hover { color: var(--ink-strong); }
+.choice-viewer-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  padding: 0 72px;
+}
+.choice-viewer-stage img {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 6px;
+  object-fit: contain;
+}
+.choice-viewer-nav {
+  position: absolute;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin-top: -20px;
+  border-radius: 50%;
+  color: var(--muted);
+}
+.choice-viewer-nav:hover { color: var(--ink-strong); background: var(--hover); }
+.choice-viewer-nav svg { width: 22px; height: 22px; }
+.choice-viewer-nav.prev { left: 16px; }
+.choice-viewer-nav.prev svg { transform: rotate(180deg); }
+.choice-viewer-nav.next { right: 16px; }
+.choice-viewer footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.choice-viewer-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: var(--raised);
+  color: var(--ink-strong);
+  font-size: 13px;
+}
+.choice-viewer-pick:hover { background: var(--raised-2); }
+.choice-viewer-pick.selected { background: var(--ink-strong); border-color: var(--ink-strong); color: #111; }
+.choice-viewer-pick svg { width: 14px; height: 14px; stroke-width: 3; }
+
+/* The pick in the composer and in a sent message. */
+.composer-chips { display: flex; gap: 6px; }
+.composer-chip,
+.msg-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 6px;
+  padding: 2px 4px 2px 8px;
+  background: var(--raised-2);
+  color: var(--ink-strong);
+  font-size: 12.5px;
+}
+.composer-chip button { display: grid; place-items: center; width: 18px; height: 18px; color: var(--dim); }
+.composer-chip button:hover { color: var(--ink-strong); }
+.composer-chip svg { width: 12px; height: 12px; }
+.msg-pick { padding-right: 8px; margin-right: 8px; background: var(--bg); }

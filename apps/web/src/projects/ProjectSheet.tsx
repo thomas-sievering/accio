@@ -6,12 +6,14 @@ import { useAction } from '../app/useAction';
 import { useProfiles } from '../profiles/profiles';
 import { useThreads } from '../threads/threads';
 import { useProjects } from './projects';
+import { ResourcePicker } from '../resources/ResourcePicker';
+import type { SettingsRoute } from '../app/Settings';
 
 /**
  * A project's profile and its checkouts on this machine. A checkout with threads
  * is removed only after a second, explicit click that deletes those threads too.
  */
-export function ProjectSheet({ project, onClose }: { project: ProjectView; onClose: () => void }) {
+export function ProjectSheet({ project, onClose, onOpenSettings }: { project: ProjectView; onClose: () => void; onOpenSettings: (route: SettingsRoute) => void }) {
   const client = useClient();
   const { profiles = [] } = useProfiles();
   const { checkoutsOf } = useProjects();
@@ -19,6 +21,8 @@ export function ProjectSheet({ project, onClose }: { project: ProjectView; onClo
   const threadCount = threads.filter((t) => t.projectId === project.id).length;
   const { busy, error, run } = useAction();
   const [confirming, setConfirming] = useState<string>();
+  const [policy, setPolicy] = useState(project.deliveryPolicy ?? 'direct');
+  const [previewCommand, setPreviewCommand] = useState(project.previewCommand ?? '');
 
   const remove = (checkoutId: string) =>
     run(async () => {
@@ -59,6 +63,19 @@ export function ProjectSheet({ project, onClose }: { project: ProjectView; onClo
             </small>
           </label>
         ) : null}
+        <label className="field">
+          <span>Ship changes</span>
+          <select value={policy} disabled={busy} onChange={e => setPolicy(e.target.value as typeof policy)}>
+            <option value="direct">Directly to the default branch</option>
+            <option value="pull-request">Through a pull request</option>
+          </select>
+        </label>
+        <label className="field">
+          <span>Preview command</span>
+          <input value={previewCommand} onChange={e => setPreviewCommand(e.target.value)} placeholder="pnpm dev --port {port}" />
+          <small className="hint">Optional. Runs in the thread’s worktree with its own PORT and app state. Use {'{port}'} where the command needs its assigned port.</small>
+        </label>
+        {(policy !== (project.deliveryPolicy ?? 'direct') || previewCommand !== (project.previewCommand ?? '')) && <button className="primary" disabled={busy} onClick={() => void run(() => client.call('projects.setDelivery', { projectId: project.id, deliveryPolicy: policy, previewCommand }))}>Save delivery settings</button>}
         <div className="field">
           <span>Checkouts on this machine</span>
           <div className="list">
@@ -87,6 +104,18 @@ export function ProjectSheet({ project, onClose }: { project: ProjectView; onClo
           </div>
         </div>
         {error && <p className="error">{error}</p>}
+        <div className="field">
+          <span>Tools, MCP servers and skills</span>
+          <small className="hint">
+            Turn on what this project needs, for every checkout and thread of it. Things on everywhere or for its profile are inherited. Changes save immediately.
+          </small>
+          <ResourcePicker context={{ kind: 'project', project }} />
+          <span className="signin-links">
+            <button type="button" className="link" onClick={() => onOpenSettings({ section: 'tools' })}>Manage tools</button>
+            <button type="button" className="link" onClick={() => onOpenSettings({ section: 'mcps' })}>MCP servers</button>
+            <button type="button" className="link" onClick={() => onOpenSettings({ section: 'skills' })}>Skills</button>
+          </span>
+        </div>
       </div>
     </Sheet>
   );

@@ -1,4 +1,4 @@
-import type { AccountLimitsView, AccountView, LimitsProblem } from '@accio/protocol';
+import type { AccountLimitsView, AccountView, LimitsProblem, LimitWindow } from '@accio/protocol';
 
 export class LimitsReadError extends Error {
   constructor(readonly code: LimitsProblem['code'], message: string, readonly retryAfterMs?: number) { super(message); }

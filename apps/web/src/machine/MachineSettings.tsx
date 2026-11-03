@@ -7,14 +7,16 @@ import { SettingRow, SettingsSection } from '../app/Settings';
 import { useProfiles } from '../profiles/profiles';
 import { FolderList } from './FolderList';
 import { useAction } from '../app/useAction';
+import { useResources } from '../resources/resources';
+import { ToolStatusCard } from '../tools/ToolStatusCard';
 
 /** The machines known to the hub, including those currently offline. */
-export function MachineSettings({ machineId, onOpen }: { machineId?: string; onOpen: (id: string) => void }) {
+export function MachineSettings({ machineId, onOpen, onOpenThread }: { machineId?: string; onOpen: (id: string) => void; onOpenThread: (threadId: string) => void }) {
   const client = useClient();
   const machines = useLive(() => client.call('machines.list', {}), 'machines.changed');
   if (!machines) return <p className="note">Loading machines…</p>;
   const machine = machines.find((m) => m.id === machineId);
-  if (machine) return <MachineDetail key={machine.id} machine={machine} />;
+  if (machine) return <MachineDetail key={machine.id} machine={machine} onOpenThread={onOpenThread} />;
   return (
     <>
       <p className="note">Machines known to the hub. Their profile folders are stored on the hub too.</p>
@@ -36,8 +38,9 @@ export function MachineSettings({ machineId, onOpen }: { machineId?: string; onO
   );
 }
 
-function MachineDetail({ machine }: { machine: MachineView }) {
+function MachineDetail({ machine, onOpenThread }: { machine: MachineView; onOpenThread: (threadId: string) => void }) {
   const { profiles = [] } = useProfiles();
+  const { state: resources } = useResources();
   return (
     <>
       <SettingsSection title={machine.name}>
@@ -57,6 +60,18 @@ function MachineDetail({ machine }: { machine: MachineView }) {
           </SettingRow>
         ))}
       </SettingsSection>
+      <section className="settings-section">
+        <h2>Managed tools</h2>
+        {!resources ? <p className="note" role="status">Loading tools…</p> : resources.tools.length === 0 ? (
+          <div className="settings-card"><SettingRow title="No managed tools" description="Add tools in Settings / Tools." /></div>
+        ) : (
+          <div className="tool-cards">
+            {[...resources.tools].sort((a, b) => a.name.localeCompare(b.name)).map((t) => (
+              <ToolStatusCard key={t.id} heading="tool" tool={t} machine={machine} status={resources.toolStatuses.find((s) => s.toolId === t.id && s.machineId === machine.id)} onOpenThread={onOpenThread} />
+            ))}
+          </div>
+        )}
+      </section>
       <SettingsSection title="Profile folders">
         {profiles.length === 0 && <SettingRow title="Add a profile first" />}
         {profiles.map((p) => (

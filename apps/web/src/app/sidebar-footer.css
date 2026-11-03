@@ -24,3 +24,27 @@
   width: 17px;
   height: 17px;
 }
+.connection-notice {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: auto;
+  padding: 0 6px;
+  color: var(--dim);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.connection-notice .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--dim);
+}
+.connection-notice.status-closed .dot,
+.connection-notice.status-unauthorized .dot {
+  background: var(--red);
+}
+.side-icon[aria-disabled='true'] {
+  cursor: default;
+  opacity: 0.6;
+}

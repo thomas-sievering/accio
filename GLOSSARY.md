@@ -46,6 +46,10 @@ _Avoid_: Vendor, backend, harness
 A coding program that runs a thread's turns, such as Claude Code, Codex or pi. Some harnesses can use several providers and models, such as pi; others only one provider's. Which harnesses exist and which providers each can use is a shared setting; each machine reports which harnesses it has installed.
 _Avoid_: Agent, runtime, coding tool, provider (as T3 Code uses it)
 
+**Accio tools**:
+Tools accio gives every harness, such as offer_choice. Each machine serves them to its own harnesses over MCP, under the name `accio`; each turn may use them only while it runs.
+_Avoid_: Accio MCP, custom tools, plugins
+
 **System prompt**:
 What accio adds to a harness's own instructions for every turn: titled sections that describe accio's chat, such as how to show images inline. Each harness receives it in its own way. Claude Code gets it after its built-in system prompt and Codex as developer instructions. It is read-only and shown under Settings → System prompt.
 _Avoid_: Instructions, preamble, custom prompt
@@ -90,6 +94,10 @@ _Avoid_: Cancelled, failed (for this case)
 **Failed**:
 The state of a thread whose last turn ended in an error. You can send it another message.
 _Avoid_: Errored, crashed
+
+**Choice**:
+Two or more screenshots a harness shows side by side, through the offer_choice accio tool, when you ask it to prototype, try or mock up UI for a feature. You pick one in your next message and add feedback if you like; the harness reads the pick on the message's first line.
+_Avoid_: Board, gallery, poll, variants (for the whole set)
 
 **Snooze**:
 Hiding a thread until a chosen time, when it comes back.

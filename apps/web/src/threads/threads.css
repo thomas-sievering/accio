@@ -3,6 +3,7 @@
 .rows {
   display: flex;
   flex-direction: column;
+  gap: 4px;
 }
 .row {
   position: relative;
@@ -431,10 +432,6 @@ button.row {
 .tool.interrupted .tool-name::before {
   background: var(--amber);
 }
-/* Consecutive calls read as one block. */
-.tool + .tool {
-  margin-top: -6px;
-}
 .tool-toggle > svg {
   opacity: 0;
 }
@@ -511,6 +508,89 @@ button.row {
   flex: 1;
   height: 1px;
   background: var(--line);
+}
+/* Same divider as .turn-finished, but it opens onto the turn's folded work. */
+.turn-work {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.turn-work-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0;
+  padding: 3px 0 3px 12px;
+  color: var(--dim);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.turn-work-toggle::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  margin-left: 4px;
+  background: var(--line);
+}
+.turn-work-toggle:not(:disabled):hover,
+.turn-work-toggle:focus-visible {
+  color: var(--ink);
+}
+.turn-work-toggle:disabled {
+  cursor: default;
+}
+/* While the turn runs: a spinner, then what the harness is doing now. */
+.turn-work.live .turn-work-toggle {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.turn-work.live .turn-work-toggle::before {
+  content: '';
+  flex: none;
+  width: 9px;
+  height: 9px;
+  margin-right: 2px;
+  border-radius: 50%;
+  border: 1.5px solid var(--line-2);
+  border-top-color: var(--muted);
+  animation: spin 0.9s linear infinite;
+}
+.turn-work-activity {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.turn-work-elapsed {
+  flex: none;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+.turn-work-elapsed::before {
+  content: '·';
+  margin-right: 6px;
+}
+.turn-work-toggle > svg {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  transition: rotate 0.15s;
+}
+.turn-work.open .turn-work-toggle > svg {
+  rotate: 90deg;
+}
+.turn-work-failed {
+  color: var(--red);
+}
+.turn-work-failed::before {
+  content: '·';
+  margin-right: 6px;
+  color: var(--dim);
+}
+.turn-work-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 .notice {
   align-self: center;
@@ -598,6 +678,7 @@ button.row {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  margin-left: -8px; /* Icon lines up with the textarea text; the hover pill bleeds left. */
   margin-right: auto;
   padding: 5px 8px;
   border-radius: 6px;
@@ -637,9 +718,8 @@ button.row {
 .model-picker-row > button:first-child { display: flex; flex-direction: column; justify-content: center; gap: 2px; flex: 1; min-width: 0; min-height: 32px; padding: 6px 4px 6px 10px; text-align: left; }
 .model-picker-row > button:first-child:focus-visible { outline: none; }
 .model-picker-name { display: flex; align-items: center; gap: 8px; min-width: 0; white-space: nowrap; }
+.model-picker-name svg { flex: none; width: 13px; height: 13px; }
 .model-picker-row.selected .model-picker-name { color: var(--ink-strong); }
-.model-picker-source { display: flex !important; align-items: center; gap: 5px; }
-.model-picker-source svg { width: 11px; height: 11px; }
 .model-picker-badge { flex: none; padding: 1px 6px; border: 1px solid var(--line-2); border-radius: 999px; color: var(--muted); font-size: 11px; }
 .model-star { display: grid; place-items: center; flex: none; width: 24px; height: 24px; border-radius: 6px; color: var(--muted); opacity: 0; }
 .model-picker-row:hover .model-star, .model-picker-row:focus-within .model-star, .model-star:focus-visible, .model-star[aria-pressed="true"] { opacity: 1; }
@@ -655,10 +735,11 @@ div.model-picker-empty b { color: var(--ink); font-weight: 500; }
 .composer-machine {
   max-width: 240px;
   min-width: 0;
-  padding: 4px 6px;
+  padding: 4px 24px 4px 8px;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: var(--raised);
+  background-color: var(--raised);
+  background-position: right 8px center;
   color: var(--muted);
   font: inherit;
   font-size: 13px;

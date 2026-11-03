@@ -14,9 +14,7 @@
     "src/**/*.test.ts"
   ],
   "references": [
-    {
-      "path": "../../packages/protocol"
-    },
+    { "path": "../../packages/protocol" },
     {
       "path": "../../packages/persistence"
     },

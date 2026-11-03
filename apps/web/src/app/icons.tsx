@@ -31,6 +31,9 @@ export const Close = () => (
     <path d="M18 6 6 18M6 6l12 12" />
   </svg>
 );
+export const Ship = () => <svg {...base}><path d="M12 15V3m-5 5 5-5 5 5M4 14v6h16v-6" /></svg>;
+export const Archive = () => <svg {...base}><rect x="3" y="3" width="18" height="5" rx="1" /><path d="M5 8v12h14V8m-10 4h6" /></svg>;
+export const Play = () => <svg {...base}><path d="m7 4 14 8-14 8Z" /></svg>;
 export const ArrowLeft = () => (
   <svg {...base}>
     <path d="M19 12H5M12 19l-7-7 7-7" />
@@ -169,8 +172,37 @@ export const Star = ({ filled = false }: { filled?: boolean }) => (
     <path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z" />
   </svg>
 );
+/** The Owl: accio's agent that works across every thread. From Lucide Lab (ISC licence). */
+export const Owl = () => (
+  <svg {...base}>
+    <ellipse cx="12" cy="9" rx="8" ry="7" />
+    <path d="M12 9a4 4 0 1 1 8 0v12h-4C9.4 21 4 15.6 4 9a4 4 0 1 1 8 0v1M8 9h.01M16 9h.01" />
+    <path d="M20 21a3.9 3.9 0 1 1 0-7.8m-10 6.2V22m4-1.15V22" />
+  </svg>
+);
+export const PanelRight = () => (
+  <svg {...base}>
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+    <path d="M15 3v18" />
+  </svg>
+);
 export const Limits = () => (
   <svg {...base}>
     <path d="M6 20v-6M12 20V4M18 20V10" />
+  </svg>
+);
+export const Wrench = () => (
+  <svg {...base}>
+    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76Z" />
+  </svg>
+);
+export const Plug = () => (
+  <svg {...base}>
+    <path d="M12 22v-5M9 8V2M15 8V2M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z" />
+  </svg>
+);
+export const BookOpen = () => (
+  <svg {...base}>
+    <path d="M12 7v14M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3Z" />
   </svg>
 );

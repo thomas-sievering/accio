@@ -1,4 +1,4 @@
-import type { CheckoutView, ProjectView, ThreadView } from '@accio/protocol';
+import type { CheckoutView, ChoicePick, ProjectView, ThreadView } from '@accio/protocol';
 import { type ModelSelection } from '@accio/protocol';
 import { useState, type ReactNode } from 'react';
 import { useClient } from '../app/connection';
@@ -9,6 +9,8 @@ import { FolderLink } from '../projects/FolderLink';
 import { ProjectMark } from '../projects/ProjectMark';
 import { useProjects } from '../projects/projects';
 import { Composer } from './Composer';
+import { PendingPick, optionName } from './Choice';
+import { DeliveryActions } from './DeliveryActions';
 import { ModelPicker } from './ModelPicker';
 import { ThreadNotice } from './ThreadNotice';
 import { ThreadActionsMenu } from './ThreadActionsMenu';
@@ -36,11 +38,19 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits 
   const notices = blocked ? items?.filter((item) => item.kind === 'notice' && item.turnId === lastTurn) : undefined;
   const detail = notices?.map((item) => 'text' in item ? item.text : '').join(' ') || undefined;
   const visibleItems = blocked ? items?.filter((item) => item.kind !== 'notice' || item.turnId !== lastTurn) : items;
+  // The option ticked for the next message; it belongs to this thread only.
+  const [pending, setPending] = useState<{ threadId: string; pick: ChoicePick }>();
+  const pick = pending?.threadId === thread.id ? pending.pick : undefined;
+  const setPick = (next?: ChoicePick) => setPending(next && { threadId: thread.id, pick: next });
+  const pickedChoice = pick && items?.find((item) => item.kind === 'choice' && item.id === pick.choiceId);
+  const pickLabel = pick && pickedChoice?.kind === 'choice' ? `✓ ${optionName(pickedChoice, pick.option)}` : undefined;
 
   return (
     <>
-      <PaneHeader title={thread.title} {...place} actions={<ThreadActionsMenu key={thread.id} thread={thread} items={items} />} />
-      {visibleItems ? <Transcript threadId={thread.id} items={visibleItems} working={running} /> : (
+      <PaneHeader title={thread.title} {...place} checkout={thread.workspace && !thread.workspace.releasedAt && place.checkout ? { ...place.checkout, path: thread.workspace.path } : place.checkout} actions={<ThreadActionsMenu key={thread.id} thread={thread} items={items} />} />
+      {visibleItems ? <PendingPick.Provider value={{ pick, setPick, enabled: !running }}>
+        <Transcript threadId={thread.id} items={visibleItems} working={running} />
+      </PendingPick.Provider> : (
         <div className="empty">
           {error && <>
             <p className="error" role="alert">Could not load transcript: {error}</p>
@@ -50,10 +60,15 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits 
       )}
       <ThreadNotice thread={thread} profile={place.profile} detail={detail} onOpenProfile={onOpenProfile} />
       <Composer
-        disabled={running || savingModel || !place.profile || !accountForModel(place.profile, thread.model)?.signedIn}
+        disabled={running || savingModel || thread.delivery?.status === 'queued' || !place.profile || !accountForModel(place.profile, thread.model)?.signedIn}
+        actions={<DeliveryActions key={thread.id} thread={thread} project={place.project} canRun={!!place.profile && !!accountForModel(place.profile, thread.model)?.signedIn} />}
         onStop={running ? async () => void (await client.call('threads.stop', { threadId: thread.id })) : undefined}
         placeholder={running ? 'Working…' : `Ask ${thread.model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}
-        onSend={async (text) => void (await client.call('threads.send', { threadId: thread.id, text }))}
+        attachment={pick && pickLabel ? { label: pickLabel, onRemove: () => setPick(undefined) } : undefined}
+        onSend={async (text) => {
+          await client.call('threads.send', { threadId: thread.id, text, ...(pick ? { pick } : {}) });
+          setPick(undefined);
+        }}
         toolbar={<>
           <ModelPicker key={thread.id} profileId={thread.profileId} harnessId={thread.model.harnessId} value={thread.model} disabled={running} onChange={async (model) => {
             setSavingModel(true);
