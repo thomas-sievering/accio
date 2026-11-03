@@ -190,9 +190,9 @@ const thread = await client.call('threads.start', { profileId: 'personal', text:
 await client.waitFor('threads.changed', (threads) => threads.some((entry) => entry.id === thread.id && entry.status === 'idle'));
 const choice = await client.call('threads.start', { profileId: 'personal', text: 'Choice fixture' });
 await client.waitFor('threads.changed', (threads) => threads.some((entry) => entry.id === choice.id && entry.status === 'idle'));
-// MCP tab: one remote server on for the profile (not signed in), one local server on nowhere yet.
-await client.call('mcp.save', { id: 'docs-search', name: 'docs-search', transport: 'http', url: 'https://mcp.example.test/docs', args: [], scope: { global: false, profileIds: ['personal'], projectKeys: [] }, auth: 'oauth' });
-await client.call('mcp.save', { id: 'local-db', name: 'local-db', transport: 'stdio', command: 'db-mcp', args: ['--readonly'], scope: { global: false, profileIds: [], projectKeys: [] }, auth: 'none' });
+// MCP tab: a remote server that still needs signing in, and a local one.
+await client.call('mcp.save', { id: 'docs-search', name: 'docs-search', transport: 'http', url: 'https://mcp.example.test/docs', args: [], auth: 'oauth' });
+await client.call('mcp.save', { id: 'local-db', name: 'local-db', transport: 'stdio', command: 'db-mcp', args: ['--readonly'], auth: 'none' });
 console.log(`Chat fixture ready: http://127.0.0.1:${app.port}`);
 let closing = false;
 const close = async () => {

@@ -98,28 +98,19 @@ test('Skills tab lists project and inherited skills, adds, references, edits, di
   await expect(skillRow(page, 'repo-notes')).toHaveCount(0);
 });
 
-test('MCP tab lists the servers this thread gets, adds one to the project and opens settings', async ({ page, baseURL }) => {
+test('MCP tab lists every MCP server, flags sign-in and opens settings', async ({ page, baseURL }, testInfo) => {
   await openSkills(page, baseURL!, /Skills fixture/);
   await page.getByRole('tab', { name: 'MCP', exact: true }).click();
   const mcp = page.getByRole('tabpanel', { name: 'MCP' });
-  const enabled = mcp.locator('section').first();
   const row = (name: string) => mcp.locator('.mcp-item').filter({ has: page.getByRole('button', { name: new RegExp(`^${name}\\b`) }) });
 
-  // On for the profile, and it still needs signing in.
-  await expect(row('docs-search')).toContainText('Profile');
-  await page.screenshot({ path: test.info().outputPath('mcp-panel.png') });
+  await expect(mcp.getByRole('heading', { name: 'Servers 2' })).toBeVisible();
+  await expect(row('docs-search')).toContainText('Remote');
   await expect(row('docs-search')).toContainText('https://mcp.example.test/docs');
   await expect(mcp.getByRole('button', { name: 'docs-search: sign in' })).toBeVisible();
-
-  // The rest wait folded; one adds to this project and moves up.
-  await expect(row('local-db')).toHaveCount(0);
-  await mcp.getByRole('button', { name: /^Not enabled/ }).click();
   await expect(row('local-db')).toContainText('db-mcp --readonly');
-  await mcp.getByRole('button', { name: 'Add local-db to this project' }).click();
-  await expect(enabled.locator('.mcp-item').filter({ hasText: 'local-db' })).toContainText('Project');
-  await expect(mcp.getByRole('button', { name: /^Not enabled/ })).toHaveCount(0);
-  await enabled.getByRole('button', { name: 'Remove local-db from this project' }).click();
-  await expect(enabled.locator('.mcp-item').filter({ hasText: 'local-db' })).toHaveCount(0);
+  await expect(row('local-db').getByRole('button', { name: /sign in/ })).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath('mcp-panel.png') });
 
   // Arrow keys move between tabs, and the choice is remembered.
   await page.getByRole('tab', { name: 'MCP', exact: true }).press('ArrowLeft');
@@ -131,7 +122,7 @@ test('MCP tab lists the servers this thread gets, adds one to the project and op
   await expect(page.getByRole('tab', { name: 'MCP', exact: true })).toHaveAttribute('aria-selected', 'true');
 
   // A row opens that server in settings.
-  await page.getByRole('tabpanel', { name: 'MCP' }).getByRole('button', { name: 'docs-search Profile', exact: true }).click();
+  await page.getByRole('tabpanel', { name: 'MCP' }).getByRole('button', { name: 'docs-search Remote', exact: true }).click();
   await expect(page.locator('.layout.with-panel')).toBeHidden();
   await expect(page.getByText('docs-search').first()).toBeVisible();
 });

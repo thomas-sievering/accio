@@ -1,7 +1,6 @@
 import { useRef, useState } from 'react';
 import type { SkillContext } from '@accio/protocol';
 import { McpPanel } from '../mcp/McpPanel';
-import { useProjects } from '../projects/projects';
 import { SkillsPanel } from '../skills/SkillsPanel';
 import { useThreads } from '../threads/threads';
 import { PanelRight } from './icons';
@@ -36,7 +35,6 @@ const TAB_KEY = 'accio.panelTab';
  */
 export function SidePanel() {
   const { threads, selectedId, draft } = useThreads();
-  const { state: projects } = useProjects();
   const [tab, setTab] = useState<Tab>(() => (localStorage.getItem(TAB_KEY) === 'mcp' ? 'mcp' : 'skills'));
   const tabRefs = useRef<Partial<Record<Tab, HTMLButtonElement | null>>>({});
   const thread = threads?.find((t) => t.id === selectedId);
@@ -44,9 +42,6 @@ export function SidePanel() {
   const context: SkillContext | undefined = draft
     ? draft.checkoutId ? { checkoutId: draft.checkoutId, ...(draft.profileId ? { profileId: draft.profileId } : {}) } : draft.profileId ? { profileId: draft.profileId } : undefined
     : thread ? { threadId: thread.id } : undefined;
-  const draftProjectId = draft?.checkoutId ? projects?.checkouts.find((c) => c.id === draft.checkoutId)?.projectId : undefined;
-  const projectId = draft ? draftProjectId : thread?.projectId || undefined;
-  const profileId = draft ? draft.profileId ?? projects?.projects.find((p) => p.id === draftProjectId)?.profileId : thread?.profileId;
   const key = context ? JSON.stringify(context) : '';
   const select = (next: Tab, focus = false) => {
     setTab(next);
@@ -74,7 +69,7 @@ export function SidePanel() {
           ? <p className="side-panel-empty">Open a thread or start one to see its {tab === 'mcp' ? 'MCP servers' : 'skills'}.</p>
           : tab === 'skills'
             ? <SkillsPanel key={key} context={context} composer={draft ? 'draft' : thread!.id} />
-            : <McpPanel key={key} profileId={profileId} projectId={projectId} />}
+            : <McpPanel />}
       </div>
     </aside>
   </>;

@@ -1,6 +1,6 @@
-/* MCP tab of the side panel: shares the Skills tab's rows, adds a quick project toggle. */
-.mcp-item .skill-line {
-  padding-right: 2px;
+/* MCP tab of the side panel: shares the Skills tab's rows. */
+.mcp-section {
+  margin-top: 4px;
 }
 .mcp-where {
   font: 11px/1.4 'Cascadia Code', Consolas, monospace;
@@ -18,23 +18,4 @@
 }
 .mcp-signin:hover {
   border-color: var(--red);
-}
-/* Add/remove only shows on the row it acts on, so the list stays quiet. */
-.mcp-act.side-icon {
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  opacity: 0;
-}
-.mcp-act.side-icon svg {
-  width: 13px;
-  height: 13px;
-}
-.mcp-item:is(:hover, :focus-within) .mcp-act {
-  opacity: 1;
-}
-@media (hover: none) {
-  .mcp-act.side-icon {
-    opacity: 1;
-  }
 }
