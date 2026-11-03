@@ -7,7 +7,7 @@ import { AccountsSettings } from '../profiles/AccountsSettings';
 import { ProfilesSettings } from '../profiles/ProfilesSettings';
 import { useProfiles } from '../profiles/profiles';
 import { ArrowLeft, Hub, Layers, Monitor, ScrollText, Users } from './icons';
-import { SidebarResizer } from './SidebarResizer';
+import { SidebarResizer } from './Resizer';
 
 /** Where Settings is open. `profileId` opens one profile ('new' to add one). */
 export type SettingsRoute = { section: 'profiles'; profileId?: string } | { section: 'accounts'; accountId?: string } | { section: 'hub' } | { section: 'harnesses' } | { section: 'systemPrompt' } | { section: 'machines'; machineId?: string };

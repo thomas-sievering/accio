@@ -1,12 +1,5 @@
 
 /* Settings: replace the whole window while open (as in T3 Code). */
-.machine {
-  border-radius: 8px;
-  text-align: start;
-}
-.machine:hover {
-  background: var(--hover);
-}
 .settings-group + .settings-group {
   margin-top: 14px;
 }

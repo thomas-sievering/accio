@@ -172,3 +172,22 @@ export const Star = ({ filled = false }: { filled?: boolean }) => (
     <path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z" />
   </svg>
 );
+/** The Owl: accio's agent that works across every thread. From Lucide Lab (ISC licence). */
+export const Owl = () => (
+  <svg {...base}>
+    <ellipse cx="12" cy="9" rx="8" ry="7" />
+    <path d="M12 9a4 4 0 1 1 8 0v12h-4C9.4 21 4 15.6 4 9a4 4 0 1 1 8 0v1M8 9h.01M16 9h.01" />
+    <path d="M20 21a3.9 3.9 0 1 1 0-7.8m-10 6.2V22m4-1.15V22" />
+  </svg>
+);
+export const PanelRight = () => (
+  <svg {...base}>
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+    <path d="M15 3v18" />
+  </svg>
+);
+export const Limits = () => (
+  <svg {...base}>
+    <path d="M6 20v-6M12 20V4M18 20V10" />
+  </svg>
+);

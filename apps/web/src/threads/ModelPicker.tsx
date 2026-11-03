@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { modelKey, type ModelSelection, type ModelsState } from '@accio/protocol';
 import { useClient, useConnectionStatus } from '../app/connection';
-import { Check, ChevronDown, ProviderLogo, Star } from '../app/icons';
+import { Check, ProviderLogo, Star } from '../app/icons';
 
 /** A profile-scoped picker: favourites first, then each provider/harness pair. */
 export function ModelPicker({ profileId, harnessId, value, onChange, disabled = false }: {
@@ -54,8 +54,7 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
   const current = value.harnessId === 'codex' && value.modelId === 'default'
     ? { harnessId: 'codex', modelId: models.find((m) => m.harnessId === 'codex' && m.isDefault)?.id ?? 'default' } : value;
   const selected = models.find((m) => m.harnessId === current.harnessId && m.id === current.modelId);
-  // The provider logo already names the brand, so the trigger drops the "Claude " prefix.
-  const shortName = (selected?.name ?? fallbackName).replace(/^Claude\s+/, '').replace(/^./, (c) => c.toUpperCase());
+  const shortName = short(selected?.name ?? fallbackName);
   const visible = models.filter((m) => activeTab === 'favorites'
     ? favorites.has(modelKey({ harnessId: m.harnessId, modelId: m.id }))
     : JSON.stringify([m.providerId, m.harnessId]) === activeTab);
@@ -109,15 +108,13 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
         const above = rect.top >= window.innerHeight - rect.bottom;
         const room = (above ? rect.top : window.innerHeight - rect.bottom) - 20;
         // One height for every tab: the longest list or the rail, whichever is taller.
-        // Favourites rows carry a second line naming the harness, so they are taller.
-        const longest = Math.max(favorites.size * 47, ...groups.map((g) => models.filter((m) => JSON.stringify([m.providerId, m.harnessId]) === g.id).length * 33));
+        const longest = Math.max(favorites.size * 33, ...groups.map((g) => models.filter((m) => JSON.stringify([m.providerId, m.harnessId]) === g.id).length * 33));
         const height = Math.min(Math.max(longest + 14, (groups.length + 1) * 40 + 12, 172), 420, room);
         setPosition({ width, height, left: Math.max(12, Math.min(rect.left, window.innerWidth - width - 12)),
           ...(above ? { bottom: window.innerHeight - rect.top + 8, top: 'auto' } : { top: rect.bottom + 8, bottom: 'auto' }) });
       }}>
       <ProviderLogo providerId={selected?.providerId ?? (value.harnessId === 'codex' ? 'openai' : 'anthropic')} />
       <span>{shortName}</span>
-      <ChevronDown />
     </button>
     <div id={id} ref={panel} popover="auto" className="model-picker" style={position} role="dialog" aria-label="Choose a model" onKeyDown={move}
       onToggle={(event) => { if (event.newState === 'open') { setTab(openingTab()); focusRow(); } }}>
@@ -144,9 +141,8 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
           const isFavorite = favorites.has(key);
           return <div className={`model-picker-row${isSelected ? ' selected' : ''}`} key={key}>
             <button type="button" data-model-choice aria-pressed={isSelected} onClick={() => void choose(choice)}>
-              <span className="model-picker-name">{m.name}{m.isDefault && <span className="model-picker-badge">Default</span>}</span>
-              {/* Favourites mix providers, so each row says where it runs. */}
-              {activeTab === 'favorites' && <small className="model-picker-source"><ProviderLogo providerId={m.providerId} />{m.harnessName}</small>}
+              {/* Favourites mix providers, so each row carries its provider's logo instead of the full name. */}
+              <span className="model-picker-name">{activeTab === 'favorites' ? <><ProviderLogo providerId={m.providerId} />{short(m.name)}</> : m.name}{m.isDefault && <span className="model-picker-badge">Default</span>}</span>
             </button>
             <button type="button" className="model-star" title={isFavorite ? 'Remove from favourites' : 'Add to favourites'}
               aria-label={`${isFavorite ? 'Remove' : 'Add'} ${m.name} ${isFavorite ? 'from' : 'to'} favourites`} aria-pressed={isFavorite}
@@ -160,4 +156,9 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
       {error && <p className="error model-picker-error" role="alert">{error}</p>}
     </div>
   </>;
+}
+
+/** The provider logo already names the brand, so a name beside it drops the "Claude " prefix. */
+function short(name: string): string {
+  return name.replace(/^Claude\s+/, '').replace(/^./, (c) => c.toUpperCase());
 }

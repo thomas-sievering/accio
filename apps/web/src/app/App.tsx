@@ -1,5 +1,4 @@
 import { useCallback, useState } from 'react';
-import { MachineBadge } from '../machine/MachineBadge';
 import { hasSignedInAccount, ProfilesProvider, useProfiles } from '../profiles/profiles';
 import { ProjectsProvider, useProjects } from '../projects/projects';
 import { AddProjectSheet } from '../projects/AddProjectSheet';
@@ -9,11 +8,13 @@ import { NewThreadButton } from '../threads/NewThreadButton';
 import { ThreadList } from '../threads/ThreadList';
 import { DraftPane, ThreadPane } from '../threads/ThreadPane';
 import { ThreadSearch } from '../threads/ThreadSearch';
+import { ConnectionNotice } from './ConnectionNotice';
 import { FirstRun } from './FirstRun';
-import { Close, FolderPlus, Settings as Gear } from './icons';
+import { Close, FolderPlus, Limits, Owl, Settings as Gear } from './icons';
 import { ScopeMenu } from './ScopeMenu';
-import { SidebarResizer } from './SidebarResizer';
+import { SidebarResizer } from './Resizer';
 import { Settings, type SettingsRoute } from './Settings';
+import { PanelToggle, SidePanel, usePanelOpen } from './SidePanel';
 
 type OpenSheet = { kind: 'addProject' } | { kind: 'project'; id: string } | null;
 
@@ -44,6 +45,7 @@ function Shell() {
   const [sheet, setSheet] = useState<OpenSheet>(null);
   const [settings, setSettings] = useState<SettingsRoute | null>(null);
   const closeSettings = useCallback(() => setSettings(null), []);
+  const [panelOpen, togglePanel] = usePanelOpen();
   const close = () => setSheet(null);
   const openProject = sheet?.kind === 'project' ? state?.projects.find((p) => p.id === sheet.id) : undefined;
   const openProfile = (profileId: string) => setSettings({ section: 'profiles', profileId });
@@ -52,7 +54,7 @@ function Shell() {
   if (settings) return <Settings route={settings} onRoute={setSettings} onClose={closeSettings} />;
 
   return (
-    <div className="layout">
+    <div className={`layout${panelOpen ? ' with-panel' : ''}`}>
       <aside className="sidebar">
         <header className="side-top drag">
           <span className="side-title">Threads</span>
@@ -78,10 +80,18 @@ function Shell() {
           <ThreadList />
         </nav>
         <footer className="side-foot">
-          <MachineBadge onOpen={() => setSettings({ section: 'machines' })} />
           <button className="side-icon" title="Settings" aria-label="Settings" onClick={() => setSettings({ section: 'profiles' })}>
             <Gear />
           </button>
+          {/* Each account's usage limits, still to be built. */}
+          <button className="side-icon" title="Usage limits · coming soon" aria-label="Usage limits, coming soon" aria-disabled="true">
+            <Limits />
+          </button>
+          {/* The Owl, accio's agent across all threads, is still to be designed. */}
+          <button className="side-icon" title="Owl · coming soon" aria-label="Owl, coming soon" aria-disabled="true">
+            <Owl />
+          </button>
+          <ConnectionNotice />
         </footer>
       </aside>
       <SidebarResizer />
@@ -97,6 +107,8 @@ function Shell() {
           </>
         )}
       </main>
+      {panelOpen && <SidePanel />}
+      <PanelToggle open={panelOpen} onToggle={togglePanel} />
       {sheet?.kind === 'addProject' && <AddProjectSheet onClose={close} />}
       {openProject && <ProjectSheet project={openProject} onClose={close} />}
     </div>
