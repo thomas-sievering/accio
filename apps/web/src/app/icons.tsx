@@ -83,3 +83,26 @@ export const Undo = () => (
     <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
   </svg>
 );
+export const Search = () => (
+  <svg {...base}>
+    <circle cx="11" cy="11" r="7" />
+    <path d="m20 20-3.5-3.5" />
+  </svg>
+);
+export const SquarePen = () => (
+  <svg {...base}>
+    <path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+    <path d="M18.4 2.6a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4Z" />
+  </svg>
+);
+export const ListFilter = () => (
+  <svg {...base}>
+    <path d="M3 6h18M7 12h10M10 18h4" />
+  </svg>
+);
+export const Settings = () => (
+  <svg {...base}>
+    <circle cx="12" cy="12" r="3" />
+    <path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1" />
+  </svg>
+);

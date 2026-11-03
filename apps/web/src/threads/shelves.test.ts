@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ThreadView } from '@accio/protocol';
-import { nextMorning, shelveThreads } from './shelves';
+import { filterThreads, nextMorning, shelveThreads } from './shelves';
 
 const now = new Date('2026-11-03T12:00:00');
 const thread = (id: string, extra: Partial<ThreadView> = {}): ThreadView => ({
@@ -27,27 +27,38 @@ describe('shelveThreads', () => {
     expect(ids(s.settled)).toEqual(['settled']);
     expect(ids(s.snoozed)).toEqual(['snoozed']);
     expect(ids(s.working)).toEqual(['working']);
-    expect(s.open.size).toBe(0);
+    expect(s.open).toEqual([]);
   });
 
   it('wakes a thread whose snooze has passed', () => {
     const s = shelveThreads([thread('woke')], { woke: { snoozedUntil: '2026-11-03T11:00:00' } }, now);
     expect(s.snoozed).toEqual([]);
-    expect(ids(s.open.get('p1') ?? [])).toEqual(['woke']);
+    expect(ids(s.open)).toEqual(['woke']);
   });
 
-  it('keeps idle, interrupted and failed threads open under their project, newest first', () => {
+  it('keeps idle, interrupted and failed threads of every project in one open list, most recently active first', () => {
     const s = shelveThreads(
       [
-        thread('old', { createdAt: '2026-11-01T00:00:00Z' }),
-        thread('cut', { status: 'interrupted', createdAt: '2026-11-03T11:00:00Z' }),
-        thread('other', { projectId: 'p2', status: 'failed' }),
+        thread('old', { updatedAt: '2026-11-01T00:00:00Z' }),
+        thread('cut', { status: 'interrupted', updatedAt: '2026-11-03T11:00:00Z' }),
+        thread('other', { projectId: 'p2', status: 'failed', updatedAt: '2026-11-03T10:30:00Z' }),
       ],
       {},
       now,
     );
-    expect(ids(s.open.get('p1') ?? [])).toEqual(['cut', 'old']);
-    expect(ids(s.open.get('p2') ?? [])).toEqual(['other']);
+    expect(ids(s.open)).toEqual(['cut', 'other', 'old']);
+  });
+});
+
+describe('filterThreads', () => {
+  const threads = [thread('Fix login'), thread('Add search', { projectId: 'p2' }), thread('Search docs', { projectId: 'p3' })];
+
+  it('keeps only threads of the given projects', () => {
+    expect(ids(filterThreads(threads, new Set(['p1', 'p2']), ''))).toEqual(['Fix login', 'Add search']);
+  });
+
+  it('matches the search against titles, ignoring case', () => {
+    expect(ids(filterThreads(threads, new Set(['p1', 'p2', 'p3']), '  SEARCH '))).toEqual(['Add search', 'Search docs']);
   });
 });
 

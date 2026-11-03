@@ -2,14 +2,10 @@
   "name": "accio",
   "private": true,
   "type": "module",
-  "workspaces": [
-    "packages/*",
-    "apps/*"
-  ],
   "scripts": {
-    "build": "npm run build -w @accio/protocol -w @accio/hub -w @accio/server -w @accio/web -w @accio/desktop",
-    "start": "npm run build && npm run start -w @accio/desktop",
-    "server": "npm run build -w @accio/protocol -w @accio/hub -w @accio/server -w @accio/web && node apps/server/dist/main.js",
+    "build": "pnpm -r build",
+    "start": "pnpm build && pnpm --filter @accio/desktop start",
+    "server": "pnpm --filter \"@accio/server...\" --filter @accio/web build && node apps/server/dist/main.js",
     "test": "vitest run",
     "typecheck": "tsc -b && tsc -p apps/web",
     "postinstall": "node scripts/ensure-electron.mjs"
@@ -21,8 +17,5 @@
     "typescript": "^7.0.2",
     "vitest": "^5.1.0"
   },
-  "allowScripts": {
-    "electron@45.2.1": true,
-    "esbuild@0.28.2": true
-  }
+  "packageManager": "pnpm@12.16.1"
 }

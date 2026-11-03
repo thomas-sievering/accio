@@ -4,13 +4,14 @@ import { ProfilesProvider, useProfiles } from '../profiles/profiles';
 import { ProfileSwitcher } from '../profiles/ProfileSwitcher';
 import { ProfilesSheet } from '../profiles/ProfilesSheet';
 import { ProjectsProvider, useProjects } from '../projects/projects';
-import { ProjectList } from '../projects/ProjectList';
+import { ProjectScopeMenu } from '../projects/ProjectScopeMenu';
 import { AddProjectSheet } from '../projects/AddProjectSheet';
 import { ProjectSheet } from '../projects/ProjectSheet';
 import { ThreadsProvider, useThreads } from '../threads/threads';
-import { ThreadRows } from '../threads/ThreadRows';
+import { NewThreadButton } from '../threads/NewThreadButton';
+import { ThreadList } from '../threads/ThreadList';
 import { ThreadPane } from '../threads/ThreadPane';
-import { ThreadShelves } from '../threads/ThreadShelves';
+import { ThreadSearch } from '../threads/ThreadSearch';
 import { FolderPlus, Users } from './icons';
 
 type OpenSheet = { kind: 'profiles'; profileId?: string } | { kind: 'addProject' } | { kind: 'project'; id: string } | null;
@@ -30,7 +31,7 @@ export function App() {
 function Shell() {
   const { profiles } = useProfiles();
   const { state } = useProjects();
-  const { threads, selectedId } = useThreads();
+  const { threads, selectedId, projectScope, setProjectScope } = useThreads();
   const thread = threads?.find((t) => t.id === selectedId);
   const [sheet, setSheet] = useState<OpenSheet>(null);
   const close = () => setSheet(null);
@@ -52,9 +53,13 @@ function Shell() {
             <FolderPlus />
           </button>
         </header>
+        <div className="side-tools">
+          <ThreadSearch />
+          <ProjectScopeMenu scope={projectScope} onScope={setProjectScope} onOpenProject={(p) => setSheet({ kind: 'project', id: p.id })} />
+          <NewThreadButton />
+        </div>
         <nav className="side-body">
-          <ProjectList onOpenProject={(p) => setSheet({ kind: 'project', id: p.id })} renderBody={(p) => <ThreadRows project={p} />} />
-          <ThreadShelves />
+          <ThreadList />
         </nav>
         <footer className="side-foot">
           <MachineBadge />
@@ -85,7 +90,7 @@ function Shell() {
                   </button>
                 </>
               ) : (
-                'Pick a thread, or start one under a project.'
+                'Pick a thread, or start a new one.'
               )}
             </div>
           </>
