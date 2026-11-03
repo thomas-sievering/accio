@@ -1,4 +1,4 @@
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FakeAgent, SESSION, replyWith } from '../testing/fakeAgent.js';
@@ -9,7 +9,7 @@ async function setup(agent: FakeAgent) {
   const c = await t.connect();
   const folder = join(t.home, 'repo');
   await mkdir(folder);
-  await c.call('accounts.save', { name: 'HRC', isJob: true, hubUrl: 'https://hub.test:8318', hubKey: 'job-key' });
+  await c.signedIn('HRC', { isJob: true });
   const checkout = await c.call('checkouts.add', { path: folder, accountId: 'hrc' });
   return { t, c, checkout, folder };
 }
@@ -19,6 +19,12 @@ async function sendAndSettle(c: TestClient, threadId: string, text: string, stat
   c.events.length = 0;
   await c.call('threads.send', { threadId, text });
   return settled(c, threadId, status);
+}
+
+/** The hub key accio wrote into an account's config folder. */
+async function hubKeyOf(home: string, accountId: string): Promise<string> {
+  const settings = JSON.parse(await readFile(join(home, 'accounts', accountId, 'claude', 'settings.json'), 'utf8'));
+  return settings.env.ANTHROPIC_AUTH_TOKEN;
 }
 
 const settled = (c: TestClient, threadId: string, status = 'idle') =>
@@ -43,8 +49,8 @@ describe('threads slice', () => {
     const run = agent.runs[0]!;
     expect(run).toMatchObject({ cwd: folder, prompt: 'Fix the login bug\nmore detail', sessionId: null });
     expect(run.env).toMatchObject({
-      ANTHROPIC_BASE_URL: 'https://hub.test:8318',
-      ANTHROPIC_AUTH_TOKEN: 'job-key',
+      ANTHROPIC_BASE_URL: t.app.hubUrl,
+      ANTHROPIC_AUTH_TOKEN: await hubKeyOf(t.home, 'hrc'),
       CLAUDE_CONFIG_DIR: join(t.home, 'accounts', 'hrc', 'claude'),
     });
 
@@ -64,11 +70,12 @@ describe('threads slice', () => {
     const { t, c, checkout } = await setup(agent);
     stop = t.stop;
     const thread = await c.call('threads.create', { checkoutId: checkout.id });
-    await c.call('accounts.save', { name: 'Personal', isJob: false, hubUrl: 'https://hub.test', hubKey: 'personal-key' });
+    await c.signedIn('Personal');
     await c.call('projects.setAccount', { projectId: thread.projectId, accountId: 'personal' });
 
     await sendAndSettle(c, thread.id, 'hi');
-    expect(agent.runs[0]!.env.ANTHROPIC_AUTH_TOKEN).toBe('job-key');
+    expect(agent.runs[0]!.env.ANTHROPIC_AUTH_TOKEN).toBe(await hubKeyOf(t.home, 'hrc'));
+    expect(agent.runs[0]!.env.ANTHROPIC_AUTH_TOKEN).not.toBe(await hubKeyOf(t.home, 'personal'));
     await expect(c.call('accounts.delete', { id: 'hrc' })).rejects.toThrow(/1 thread/);
   });
 
@@ -102,5 +109,24 @@ describe('threads slice', () => {
     await expect(c.call('threads.send', { threadId: thread.id, text: 'two' })).rejects.toThrow(/already working/);
     release();
     await settled(c, thread.id);
+  });
+});
+
+describe('threads need a signed-in account', () => {
+  it('refuses to start a turn until the account is signed in with Claude', async () => {
+    const agent = new FakeAgent();
+    const t = await startTestApp({ agent });
+    try {
+      const c = await t.connect();
+      const folder = join(t.home, 'repo');
+      await mkdir(folder);
+      await c.call('accounts.save', { name: 'Personal', isJob: false });
+      const checkout = await c.call('checkouts.add', { path: folder, accountId: 'personal' });
+      const thread = await c.call('threads.create', { checkoutId: checkout.id });
+      await expect(c.call('threads.send', { threadId: thread.id, text: 'hi' })).rejects.toThrow(/Sign Personal in with Claude first/);
+      expect(agent.runs).toHaveLength(0);
+    } finally {
+      await t.stop();
+    }
   });
 });

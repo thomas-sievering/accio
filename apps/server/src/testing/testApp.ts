@@ -5,13 +5,32 @@ import WebSocket from 'ws';
 import type { EventName, Events, MethodName, ParamsOf, ResultOf, ServerEnvelope } from '@accio/protocol';
 import { startApp, type AppDeps } from '../app.js';
 
+/**
+ * Anthropic's token endpoint, faked. The pasted code names the Claude login it
+ * stands for (code 'claude-job' signs in as Claude account 'claude-job').
+ */
+export const fakeClaudeFetch: typeof fetch = async (url, init) => {
+  if (!String(url).includes('/oauth/token')) return fetch(url, init);
+  const body = JSON.parse(String(init?.body));
+  const who = body.code ?? 'refreshed';
+  return Response.json({
+    access_token: `oauth-${who}`,
+    refresh_token: `refresh-${who}`,
+    expires_in: 3600,
+    account: { uuid: who, email_address: `${who}@example.com` },
+  });
+};
+
 export const TEST_TOKEN = 'test-token';
 
 /** A real server on a random port with a throwaway ACCIO_HOME, plus a client. */
 /** Pass an existing `home` to simulate a restart on the same machine. */
 export async function startTestApp(deps: Partial<AppDeps> = {}, existingHome?: string) {
   const home = existingHome ?? (await mkdtemp(join(tmpdir(), 'accio-test-')));
-  const app = await startApp({ home, host: '127.0.0.1', port: 0, token: TEST_TOKEN }, deps);
+  const app = await startApp(
+    { home, host: '127.0.0.1', port: 0, hubPort: 0, token: TEST_TOKEN },
+    { claudeFetch: fakeClaudeFetch, ...deps },
+  );
   const clients: TestClient[] = [];
   return {
     home,
@@ -66,6 +85,16 @@ export class TestClient {
     if (msg.type !== 'response') throw new Error('unexpected');
     if (!msg.ok) throw new Error(msg.error);
     return msg.result as ResultOf<M>;
+  }
+
+  /** Creates an account (if new) and signs it in as the given Claude login. */
+  async signedIn(name: string, opts: { isJob?: boolean; claudeLogin?: string; roots?: string[] } = {}) {
+    const accounts = await this.call('accounts.list', {});
+    const account =
+      accounts.find((a) => a.name === name) ??
+      (await this.call('accounts.save', { name, isJob: opts.isJob ?? false, roots: opts.roots ?? [] }));
+    const { signInId } = await this.call('accounts.beginSignIn', { accountId: account.id });
+    return this.call('accounts.completeSignIn', { signInId, code: opts.claudeLogin ?? `claude-${account.id}` });
   }
 
   /** Waits until an event matching `pred` has arrived (including earlier ones). */

@@ -6,7 +6,7 @@ import { Composer } from './Composer';
 import { Transcript } from './Transcript';
 import { useTranscript } from './threads';
 
-export function ThreadPane({ thread }: { thread: ThreadView }) {
+export function ThreadPane({ thread, onOpenAccount }: { thread: ThreadView; onOpenAccount: (accountId: string) => void }) {
   const client = useClient();
   const { accounts = [] } = useAccounts();
   const { state } = useProjects();
@@ -35,6 +35,16 @@ export function ThreadPane({ thread }: { thread: ThreadView }) {
         )
       ) : (
         <div className="empty" />
+      )}
+      {account && !account.signIn && (
+        <div className="account-note">
+          <span>
+            <b>{account.name}</b> isn’t signed in with Claude, so this thread can’t run yet.
+          </span>
+          <button className="ghost" onClick={() => onOpenAccount(account.id)}>
+            Open {account.name}
+          </button>
+        </div>
       )}
       {thread.status === 'interrupted' && (
         <div className="resume-bar">

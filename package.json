@@ -7,9 +7,9 @@
     "apps/*"
   ],
   "scripts": {
-    "build": "npm run build -w @accio/protocol -w @accio/server -w @accio/web -w @accio/desktop",
+    "build": "npm run build -w @accio/protocol -w @accio/hub -w @accio/server -w @accio/web -w @accio/desktop",
     "start": "npm run build && npm run start -w @accio/desktop",
-    "server": "npm run build -w @accio/protocol -w @accio/server -w @accio/web && node apps/server/dist/main.js",
+    "server": "npm run build -w @accio/protocol -w @accio/hub -w @accio/server -w @accio/web && node apps/server/dist/main.js",
     "test": "vitest run",
     "typecheck": "tsc -b && tsc -p apps/web",
     "postinstall": "node scripts/ensure-electron.mjs"

@@ -35,7 +35,10 @@ export function AccountSwitcher({ onManage }: { onManage: () => void }) {
             <AccountTile account={a} size="md" />
             <span className="menu-text">
               <b>{a.name}</b>
-              <small>{a.isJob ? 'Job account' : 'Personal'}</small>
+              <small className={a.signIn ? undefined : 'warn'}>
+                {a.isJob ? 'Job account' : 'Personal'}
+                {a.signIn ? '' : ' · not signed in'}
+              </small>
             </span>
             {filter === a.id && <Check />}
           </button>

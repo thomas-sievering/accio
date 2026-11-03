@@ -38,7 +38,7 @@ describe('interrupted turns', () => {
     stop = t.stop;
     const folder = join(t.home, 'repo');
     await mkdir(folder);
-    await c.call('accounts.save', { name: 'Personal', isJob: false, hubUrl: 'https://hub.test', hubKey: 'k' });
+    await c.signedIn('Personal');
     const checkout = await c.call('checkouts.add', { path: folder, accountId: 'personal' });
     const thread = await c.call('threads.create', { checkoutId: checkout.id });
 
@@ -66,7 +66,7 @@ describe('interrupted turns', () => {
     const home = first.t.home;
     const folder = join(home, 'repo');
     await mkdir(folder);
-    await first.c.call('accounts.save', { name: 'Personal', isJob: false, hubUrl: 'https://hub.test', hubKey: 'k' });
+    await first.c.signedIn('Personal');
     const checkout = await first.c.call('checkouts.add', { path: folder, accountId: 'personal' });
     const thread = await first.c.call('threads.create', { checkoutId: checkout.id });
     await first.t.stop({ keepHome: true });

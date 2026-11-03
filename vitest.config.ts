@@ -5,6 +5,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@accio/protocol': fileURLToPath(new URL('./packages/protocol/src/index.ts', import.meta.url)),
+      '@accio/hub': fileURLToPath(new URL('./apps/hub/src/index.ts', import.meta.url)),
     },
   },
   test: { include: ['apps/*/src/**/*.test.ts', 'packages/*/src/**/*.test.ts'] },

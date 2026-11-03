@@ -27,12 +27,16 @@ A named identity that agents run under, such as "personal" or "hrc". Each accoun
 _Avoid_: Profile, provider instance, login
 
 **Job account**:
-An account that belongs to an employer. Its traffic never shares a proxy or login with any other account.
+An account that belongs to an employer. Its traffic never shares a login or hub access key with any other account.
 _Avoid_: Work profile
 
 **Hub**:
-The proxy service that holds the actual provider logins and forwards agent requests for each account.
-_Avoid_: CLI proxy, gateway
+accio's proxy service on the home machine. It holds each account's provider login, refreshes it, and forwards that account's agent requests to the provider.
+_Avoid_: CLI proxy, gateway, accio proxy
+
+**Sign-in**:
+Giving an account its provider login: you approve accio on the provider's page and paste back the code it shows. The login is stored on the hub only.
+_Avoid_: Login (as a verb or action), auth, connect
 
 ## Work
 

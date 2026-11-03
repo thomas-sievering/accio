@@ -1,8 +1,17 @@
 {
   "files": [],
   "references": [
-    { "path": "packages/protocol" },
-    { "path": "apps/server" },
-    { "path": "apps/desktop" }
+    {
+      "path": "packages/protocol"
+    },
+    {
+      "path": "apps/hub"
+    },
+    {
+      "path": "apps/server"
+    },
+    {
+      "path": "apps/desktop"
+    }
   ]
 }

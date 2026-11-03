@@ -116,8 +116,8 @@ export class Threads {
 
   private async beginTurn(threadId: string, text: string, { resume = false } = {}) {
     const thread = this.require(threadId);
-    const account = this.accounts.get(thread.accountId);
-    if (!account) throw new UserError('The account this thread started with no longer exists');
+    if (!this.accounts.get(thread.accountId)) throw new UserError('The account this thread started with no longer exists');
+    const access = await this.accounts.hubAccess(thread.accountId);
     const checkout = this.projects.checkout(thread.checkoutId);
 
     const started = startTurn(thread, text, now());
@@ -127,7 +127,7 @@ export class Threads {
 
     const controller = new AbortController();
     this.running.set(thread.id, controller);
-    const env = agentEnv(process.env, account, configFolderOf(this.home, account.id));
+    const env = agentEnv(process.env, access, configFolderOf(this.home, thread.accountId));
     const turn = this.runTurn(started, turnId, { cwd: checkout.path, prompt: text, env, signal: controller.signal });
     this.turns.add(turn);
     void turn.finally(() => this.turns.delete(turn));

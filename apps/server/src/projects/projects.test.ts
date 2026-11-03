@@ -23,8 +23,8 @@ describe('projects slice', () => {
     gitRepo(join(repos, 'accio'), 'git@github.com:me/accio.git');
     gitRepo(join(work, 'accio-copy'), 'https://github.com/me/accio');
 
-    await c.call('accounts.save', { name: 'Personal', isJob: false, hubUrl: 'https://hub.test', hubKey: 'k', roots: [repos] });
-    await c.call('accounts.save', { name: 'Work', isJob: false, hubUrl: 'https://hub.test', hubKey: 'k', roots: [work] });
+    await c.call('accounts.save', { name: 'Personal', isJob: false, roots: [repos] });
+    await c.call('accounts.save', { name: 'Work', isJob: false, roots: [work] });
 
     // Inspecting a subfolder resolves to the repository root.
     const seen = await c.call('checkouts.inspect', { path: join(repos, 'accio', 'src') });
@@ -46,7 +46,7 @@ describe('projects slice', () => {
     const c = await t.connect();
     const plain = join(t.home, 'notes');
     await mkdir(plain);
-    await c.call('accounts.save', { name: 'Personal', isJob: false, hubUrl: 'https://hub.test', hubKey: 'k' });
+    await c.call('accounts.save', { name: 'Personal', isJob: false });
     const seen = await c.call('checkouts.inspect', { path: plain });
     expect(seen).toMatchObject({ name: 'notes', repoKey: null, suggestedAccountId: null });
     await expect(c.call('checkouts.add', { path: plain })).rejects.toThrow(/Choose the account/);

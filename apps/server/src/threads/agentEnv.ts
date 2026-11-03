@@ -1,9 +1,9 @@
-import type { Account } from '../accounts/account.js';
+import type { HubAccess } from '../accounts/claudeConfigFolder.js';
 
 /**
  * Variables that could carry another login, another provider or another config
  * into a thread. They are dropped before the account's own values are set, so a
- * thread can only ever reach its account's hub proxy (ADR 0002).
+ * thread can only ever reach its account's hub proxy (ADR 0002, ADR 0007).
  */
 const INHERITED_BLOCKLIST = [
   /^ANTHROPIC_/,
@@ -18,7 +18,7 @@ const INHERITED_BLOCKLIST = [
   /^ELECTRON_RUN_AS_NODE$/,
 ];
 
-export function agentEnv(base: NodeJS.ProcessEnv, account: Account, configDir: string): Record<string, string> {
+export function agentEnv(base: NodeJS.ProcessEnv, access: HubAccess, configDir: string): Record<string, string> {
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(base)) {
     if (value === undefined) continue;
@@ -26,7 +26,7 @@ export function agentEnv(base: NodeJS.ProcessEnv, account: Account, configDir: s
     env[key] = value;
   }
   env.CLAUDE_CONFIG_DIR = configDir;
-  env.ANTHROPIC_BASE_URL = account.hubUrl;
-  env.ANTHROPIC_AUTH_TOKEN = account.hubKey;
+  env.ANTHROPIC_BASE_URL = access.baseUrl;
+  env.ANTHROPIC_AUTH_TOKEN = access.accessKey;
   return env;
 }

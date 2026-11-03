@@ -1,14 +1,16 @@
 import { join } from 'node:path';
+import type { AccountView } from '@accio/protocol';
+import { SignInError, type Hub } from '@accio/hub';
 import type { Broadcast, Router } from '../rpc/router.js';
 import { UserError } from '../rpc/router.js';
 import { JsonFile } from '../store/jsonFile.js';
-import { saveAccount, toView, type Account } from './account.js';
-import { writeConfigFolder } from './claudeConfigFolder.js';
+import { assertLoginKeptApart, saveAccount, toView, type Account } from './account.js';
+import { writeConfigFolder, type HubAccess } from './claudeConfigFolder.js';
 
-/** Other slices that hold on to an account (projects) veto its deletion here. */
+/** Other slices that hold on to an account (projects, threads) veto its deletion here. */
 export type AccountInUse = (accountId: string) => string | undefined;
 
-/** The accounts on this machine: persistence plus the rules in account.ts. */
+/** The accounts on this machine: persistence, the rules in account.ts, and their sign-in on the hub. */
 export class Accounts {
   private file: JsonFile<Account[]>;
   private list: Account[] = [];
@@ -16,16 +18,18 @@ export class Accounts {
 
   constructor(
     private home: string,
+    private hub: Hub,
+    private hubUrl: string,
     private broadcast: Broadcast,
   ) {
     this.file = new JsonFile(join(home, 'accounts.json'), () => []);
   }
 
   async load() {
-    // Accounts saved before a field existed get its default.
-    this.list = (await this.file.read()).map((a) => ({ ...a, roots: a.roots ?? [] }));
+    // Keep only today's fields (v0.1 accounts also had a hand-typed hub URL and key).
+    this.list = (await this.file.read()).map(({ id, name, isJob, roots }) => ({ id, name, isJob, roots: roots ?? [] }));
     // ADR 0003: rewrite every account's config folder on start.
-    await Promise.all(this.list.map((a) => writeConfigFolder(this.home, a)));
+    for (const a of this.list) await this.connect(a.id);
   }
 
   all(): readonly Account[] {
@@ -42,18 +46,25 @@ export class Accounts {
     return a;
   }
 
+  /** What a thread needs to run under this account; refuses until it is signed in. */
+  async hubAccess(id: string): Promise<HubAccess> {
+    const account = this.require(id);
+    if (!this.hub.summary(id).signedIn) throw new UserError(`Sign ${account.name} in with Claude first (Accounts).`);
+    return { baseUrl: this.hubUrl, accessKey: await this.hub.ensureAccount(id) };
+  }
+
   onCheckInUse(check: AccountInUse) {
     this.inUseChecks.push(check);
   }
 
   register(router: Router) {
     router
-      .on('accounts.list', () => this.list.map(toView))
+      .on('accounts.list', () => this.views())
       .on('accounts.save', async (req) => {
         const { accounts, saved } = saveAccount(this.list, req);
-        await writeConfigFolder(this.home, saved);
         await this.commit(accounts);
-        return toView(saved);
+        await this.connect(saved.id);
+        return this.view(saved);
       })
       .on('accounts.delete', async ({ id }) => {
         const account = this.require(id);
@@ -62,13 +73,61 @@ export class Accounts {
           if (reason) throw new UserError(`${account.name} is still used by ${reason}`);
         }
         await this.commit(this.list.filter((a) => a.id !== id));
+        await this.hub.removeAccount(id);
         return null;
+      })
+      .on('accounts.beginSignIn', async ({ accountId }) => {
+        this.require(accountId);
+        await this.hub.ensureAccount(accountId);
+        return this.hub.beginSignIn(accountId);
+      })
+      .on('accounts.completeSignIn', async ({ signInId, code }) => {
+        const accountId = await asUserError(() =>
+          this.hub.completeSignIn(signInId, code, (who, id) =>
+            assertLoginKeptApart(this.list, (other) => this.hub.summary(other), id, who.claudeAccountId),
+          ),
+        );
+        this.announce();
+        return this.view(this.require(accountId));
+      })
+      .on('accounts.signOut', async ({ accountId }) => {
+        const account = this.require(accountId);
+        await this.hub.signOut(accountId);
+        this.announce();
+        return this.view(account);
       });
+  }
+
+  private view(a: Account): AccountView {
+    return toView(a, this.hub.summary(a.id));
+  }
+
+  private views(): AccountView[] {
+    return this.list.map((a) => this.view(a));
+  }
+
+  /** Makes sure the hub knows the account and its config folder points there. */
+  private async connect(id: string) {
+    const accessKey = await this.hub.ensureAccount(id);
+    await writeConfigFolder(this.home, id, { baseUrl: this.hubUrl, accessKey });
+  }
+
+  private announce() {
+    this.broadcast('accounts.changed', this.views());
   }
 
   private async commit(next: Account[]) {
     this.list = next;
-    this.broadcast('accounts.changed', next.map(toView));
+    this.announce();
     await this.file.write(next);
+  }
+}
+
+async function asUserError<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    if (err instanceof SignInError) throw new UserError(err.message);
+    throw err;
   }
 }

@@ -12,7 +12,7 @@ import { ThreadRows } from '../threads/ThreadRows';
 import { ThreadPane } from '../threads/ThreadPane';
 import { FolderPlus, Users } from './icons';
 
-type OpenSheet = { kind: 'accounts' } | { kind: 'addProject' } | { kind: 'project'; id: string } | null;
+type OpenSheet = { kind: 'accounts'; accountId?: string } | { kind: 'addProject' } | { kind: 'project'; id: string } | null;
 
 export function App() {
   return (
@@ -63,7 +63,7 @@ function Shell() {
       </aside>
       <main className="main">
         {thread ? (
-          <ThreadPane key={thread.id} thread={thread} />
+          <ThreadPane key={thread.id} thread={thread} onOpenAccount={(accountId) => setSheet({ kind: 'accounts', accountId })} />
         ) : (
           <>
             <header className="main-top drag" />
@@ -89,7 +89,7 @@ function Shell() {
           </>
         )}
       </main>
-      {sheet?.kind === 'accounts' && <AccountsSheet onClose={close} />}
+      {sheet?.kind === 'accounts' && <AccountsSheet onClose={close} openAccountId={sheet.accountId} />}
       {sheet?.kind === 'addProject' && <AddProjectSheet onClose={close} />}
       {openProject && <ProjectSheet project={openProject} onClose={close} />}
     </div>

@@ -4,27 +4,32 @@ import { useClient } from '../app/connection';
 import { Sheet } from '../app/Sheet';
 import { Plus } from '../app/icons';
 import { AccountTile, useAccounts } from './accounts';
+import { SignInWithClaude } from './SignInWithClaude';
 
-/** List and edit accounts. Each account reaches its provider only through its hub proxy. */
-export function AccountsSheet({ onClose }: { onClose: () => void }) {
+/** List and edit accounts. Each one signs in with Claude; the login stays on the hub. */
+export function AccountsSheet({ onClose, openAccountId }: { onClose: () => void; openAccountId?: string }) {
   const { accounts = [] } = useAccounts();
-  const [editing, setEditing] = useState<AccountView | 'new' | null>(accounts.length ? null : 'new');
+  const [editing, setEditing] = useState<string | 'new' | null>(openAccountId ?? (accounts.length ? null : 'new'));
+  // Always the latest view, so sign-in changes show up while the form is open.
+  const current = editing && editing !== 'new' ? accounts.find((a) => a.id === editing) : undefined;
 
   return (
     <Sheet title="Accounts" onClose={onClose}>
-      {editing ? (
-        <AccountForm account={editing === 'new' ? undefined : editing} onDone={() => setEditing(null)} />
+      {editing === 'new' ? (
+        <AccountForm onSaved={(a) => setEditing(a.id)} onCancel={() => setEditing(null)} />
+      ) : current ? (
+        <AccountForm account={current} onSaved={() => setEditing(null)} onCancel={() => setEditing(null)} />
       ) : (
         <div className="sheet-body">
           <div className="list">
             {accounts.map((a) => (
-              <button key={a.id} className="list-row" onClick={() => setEditing(a)}>
+              <button key={a.id} className="list-row" onClick={() => setEditing(a.id)}>
                 <AccountTile account={a} size="md" />
                 <span className="menu-text">
                   <b>{a.name}</b>
-                  <small>
+                  <small className={a.signIn ? undefined : 'warn'}>
                     {a.isJob ? 'Job account · ' : ''}
-                    {a.hubUrl}
+                    {a.signIn ? (a.signIn.email ?? 'Signed in') : 'Not signed in'}
                   </small>
                 </span>
               </button>
@@ -42,22 +47,21 @@ export function AccountsSheet({ onClose }: { onClose: () => void }) {
   );
 }
 
-function AccountForm({ account, onDone }: { account?: AccountView; onDone: () => void }) {
+function AccountForm({ account, onSaved, onCancel }: { account?: AccountView; onSaved: (a: AccountView) => void; onCancel: () => void }) {
   const client = useClient();
   const [name, setName] = useState(account?.name ?? '');
-  const [hubUrl, setHubUrl] = useState(account?.hubUrl ?? '');
-  const [hubKey, setHubKey] = useState('');
   const [isJob, setIsJob] = useState(account?.isJob ?? false);
   const [roots, setRoots] = useState((account?.roots ?? []).join('\n'));
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
 
-  const run = async (action: () => Promise<unknown>) => {
+  const run = async (action: () => Promise<AccountView | null>) => {
     setBusy(true);
     setError(undefined);
     try {
-      await action();
-      onDone();
+      const result = await action();
+      if (result) onSaved(result);
+      else onCancel();
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -71,64 +75,57 @@ function AccountForm({ account, onDone }: { account?: AccountView; onDone: () =>
       .split('\n')
       .map((r) => r.trim())
       .filter(Boolean);
-    void run(() => client.call('accounts.save', { id: account?.id, name, hubUrl, hubKey, isJob, roots: folders }));
+    void run(() => client.call('accounts.save', { id: account?.id, name, isJob, roots: folders }));
   };
 
   return (
-    <form onSubmit={submit}>
-      <div className="sheet-body">
-        <label className="field">
-          <span>Name</span>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="personal, hrc…" autoFocus required />
-        </label>
-        <label className="field">
-          <span>Hub URL</span>
-          <input value={hubUrl} onChange={(e) => setHubUrl(e.target.value)} placeholder="https://hub.example.com:8318" required />
-        </label>
-        <label className="field">
-          <span>Hub key</span>
-          <input
-            type="password"
-            value={hubKey}
-            onChange={(e) => setHubKey(e.target.value)}
-            placeholder={account?.hasHubKey ? 'Unchanged' : 'Access key of this account’s hub proxy'}
-            required={!account?.hasHubKey}
-            autoComplete="off"
-          />
-        </label>
-        <label className="check">
-          <input type="checkbox" checked={isJob} onChange={(e) => setIsJob(e.target.checked)} />
-          <span>
-            Job account
-            <small>Belongs to an employer. Needs a hub proxy no other account uses.</small>
-          </span>
-        </label>
-        <label className="field">
-          <span>Folders</span>
-          <textarea rows={2} value={roots} onChange={(e) => setRoots(e.target.value)} placeholder={'S:\\hrc'} spellCheck={false} />
-          <small className="hint">One per line. New projects inside these folders default to this account.</small>
-        </label>
-        {error && <p className="error">{error}</p>}
-      </div>
+    <>
+      <form onSubmit={submit} id="account-form">
+        <div className="sheet-body">
+          <label className="field">
+            <span>Name</span>
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="personal, hrc…" autoFocus={!account} required />
+          </label>
+          <label className="check">
+            <input type="checkbox" checked={isJob} onChange={(e) => setIsJob(e.target.checked)} />
+            <span>
+              Job account
+              <small>Belongs to an employer. Its Claude login is never shared with another account.</small>
+            </span>
+          </label>
+          <label className="field">
+            <span>Folders</span>
+            <textarea rows={2} value={roots} onChange={(e) => setRoots(e.target.value)} placeholder={'S:\\hrc'} spellCheck={false} />
+            <small className="hint">One per line. New projects inside these folders default to this account.</small>
+          </label>
+          {account && (
+            <div className="field">
+              <span>Claude</span>
+              <SignInWithClaude account={account} />
+            </div>
+          )}
+          {error && <p className="error">{error}</p>}
+        </div>
+      </form>
       <footer className="sheet-foot">
         {account && (
           <button
             type="button"
             className="ghost danger"
             disabled={busy}
-            onClick={() => run(() => client.call('accounts.delete', { id: account.id }))}
+            onClick={() => run(async () => (await client.call('accounts.delete', { id: account.id }), null))}
           >
             Delete
           </button>
         )}
         <span className="spacer" />
-        <button type="button" className="ghost" onClick={onDone}>
-          Cancel
+        <button type="button" className="ghost" onClick={onCancel}>
+          {account ? 'Done' : 'Cancel'}
         </button>
-        <button type="submit" className="ghost primary" disabled={busy}>
+        <button type="submit" form="account-form" className="ghost primary" disabled={busy}>
           {account ? 'Save' : 'Add account'}
         </button>
       </footer>
-    </form>
+    </>
   );
 }

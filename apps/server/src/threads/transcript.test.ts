@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import type { Account } from '../accounts/account.js';
 import type { AgentMessage } from './agent.js';
 import { agentEnv } from './agentEnv.js';
 import { summarizeTool, TurnTranscript } from './transcript.js';
@@ -96,7 +95,7 @@ describe('TurnTranscript', () => {
 });
 
 describe('agentEnv', () => {
-  const hrc: Account = { id: 'hrc', name: 'HRC', isJob: true, hubUrl: 'https://hub.test:8318', hubKey: 'job-key', roots: [] };
+  const hrc = { baseUrl: 'http://127.0.0.1:47322', accessKey: 'accio-hrc-key' };
 
   it('runs a thread only against its own account, dropping any inherited login', () => {
     const env = agentEnv(
@@ -118,8 +117,8 @@ describe('agentEnv', () => {
       PATH: '/bin',
       CLAUDE_CODE_GIT_BASH_PATH: 'C:\\git\\bash.exe',
       CLAUDE_CONFIG_DIR: '/accio/accounts/hrc/claude',
-      ANTHROPIC_BASE_URL: 'https://hub.test:8318',
-      ANTHROPIC_AUTH_TOKEN: 'job-key',
+      ANTHROPIC_BASE_URL: 'http://127.0.0.1:47322',
+      ANTHROPIC_AUTH_TOKEN: 'accio-hrc-key',
     });
   });
 });
