@@ -39,7 +39,7 @@ export function ThreadPane({ thread, onOpenProfile }: { thread: ThreadView; onOp
       {visibleItems ? <Transcript items={visibleItems} working={running} /> : <div className="empty" />}
       <ThreadNotice thread={thread} profile={place.profile} detail={detail} onOpenProfile={onOpenProfile} />
       <Composer
-        disabled={running || !place.profile || !claudeAccount(place.profile)}
+        disabled={running || !place.profile || !claudeAccount(place.profile)?.signedIn}
         onStop={running ? async () => void (await client.call('threads.stop', { threadId: thread.id })) : undefined}
         placeholder={running ? 'Working…' : 'Ask Claude Code anything'}
         onSend={async (text) => void (await client.call('threads.send', { threadId: thread.id, text }))}
@@ -65,7 +65,7 @@ export function DraftPane({ checkoutId, onOpenProfile }: { checkoutId: string; o
         <h1>What should we build in {place.project?.name ?? 'this checkout'}?</h1>
         <ThreadNotice profile={place.profile} onOpenProfile={onOpenProfile} />
         <Composer
-          disabled={!place.profile || !claudeAccount(place.profile)}
+          disabled={!place.profile || !claudeAccount(place.profile)?.signedIn}
           placeholder="Ask Claude Code anything"
           onSend={async (text) => select((await client.call('threads.start', { checkoutId, text })).id)}
           toolbar={harness}

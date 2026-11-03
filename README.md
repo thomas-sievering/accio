@@ -6,7 +6,7 @@ Runs coding threads in harnesses (Claude Code first) on your own machines, keepi
 
 One machine, Claude only, through the Claude Agent SDK.
 
-- **Profiles** (personal, work, any you add) sign in to a Claude account inside accio: approve on Claude's page, paste back the code. The account stays on the **hub** (`apps/hub`, ADR 0007), which gives each profile its own key and forwards its threads' requests to Anthropic. A Claude account belongs to one profile only. For now a profile has one account, at Claude. accio writes each profile's Claude config folder under `~/.accio/profiles/<id>/claude` and never touches `~/.claude`.
+- **Accounts** are named and signed in separately under Settings / Accounts: approve on Claude's page, paste back the code. The account stays on the **hub** (`apps/hub`, ADR 0007), which gives each profile its own key and forwards its threads' requests to Anthropic. **Profiles** (personal, work, any you add) select an account by its custom name. Multiple profiles can select the same account. For now a profile selects one Claude account. accio writes each profile's Claude config folder under `~/.accio/profiles/<id>/claude` and never touches `~/.claude`.
 - **Projects** are folders on this machine, matched by git remote. Each belongs to one profile; the profile folders suggest it.
 - **Threads** stream the harness's reply and keep their profile for life. **Stop** interrupts a turn; a turn cut off by Stop or by accio restarting waits for **Resume**.
 

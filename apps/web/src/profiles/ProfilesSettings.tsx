@@ -5,9 +5,8 @@ import { Chevron, Plus } from '../app/icons';
 import { SettingsSection } from '../app/Settings';
 import { useAction } from '../app/useAction';
 import { claudeAccount, ProfileTile, useProfiles } from './profiles';
-import { SignInWithClaude } from './SignInWithClaude';
 
-/** Profiles and their providers and accounts, shared through the hub. */
+/** Profiles select accounts configured in Accounts settings. */
 export function ProfilesSettings({
   profileId,
   onOpen,
@@ -32,7 +31,7 @@ export function ProfilesSettings({
           <ProfileTile profile={p} size="md" />
           <span className="setting-text">
             <b>{p.name}</b>
-            <small className={claudeAccount(p) ? undefined : 'warn'}>{claudeAccount(p)?.email ?? (claudeAccount(p) ? 'Signed in' : 'Not signed in')}</small>
+            <small className={claudeAccount(p)?.signedIn ? undefined : 'warn'}>{claudeAccount(p)?.name ?? 'No account selected'}{claudeAccount(p) && !claudeAccount(p)?.signedIn ? ' · Signed out' : ''}</small>
           </span>
           <Chevron />
         </button>
@@ -52,12 +51,14 @@ export function ProfilesSettings({
 
 function ProfileForm({ profile, onSaved, onDone }: { profile?: ProfileView; onSaved: (p: ProfileView) => void; onDone: () => void }) {
   const client = useClient();
+  const { accounts } = useProfiles();
+  const [accountId, setAccountId] = useState(profile ? claudeAccount(profile)?.id ?? '' : '');
   const [name, setName] = useState(profile?.name ?? '');
   const { busy, error, run } = useAction();
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const saved = await run(() => client.call('profiles.save', { id: profile?.id, name }));
+    const saved = await run(() => client.call('profiles.save', { id: profile?.id, name, accountId: accountId || null }));
     if (saved) onSaved(saved);
   };
   const remove = async () => {
@@ -76,23 +77,20 @@ function ProfileForm({ profile, onSaved, onDone }: { profile?: ProfileView; onSa
           {error && <p className="error">{error}</p>}
         </div>
       </SettingsSection>
-      {profile && (
-        <SettingsSection title="Providers">
-          {profile.providers.map((provider) => (
-            <div className="setting-form" key={provider.id}>
-              <div className="field">
-                <b>{provider.name}</b>
-                <span>{provider.accountName}{provider.accounts.length === 1 ? '' : 's'}</span>
-                {provider.available && provider.id === 'anthropic' ? (
-                  <SignInWithClaude profile={profile} />
-                ) : (
-                  <small className="hint">Not available yet.</small>
-                )}
-              </div>
-            </div>
-          ))}
-        </SettingsSection>
-      )}
+      <SettingsSection title="Accounts">
+        <div className="setting-form">
+          <label className="field">
+            <span>Anthropic · Claude account</span>
+            <select value={accountId} onChange={(e) => setAccountId(e.target.value)} disabled={!accounts}>
+              <option value="">No account selected</option>
+              {accounts?.filter((a) => a.providerId === 'anthropic').map((a) => (
+                <option key={a.id} value={a.id}>{a.name}{a.email ? ` · ${a.email}` : ''}{a.signedIn ? '' : ' · Signed out'}</option>
+              ))}
+            </select>
+          </label>
+          <small className="hint">Set up and name accounts in Settings / Accounts. Choose one Claude account for this profile.</small>
+        </div>
+      </SettingsSection>
       <footer className="settings-actions">
         {profile && (
           <button
@@ -108,7 +106,7 @@ function ProfileForm({ profile, onSaved, onDone }: { profile?: ProfileView; onSa
         <button type="button" className="ghost" onClick={onDone}>
           {profile ? 'Done' : 'Cancel'}
         </button>
-        <button type="submit" className="ghost primary" disabled={busy}>
+        <button type="submit" className="ghost primary" disabled={busy || !accounts}>
           {profile ? 'Save' : 'Add profile'}
         </button>
       </footer>

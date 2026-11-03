@@ -5,7 +5,7 @@ import { method } from './rpc.js';
 export type ProviderId = 'anthropic' | 'openai';
 
 /** GLOSSARY: Account. Who it is; its tokens never leave the hub. */
-export type AccountView = { email: string | null; organization: string | null };
+export type AccountView = { id: string; name: string; providerId: ProviderId; signedIn: boolean; email: string | null; organization: string | null };
 
 /** One provider as a profile uses it, with the profile's accounts there. */
 export type ProfileProviderView = {
@@ -33,6 +33,7 @@ export const SaveProfileParams = z.object({
   /** Omit to create. */
   id: z.string().optional(),
   name: z.string().trim().min(1, 'Name is required').max(40),
+  accountId: z.string().nullable().optional(),
 });
 export type SaveProfileParams = z.output<typeof SaveProfileParams>;
 
@@ -40,7 +41,14 @@ const ById = z.object({ id: z.string() });
 const ProfileId = z.object({ profileId: z.string() });
 const CompleteSignIn = z.object({ signInId: z.string(), code: z.string().trim().min(1, 'Paste the code from Claude’s page') });
 
+const SaveAccount = z.object({ id: z.string().optional(), name: z.string().trim().min(1, 'Name is required').max(80) });
 export const profileMethods = {
+  'accounts.list': method<z.ZodObject<{}>, AccountView[]>(z.object({})),
+  'accounts.save': method<typeof SaveAccount, AccountView>(SaveAccount),
+  'accounts.delete': method<typeof ById, null>(ById),
+  'accounts.beginSignIn': method<typeof ById, { signInId: string; url: string }>(ById),
+  'accounts.completeSignIn': method<typeof CompleteSignIn, AccountView>(CompleteSignIn),
+  'accounts.signOut': method<typeof ById, AccountView>(ById),
   'profiles.list': method<z.ZodObject<{}>, ProfileView[]>(z.object({})),
   'profiles.save': method<typeof SaveProfileParams, ProfileView>(SaveProfileParams),
   'profiles.delete': method<typeof ById, null>(ById),
@@ -52,4 +60,5 @@ export const profileMethods = {
 
 export type ProfileEvents = {
   'profiles.changed': ProfileView[];
+  'accounts.changed': AccountView[];
 };

@@ -62,8 +62,8 @@ export function ScopeMenu({ onOpenProject, onAddProject }: { onOpenProject: (p: 
               <ProfileTile profile={profile} size="md" />
               <span className="menu-text">
                 <b>{profile.name}</b>
-                <small className={claudeAccount(profile) ? undefined : 'warn'}>
-                  {claudeAccount(profile)?.email ?? (claudeAccount(profile) ? 'Signed in' : 'Not signed in')}
+                <small className={claudeAccount(profile)?.signedIn ? undefined : 'warn'}>
+                  {claudeAccount(profile)?.name ?? 'No account selected'}{claudeAccount(profile) && !claudeAccount(profile)?.signedIn ? ' (signed out)' : ''}
                 </small>
               </span>
               {checked(profile.id) && <Check />}

@@ -2,7 +2,7 @@ import type { ProfileView } from '@accio/protocol';
 import { SignInError, type Hub, type SharedSettings } from '@accio/hub';
 import type { Broadcast, Router } from '../rpc/router.js';
 import { UserError } from '../rpc/router.js';
-import { assertAccountInOneProfile, saveProfile, toView, type Profile } from './profile.js';
+import { saveProfile, toView, type Profile } from './profile.js';
 import { writeConfigFolder, type HubAccess } from './claudeConfigFolder.js';
 
 /** Other slices that hold on to a profile (projects, threads) veto its deletion here. */
@@ -46,7 +46,7 @@ export class Profiles {
   /** What a thread needs to run under this profile; refuses until it is signed in. */
   async hubAccess(id: string): Promise<HubAccess> {
     const profile = this.require(id);
-    if (!this.hub.summary(id).signedIn) throw new UserError(`Sign ${profile.name} in with Claude first (Profiles).`);
+    if (!this.hub.summary(id).signedIn) throw new UserError(`Select a signed-in Claude account for ${profile.name} in Profiles.`);
     return { baseUrl: this.hubUrl, accessKey: await this.hub.ensureProfile(id) };
   }
 
@@ -56,11 +56,35 @@ export class Profiles {
 
   register(router: Router) {
     router
+      .on('accounts.list', () => this.hub.accountViews())
+      .on('accounts.save', async ({ id, name }) => {
+        const account = await this.hub.saveAccount(name, id);
+        this.announce();
+        return account;
+      })
+      .on('accounts.delete', async ({ id }) => {
+        await asUserError(() => this.hub.deleteAccount(id));
+        this.announce();
+        return null;
+      })
+      .on('accounts.beginSignIn', ({ id }) => this.hub.beginAccountSignIn(id))
+      .on('accounts.completeSignIn', async ({ signInId, code }) => {
+        const account = await asUserError(() => this.hub.completeAccountSignIn(signInId, code));
+        this.announce();
+        return account;
+      })
+      .on('accounts.signOut', async ({ id }) => {
+        const account = await this.hub.signOutAccount(id);
+        this.announce();
+        return account;
+      })
       .on('profiles.list', () => this.views())
       .on('profiles.save', async (req) => {
         const { profiles, saved } = saveProfile(this.list, req);
-        await this.commit(profiles);
+        if (req.accountId) this.hub.accountView(req.accountId);
         await this.connect(saved.id);
+        if (req.accountId !== undefined) await this.hub.selectAccount(saved.id, req.accountId);
+        await this.commit(profiles);
         return this.view(saved);
       })
       .on('profiles.delete', async ({ id }) => {
@@ -80,9 +104,7 @@ export class Profiles {
       })
       .on('profiles.completeSignIn', async ({ signInId, code }) => {
         const profileId = await asUserError(() =>
-          this.hub.completeSignIn(signInId, code, (who, id) =>
-            assertAccountInOneProfile(this.list, (other) => this.hub.summary(other), id, who.claudeAccountId),
-          ),
+          this.hub.completeSignIn(signInId, code),
         );
         this.announce();
         return this.view(this.require(profileId));
@@ -96,7 +118,7 @@ export class Profiles {
   }
 
   private view(a: Profile): ProfileView {
-    return toView(a, this.hub.summary(a.id));
+    return toView(a, this.hub.selectedAccount(a.id));
   }
 
   private views(): ProfileView[] {
@@ -111,6 +133,7 @@ export class Profiles {
 
   private announce() {
     this.broadcast('profiles.changed', this.views());
+    this.broadcast('accounts.changed', this.hub.accountViews());
   }
 
   private async commit(next: Profile[]) {
