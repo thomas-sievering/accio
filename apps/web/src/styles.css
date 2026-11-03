@@ -1275,3 +1275,9 @@ button.row {
   color: var(--ink);
   font-weight: 600;
 }
+
+.project-mark {
+  flex: none;
+  display: block;
+  border-radius: 3px;
+}
