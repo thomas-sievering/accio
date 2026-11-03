@@ -15,6 +15,7 @@ const token = 'isolated-chat-test-token';
 const image = await fixture('chat.png');
 const reviewHostFile = join(home, 'review-host.json');
 let reviewFeature = 0;
+let deliveryFeature = 0;
 // The delivery verification boundary supplies deterministic CI snapshots; Git publication stays real.
 const verifyDelivery = DeliveryGit.prototype.verify;
 const ciPolls = new Map<string, number>();
@@ -76,7 +77,7 @@ const harness = new FakeHarness(async function* (run) {
     return;
   }
   if (run.prompt === 'Build delivery fixture') {
-    await writeFile(join(run.cwd, 'feature.txt'), 'A change owned by this thread.\n');
+    await writeFile(join(run.cwd, 'feature.txt'), `A change owned by this thread: ${++deliveryFeature}.\n`);
     yield { type: 'harness_event', event: { kind: 'text', id: 'delivery-progress', text: 'Feature implemented. Running checks…' } };
     await setTimeout(8000, undefined, { signal: run.signal }).catch(() => {});
     if (!run.signal.aborted) yield { type: 'harness_event', event: { kind: 'end' } };
@@ -218,7 +219,7 @@ await git(reviewFolder, 'remote', 'set-url', 'origin', 'https://github.com/test/
 await client.call('checkouts.add', { path: reviewFolder, profileId: 'personal' });
 await mkdir(resolve('out'), { recursive: true });
 const fixtureMetadata = resolve('out', `chat-test-${app.port}.json`);
-await writeFile(fixtureMetadata, JSON.stringify({ reviewFolder, reviewOrigin, reviewHostFile }));
+await writeFile(fixtureMetadata, JSON.stringify({ deliveryFolder, deliveryOrigin, reviewFolder, reviewOrigin, reviewHostFile }));
 // CI progress publishes to a separate disposable origin, preserving other delivery scenarios' starting main.
 const ciOrigin = join(home, 'ci-origin.git');
 const ciFolder = join(home, 'ci-progress-project');

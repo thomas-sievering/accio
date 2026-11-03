@@ -26,6 +26,7 @@ async function maybeGit(cwd: string, ...args: string[]) {
 /** Git owns worktree removal; we never recursively delete a project or force a dirty checkout away. */
 export class DeliveryGit {
   private reads = new Map<string, Promise<any>>();
+  private bases = new Map<string, Promise<string>>();
   constructor(private home: string, private hostingJson: DeliveryHosting = ghJson) {}
 
   /** Concurrent observers of one project's PR share host reads, including failures. */
@@ -38,11 +39,37 @@ export class DeliveryGit {
     return read;
   };
 
-  async allocate(threadId: string, sourcePath: string, revision = 'HEAD'): Promise<ThreadWorkspace | undefined> {
+  /** Fetch once for concurrent starts; leave the source checkout's branch and files alone. */
+  private async freshBase(sourcePath: string, localRevision: string): Promise<string> {
+    if (!await maybeGit(sourcePath, 'remote', 'get-url', 'origin')) return localRevision;
+    const key = resolve(sourcePath, await git(sourcePath, 'rev-parse', '--git-common-dir'));
+    const existing = this.bases.get(key);
+    if (existing) return existing;
+    const read = (async () => {
+      try {
+        const remote = await git(sourcePath, 'ls-remote', '--symref', 'origin', 'HEAD');
+        const branch = remote.match(/^ref: refs\/heads\/(.+)\tHEAD$/m)?.[1];
+        if (!branch) throw new Error('Origin has no default branch');
+        const ref = `refs/remotes/origin/${branch}`;
+        await git(sourcePath, 'fetch', '--quiet', '--no-tags', '--no-write-fetch-head', 'origin', `+refs/heads/${branch}:${ref}`);
+        const revision = await git(sourcePath, 'rev-parse', '--verify', `${ref}^{commit}`);
+        await git(sourcePath, 'symbolic-ref', 'refs/remotes/origin/HEAD', ref);
+        return revision;
+      } catch {
+        throw new UserError('Could not fetch origin’s latest default branch. Check access to origin and retry. No thread was started.');
+      }
+    })().finally(() => this.bases.delete(key));
+    this.bases.set(key, read);
+    return read;
+  }
+
+  async allocate(threadId: string, sourcePath: string, revision?: string): Promise<ThreadWorkspace | undefined> {
     if (!await maybeGit(sourcePath, 'rev-parse', '--show-toplevel')) return undefined;
-    const startRevision = await maybeGit(sourcePath, 'rev-parse', '--verify', `${revision}^{commit}`);
+    let startRevision = await maybeGit(sourcePath, 'rev-parse', '--verify', `${revision ?? 'HEAD'}^{commit}`);
     // Empty repositories still support ordinary conversations; shipping needs a commit.
     if (!startRevision) return undefined;
+    // Explicit revisions restore archived work; only a new thread chooses a fresh remote base.
+    if (revision === undefined) startRevision = await this.freshBase(sourcePath, startRevision);
     const path = join(this.home, 'workspaces', threadId);
     const branch = `accio/${threadId}`;
     await mkdir(join(this.home, 'workspaces'), { recursive: true });
