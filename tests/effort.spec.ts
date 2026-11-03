@@ -104,7 +104,7 @@ test('sets a preset level in settings, keeps it across reloads and resets it', a
   const effort = page.getByRole('combobox', { name: 'Ultra preset effort' }).first();
   await expect(effort).toHaveValue('max');
   await effort.selectOption('xhigh');
-  await expect(page.getByText('Set by you')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Reset' })).toBeVisible();
   await page.reload();
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await page.locator('.sidebar nav').getByRole('button', { name: 'Harnesses' }).click();

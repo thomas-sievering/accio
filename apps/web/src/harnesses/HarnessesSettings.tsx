@@ -32,6 +32,7 @@ export function HarnessesSettings() {
         <SettingsSection key={h.id} title={h.name}>
           <SettingRow title="Providers"><span>{h.providers.map((p) => p === 'anthropic' ? 'Anthropic' : 'OpenAI').join(', ')}</span></SettingRow>
           <SettingRow title="Models" description={h.id === 'codex' ? 'Available models come from the signed-in ChatGPT account.' : "Model aliases follow Claude Code's current versions."}><span>{h.models.length ? h.models.map((m) => m.name).join(', ') : 'Per account'}</span></SettingRow>
+          {h.presets.length > 0 && <SettingRow title="Presets" description="The levels you step through in the composer. Each sets a model and effort." />}
           {h.presets.map((preset) => <PresetRow key={preset.level} harness={h} preset={preset} onError={setError} />)}
           {h.machines.length === 0 && <SettingRow title="No installations reported" />}
           {h.machines.map((install) => {
@@ -60,7 +61,8 @@ function PresetRow({ harness, preset, onError }: { harness: HarnessView; preset:
     catch (err) { onError((err as Error).message); }
   };
   return (
-    <SettingRow title={`${LEVELS[preset.level]} preset`} description={preset.custom ? 'Set by you' : "accio's default"}>
+    // The level's dot matches the composer chip; a changed level is the one with Reset.
+    <SettingRow title={<span className={`preset-setting-title tone-${preset.level}`}><i className="preset-dot" aria-hidden />{LEVELS[preset.level]}</span>}>
       <span className="preset-setting">
         <select aria-label={`${LEVELS[preset.level]} preset model`} value={preset.model.modelId} onChange={(e) => {
           const next = harness.models.find((m) => m.id === e.target.value);
@@ -75,7 +77,7 @@ function PresetRow({ harness, preset, onError }: { harness: HarnessView; preset:
           <option value="">{model.defaultEffort ? `Default (${effortName(model.defaultEffort)})` : 'Auto'}</option>
           {model.efforts.map((x) => <option key={x.id} value={x.id}>{effortName(x.id)}</option>)}
         </select>}
-        {preset.custom && <button type="button" className="link" onClick={() => void save(null)}>Reset</button>}
+        {preset.custom && <button type="button" className="link" title="Use the default for this level again" onClick={() => void save(null)}>Reset</button>}
       </span>
     </SettingRow>
   );
