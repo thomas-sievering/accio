@@ -257,7 +257,7 @@ it('enforces review-only instructions and verifies PR/check state rather than tr
     ],
   } });
   hosting.mockImplementation(async (_cwd, args) => {
-    if (args[0] === 'pr') return [{ state: 'OPEN', headRefOid: revision, baseRefName: 'main', statusCheckRollup: checks }];
+    if (args[0] === 'pr') return [{ url: 'https://github.com/test/fixture/pull/1', state: 'OPEN', headRefOid: revision, baseRefName: 'main', statusCheckRollup: checks }];
     throw new Error('Actions permission unavailable');
   });
   await expect(manager.verify(workspace, intent)).rejects.toMatchObject({ continueAgent: false, ci: { checks: [
@@ -267,7 +267,7 @@ it('enforces review-only instructions and verifies PR/check state rather than tr
   await expect(manager.verify(workspace, intent)).rejects.toThrow(/Checks are failing/);
   // A check can appear in the REST commit checks before the PR rollup catches up.
   hosting.mockImplementation(async (_cwd, args) => {
-    if (args[0] === 'pr') return [{ state: 'OPEN', headRefOid: revision, baseRefName: 'main', statusCheckRollup: [] }];
+    if (args[0] === 'pr') return [{ url: 'https://github.com/test/fixture/pull/1', state: 'OPEN', headRefOid: revision, baseRefName: 'main', statusCheckRollup: [] }];
     if (args[1]!.includes('/check-runs')) return { total_count: 1, check_runs: [{ name: 'test', conclusion: null, status: 'in_progress', html_url: 'https://github.com/test/fixture/actions/runs/10/job/21' }] };
     if (args[1]!.endsWith('/actions/jobs/21')) return { steps: [{ name: 'Run tests', status: 'in_progress' }] };
     return { total_count: 0, statuses: [] };

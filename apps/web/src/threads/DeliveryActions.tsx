@@ -1,9 +1,12 @@
 import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 import type { DeliveryMode, DeliverySummary, ProjectView, ThreadView } from '@accio/protocol';
 import { useClient, useConnectionStatus } from '../app/connection';
-import { Archive, Check, ChevronDown, Close, Play, Ship } from '../app/icons';
+import { Archive, Check, ChevronDown, Close, Play, Refresh, Ship, StopSquare, Undo } from '../app/icons';
 import { useAction } from '../app/useAction';
-import { ciSummary, DeliveryProgress } from './DeliveryProgress';
+import { DeliveryProgress } from './DeliveryProgress';
+import { StatusGlyphIcon } from './StatusMark';
+import { checkedAgo, deliveryStatus, statusText } from './status';
+import { useThreads } from './threads';
 
 /** Delivery intent stays on the server, including when this view is closed or disconnected. */
 export function DeliveryActions({ thread, project, canRun }: { thread: ThreadView; project?: ProjectView; canRun: boolean }) {
@@ -18,12 +21,9 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
   const menu = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const [position, setPosition] = useState<CSSProperties>({});
+  const { now } = useThreads();
   const delivery = thread.delivery;
-  const queued = delivery?.status === 'queued';
-  const shipWhenDone = queued && thread.status === 'running';
-  const shipping = delivery?.status === 'running';
-  const waiting = delivery?.status === 'waiting';
-  const delivered = delivery?.status === 'delivered';
+  const shipWhenDone = delivery?.status === 'queued' && thread.status === 'running';
   const archived = !!thread.workspace?.releasedAt;
   const target = delivery?.baseBranch ?? summary?.baseBranch ?? 'default branch';
 
@@ -66,35 +66,63 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
   };
 
   if (!thread.workspace) return null;
+  const status = deliveryStatus(thread);
+  const call = (method: 'threads.cancelDelivery' | 'threads.checkDelivery' | 'threads.archive' | 'threads.reopen') =>
+    void run(async () => { await client.call(method, { threadId: thread.id }); });
+  const settled = !!thread.settledAt;
+  // A fresh request is offered with no delivery, after new work, or when a person must act.
+  const offerShip = !status || status.canShip;
+  const receipt = status?.phase === 'delivered';
+  const age = checkedAgo(status?.checkedAt, now);
+  const hint = archived ? undefined : receipt
+    ? settled ? 'Thread settled · Workspace retained' : delivery?.keepOpen ? 'Kept open · Workspace retained' : 'Workspace retained'
+    : status?.phase === 'queued' || status?.phase === 'shipping' ? undefined
+    : [status?.detail, status && ['waiting', 'integrated', 'unavailable'].includes(status.phase) ? age : undefined].filter(Boolean).join(' · ') || undefined;
+  const statusName = status && statusText(status.label, status.pullRequest);
+  const statusBody = status && <>
+    <StatusGlyphIcon glyph={status.glyph} tone={status.tone} />
+    {statusName}
+    {status.pullRequest && <span className="delivery-ext" aria-hidden="true">↗</span>}
+  </>;
+
   return <div className="delivery-actions">
     <div className="delivery-row" aria-label="Delivery actions">
-      {archived ? <span className="delivery-pill delivery-complete"><Check />Archived · history kept</span> : delivered ? <>
-        <span className="delivery-pill delivery-complete"><Check />On {target} · {delivery.publishedRevision?.slice(0, 7)}</span>
-        <button className="delivery-pill" disabled={busy || thread.status === 'running'} onClick={() => void run(async () => { await client.call('threads.archive', { threadId: thread.id }); })}>
-          <Archive />{busy ? 'Archiving…' : 'Archive'}
-        </button>
-        <span className="delivery-hint">Frees the workspace, keeps this thread</span>
-      </> : <>
-        {summary && <span className="delivery-pill delivery-diff" title={`${summary.files} changed ${summary.files === 1 ? 'file' : 'files'}`} aria-label={`${summary.added} lines added, ${summary.removed} lines removed`}>
+      {archived ? <span className="delivery-pill delivery-complete"><Check />Archived · history kept</span> : <>
+        {!receipt && summary && <span className="delivery-pill delivery-diff" title={`${summary.files} changed ${summary.files === 1 ? 'file' : 'files'}`} aria-label={`${summary.added} lines added, ${summary.removed} lines removed`}>
           <span className="delivery-added">+{summary.added}</span><span className="delivery-removed">−{summary.removed}</span>
         </span>}
-        {queued || waiting ? <span className={`delivery-split delivery-queued${shipWhenDone ? ' delivery-armed' : ''}`}>
+        {status?.phase === 'queued' || status?.phase === 'paused' ? <span className={`delivery-split delivery-queued${shipWhenDone ? ' delivery-armed' : ''}`}>
           {shipWhenDone && <span className="delivery-sparkles" aria-hidden="true"><i /><i /><i /><i /><i /></span>}
-          <span role="status"><span className="row-working" />{waiting ? delivery.waitingOn === 'review' ? 'Waiting for review' : delivery.waitingOn === 'agent' ? 'Continuing delivery…' : ciSummary(delivery.ci) ?? 'Waiting for checks' : thread.status === 'running' ? 'Ships when done' : 'Ship paused'}</span>
-          <button disabled={busy} aria-label="Cancel queued delivery" title="Cancel queued delivery" onClick={() => void run(async () => { await client.call('threads.cancelDelivery', { threadId: thread.id }); })}><Close /></button>
-        </span> : shipping ? <span className="delivery-pill" role="status"><span className="row-working" />{delivery.mode === 'review' ? 'Preparing review…' : 'Shipping…'}</span> : <span className="delivery-split">
-          <button disabled={busy || !canRun || !summary?.available || !!thread.queuedMessages?.length} title={thread.queuedMessages?.length ? 'Send or remove queued messages first' : summary?.reason ?? (mode === 'review' ? 'Prepare a PR without merging' : `Finish, verify and ship to ${target}`)} onClick={() => deliver(mode)}><Ship />{mode === 'review' ? 'Prepare for review' : 'Ship'}</button>
-          <button ref={trigger} popoverTarget={id} disabled={busy || !summary?.available} aria-label="Shipping options" aria-haspopup="menu"><ChevronDown /></button>
+          <span role="status"><StatusGlyphIcon glyph={status.glyph} tone={status.tone} />{status.label}</span>
+          {status.canCancel && <button disabled={busy} aria-label="Cancel queued delivery" title="Cancel queued delivery" onClick={() => call('threads.cancelDelivery')}><Close /></button>}
+        </span> : status?.phase === 'shipping' ? <span className="delivery-pill delivery-queued" role="status"><StatusGlyphIcon glyph={status.glyph} tone={status.tone} />{status.label}…</span>
+        : status && status.phase !== 'superseded' && <span className={`delivery-split delivery-status tone-${status.tone}`} role="status">
+          {status.pullRequest
+            ? <a href={status.pullRequest.url} target="_blank" rel="noreferrer" title={`Open PR #${status.pullRequest.number}`}>{statusBody}</a>
+            : <span>{statusBody}</span>}
+          {receipt && status.revision && <span className="delivery-rev" title="Revision on the target">{status.revision}</span>}
         </span>}
-        {waiting && <button className="delivery-pill" disabled={busy} onClick={() => void run(async () => { await client.call('threads.checkDelivery', { threadId: thread.id }); })}>Check now</button>}
-        {delivery?.status === 'ready' && <>
-          <a className="delivery-pill" href={delivery.pullRequestUrl} target="_blank" rel="noreferrer">Ready for review ↗</a>
-          <span className="delivery-hint">Workspace retained</span>
+        {offerShip && <span className="delivery-split">
+          <button disabled={busy || !canRun || !summary?.available || !!thread.queuedMessages?.length} title={thread.queuedMessages?.length ? 'Send or remove queued messages first' : summary?.reason ?? (mode === 'review' ? 'Prepare a PR without merging' : `Finish, verify and ship to ${target}`)} onClick={() => deliver(mode)}><Ship />{mode === 'review' ? 'Prepare for review' : 'Ship'}</button>
+          <button ref={trigger} popoverTarget={id} disabled={busy || !summary?.available || !!thread.queuedMessages?.length} aria-label="Shipping options" aria-haspopup="menu"><ChevronDown /></button>
+        </span>}
+        {status?.canCheck && <button className="delivery-pill" disabled={busy} onClick={() => call('threads.checkDelivery')}><Refresh />Check now</button>}
+        {status?.canStopFollowUps && <button className="delivery-pill" disabled={busy} title="Keep tracking the PR without starting the agent again" onClick={() => call('threads.cancelDelivery')}><StopSquare />Stop automatic follow-ups</button>}
+        {status?.canCancel && status.phase !== 'queued' && <button className="delivery-pill" disabled={busy} onClick={() => call('threads.cancelDelivery')}><Close />Cancel delivery</button>}
+        {receipt && <>
+          {settled && <button className="delivery-pill" disabled={busy} onClick={() => call('threads.reopen')}><Undo />Reopen</button>}
+          <button className="delivery-pill" disabled={busy || thread.status === 'running'} title="Frees the workspace, keeps this thread" onClick={() => call('threads.archive')}>
+            <Archive />{busy ? 'Archiving…' : 'Archive'}
+          </button>
         </>}
       </>}
       {!archived && summary?.previewAvailable && <button className="delivery-pill" disabled={busy} onClick={openApp}><Play />Open app</button>}
     </div>
-    {waiting && delivery.waitingOn === 'checks' && delivery.ci && <DeliveryProgress ci={delivery.ci} />}
+    {hint && <p className={`delivery-hint tone-${status?.tone ?? 'ready'}`} role={status?.phase === 'attention' || status?.phase === 'closed' ? 'alert' : undefined}
+      title={status?.phase === 'unavailable' ? thread.delivery?.observationError : undefined}>
+      <span className="delivery-dot" aria-hidden="true" /><span className="delivery-hint-text">{hint}</span>
+    </p>}
+    {status?.ci && <DeliveryProgress ci={status.ci} />}
     <div id={id} ref={menu} className="menu delivery-menu" popover="auto" role="menu" aria-label="Shipping options" style={position}
       onToggle={e => {
         if (e.newState === 'open' && trigger.current) {
@@ -119,6 +147,6 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
         <span className="menu-text">Prepare for review<small>Rebase, test and open a PR. Never merges.</small></span>
       </button>
     </div>
-    {(error || loadError || delivery?.status === 'blocked') && <p className="delivery-error" role="alert">{error ?? loadError ?? delivery?.detail}{loadError && <button className="ghost" onClick={() => setAttempt(n => n + 1)}>Retry</button>}</p>}
+    {(error || loadError) && <p className="delivery-error" role="alert">{error ?? loadError}{loadError && <button className="ghost" onClick={() => setAttempt(n => n + 1)}>Retry</button>}</p>}
   </div>;
 }

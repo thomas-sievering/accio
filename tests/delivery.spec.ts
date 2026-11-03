@@ -24,7 +24,7 @@ test('CI wait shows current job and step, refreshes, survives reload and clears 
   await page.getByRole('button', { name: 'Check now', exact: true }).click();
   await expect(status).toContainText('Push image · step 3 of 4');
   await page.getByRole('button', { name: 'Check now', exact: true }).click();
-  await expect(page.getByText(/^On main ·/)).toBeVisible();
+  await expect(page.locator('.delivery-actions [role="status"]')).toContainText('Shipped to main');
   await expect(page.locator('.delivery-progress')).toHaveCount(0);
   await expect(page.locator('.row-project').filter({ hasText: 'CI ·' })).toHaveCount(0);
   await expect(page.getByText('Ship to main when ready.', { exact: true })).toHaveCount(1);
@@ -54,6 +54,8 @@ test('Ship menu, queued cancellation, owned preview, delivery, Archive and follo
   await page.locator('.composer textarea').fill('Build delivery fixture');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect(page.getByText('Feature implemented. Running checks…', { exact: true })).toBeVisible();
+  // The sidebar repeats the delivery status, so composer assertions stay inside the delivery row.
+  const actions = page.locator('.delivery-actions');
   await page.getByRole('button', { name: 'Shipping options', exact: true }).click();
   await expect(page.getByRole('menuitemradio', { name: /Ship to main/ })).toBeVisible();
   await expect(page.getByRole('menuitemradio', { name: /Prepare for review/ })).toContainText('Never merges.');
@@ -65,12 +67,12 @@ test('Ship menu, queued cancellation, owned preview, delivery, Archive and follo
   await page.screenshot({ path: testInfo.outputPath('ship-menu.png') });
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Ship', exact: true }).click();
-  await expect(page.getByText('Ships when done', { exact: true })).toBeVisible();
+  await expect(actions.getByText('Ships when done', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Cancel queued delivery' }).click();
-  await expect(page.getByText('Ships when done', { exact: true })).toHaveCount(0);
+  await expect(actions.getByText('Ships when done', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Stop', exact: true }).first()).toBeVisible();
   await page.getByRole('button', { name: 'Ship', exact: true }).click();
-  await expect(page.getByText('Ships when done', { exact: true })).toBeVisible();
+  await expect(actions.getByText('Ships when done', { exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('ship-queued.png') });
   const opened = page.waitForEvent('popup');
   await page.getByRole('button', { name: 'Open app', exact: true }).click();
@@ -78,13 +80,19 @@ test('Ship menu, queued cancellation, owned preview, delivery, Archive and follo
   await expect(preview.locator('body')).toHaveText('Accio delivery preview');
   const previewUrl = preview.url();
   await preview.close();
-  await expect(page.getByText(/^On main ·/)).toBeVisible({ timeout: 20_000 });
+  await expect(actions.getByRole('status')).toContainText('Shipped to main', { timeout: 20_000 });
   await expect(page.getByText('Ship to main when ready.', { exact: true })).toHaveCount(1);
-  await expect(page.getByRole('button', { name: 'Archive', exact: true })).toBeEnabled();
+  // Verified direct delivery settles automatically, keeps the conversation selected and retains its workspace.
+  await expect(actions).toContainText('Thread settled · Workspace retained');
+  await expect(page.locator('.composer textarea')).toHaveAttribute('placeholder', 'Send a message to reopen this thread…');
+  await expect(page.locator('.row.settled.active')).toContainText('main');
+  await expect(page.getByText(/^Shipped to main · [0-9a-f]{7} · .*Thread settled; workspace retained\.$/)).toHaveCount(1);
+  await expect(actions.getByRole('button', { name: 'Reopen', exact: true })).toBeVisible();
+  await expect(actions.getByRole('button', { name: 'Archive', exact: true })).toBeEnabled();
   await page.screenshot({ path: testInfo.outputPath('ship-delivered.png') });
   await page.reload();
-  await expect(page.getByText(/^On main ·/)).toBeVisible();
-  await page.getByRole('button', { name: 'Archive', exact: true }).click();
+  await expect(actions.getByRole('status')).toContainText('Shipped to main');
+  await actions.getByRole('button', { name: 'Archive', exact: true }).click();
   await expect(page.getByText('Archived · history kept', { exact: true })).toBeVisible();
   await expect(page.getByText('Verification complete. Published the committed change.', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Open app', exact: true })).toHaveCount(0);
@@ -115,7 +123,7 @@ test('Electron Open app uses the native bridge and archives its real owned previ
     const url = await desktop.evaluate(({ app }) => (app as any).chatPreviews[0] as string);
     expect(await (await fetch(url)).text()).toBe('Accio delivery preview');
     await page.getByRole('button', { name: 'Ship', exact: true }).click();
-    await expect(page.getByText(/^On main ·/)).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator('.delivery-actions').getByRole('status')).toContainText('Shipped to main', { timeout: 20_000 });
     await page.getByRole('button', { name: 'Archive', exact: true }).click();
     await expect(page.getByText('Archived · history kept', { exact: true })).toBeVisible();
     await expect(fetch(url)).rejects.toThrow();

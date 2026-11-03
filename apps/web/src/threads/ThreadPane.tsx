@@ -69,7 +69,7 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
         target={thread.id}
         draftId={`thread:${thread.id}`}
         onStop={running ? async () => void (await client.call('threads.stop', { threadId: thread.id })) : undefined}
-        placeholder={running ? 'Send a correction or follow-up…' : `Ask ${thread.model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}
+        placeholder={running ? 'Send a correction or follow-up…' : thread.settledAt ? 'Send a message to reopen this thread…' : `Ask ${thread.model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}
         attachment={pick && pickLabel ? { label: pickLabel, onRemove: () => setPick(undefined) } : undefined}
         onSend={async (text, mode) => {
           await client.call('threads.send', { threadId: thread.id, text, mode, ...(pick ? { pick } : {}) });

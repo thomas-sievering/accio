@@ -4,11 +4,11 @@ import { DEFAULT_MODEL } from '@accio/protocol';
 import { UserError } from '../rpc/router.js';
 
 /** A thread as stored: what clients see, plus the harness session it continues. */
-export type Thread = ThreadView & { sessionId: string | null; resumeAfterRestart?: boolean };
+export type Thread = ThreadView & { sessionId: string | null; organizationVersion?: number; resumeAfterRestart?: boolean };
 
 export const NEW_THREAD_TITLE = 'New thread';
 
-export function toView({ sessionId: _s, resumeAfterRestart: _r, ...view }: Thread): ThreadView {
+export function toView({ sessionId: _s, organizationVersion: _o, resumeAfterRestart: _r, ...view }: Thread): ThreadView {
   return view;
 }
 
@@ -34,7 +34,14 @@ export function newThread(input: { checkoutId: string; projectId: string; profil
  */
 export function fromStored(t: Omit<Thread, 'snoozedUntil' | 'settledAt' | 'model'> & Partial<Pick<Thread, 'snoozedUntil' | 'settledAt' | 'model'>>): Thread {
   const model = !t.model || (t.model.harnessId === 'claudeCode' && t.model.modelId === 'default') ? { ...DEFAULT_MODEL } : t.model;
-  return { ...t, model, snoozedUntil: t.snoozedUntil ?? null, settledAt: t.settledAt ?? null };
+  const workVersion = t.workVersion ?? 0;
+  const delivery = t.delivery && { ...t.delivery,
+    id: t.delivery.id ?? `${t.id}:${t.delivery.requestedAt}`,
+    workVersion: t.delivery.workVersion ?? workVersion,
+    // Historical completed deliveries have no record of a later manual Reopen.
+    autoSettle: t.delivery.autoSettle ?? t.delivery.status !== 'delivered',
+  };
+  return { ...t, model, workVersion, delivery, organizationVersion: t.organizationVersion ?? 0, snoozedUntil: t.snoozedUntil ?? null, settledAt: t.settledAt ?? null };
 }
 
 /**

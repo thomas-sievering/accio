@@ -40,7 +40,7 @@ import { SecretRequests } from '../secrets/secrets.js';
 import type { SecretsAccess } from '@accio/hub';
 import { isChoiceTool, parseChoice, pickPrompt } from './choice.js';
 import type { AccioTools, ToolAccess } from '../tools/tools.js';
-import { DeliveryGit, DeliveryPending, deliveryPrompt } from './delivery.js';
+import { DeliveryGit, DeliveryPending, DeliveryUnavailable, deliveryPrompt, type DeliveryHosting } from './delivery.js';
 import { Previews } from './previews.js';
 import { samePath } from '../projects/project.js';
 import { observedSkillLoads, readSkillFile, repositorySkillTarget, saveRepositorySkill } from '../resources/workspaceSkills.js';
@@ -71,6 +71,7 @@ export class Threads {
   private lifecycle = new Set<string>();
   private deliveryStarting = new Set<string>();
   private deliveryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private deliveryChecks = new Map<string, Promise<void>>();
   private deliveryGit: DeliveryGit;
   private previews: Previews;
   readonly assets: ThreadAssets;
@@ -87,9 +88,10 @@ export class Threads {
     private machines: Machines,
     vault: SecretsAccess,
     private tools?: AccioTools,
+    deliveryHosting?: DeliveryHosting,
   ) {
     this.file = new JsonFile(join(home, 'threads.json'), () => []);
-    this.deliveryGit = new DeliveryGit(home);
+    this.deliveryGit = new DeliveryGit(home, deliveryHosting);
     this.previews = new Previews(home);
     this.assets = new ThreadAssets(home, (threadId) => this.list.some((thread) => thread.id === threadId));
     this.content = new ThreadContent(home, this.assets);
@@ -126,7 +128,7 @@ export class Threads {
       if (candidates.has(thread.id) || (await this.transcript(thread.id)).items.length > 0) started.push(thread);
     }
     const { threads, interrupted } = recoverAfterRestart(started);
-    this.list = threads.map(t => t.delivery?.status === 'running' ? { ...t, delivery: { ...t.delivery, status: 'blocked', detail: 'Delivery was interrupted. Check the conversation and request Ship again to continue safely.' } } : t.delivery?.status === 'queued' && t.status === 'idle' ? { ...t, status: 'interrupted' } : t);
+    this.list = threads.map(t => t.delivery?.status === 'delivered' && t.delivery.completedAt && t.status === 'interrupted' ? { ...t, status: 'idle' } : t.delivery?.status === 'running' ? { ...t, delivery: { ...t.delivery, status: 'blocked', detail: 'Delivery was interrupted. Check the conversation and request Ship again to continue safely.' } } : t.delivery?.status === 'queued' && t.status === 'idle' ? { ...t, status: 'interrupted' } : t);
     let recoveredRelease = false;
     for (const thread of this.list) {
       if (!thread.workspace?.releaseRequestedAt || thread.workspace.releasedAt || !thread.delivery?.revision) continue;
@@ -153,7 +155,13 @@ export class Threads {
       await live.file.write(live.items);
     }
     if (bound || recoveredRelease || interrupted.length || started.length < stored.length || this.list.some(t => t.delivery?.status === 'blocked')) await this.file.write(this.list);
-    for (const thread of this.list) if (thread.delivery?.status === 'waiting') this.scheduleDeliveryCheck(thread.id);
+    for (const thread of this.list) {
+      if (thread.delivery?.status === 'delivered' && thread.delivery.completedAt) {
+        await this.updateDurably(thread.id, t => this.settleDelivered(t));
+        await this.deliveryReceipt(thread.id);
+      }
+      this.scheduleDeliveryCheck(thread.id);
+    }
     this.restartCandidates = new Set(this.list.filter(t => t.status === 'interrupted' && t.resumeAfterRestart && t.sessionId && !t.delivery).map(t => t.id));
   }
 
@@ -288,11 +296,16 @@ export class Threads {
       .on('threads.cancelDelivery', async ({ threadId }) => {
         if (this.lifecycle.has(threadId) || this.deliveryStarting.has(threadId)) throw new UserError('Wait for the current thread action to finish.');
         const thread = this.require(threadId);
-        if (!thread.delivery || !['queued', 'waiting', 'blocked'].includes(thread.delivery.status)) throw new UserError('Only a queued or paused delivery can be cancelled.');
+        if (!thread.delivery || !['queued', 'waiting', 'blocked', 'ready'].includes(thread.delivery.status)) throw new UserError('Only a queued or paused delivery can be cancelled.');
         this.clearDeliveryCheck(threadId);
-        return toView(await this.update(threadId, t => ({ ...t, delivery: undefined })));
+        const published = !!(thread.delivery.pullRequest || thread.delivery.pullRequestUrl || thread.delivery.integratedAt);
+        const updated = await this.update(threadId, t => ({ ...t, organizationVersion: (t.organizationVersion ?? 0) + 1,
+          delivery: published ? { ...t.delivery!, status: t.delivery!.status === 'queued' ? 'waiting' : t.delivery!.status,
+            followUpsStoppedAt: now(), keepOpen: true } : undefined }));
+        this.scheduleDeliveryCheck(threadId);
+        return toView(updated);
       })
-      .on('threads.checkDelivery', async ({ threadId }) => { await this.checkDelivery(threadId); return toView(this.require(threadId)); })
+      .on('threads.checkDelivery', async ({ threadId }) => { await this.checkDelivery(threadId, true); return toView(this.require(threadId)); })
       .on('threads.openPreview', ({ threadId }) => this.withLifecycle(threadId, async () => {
         const thread = this.require(threadId);
         const command = thread.checkoutId ? this.projects.projectOf(this.projects.checkout(thread.checkoutId)).previewCommand : undefined;
@@ -336,9 +349,10 @@ export class Threads {
         await this.beginTurn(threadId, '', { retry: true });
         return null;
       })
-      .on('threads.snooze', async ({ threadId, until }) => toView(await this.update(threadId, (t) => snooze(t, until))))
-      .on('threads.settle', async ({ threadId }) => toView(await this.update(threadId, (t) => settle(t, now()))))
-      .on('threads.reopen', async ({ threadId }) => toView(await this.update(threadId, reopen)))
+      .on('threads.snooze', async ({ threadId, until }) => toView(await this.update(threadId, t => snooze({ ...t, organizationVersion: (t.organizationVersion ?? 0) + 1 }, until))))
+      .on('threads.settle', async ({ threadId }) => toView(await this.update(threadId, t => settle({ ...t, organizationVersion: (t.organizationVersion ?? 0) + 1 }, now()))))
+      .on('threads.reopen', async ({ threadId }) => toView(await this.update(threadId, t => reopen({ ...t,
+        organizationVersion: (t.organizationVersion ?? 0) + 1, ...(t.delivery ? { delivery: { ...t.delivery, keepOpen: true } } : {}) }))))
       .on('threads.rename', async ({ threadId, title }) => {
         const updated = await this.update(threadId, (t) => ({ ...t, title }));
         return toView(updated);
@@ -492,7 +506,10 @@ export class Threads {
       if (thread.delivery && ['queued', 'running', 'waiting'].includes(thread.delivery.status)) throw new UserError('Delivery is already requested.');
       const baseBranch = await this.deliveryGit.target(thread.workspace);
       const project = this.projects.projectOf(this.projects.checkout(thread.checkoutId));
-      const delivery: ThreadDelivery = { mode, policy: thread.delivery?.pullRequestUrl ? 'pull-request' : project.deliveryPolicy ?? 'direct', baseBranch, requestedAt: now(), status: 'queued' };
+      const openPr = thread.delivery?.pullRequest?.state === 'open' || !!(thread.delivery?.pullRequestUrl && !thread.delivery.pullRequest && thread.delivery.status !== 'delivered');
+      const delivery: ThreadDelivery = { id: randomUUID(), workVersion: thread.workVersion ?? 0, autoSettle: true,
+        mode, policy: openPr ? 'pull-request' : project.deliveryPolicy ?? 'direct', baseBranch, requestedAt: now(), status: 'queued',
+        ...(openPr ? { pullRequest: thread.delivery?.pullRequest, pullRequestUrl: thread.delivery?.pullRequestUrl } : {}) };
       try { await this.update(threadId, t => ({ ...t, delivery })); }
       catch (error) {
         // A rejected request must never become an in-memory publication grant.
@@ -507,7 +524,7 @@ export class Threads {
 
   private async dispatchDelivery(threadId: string) {
     const thread = this.require(threadId);
-    if (this.closing || this.lifecycle.has(threadId) || this.running.has(threadId) || thread.status === 'running' || thread.delivery?.status !== 'queued') return;
+    if (this.closing || this.lifecycle.has(threadId) || this.running.has(threadId) || thread.status === 'running' || thread.delivery?.status !== 'queued' || thread.delivery.followUpsStoppedAt) return;
     this.deliveryStarting.add(threadId);
     try { await this.beginTurn(threadId, '', { delivery: true }); }
     catch (error) {
@@ -522,44 +539,113 @@ export class Threads {
 
   private scheduleDeliveryCheck(threadId: string) {
     this.clearDeliveryCheck(threadId);
-    if (this.closing) return;
+    const thread = this.require(threadId);
+    if (this.closing || !this.observesDelivery(thread)) return;
+    const delivery = thread.delivery!;
+    const quiet = delivery.status === 'ready' || (delivery.waitingOn === 'merge' && !delivery.integratedAt);
+    const delay = delivery.observationError ? Math.min(15 * 60_000, 30_000 * 2 ** Math.min(delivery.observationFailures ?? 0, 5)) : quiet ? 2 * 60_000 : 30_000;
     const timer = setTimeout(() => {
       this.deliveryTimers.delete(threadId);
       void this.checkDelivery(threadId).catch(error => console.error('[delivery] checking delivery failed', error));
-    }, 30_000);
+    }, delay);
     timer.unref(); this.deliveryTimers.set(threadId, timer);
   }
 
-  private async recordDeliveryWait(threadId: string, error: Error) {
-    const delivery = this.require(threadId).delivery!;
-    const withinBudget = Date.now() - Date.parse(delivery.requestedAt) < 60 * 60_000;
-    const waiting = error instanceof DeliveryPending && withinBudget;
-    await this.update(threadId, t => ({ ...t, delivery: { ...t.delivery!, status: waiting ? 'waiting' : 'blocked', detail: error.message, ci: error instanceof DeliveryPending ? error.ci : undefined, waitingOn: error instanceof DeliveryPending ? error.continueAgent ? 'agent' : error.waitingOn : undefined } }));
-    if (waiting) this.scheduleDeliveryCheck(threadId);
-    else this.clearDeliveryCheck(threadId);
+  private observesDelivery(thread: Thread) {
+    const d = thread.delivery;
+    if (!d || !thread.workspace || thread.workspace.releasedAt || (d.workVersion ?? 0) !== (thread.workVersion ?? 0)) return false;
+    if (d.status === 'delivered') return !!(d.autoSettle && !d.keepOpen && !thread.settledAt);
+    if (d.status === 'queued' || d.status === 'running' || d.pullRequest?.state === 'closed') return false;
+    return d.status === 'waiting' || d.status === 'ready' || !!(d.pullRequest || d.pullRequestUrl || d.integratedAt || d.observationError);
   }
 
-  private async checkDelivery(threadId: string) {
-    const current = this.require(threadId);
-    if (current.delivery?.status !== 'waiting') return;
-    if (this.running.has(threadId) || this.lifecycle.has(threadId)) { this.scheduleDeliveryCheck(threadId); return; }
-    await this.withLifecycle(threadId, async () => {
-      const thread = this.require(threadId);
-      if (thread.delivery?.status !== 'waiting' || !thread.workspace) return;
-      try {
-        const verified = await this.deliveryGit.verify(thread.workspace, thread.delivery);
-        await this.update(threadId, t => ({ ...t, delivery: verified }));
-        this.clearDeliveryCheck(threadId);
-      } catch (error) {
-        const attempts = thread.delivery.continuationAttempts ?? 0;
-        if (error instanceof DeliveryPending && error.continueAgent && thread.status === 'idle' && attempts < 3 && Date.now() - Date.parse(thread.delivery.requestedAt) < 60 * 60_000) {
-          await this.update(threadId, t => ({ ...t, delivery: { ...t.delivery!, ci: undefined, status: 'queued', continuationAttempts: attempts + 1, detail: error.message } }));
-          this.clearDeliveryCheck(threadId);
-        } else if (error instanceof DeliveryPending && error.continueAgent && attempts >= 3) {
-          await this.recordDeliveryWait(threadId, new UserError('Delivery needs attention after three follow-ups. The workspace has been kept.'));
-        } else await this.recordDeliveryWait(threadId, error as Error);
-      }
+  private matchesDelivery(thread: Thread, expected: Thread, ownTurn = false) {
+    return !!thread.delivery && thread.delivery.id === expected.delivery?.id && thread.delivery.requestedAt === expected.delivery?.requestedAt
+      && (thread.workVersion ?? 0) === (expected.workVersion ?? 0) && (thread.delivery.workVersion ?? 0) === (thread.workVersion ?? 0)
+      && (thread.organizationVersion ?? 0) === (expected.organizationVersion ?? 0)
+      && (ownTurn || (!this.running.has(thread.id) && !this.lifecycle.has(thread.id)));
+  }
+
+  private settleDelivered(thread: Thread) {
+    const d = thread.delivery;
+    if (d?.status !== 'delivered' || !d.autoSettle || d.keepOpen || d.followUpsStoppedAt || thread.settledAt || thread.status !== 'idle'
+      || (d.workVersion ?? 0) !== (thread.workVersion ?? 0) || this.running.has(thread.id) || this.lifecycle.has(thread.id) || !!thread.queuedMessages?.length || this.messageOps.has(thread.id)
+      || (thread.snoozedUntil && Date.parse(thread.snoozedUntil) > Date.now())) return thread;
+    return settle(thread, now());
+  }
+
+  private async deliveryReceipt(threadId: string) {
+    const thread = this.require(threadId);
+    const d = thread.delivery;
+    if (d?.status !== 'delivered' || !d.completedAt || !d.id) return;
+    const id = `delivery:${d.id}:completed`;
+    const live = await this.transcript(threadId);
+    if (live.items.some(item => item.id === id)) return;
+    const result = d.pullRequestUrl ? `PR #${d.pullRequest?.number ?? d.pullRequestUrl.split('/').at(-1)} merged into ${d.baseBranch} (${d.pullRequestUrl})`
+      : `Shipped to ${d.baseBranch}`;
+    await this.addItem(threadId, { kind: 'notice', id, turnId: `delivery:${d.id}`, tone: 'info',
+      text: `${result} · ${d.publishedRevision?.slice(0, 7)} · ${d.completedAt}. ${thread.settledAt ? 'Thread settled' : 'Thread stays open'}; workspace retained.` });
+    await this.flush(threadId);
+  }
+
+  private async recordDeliveryWait(threadId: string, error: Error) {
+    await this.update(threadId, t => {
+      const d = t.delivery!;
+      if (error instanceof DeliveryUnavailable) return { ...t, delivery: { ...d, status: d.status === 'running' ? 'waiting' : d.status,
+        observationError: error.message, observationFailures: (d.observationFailures ?? 0) + 1 } };
+      const pending = error instanceof DeliveryPending;
+      const budget = (d.continuationAttempts ?? 0) < 3 && Date.now() - Date.parse(d.requestedAt) < 60 * 60_000;
+      const exhausted = pending && error.continueAgent && (!budget || !!d.followUpsStoppedAt || !!d.integratedAt);
+      return { ...t, delivery: { ...d, status: pending && !exhausted ? 'waiting' : 'blocked',
+        detail: exhausted ? d.followUpsStoppedAt ? 'Automatic follow-ups stopped. PR observation continues.' : d.integratedAt ? 'Checks on the published revision need attention. Observation continues; the workspace has been kept.' : 'Delivery needs attention after its automatic follow-up budget. The workspace has been kept.' : error.message,
+        waitingOn: pending ? error.waitingOn : undefined, ci: pending ? error.ci : undefined, observationError: undefined, observationFailures: 0 } };
     });
+    this.scheduleDeliveryCheck(threadId);
+  }
+
+  private async verifyDelivery(expected: Thread, ownTurn = false, continueAgent = false) {
+    const threadId = expected.id;
+    const matches = () => this.matchesDelivery(this.require(threadId), expected, ownTurn);
+    let verified: ThreadDelivery;
+    try {
+      verified = await this.deliveryGit.verify(expected.workspace!, expected.delivery!, async patch => {
+        if (matches()) await this.update(threadId, t => ({ ...t, delivery: { ...t.delivery!, ...patch } }));
+      });
+    } catch (error) {
+      if (!matches()) return;
+      const current = this.require(threadId);
+      const d = current.delivery!;
+      const pending = error instanceof DeliveryPending;
+      const canContinue = continueAgent && pending && error.continueAgent && !d.followUpsStoppedAt && !d.integratedAt
+        && !current.queuedMessages?.length && !this.messageOps.has(threadId)
+        && current.status === 'idle' && (d.continuationAttempts ?? 0) < 3 && Date.now() - Date.parse(d.requestedAt) < 60 * 60_000;
+      if (canContinue) await this.update(threadId, t => ({ ...t, delivery: { ...t.delivery!, ci: undefined, status: 'queued', continuationAttempts: (d.continuationAttempts ?? 0) + 1, detail: (error as Error).message } }));
+      else await this.recordDeliveryWait(threadId, error as Error);
+      return;
+    }
+    if (!matches()) return;
+    await this.updateDurably(threadId, t => this.settleDelivered({ ...t, delivery: { ...t.delivery!, ...verified } }));
+    if (!ownTurn) await this.deliveryReceipt(threadId);
+  }
+
+  private async checkDelivery(threadId: string, force = false) {
+    const existing = this.deliveryChecks.get(threadId);
+    if (existing) return existing;
+    const thread = this.require(threadId);
+    if (!thread.delivery || !thread.workspace || thread.workspace.releasedAt) return;
+    if (this.running.has(threadId) || this.lifecycle.has(threadId) || this.deliveryChecks.size >= 2) { this.scheduleDeliveryCheck(threadId); return; }
+    const check = this.trackStart(async () => {
+      if (thread.delivery?.status === 'delivered') {
+        await this.updateDurably(threadId, t => this.settleDelivered(t));
+        await this.deliveryReceipt(threadId);
+      } else if (this.observesDelivery(thread) || (force && !['queued', 'running'].includes(thread.delivery!.status)
+        && (thread.workVersion ?? 0) === (thread.delivery!.workVersion ?? 0))) await this.verifyDelivery(thread, false, true);
+    });
+    this.deliveryChecks.set(threadId, check);
+    try { await check; }
+    finally { this.deliveryChecks.delete(threadId); this.scheduleDeliveryCheck(threadId); }
+    // No model is held open while the host is waiting. Only actionable work gets a new turn.
+    if (this.require(threadId).delivery?.status === 'queued') await this.dispatchDelivery(threadId);
   }
 
   private trackStart<T>(start: () => Promise<T>): Promise<T> {
@@ -639,6 +725,7 @@ export class Threads {
         delivering = !!(last?.kind === 'user' && last.delivery && thread.delivery);
         if (options.retry) ({ text, resume, pick } = retryOf(thread, items));
       }
+      if (delivering && thread.delivery?.followUpsStoppedAt) throw new UserError('Automatic delivery was stopped. Request Ship again before continuing publication.');
       const picked = pick ? pickPrompt((await this.transcript(threadId)).items, pick, text) : text;
       if (picked === undefined) throw new UserError('That option is no longer available');
       if (!this.profiles.get(thread.profileId)) throw new UserError('The profile this thread started with no longer exists');
@@ -653,7 +740,10 @@ export class Threads {
         thread = { ...thread, workspace, sessionId: null, delivery: undefined };
       }
       if (delivering) thread = { ...thread, delivery: { ...thread.delivery!, status: 'running', detail: undefined } };
-      else if (thread.delivery && ['delivered', 'ready', 'waiting'].includes(thread.delivery.status)) { this.clearDeliveryCheck(threadId); thread = { ...thread, delivery: { ...thread.delivery, status: 'blocked', detail: 'New work needs to be shipped before archiving.' } }; }
+      else {
+        if (!options.resume && !options.retry) thread = { ...thread, workVersion: (thread.workVersion ?? 0) + 1 };
+        if (thread.delivery && ['delivered', 'ready', 'waiting'].includes(thread.delivery.status)) { this.clearDeliveryCheck(threadId); thread = { ...thread, delivery: { ...thread.delivery, status: 'blocked', detail: 'New work needs to be shipped before archiving.' } }; }
+      }
       const cwd = this.cwd(thread);
       const prompt = delivering && !resume ? deliveryPrompt(thread.workspace!, thread.delivery!) : picked;
       if (delivering && !resume) text = thread.delivery!.mode === 'review' ? 'Prepare for review.' : `Ship to ${thread.delivery!.baseBranch} when ready.`;
@@ -756,8 +846,7 @@ export class Threads {
           const current = this.require(thread.id);
           try {
             if (outcome !== 'completed') throw new UserError('Delivery paused. Check the conversation, then request Ship again.');
-            const verified = await this.deliveryGit.verify(current.workspace!, current.delivery!);
-            await this.update(thread.id, t => ({ ...t, delivery: verified }));
+            await this.verifyDelivery(current, true);
           } catch (error) {
             const detail = (error as Error).message;
             await this.recordDeliveryWait(thread.id, error as Error);
@@ -778,7 +867,10 @@ export class Threads {
       } finally {
         // A storage failure must never leave a finished turn holding its slot.
         this.running.delete(thread.id);
-        await this.update(thread.id, (t) => endTurn(t, outcome ?? 'failed', now()));
+        await this.updateDurably(thread.id, t => this.settleDelivered(endTurn(t.delivery?.status === 'running'
+          ? { ...t, delivery: { ...t.delivery, status: 'waiting' } } : t, outcome ?? 'failed', now())));
+        await this.deliveryReceipt(thread.id);
+        this.scheduleDeliveryCheck(thread.id);
         // Every turn spends the account's allowance, so a model it used up is marked as soon as possible.
         this.profiles.refreshLimits(thread.profileId, thread.model.harnessId === 'codex' ? 'openai' : 'anthropic');
         if (thread.repairToolId && outcome === 'completed') this.onRepairFinished?.(thread.repairToolId);
@@ -901,6 +993,23 @@ export class Threads {
       opts,
     );
     return updated;
+  }
+
+  /** Completion must reach disk before its settled row is broadcast. Preserve intervening writes. */
+  private async updateDurably(id: string, fn: (t: Thread) => Thread): Promise<Thread> {
+    const previous = this.require(id);
+    let applied: Thread | undefined;
+    try {
+      const updated = await this.update(id, t => applied = fn(t), { quiet: true });
+      this.broadcast('threads.changed', this.views());
+      return updated;
+    } catch (error) {
+      if (this.require(id) === applied) {
+        this.list = this.list.map(t => t.id === id ? previous : t);
+        this.broadcast('threads.changed', this.views());
+      }
+      throw error;
+    }
   }
 
   private async commit(next: Thread[], { quiet = false } = {}) {

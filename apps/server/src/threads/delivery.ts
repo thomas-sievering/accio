@@ -2,14 +2,19 @@ import { execFile } from 'node:child_process';
 import { lstat, mkdir, readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
-import type { DeliveryCI, DeliverySummary, ThreadDelivery, ThreadWorkspace } from '@accio/protocol';
+import type { DeliveryCI, DeliveryPullRequest, DeliverySummary, ThreadDelivery, ThreadWorkspace } from '@accio/protocol';
 import { UserError } from '../rpc/router.js';
 
 const exec = promisify(execFile);
 /** Waiting uses machine-side checks; a model is woken only when it has more work. */
 export class DeliveryPending extends UserError {
-  constructor(message: string, readonly continueAgent = false, readonly waitingOn: 'checks' | 'review' = 'checks', readonly ci?: DeliveryCI) { super(message); }
+  constructor(message: string, readonly continueAgent = false, readonly waitingOn: 'checks' | 'review' | 'merge' = 'checks', readonly ci?: DeliveryCI) { super(message); }
 }
+/** Failed observations are retried without granting the agent more publication authority. */
+export class DeliveryUnavailable extends UserError {}
+export type DeliveryObservation = (patch: Partial<ThreadDelivery>) => Promise<void>;
+export type DeliveryHosting = (cwd: string, args: string[]) => Promise<any>;
+const PR_FIELDS = 'number,url,state,headRefOid,baseRefName,isDraft,mergeCommit,mergedAt,statusCheckRollup,reviewDecision,autoMergeRequest,mergeStateStatus,mergeable';
 export async function git(cwd: string, ...args: string[]): Promise<string> {
   const { stdout } = await exec('git', ['-C', cwd, ...args], { windowsHide: true, timeout: 30_000, maxBuffer: 4 * 1024 * 1024 });
   return stdout.trim();
@@ -20,7 +25,18 @@ async function maybeGit(cwd: string, ...args: string[]) {
 
 /** Git owns worktree removal; we never recursively delete a project or force a dirty checkout away. */
 export class DeliveryGit {
-  constructor(private home: string, private hostingJson = ghJson) {}
+  private reads = new Map<string, Promise<any>>();
+  constructor(private home: string, private hostingJson: DeliveryHosting = ghJson) {}
+
+  /** Concurrent observers of one project's PR share host reads, including failures. */
+  private hosting = (cwd: string, args: string[]): Promise<any> => {
+    const key = JSON.stringify([resolve(cwd), args]);
+    const existing = this.reads.get(key);
+    if (existing) return existing;
+    const read = Promise.resolve().then(() => this.hostingJson(cwd, args)).finally(() => this.reads.delete(key));
+    this.reads.set(key, read);
+    return read;
+  };
 
   async allocate(threadId: string, sourcePath: string, revision = 'HEAD'): Promise<ThreadWorkspace | undefined> {
     if (!await maybeGit(sourcePath, 'rev-parse', '--show-toplevel')) return undefined;
@@ -73,39 +89,71 @@ export class DeliveryGit {
     return { ...result, available: !!origin, baseBranch, ...(!origin ? { reason: 'Add an origin remote before shipping.' } : {}) };
   }
 
-  async verify(workspace: ThreadWorkspace, delivery: ThreadDelivery): Promise<ThreadDelivery> {
-    if (await git(workspace.path, 'branch', '--show-current') !== workspace.branch) throw new UserError('The worktree’s branch changed. Restore its owned branch before delivery.');
-    if (await git(workspace.path, 'status', '--porcelain', '--untracked-files=all')) throw new UserError('Uncommitted work remains. The workspace has been kept.');
-    const revision = await git(workspace.path, 'rev-parse', 'HEAD');
-    try { await git(workspace.path, 'fetch', '--quiet', 'origin', `refs/heads/${delivery.baseBranch}:refs/remotes/origin/${delivery.baseBranch}`); }
-    catch { throw new UserError('Could not verify the latest target branch on origin. The workspace has been kept.'); }
-    // An unchanged starting commit is not a publication by this thread, even
-    // when it is already an ancestor of the target. Its old CI may never run.
-    if (delivery.mode === 'ship' && revision === workspace.startRevision) throw new UserError('Nothing to ship: this thread has no new commits. The workspace has been kept.');
-    const origin = await git(workspace.path, 'config', '--get', 'remote.origin.url');
-    const slug = githubRepo(origin);
-    let publishedRevision = revision;
-    let pullRequestUrl = delivery.pullRequestUrl;
+  async verify(workspace: ThreadWorkspace, delivery: ThreadDelivery, observed?: DeliveryObservation): Promise<ThreadDelivery> {
+    let result = { ...delivery };
+    const record = async (patch: Partial<ThreadDelivery>) => {
+      result = { ...result, ...patch };
+      await observed?.(patch);
+    };
+    const checkedAt = new Date().toISOString();
+    const origin = await maybeGit(workspace.sourcePath, 'config', '--get', 'remote.origin.url');
+    const slug = origin ? githubRepo(origin) : undefined;
+    const localRevision = await maybeGit(workspace.path, 'rev-parse', 'HEAD');
+    const revision = delivery.status === 'running' ? localRevision : delivery.revision ?? localRevision;
+    let pr: any;
+    // Read a known PR even if its source branch/worktree disappeared. Host facts survive local errors.
     if (delivery.mode === 'review' || delivery.policy === 'pull-request') {
       if (!slug) throw new UserError('PR verification currently requires a GitHub origin and authenticated gh CLI.');
-      const prs = await this.hostingJson(workspace.path, ['pr', 'list', '--repo', slug, '--head', workspace.branch, '--state', 'all', '--json', 'url,state,headRefOid,baseRefName,isDraft,mergeCommit,statusCheckRollup,reviewDecision']);
-      const pr = prs.find((p: any) => p.headRefOid === revision && p.baseRefName === delivery.baseBranch && (p.state === 'OPEN' || p.state === 'MERGED'));
-      if (!pr) throw new UserError(delivery.mode === 'review' ? 'No PR for this revision is ready. The workspace has been kept.' : 'The PR has not merged this revision. The workspace has been kept.');
-      if (pr.isDraft || pr.reviewDecision === 'CHANGES_REQUESTED') throw new DeliveryPending('The PR needs review changes. Continuing in the owning thread.', true);
-      await assertChecksWithProgress(workspace.path, slug, revision, pr.statusCheckRollup ?? [], this.hostingJson);
-      pullRequestUrl = pr.url;
+      const linked = delivery.pullRequest ?? pullRequestIdentity(delivery.pullRequestUrl);
+      if (linked && linked.repository.toLowerCase() !== slug.toLowerCase()) throw new UserError('The PR repository no longer matches origin. Request Ship again.');
+      if (linked) pr = await this.hosting(workspace.sourcePath, ['pr', 'view', String(linked.number), '--repo', slug, '--json', PR_FIELDS]);
+      else {
+        const prs = await this.hosting(workspace.sourcePath, ['pr', 'list', '--repo', slug, '--head', workspace.branch, '--state', 'all', '--json', PR_FIELDS]);
+        pr = prs.find((p: any) => p.headRefOid === revision && p.baseRefName === delivery.baseBranch);
+      }
+      if (!pr) throw new UserError('No PR for this revision was found. The workspace has been kept.');
+      const identity = pullRequestIdentity(pr.url);
+      const state = String(pr.state).toLowerCase() as DeliveryPullRequest['state'];
+      if (!identity || identity.repository.toLowerCase() !== slug.toLowerCase() || (linked && identity.number !== linked.number) || !['open', 'closed', 'merged'].includes(state)) throw new UserError('Could not verify the linked PR identity.');
+      const pullRequest: DeliveryPullRequest = { ...identity, state, headRevision: pr.headRefOid, baseBranch: pr.baseRefName,
+        ...(pr.mergeCommit?.oid ? { mergeRevision: pr.mergeCommit.oid } : {}), ...(pr.mergedAt ? { mergedAt: pr.mergedAt } : {}) };
+      // Persist the link before readiness checks, including pending/failing check results.
+      await record({ pullRequest, pullRequestUrl: pr.url, checkedAt, ...(revision ? { revision } : {}),
+        ...(state === 'merged' ? { publishedRevision: pr.mergeCommit?.oid, integratedAt: pr.mergedAt ?? result.integratedAt ?? checkedAt } : {}) });
+      if (pr.baseRefName !== delivery.baseBranch) throw new UserError('The PR targets a different branch. Request Ship again with the intended target.');
+      if (state === 'closed') throw new UserError('The PR was closed without merging. The workspace has been kept.');
+      if (!revision || pr.headRefOid !== revision) throw new UserError('The PR head changed after this revision was verified. Request Ship again to verify the new work.');
+    }
+    if (!localRevision) throw new UserError('The owned worktree is unavailable. Its delivery cannot be verified locally.');
+    if (localRevision !== revision) throw new UserError('New commits need to be shipped before delivery can complete.');
+    if (await git(workspace.path, 'branch', '--show-current') !== workspace.branch) throw new UserError('The worktree’s branch changed. Restore its owned branch before delivery.');
+    if (await git(workspace.path, 'status', '--porcelain', '--untracked-files=all')) throw new UserError('Uncommitted work remains. The workspace has been kept.');
+    if (delivery.mode === 'ship' && revision === workspace.startRevision) throw new UserError('Nothing to ship: this thread has no new commits. The workspace has been kept.');
+    await record({ revision, checkedAt });
+    let publishedRevision = revision;
+    if (pr) {
       if (pr.state === 'OPEN') {
-        await verifyGitHubChecks(workspace.path, slug, revision, delivery.requestedAt, this.hostingJson);
-        if (delivery.mode === 'review') return { ...delivery, ci: undefined, status: 'ready', revision, pullRequestUrl, detail: 'Ready for review. Workspace retained.' };
+        if (pr.isDraft || pr.reviewDecision === 'CHANGES_REQUESTED') throw new DeliveryPending('The PR needs review changes. Continuing in the owning thread.', true, 'review');
+        if (pr.mergeable === 'CONFLICTING') throw new DeliveryPending('The PR has conflicts. Continuing in the owning thread.', true, 'merge');
+        await assertChecksWithProgress(workspace.sourcePath, slug!, revision, pr.statusCheckRollup ?? [], this.hosting);
+        await verifyGitHubChecks(workspace.sourcePath, slug!, revision!, delivery.requestedAt, this.hosting);
         if (pr.reviewDecision === 'REVIEW_REQUIRED') throw new DeliveryPending('Waiting for the required PR review.', false, 'review');
-        throw new DeliveryPending('The PR is ready. Continuing the authorized merge in the owning thread.', true);
+        if (delivery.mode === 'review') return { ...result, ci: undefined, status: 'ready', waitingOn: 'merge', detail: undefined, observationError: undefined, observationFailures: 0 };
+        if (pr.autoMergeRequest || pr.mergeStateStatus === 'QUEUED') throw new DeliveryPending('Waiting for the PR to merge.', false, 'merge');
+        throw new DeliveryPending('The PR is ready. Continuing the authorized merge in the owning thread.', true, 'merge');
       }
       publishedRevision = pr.mergeCommit?.oid;
       if (!publishedRevision) throw new UserError('Could not verify the merged commit.');
     }
+    try { await git(workspace.path, 'fetch', '--quiet', 'origin', `refs/heads/${delivery.baseBranch}:refs/remotes/origin/${delivery.baseBranch}`); }
+    catch { throw new DeliveryUnavailable('Could not read the latest target branch on origin. Retrying without publishing again.'); }
     if (await maybeGit(workspace.path, 'merge-base', '--is-ancestor', publishedRevision, `refs/remotes/origin/${delivery.baseBranch}`) === null) throw new UserError('This revision has not reached the target branch. The workspace has been kept.');
-    if (slug) await verifyGitHubChecks(workspace.path, slug, publishedRevision, delivery.requestedAt, this.hostingJson);
-    return { ...delivery, ci: undefined, status: 'delivered', revision, publishedRevision, pullRequestUrl, detail: undefined };
+    await record({ publishedRevision, integratedAt: result.integratedAt ?? checkedAt });
+    if (slug) await verifyGitHubChecks(workspace.sourcePath, slug, publishedRevision, result.integratedAt ?? delivery.requestedAt, this.hosting);
+    // Host reads can take time. Files or commits added meanwhile still belong to this thread.
+    if (await git(workspace.path, 'rev-parse', 'HEAD') !== revision || await git(workspace.path, 'branch', '--show-current') !== workspace.branch
+      || await git(workspace.path, 'status', '--porcelain', '--untracked-files=all')) throw new UserError('The worktree changed during delivery verification. Its new work has been kept.');
+    return { ...result, ci: undefined, status: 'delivered', revision, publishedRevision, completedAt: result.completedAt ?? checkedAt, waitingOn: undefined, detail: undefined, observationError: undefined, observationFailures: 0 };
   }
 
   async release(threadId: string, workspace: ThreadWorkspace, revision: string) {
@@ -132,11 +180,16 @@ export class DeliveryGit {
 function githubRepo(origin: string) {
   return origin.match(/(?:github\.com[/:])([^/]+\/[^/]+?)(?:\.git)?\/?$/i)?.[1];
 }
+function pullRequestIdentity(url?: string): Pick<DeliveryPullRequest, 'host' | 'repository' | 'number' | 'url'> | undefined {
+  const match = url?.match(/^https:\/\/github\.com\/([^/]+\/[^/]+)\/pull\/([1-9]\d*)\/?$/i);
+  if (!match || !Number.isSafeInteger(Number(match[2]))) return undefined;
+  return { host: 'github.com', repository: match[1]!, number: Number(match[2]), url: url! };
+}
 async function ghJson(cwd: string, args: string[]): Promise<any> {
   try {
     const { stdout } = await exec('gh', args, { cwd, windowsHide: true, timeout: 30_000, maxBuffer: 4 * 1024 * 1024 });
     return JSON.parse(stdout);
-  } catch { throw new UserError('Could not verify GitHub delivery or checks. Sign in to gh on this machine and try Ship again.'); }
+  } catch { throw new DeliveryUnavailable('Could not read GitHub delivery or checks. Check gh sign-in on this machine; observation will retry.'); }
 }
 function assertChecks(checks: any[]) {
   const conclusions = checks.map(c => String(c.conclusion ?? c.state).toLowerCase());

@@ -34,6 +34,10 @@ export const Close = () => (
 export const Queue = () => <svg {...base}><path d="M4 6h12M4 12h8M4 18h8M18 12v8m-4-4h8" /></svg>;
 export const Ship = () => <svg {...base}><path d="M12 15V3m-5 5 5-5 5 5M4 14v6h16v-6" /></svg>;
 export const Archive = () => <svg {...base}><rect x="3" y="3" width="18" height="5" rx="1" /><path d="M5 8v12h14V8m-10 4h6" /></svg>;
+/** An open pull request: two branches, the second still pointing back. */
+export const PullRequest = () => <svg {...base}><circle cx="6" cy="6" r="2.6" /><circle cx="18" cy="18" r="2.6" /><path d="M6 8.6V21" /><path d="M12.5 6H16a2 2 0 0 1 2 2v7.4" /></svg>;
+export const Merge = () => <svg {...base}><circle cx="6" cy="6" r="2.6" /><circle cx="18" cy="18" r="2.6" /><path d="M6 21V8.6" /><path d="M6 9a9 9 0 0 0 9.4 9" /></svg>;
+export const Alert = () => <svg {...base}><circle cx="12" cy="12" r="9" /><path d="M12 8v4.5M12 16h.01" /></svg>;
 export const Play = () => <svg {...base}><path d="m7 4 14 8-14 8Z" /></svg>;
 export const ArrowLeft = () => (
   <svg {...base}>

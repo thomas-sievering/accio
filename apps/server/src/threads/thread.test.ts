@@ -87,6 +87,12 @@ describe('shelving', () => {
     expect(fromStored(old)).toMatchObject({ snoozedUntil: null, settledAt: null });
   });
 
+  it('observes old pending deliveries conservatively without bulk-settling historical completed work', () => {
+    const delivery = { mode: 'review' as const, policy: 'direct' as const, requestedAt: '2026-01-01T00:00:00Z', baseBranch: 'main' };
+    expect(fromStored({ ...t0, delivery: { ...delivery, status: 'ready' } }).delivery).toMatchObject({ id: `${t0.id}:${delivery.requestedAt}`, workVersion: 0, autoSettle: true });
+    expect(fromStored({ ...t0, delivery: { ...delivery, status: 'delivered' } }).delivery!.autoSettle).toBe(false);
+  });
+
   it('moves threads off the Claude Code account default, which is no longer a choice', () => {
     expect(fromStored({ ...t0, model: { harnessId: 'claudeCode', modelId: 'default' } }).model).toEqual(DEFAULT_MODEL);
     expect(fromStored({ ...t0, model: { harnessId: 'claudeCode', modelId: 'haiku' } }).model).toEqual({ harnessId: 'claudeCode', modelId: 'haiku' });
