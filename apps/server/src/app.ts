@@ -29,7 +29,7 @@ export type AppOptions = {
 /** Infrastructure a test can swap out. Grows as slices need it. */
 export type AppDeps = {
   harness: Harness;
-  /** Reaches Anthropic for sign-in and token refresh. */
+  /** Reaches Anthropic for sign-in, token refresh and account limits. */
   claudeFetch: Fetch;
   /** Where the hub forwards threads' requests. */
   anthropicUrl: string;

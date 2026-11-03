@@ -13,6 +13,8 @@ export function testJWT(who: string, expired = false) {
 /** Real RPC and disk storage around a scripted app-server, without using a developer's accounts. */
 export class FakeCodex {
   clients: FakeCodexClient[] = [];
+  rateLimitsResponse: unknown = { rateLimits: null };
+  rateLimitsError?: Error;
   holdTurns = false;
   factory: CodexFactory = async (options) => {
     const client = new FakeCodexClient(options, this);
@@ -50,6 +52,9 @@ export class FakeCodexClient implements CodexClient {
         result = { account: { type: 'chatgpt', email: `${auth.tokens.account_id}@example.com`, planType: 'pro' } }; break;
       }
       case 'model/list': result = { data: fakeModels, nextCursor: null }; break;
+      case 'account/rateLimits/read':
+        if (this.host.rateLimitsError) throw this.host.rateLimitsError;
+        result = this.host.rateLimitsResponse; break;
       case 'thread/start': result = { thread: { id: 'codex-session' } }; break;
       case 'thread/resume': result = { thread: { id: params.threadId } }; break;
       case 'turn/start':

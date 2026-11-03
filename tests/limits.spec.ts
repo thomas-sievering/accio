@@ -1,0 +1,162 @@
+import { expect, test, type WebSocketRoute } from '@playwright/test';
+
+test('limits follow profiles and shared accounts through sign-in, retry, reset, settings and composer navigation', async ({ page, context, baseURL }, testInfo) => {
+  const errors: string[] = [];
+  let disconnected = false;
+  const sockets: WebSocketRoute[] = [];
+  await page.routeWebSocket('**/ws?*', (socket) => {
+    if (disconnected) socket.close({ code: 1012, reason: 'Fixture disconnect' });
+    else { socket.connectToServer(); sockets.push(socket); }
+  });
+  page.on('pageerror', (error) => errors.push(error.message));
+  // Sign-in is faked only at the provider boundary; every Accio action uses its UI.
+  await context.route('https://**/*', (route) => route.fulfill({ status: 200, body: 'Provider fixture: finish sign-in in Accio.' }));
+  context.on('page', (popup) => { if (popup !== page) void popup.close(); });
+  const button = (name: string) => page.getByRole('button', { name, exact: true });
+  const section = (name: string) => page.locator('.sidebar nav').getByRole('button', { name, exact: true });
+  const card = (name: string) => page.getByRole('article', { name: new RegExp(`^${name},`) });
+  const settings = async (name: string) => {
+    if (await button('Settings').isVisible()) await button('Settings').click();
+    await section(name).click();
+  };
+  const createAccount = async (name: string, code?: string, openai = false) => {
+    await settings('Accounts');
+    await page.getByRole('button', { name: new RegExp(`^Add ${openai ? 'ChatGPT' : 'Claude'} account`) }).click();
+    await page.getByRole('textbox', { name: 'Account name' }).fill(name);
+    await button('Add account').click();
+    if (openai) {
+      await button('Sign in with ChatGPT').click();
+      await expect(page.getByText('Signed in as', { exact: false })).toBeVisible({ timeout: 10_000 });
+    } else if (code) await signIn(code);
+    await button('Done').click();
+  };
+  const signIn = async (code: string) => {
+    const again = button('Sign in again');
+    await (await again.isVisible() ? again : button('Sign in with Claude')).click();
+    await page.getByPlaceholder('Code from Claude').fill(code);
+    await button('Finish').click();
+    await expect(page.getByText('Signed in as', { exact: false })).toBeVisible();
+  };
+  const selectAccounts = async (name: string, claude: string, chatgpt: string) => {
+    await settings('Profiles');
+    await page.getByRole('button', { name: new RegExp(`^${name} `) }).click();
+    await page.getByRole('combobox', { name: /Anthropic · Claude account/ }).selectOption({ label: `${claude} · ${claude === 'Shared Claude' ? 'shared' : 'work'}@example.com` });
+    await page.getByRole('combobox', { name: /OpenAI · ChatGPT account/ }).selectOption({ label: `${chatgpt} · shared-chatgpt@example.com` });
+    await button('Save').click();
+  };
+
+  await page.goto(`${baseURL}/#token=isolated-limits-test-token`);
+  await page.getByPlaceholder('personal, work…').fill('Personal');
+  await button('Add').click();
+  await createAccount('Shared Claude', 'shared');
+  await createAccount('Team Claude', 'work');
+  await createAccount('Shared ChatGPT', undefined, true);
+  await settings('Profiles');
+  await page.getByRole('button', { name: /^Add profile / }).click();
+  await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Work');
+  await button('Add profile').click();
+  await button('Done').click();
+  await selectAccounts('Personal', 'Shared Claude', 'Shared ChatGPT');
+  await selectAccounts('Work', 'Team Claude', 'Shared ChatGPT');
+  await button('Back').click();
+  await button('Limits').click();
+  await expect(page.getByRole('radio', { name: 'All profiles' })).toHaveAttribute('aria-checked', 'true');
+  await expect(page.locator('.limits-card')).toHaveCount(3);
+  await expect(page.getByText('Shared with Personal. One allowance, shown under Personal.', { exact: true })).toBeVisible();
+  await button('Show limits').click();
+  await expect(card('Shared ChatGPT')).toBeFocused();
+  await expect(card('Shared Claude').getByRole('meter', { name: '5-hour allowance remaining' })).toHaveAttribute('aria-valuenow', '52');
+  await expect(card('Team Claude')).toContainText('Weekly limit reached.');
+  await expect(card('Team Claude').getByRole('meter', { name: '5-hour allowance remaining' })).toHaveAttribute('aria-valuenow', '67');
+  await expect(card('Team Claude').locator('.limit-meter.exhausted')).toHaveCSS('display', 'grid');
+  await card('Shared Claude').getByText('Model-specific limits', { exact: false }).click();
+  await expect(card('Shared Claude').getByRole('meter', { name: 'Fable weekly allowance remaining' })).toHaveAttribute('aria-valuenow', '99');
+  await page.screenshot({ path: testInfo.outputPath('all-profiles.png'), fullPage: true });
+
+  // The provider's second Shared Claude read fails. The original snapshot must stay.
+  const refresh = card('Shared Claude').getByRole('button', { name: 'Refresh this account’s limits' });
+  await expect(refresh).toBeVisible({ timeout: 10_000 });
+  await refresh.click();
+  await expect(card('Shared Claude')).toContainText('Anthropic could not provide this account’s limits.');
+  await expect(card('Shared Claude')).toContainText('Last known');
+  await expect.poll(() => card('Shared Claude').locator('.limits-tag.warn').evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await expect(card('Shared Claude').getByRole('meter', { name: '5-hour allowance remaining' })).toHaveAttribute('aria-valuenow', '52');
+  await expect(card('Shared Claude').getByRole('button', { name: /^Retry / })).toBeDisabled();
+  await page.screenshot({ path: testInfo.outputPath('failed-refresh.png'), fullPage: true });
+  await expect(card('Shared Claude').getByRole('button', { name: 'Retry', exact: true })).toBeEnabled({ timeout: 10_000 });
+  await card('Shared Claude').getByRole('button', { name: 'Retry', exact: true }).click();
+  await expect(card('Shared Claude').getByText('Last known', { exact: true })).toHaveCount(0);
+
+  disconnected = true;
+  for (const socket of sockets) socket.close({ code: 1012, reason: 'Fixture disconnect' });
+  await expect(page.getByText('Not connected to accio’s server.', { exact: false })).toBeVisible();
+  await expect(card('Shared Claude')).toContainText('Last known');
+  await expect(card('Shared Claude').getByRole('meter', { name: '5-hour allowance remaining' })).toHaveAttribute('aria-valuenow', '52');
+  await expect(page.locator('.limits-refresh-all')).toBeDisabled();
+  await page.screenshot({ path: testInfo.outputPath('disconnected.png'), fullPage: true });
+  disconnected = false;
+  await expect(page.getByText('Not connected to accio’s server.', { exact: false })).toHaveCount(0);
+  await expect(card('Shared Claude').getByText('Last known', { exact: true })).toHaveCount(0);
+
+  // Radio keyboard behavior and narrow card layout; desktop chrome stays present.
+  await page.getByRole('radio', { name: 'Personal', exact: true }).click();
+  await expect(card('Shared ChatGPT')).toContainText('Shared with Work');
+  await page.getByRole('radio', { name: 'Personal', exact: true }).press('ArrowRight');
+  await expect(page.getByRole('radio', { name: 'Work', exact: true })).toBeFocused();
+  await page.setViewportSize({ width: 820, height: 900 });
+  await expect.poll(() => card('Team Claude').evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('narrow.png'), fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 900 });
+
+  // Account settings entered from Limits return to Limits and signing out removes meters.
+  await card('Team Claude').getByRole('button', { name: 'Team Claude settings' }).click();
+  await expect(page.getByRole('textbox', { name: 'Account name' })).toHaveValue('Team Claude');
+  await expect(page.locator('.account-limits').getByRole('meter')).toHaveCount(2);
+  await button('Sign out').click();
+  await expect(page.locator('.account-limits')).toContainText('Signed out.');
+  await button('Back').click();
+  await expect(card('Team Claude').getByRole('meter')).toHaveCount(0);
+  await card('Team Claude').getByRole('button', { name: 'Sign in', exact: true }).click();
+  await signIn('work');
+  await expect(page.locator('.account-limits').getByRole('meter')).toHaveCount(2);
+  await button('Back').click();
+
+  // Unselected account settings read limits too, and reauthentication rechecks immediately.
+  await createAccount('Unused Claude', 'unknown');
+  await page.getByRole('button', { name: /^Unused Claude / }).click();
+  await expect(page.locator('.account-limits')).toContainText('Unknown');
+  await signIn('empty');
+  await expect(page.locator('.account-limits')).toContainText('No limits were reported');
+  await signIn('expired');
+  await expect(page.locator('.account-limits')).toContainText('Reset time passed · awaiting confirmation');
+  await expect(page.locator('.account-limits').getByRole('meter', { name: '5-hour allowance remaining' })).toHaveAttribute('aria-valuenow', '0');
+  await button('Back').click();
+
+  // The active draft, not the previous Limits selection, determines default scope.
+  await button('Close limits').click();
+  await page.locator('.sidebar').getByRole('button', { name: 'New thread', exact: true }).click();
+  await page.getByRole('option', { name: 'No project', exact: true }).click();
+  await page.getByRole('option', { name: /Personal/ }).click();
+  await expect(page.locator('.limits-chip')).toBeVisible();
+  await page.locator('.composer textarea').fill('A fixture-only turn');
+  await page.locator('.limits-chip').click();
+  await expect(page.getByRole('radio', { name: 'Personal', exact: true })).toHaveAttribute('aria-checked', 'true');
+  await button('Close limits').click();
+  await expect(page.locator('.composer textarea')).toHaveValue('A fixture-only turn');
+  await expect(page.locator('.limits-chip')).toBeFocused();
+  await page.locator('.limits-chip').click();
+  await card('Shared Claude').getByRole('button', { name: 'Shared Claude settings' }).click();
+  await button('Back').click();
+  await button('Close limits').click();
+  await expect(page.locator('.composer textarea')).toHaveValue('A fixture-only turn');
+  await button('Send').click();
+  await expect(page.getByText('Limits fixture reply', { exact: true })).toBeVisible();
+  await page.locator('.composer textarea').fill('Unsent follow-up');
+  await page.locator('.limits-chip').click();
+  await expect(page.getByRole('radio', { name: 'Personal', exact: true })).toHaveAttribute('aria-checked', 'true');
+  await page.getByRole('button', { name: /A fixture-only turn/ }).click();
+  await expect(button('Close limits')).toHaveCount(0);
+  await expect(page.locator('.composer textarea')).toHaveValue('Unsent follow-up');
+  expect(errors).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath('composer.png'), fullPage: true });
+});

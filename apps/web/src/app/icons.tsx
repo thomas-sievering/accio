@@ -169,3 +169,8 @@ export const Star = ({ filled = false }: { filled?: boolean }) => (
     <path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z" />
   </svg>
 );
+export const Limits = () => (
+  <svg {...base}>
+    <path d="M6 20v-6M12 20V4M18 20V10" />
+  </svg>
+);

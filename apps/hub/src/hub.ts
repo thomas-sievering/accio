@@ -14,6 +14,8 @@ import {
 import { JsonFile } from '@accio/persistence';
 import { loadAccounts, type AccountData, type StoredAccount } from './migrateAccounts.js';
 import { OpenAIAuth } from './openaiAuth.js';
+import { AccountLimits, LimitsReadError } from './limits.js';
+import { anthropicLimits, openaiLimits, retryAfterMs } from './providerLimits.js';
 
 /**
  * GLOSSARY: Hub. Holds named provider accounts selected by profiles and hands out one access
@@ -39,6 +41,7 @@ export type AccountSummary = {
 const SIGN_IN_TTL_MS = 15 * 60 * 1000;
 
 export class Hub {
+  readonly limits: AccountLimits;
   private file: JsonFile<AccountData>;
   private queue: Promise<unknown> = Promise.resolve();
   private profiles: HubProfile[] = [];
@@ -53,6 +56,7 @@ export class Hub {
     private openai: OpenAIAuth = new OpenAIAuth(home),
   ) {
     this.file = new JsonFile(join(home, 'hub', 'profiles.json'), () => ({ profiles: [], accounts: [] }));
+    this.limits = new AccountLimits(() => this.accountViews(), (id, signal) => this.readAccountLimits(id, signal));
   }
 
   /** The file that holds the hub's profiles and accounts. */
@@ -144,6 +148,7 @@ export class Hub {
     return this.change(async () => {
       if (this.pending.get(signInId) !== p) throw new SignInError('This sign-in was cancelled. Start it again.');
       await this.setAccount(p.accountId, account);
+      this.limits.invalidate(p.accountId);
       this.pending.delete(signInId);
       return this.accountView(p.accountId);
     });
@@ -168,6 +173,7 @@ export class Hub {
       if (result.status === 'pending') return result;
       const previous = this.requireAccount(id).openai;
       await this.commit(this.profiles, this.accounts.map((a) => a.id === id ? { ...a, openai: result.account } : a));
+      this.limits.invalidate(id);
       this.openaiPending.delete(signInId);
       await this.openai.finish(signInId);
       if (previous) await this.openai.remove(previous.credentialId);
@@ -210,6 +216,14 @@ export class Hub {
   /** A usable access token for the profile, refreshed first when close to expiry (or when forced). */
   async accessToken(profileId: string, { force = false } = {}): Promise<string | null> {
     const accountId = this.require(profileId).accountId;
+    if (!accountId) return null;
+    await this.accountAccessToken(accountId, force);
+    // Preserve profile routing if its selection changed while the token refreshed.
+    const currentId = this.profiles.find((p) => p.id === profileId)?.accountId;
+    return this.accounts.find((a) => a.id === currentId)?.account?.accessToken ?? null;
+  }
+
+  private async accountAccessToken(accountId: string, force = false): Promise<string | null> {
     const account = this.accounts.find((a) => a.id === accountId)?.account;
     if (!account) return null;
     if (!force && !needsRefresh(account)) return account.accessToken;
@@ -229,12 +243,41 @@ export class Hub {
       );
     }
     await pending;
-    // Sign-out, account switching, or a fresh sign-in may have happened during refresh.
-    const currentId = this.profiles.find((p) => p.id === profileId)?.accountId;
-    return this.accounts.find((a) => a.id === currentId)?.account?.accessToken ?? null;
+    return this.accounts.find((a) => a.id === accountId)?.account?.accessToken ?? null;
+  }
+
+  refreshLimits(ids = this.accounts.map((a) => a.id), force = false) {
+    for (const id of ids) this.requireAccount(id);
+    return this.limits.refresh(ids, force);
+  }
+
+  private async readAccountLimits(id: string, signal: AbortSignal) {
+    const account = this.requireAccount(id);
+    if (account.providerId === 'openai') {
+      if (!account.openai) throw new LimitsReadError('signInRequired', 'Sign in to this ChatGPT account to read its limits.');
+      return openaiLimits(await this.openai.rateLimits(account.openai, signal));
+    }
+    const send = async (force = false) => {
+      const token = await this.accountAccessToken(id, force);
+      signal.throwIfAborted();
+      if (!token) throw new LimitsReadError('signInRequired', 'Sign in to this Claude account to read its limits.');
+      return this.fetchImpl('https://api.anthropic.com/api/oauth/usage', { signal, headers: {
+        authorization: `Bearer ${token}`, 'anthropic-beta': 'oauth-2025-04-20', accept: 'application/json',
+      } });
+    };
+    let response = await send();
+    if (response.status === 401) { await response.body?.cancel(); response = await send(true); }
+    if (!response.ok) {
+      await response.body?.cancel();
+      if (response.status === 401 || response.status === 403) throw new LimitsReadError('signInRequired', 'Sign in to this Claude account again to read its limits.');
+      if (response.status === 429) throw new LimitsReadError('rateLimited', 'Anthropic is limiting usage checks. Try again later.', retryAfterMs(response.headers.get('retry-after')));
+      throw new LimitsReadError('unavailable', 'Anthropic could not provide this account’s limits. Try again.', retryAfterMs(response.headers.get('retry-after')));
+    }
+    return anthropicLimits(await response.json());
   }
 
   async close(): Promise<void> {
+    await this.limits.close();
     await this.queue.catch(() => {});
     await this.openai.close();
     await this.file.idle();
@@ -288,6 +331,7 @@ export class Hub {
       const account = this.requireAccount(id);
       if (this.profiles.some((p) => p.accountId === id || p.openaiAccountId === id)) throw new SignInError('Remove this account from its profiles before deleting it.');
       await this.commit(this.profiles, this.accounts.filter((a) => a.id !== id));
+      this.limits.invalidate(id);
       this.cancelSignIn(id);
       await this.cancelOpenAISignIn(id);
       if (account.openai) await this.openai.remove(account.openai.credentialId);
@@ -298,6 +342,7 @@ export class Hub {
     return this.change(async () => {
       const account = this.requireAccount(id);
       await this.commit(this.profiles, this.accounts.map((a) => a.id === id ? { ...a, account: null, openai: null } : a));
+      this.limits.invalidate(id);
       this.cancelSignIn(id);
       await this.cancelOpenAISignIn(id);
       if (account.openai) await this.openai.remove(account.openai.credentialId);

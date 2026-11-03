@@ -4,6 +4,7 @@ import { useState, type ReactNode } from 'react';
 import { useClient } from '../app/connection';
 import { useLive } from '../app/useLive';
 import { accountForModel, defaultModel, useProfiles } from '../profiles/profiles';
+import { LimitsIndicator } from '../limits/LimitsIndicator';
 import { FolderLink } from '../projects/FolderLink';
 import { ProjectMark } from '../projects/ProjectMark';
 import { useProjects } from '../projects/projects';
@@ -24,7 +25,7 @@ function usePlace(checkoutId: string, profileId?: string) {
   return { checkout, project, profile };
 }
 
-export function ThreadPane({ thread, onOpenProfile }: { thread: ThreadView; onOpenProfile: (profileId: string) => void }) {
+export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits }: { thread: ThreadView; active?: boolean; onOpenProfile: (profileId: string) => void; onOpenLimits: (profileId: string) => void }) {
   const client = useClient();
   const place = usePlace(thread.checkoutId, thread.profileId);
   const { items, error, retry } = useTranscript(thread.id);
@@ -53,11 +54,14 @@ export function ThreadPane({ thread, onOpenProfile }: { thread: ThreadView; onOp
         onStop={running ? async () => void (await client.call('threads.stop', { threadId: thread.id })) : undefined}
         placeholder={running ? 'Working…' : `Ask ${thread.model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}
         onSend={async (text) => void (await client.call('threads.send', { threadId: thread.id, text }))}
-        toolbar={<ModelPicker key={thread.id} profileId={thread.profileId} harnessId={thread.model.harnessId} value={thread.model} disabled={running} onChange={async (model) => {
-          setSavingModel(true);
-          try { await client.call('threads.setModel', { threadId: thread.id, model }); }
-          finally { setSavingModel(false); }
-        }} />}
+        toolbar={<>
+          <ModelPicker key={thread.id} profileId={thread.profileId} harnessId={thread.model.harnessId} value={thread.model} disabled={running} onChange={async (model) => {
+            setSavingModel(true);
+            try { await client.call('threads.setModel', { threadId: thread.id, model }); }
+            finally { setSavingModel(false); }
+          }} />
+          {place.profile && <LimitsIndicator active={active} account={accountForModel(place.profile, thread.model)} onOpen={() => onOpenLimits(place.profile!.id)} />}
+        </>}
       />
     </>
   );
@@ -67,7 +71,7 @@ export function ThreadPane({ thread, onOpenProfile }: { thread: ThreadView; onOp
  * A new thread before its first message, centred under a question as in T3 Code.
  * Sending creates the thread and its first turn together.
  */
-export function DraftPane({ checkoutId, profileId, onOpenProfile }: { checkoutId: string; profileId?: string; onOpenProfile: (profileId: string) => void }) {
+export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile, onOpenLimits }: { checkoutId: string; profileId?: string; active?: boolean; onOpenProfile: (profileId: string) => void; onOpenLimits: (profileId: string) => void }) {
   const client = useClient();
   const { select } = useThreads();
   const place = usePlace(checkoutId, profileId);
@@ -101,6 +105,7 @@ export function DraftPane({ checkoutId, profileId, onOpenProfile }: { checkoutId
               {online.map((m) => <option key={m.id} value={m.id}>{m.name}{m.thisMachine ? ' (local)' : ''}</option>)}
             </select>
             <ModelPicker profileId={place.profile?.id} value={model} onChange={async (model) => setChoice({ checkoutId, profileId: place.profile?.id, model })} />
+            {place.profile && <LimitsIndicator active={active} account={accountForModel(place.profile, model)} onOpen={() => onOpenLimits(place.profile!.id)} />}
           </>}
         />
       </div>

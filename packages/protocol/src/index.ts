@@ -4,6 +4,7 @@ import { harnessMethods } from './harnesses.js';
 import { modelMethods, type ModelEvents } from './models.js';
 import { hubMethods } from './hub.js';
 import { profileMethods, type ProfileEvents } from './profiles.js';
+import { limitsMethods, type LimitsEvents } from './limits.js';
 import { projectMethods, type ProjectEvents } from './projects.js';
 import { threadMethods, type ThreadEvents } from './threads.js';
 
@@ -13,6 +14,7 @@ export * from './hub.js';
 export * from './harnesses.js';
 export * from './models.js';
 export * from './profiles.js';
+export * from './limits.js';
 export * from './projects.js';
 export * from './threads.js';
 export * from './media.js';
@@ -23,6 +25,7 @@ export const methods = {
   ...harnessMethods,
   ...modelMethods,
   ...profileMethods,
+  ...limitsMethods,
   ...projectMethods,
   ...threadMethods,
 };
@@ -33,7 +36,7 @@ export type ParamsOf<M extends MethodName> = z.input<Methods[M]['params']>;
 export type ResultOf<M extends MethodName> = Methods[M]['result'];
 
 /** Server-pushed events and their payloads. */
-export type Events = MachineEvents & ProfileEvents & ProjectEvents & ThreadEvents & ModelEvents;
+export type Events = MachineEvents & ProfileEvents & LimitsEvents & ProjectEvents & ThreadEvents & ModelEvents;
 export type EventName = keyof Events;
 
 export const DEFAULT_PORT = 47321;

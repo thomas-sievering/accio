@@ -3,6 +3,7 @@ import { mkdir, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { startCodex, type CodexClient, type CodexFactory } from '@accio/codex';
 import { SignInError } from './claudeOAuth.js';
+import { LimitsReadError } from './limits.js';
 
 export type CodexModel = { id: string; name: string; description: string; isDefault: boolean };
 /** Only metadata is stored in profiles.json. Codex owns auth.json inside this hub-only credential home. */
@@ -86,6 +87,27 @@ export class OpenAIAuth {
     const pending = this.loadCredentials(account, force).finally(() => this.refreshing.delete(account.credentialId));
     this.refreshing.set(account.credentialId, pending);
     return pending;
+  }
+
+  /** Account-only query in the hub credential home; never starts a thread or turn. */
+  async rateLimits(account: OpenAIAccount, signal: AbortSignal): Promise<unknown> {
+    // Reuse the proxy's refresh coordination rather than rotate tokens independently.
+    await this.credentials(account);
+    signal.throwIfAborted();
+    const dir = this.directory(account.credentialId);
+    const client = await this.factory({ home: dir, cwd: dir, signal });
+    const abort = () => { void client.close(); };
+    signal.addEventListener('abort', abort, { once: true });
+    try {
+      signal.throwIfAborted();
+      const result = await client.request('account/read', { refreshToken: false });
+      if (result.account?.type !== 'chatgpt') throw new LimitsReadError('signInRequired', 'Sign in to this ChatGPT account again to read its limits.');
+      signal.throwIfAborted();
+      return await client.request('account/rateLimits/read', null);
+    } finally {
+      signal.removeEventListener('abort', abort);
+      await client.close();
+    }
   }
 
   private async loadCredentials(account: OpenAIAccount, force: boolean): Promise<OpenAICredentials> {

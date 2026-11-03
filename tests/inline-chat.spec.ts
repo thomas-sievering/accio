@@ -123,6 +123,10 @@ test('reading position stays put through updates and jump-to-latest restores fol
   await scroller.evaluate((element) => { element.scrollTop = element.scrollHeight / 2; });
   await expect(page.getByRole('button', { name: /Jump to latest/ })).toBeVisible();
   const before = await scroller.evaluate((element) => element.scrollTop);
+  await page.getByRole('button', { name: 'Limits', exact: true }).click();
+  await page.getByRole('button', { name: 'Close limits', exact: true }).click();
+  await expect(page.getByRole('button', { name: /Jump to latest/ })).toBeVisible();
+  await expect.poll(async () => Math.abs(await scroller.evaluate((element) => element.scrollTop) - before)).toBeLessThan(5);
   await page.locator('textarea').fill('stream update');
   await page.locator('textarea').press('Enter');
   await expect(page.getByText(/Stream complete/).last()).toBeAttached();
