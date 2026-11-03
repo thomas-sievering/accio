@@ -37,6 +37,17 @@ export class Resources {
   async applySkills(id: string, revision: string) { const source = this.data.sources.find(s => s.id === id); const snapshot = this.data.skillSnapshots?.find(s => s.sourceId === id && s.revision === revision); if (!source || !snapshot) throw new Error('Preview this source revision before applying it'); await this.saveSource(source, snapshot.skills); }
   deleteSource(id: string) { return this.save(d => ({ ...d, sources: d.sources.filter(s => s.id !== id), skills: d.skills.filter(s => s.sourceId !== id), skillSelections: Object.fromEntries(Object.entries(d.skillSelections ?? {}).filter(([key]) => !key.startsWith(`${id}:`))), skillSnapshots: (d.skillSnapshots ?? []).filter(s => s.sourceId !== id) })); }
   setSkillScope(id: string, scope: ResourceScope) { return this.save(d => { if (!d.skills.some(s => s.id === id)) throw new Error('No such skill'); return { ...d, skillSelections: { ...d.skillSelections, [id]: scope }, skills: d.skills.map(s => s.id === id ? { ...s, scope } : s) }; }); }
+  /** Update just one project inside the store queue so concurrent selections keep each other. */
+  setSkillProject(id: string, selection: { projectKey: string; enabled: boolean }) {
+    return this.save(d => {
+      const skill = d.skills.find(skill => skill.id === id);
+      if (!skill) throw new Error('No such skill');
+      const projectKeys = skill.scope.projectKeys.filter(key => key !== selection.projectKey);
+      if (selection.enabled) projectKeys.push(selection.projectKey);
+      const scope = { ...skill.scope, projectKeys };
+      return { ...d, skillSelections: { ...d.skillSelections, [id]: scope }, skills: d.skills.map(skill => skill.id === id ? { ...skill, scope } : skill) };
+    });
+  }
   saveMcp(mcp: McpDefinition) { return this.save(d => ({ ...d, mcps: [...d.mcps.filter(m => m.id !== mcp.id), mcp] })); }
   async deleteMcp(id: string) { await this.setCredential(id); await this.save(d => ({ ...d, mcps: d.mcps.filter(m => m.id !== id) })); }
   setToolStatus(status: ToolStatus) { return this.save(d => ({ ...d, toolStatuses: [...d.toolStatuses.filter(s => s.toolId !== status.toolId || s.machineId !== status.machineId), status] })); }

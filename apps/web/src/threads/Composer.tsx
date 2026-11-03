@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { ArrowUp, Close, StopSquare } from '../app/icons';
+import { useAppEvent } from '../app/appEvents';
 import { useAction } from '../app/useAction';
 import { useClient } from '../app/connection';
 
@@ -15,6 +16,7 @@ export function Composer({
   toolbar,
   attachment,
   actions,
+  target,
   draftId = 'new',
 }: {
   onSend: (text: string) => Promise<void>;
@@ -28,6 +30,8 @@ export function Composer({
   attachment?: { label: string; onRemove: () => void };
   /** Compact thread delivery controls, outside the message input. */
   actions?: ReactNode;
+  /** Which `composer.insert` requests this composer accepts: its thread id, or 'draft'. */
+  target?: string;
   draftId?: string;
 }) {
   const client = useClient();
@@ -37,6 +41,21 @@ export function Composer({
   const { busy, error, run } = useAction();
   const sending = useRef(false);
   const input = useRef<HTMLTextAreaElement>(null);
+
+  // Text another pane hands over (such as a skill reference) goes in at the cursor, without replacing the message.
+  useAppEvent('composer.insert', ({ target: to, text: insert }) => {
+    const el = input.current;
+    if (!target || to !== target || !el) return;
+    // A textarea keeps its selection while unfocused.
+    const before = text.slice(0, el.selectionStart);
+    const after = text.slice(el.selectionEnd);
+    const lead = before && !/\s$/.test(before) ? ' ' : '';
+    const trail = after && !/^\s/.test(after) ? ' ' : '';
+    const next = before + lead + insert + trail + after;
+    const end = (before + lead + insert + trail).length;
+    setText(next);
+    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(end, end); });
+  });
 
   // Picking an option is the start of a message: put the cursor there.
   useEffect(() => { if (attachment) input.current?.focus(); }, [attachment?.label]);

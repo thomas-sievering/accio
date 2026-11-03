@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { mediaKind, mediaMimeType, normalizeMarkdownSource, type ChoicePick, type DeliveryMode, type ThreadDelivery, type ParamsOf, type TranscriptItem } from '@accio/protocol';
+import { mediaKind, mediaMimeType, normalizeMarkdownSource, type ChoicePick, type DeliveryMode, type ThreadDelivery, type ParamsOf, type TranscriptItem, type SkillContext, type WorkspaceSkill, type WorkspaceSkills } from '@accio/protocol';
 import type { Profiles } from '../profiles/profiles.js';
 import { configFolderOf } from '../profiles/claudeConfigFolder.js';
 import type { Projects } from '../projects/projects.js';
@@ -43,6 +43,7 @@ import type { AccioTools, ToolAccess } from '../tools/tools.js';
 import { DeliveryGit, DeliveryPending, deliveryPrompt } from './delivery.js';
 import { Previews } from './previews.js';
 import { samePath } from '../projects/project.js';
+import { observedSkillLoads, readSkillFile, repositorySkillTarget, saveRepositorySkill } from '../resources/workspaceSkills.js';
 
 type TurnOptions = { resume?: boolean; retry?: boolean; delivery?: boolean; pick?: ChoicePick };
 type Live = { cursor: number; items: TranscriptItem[]; file: JsonFile<TranscriptItem[]>; saveTimer?: ReturnType<typeof setTimeout> };
@@ -152,6 +153,34 @@ export class Threads {
   register(router: Router) {
     this.secrets.register(router, this.profiles, this.projects, this.broadcast);
     router
+      .on('threads.skills', context => this.workspaceSkills(context))
+      .on('threads.skillContent', async input => {
+        const { scope, skill } = await this.workspaceSkill(input);
+        if (skill.origin === 'library') return { content: await this.resources!.skillContent(skill.id), path: skill.path, editable: false };
+        if (!scope.cwd) throw new UserError('This workspace is unavailable');
+        const file = await repositorySkillTarget(scope.cwd, skill);
+        return { content: await readSkillFile(file), path: skill.path, editable: true };
+      })
+      .on('threads.saveSkillContent', async input => {
+        const save = async () => {
+          const { scope, skill } = await this.workspaceSkill(input);
+          if (!scope.cwd || skill.origin !== 'repository') throw new UserError('Only repository skills can be edited here');
+          if (scope.thread?.status === 'running') throw new UserError('Wait for this turn to finish before editing its skills');
+          const release = scope.checkoutId ? this.projects.useCheckout(scope.checkoutId) : undefined;
+          try { await saveRepositorySkill(scope.cwd, skill, input.content); this.resources!.skillsChanged(); }
+          finally { release?.(); }
+          return null;
+        };
+        return input.threadId ? this.withLifecycle(input.threadId, save) : save();
+      })
+      .on('threads.setSkillEnabled', async input => {
+        const { scope, skill } = await this.workspaceSkill(input);
+        if (!scope.projectId) throw new UserError('Choose a project to enable skills');
+        if (skill.origin !== 'library') throw new UserError('Repository skills are managed in the repository');
+        if (!input.enabled && (skill.enabledBy === 'global' || skill.enabledBy === 'profile')) throw new UserError('This skill is inherited. Change its selection in Settings.');
+        await this.resources!.setProjectSkill(skill.id, scope.projectId, input.enabled);
+        return null;
+      })
       .on('threads.list', () => this.views())
       .on('threads.start', input => this.start(input))
       .on('threads.transcript', async ({ threadId }) => {
@@ -530,7 +559,7 @@ export class Threads {
       }
       const grant = this.tools?.grant(thread.id);
       const turnResources = resources;
-      const turn = this.runTurn(next, turnId, { cwd, prompt, env: resources?.env ?? env, signal: controller.signal, ...(grant ? { tools: grant.access } : {}), resourceInstructions: resources?.instructions, mcps: resources?.mcps }, delivering).finally(() => { turnResources?.release(); grant?.revoke(); });
+      const turn = this.runTurn(next, turnId, { cwd, prompt, env: resources?.env ?? env, signal: controller.signal, ...(grant ? { tools: grant.access } : {}), resourceInstructions: resources?.instructions, mcps: resources?.mcps }, delivering, resources?.skills).finally(() => { turnResources?.release(); grant?.revoke(); });
       resources = undefined;
       this.turns.add(turn);
       void turn.then(() => this.turns.delete(turn), (err) => {
@@ -552,6 +581,7 @@ export class Threads {
     turnId: string,
     run: { cwd: string; prompt: string; env: Record<string, string>; tools?: ToolAccess; signal: AbortSignal; resourceInstructions?: string; mcps?: import('./harness.js').HarnessTurn['mcps'] },
     delivering = false,
+    skills: WorkspaceSkill[] = [],
   ) {
     const transcript = new TurnTranscript(turnId);
     const startedAt = Date.now();
@@ -571,7 +601,7 @@ export class Threads {
         secretPurposes: this.secrets.purposes(thread.profileId, thread.projectId || null) })) {
         for (const change of transcript.accept(msg)) {
           if (change.type === 'end') outcome = change.outcome;
-          await this.apply(thread.id, change, run.cwd);
+          await this.apply(thread.id, change, run.cwd, skills);
         }
       }
       if (run.signal.aborted) {
@@ -628,14 +658,15 @@ export class Threads {
     }
   }
 
-  private async apply(threadId: string, change: TranscriptChange, cwd: string) {
+  private async apply(threadId: string, change: TranscriptChange, cwd: string, skills: WorkspaceSkill[] = []) {
     if (change.type === 'session') {
       await this.update(threadId, (t) => ({ ...t, sessionId: change.sessionId }), { quiet: true });
     } else if (change.type === 'tool' && isChoiceTool(change.item.name)) {
       await this.offerChoice(threadId, change, cwd);
     } else if (change.type === 'tool') {
       await this.content.saveTool(threadId, change.item.id, change.input, change.content);
-      await this.addItem(threadId, change.item);
+      const loadedSkills = change.item.status === 'done' ? observedSkillLoads(change.item.name, change.input, change.item.summary, cwd, skills) : [];
+      await this.addItem(threadId, loadedSkills.length ? { ...change.item, loadedSkills } : change.item);
     } else if (change.type === 'item') {
       let item = change.item;
       if (item.kind === 'assistant' && item.text) {
@@ -679,6 +710,47 @@ export class Threads {
   }
 
   // ---- storage ----
+
+  private skillContext(context: SkillContext) {
+    if (context.threadId) {
+      if (context.checkoutId || context.profileId) throw new UserError('Choose a thread or a draft skill context, not both');
+      const thread = this.require(context.threadId);
+      return { thread, checkoutId: thread.checkoutId, projectId: thread.projectId || undefined, profileId: thread.profileId, cwd: thread.checkoutId && !thread.workspace?.releasedAt ? this.cwd(thread) : undefined, unavailable: thread.workspace?.releasedAt ? 'This workspace was archived. Repository skills are unavailable until it is restored.' : undefined };
+    }
+    if (context.checkoutId) {
+      const checkout = this.projects.checkout(context.checkoutId);
+      const project = this.projects.projectOf(checkout);
+      if (context.profileId && context.profileId !== project.profileId) throw new UserError('This project belongs to another profile');
+      return { checkoutId: checkout.id, projectId: project.id, profileId: project.profileId, cwd: checkout.path, thread: undefined, unavailable: undefined };
+    }
+    if (!context.profileId) throw new UserError('Choose a thread, project or profile to see skills');
+    this.profiles.require(context.profileId);
+    return { profileId: context.profileId, checkoutId: undefined, projectId: undefined, cwd: undefined, thread: undefined, unavailable: undefined };
+  }
+
+  private async workspaceSkills(context: SkillContext): Promise<WorkspaceSkills> {
+    if (!this.resources) throw new UserError('Skills are unavailable');
+    const scope = this.skillContext(context);
+    const skills = await this.resources.workspaceSkills(scope.profileId, scope.projectId, scope.cwd);
+    if (scope.thread) {
+      const live = await this.transcript(scope.thread.id);
+      for (const item of live.items) if (item.kind === 'tool' && item.status === 'done') {
+        for (const loaded of item.loadedSkills ?? []) {
+          const skill = skills.find(skill => skill.id === loaded.id);
+          if (skill) skill.loaded = { itemId: item.id, turnId: item.turnId };
+        }
+      }
+    }
+    return { skills, projectId: scope.projectId, unavailable: scope.unavailable };
+  }
+
+  private async workspaceSkill(input: SkillContext & { skillId: string }) {
+    const scope = this.skillContext(input);
+    const { skills } = await this.workspaceSkills(input);
+    const skill = skills.find(skill => skill.id === input.skillId);
+    if (!skill) throw new UserError('No such skill in this workspace');
+    return { scope, skill };
+  }
 
   private cwd(thread: Thread) {
     return thread.workspace && !thread.workspace.releasedAt ? thread.workspace.path : thread.checkoutId ? this.projects.checkout(thread.checkoutId).path : join(this.home, 'workspaces', thread.id);

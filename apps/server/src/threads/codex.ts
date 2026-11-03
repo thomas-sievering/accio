@@ -115,7 +115,7 @@ export function codexEvents({ method, params }: CodexNotification): HarnessEvent
   if (item.type === 'agentMessage' || item.type === 'plan') return done ? [{ kind: 'text', id: item.id, text: item.text }] : [];
   const status = done ? (item.status === 'failed' || item.status === 'declined' || item.success === false || (item.exitCode != null && item.exitCode !== 0) ? 'error' : 'done') : 'running';
   switch (item.type) {
-    case 'commandExecution': return [{ kind: 'tool', id: item.id, name: 'Shell', summary: item.command, status, output: item.aggregatedOutput ?? undefined }];
+    case 'commandExecution': return [{ kind: 'tool', id: item.id, name: 'Shell', summary: item.command, input: { command: item.command, ...(item.cwd ? { cwd: item.cwd } : {}) }, status, output: item.aggregatedOutput ?? undefined }];
     case 'fileChange': return [{ kind: 'tool', id: item.id, name: 'Edit', summary: item.changes.map((c: any) => c.path).join(', '), status,
       ...(done ? { output: item.changes.map((c: any) => `${c.path}\n${c.diff ?? ''}`).join('\n') } : {}) }];
     case 'mcpToolCall': return [{ kind: 'tool', id: item.id, name: `${item.server}/${item.tool}`, summary: JSON.stringify(item.arguments ?? {}), input: item.arguments ?? {}, status,

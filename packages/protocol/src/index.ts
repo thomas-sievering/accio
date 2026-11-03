@@ -1,4 +1,6 @@
 import type { z } from 'zod';
+import { workspaceSkillMethods } from './workspaceSkills.js';
+export * from './workspaceSkills.js';
 import { resourceMethods, type ResourceEvents } from './resources.js';
 export * from './resources.js';
 import { machineMethods, type MachineEvents } from './machine.js';
@@ -24,6 +26,7 @@ export * from './media.js';
 export * from './secrets.js';
 
 export const methods = {
+  ...workspaceSkillMethods,
   ...resourceMethods,
   ...machineMethods,
   ...hubMethods,

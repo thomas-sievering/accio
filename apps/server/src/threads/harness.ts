@@ -1,4 +1,5 @@
 import type { ToolAccess } from '../tools/tools.js';
+import type { WorkspaceSkill } from '@accio/protocol';
 
 /**
  * The port between threads and the harness that runs their turns. Claude wraps
@@ -66,7 +67,7 @@ export type HarnessTurn = {
 };
 
 export type HarnessMcp = { type: 'http'; url: string; headers: Record<string, string> } | { type: 'stdio'; command: string; args: string[] };
-export type TurnResources = { env: Record<string, string>; instructions: string; mcps: Record<string, HarnessMcp>; snapshot: { tools: { id: string; version: string }[]; skills: { id: string; revision: string }[]; mcps: string[] }; release: () => void };
+export type TurnResources = { env: Record<string, string>; instructions: string; mcps: Record<string, HarnessMcp>; skills?: WorkspaceSkill[]; snapshot: { tools: { id: string; version: string }[]; skills: { id: string; revision: string }[]; mcps: string[] }; release: () => void };
 
 export interface Harness {
   run(run: HarnessTurn): AsyncIterable<HarnessMessage>;

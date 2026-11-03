@@ -131,6 +131,7 @@ export async function startHubService(opts: HubServiceOptions) {
           }
         }
         if (p.method === 'setSkillScope') args[1] = ResourceScope.parse(args[1]);
+        if (p.method === 'setSkillProject' && (!args[1] || typeof args[1].projectKey !== 'string' || !args[1].projectKey || args[1].projectKey.length > 512 || typeof args[1].enabled !== 'boolean')) throw new SignInError('Invalid project skill selection');
         if (p.method === 'setToolStatus' && (!args[0] || args[0].machineId !== machineId || typeof args[0].toolId !== 'string' || !['pending', 'installing', 'ready', 'error'].includes(args[0].status))) throw new SignInError('Invalid machine tool status');
         if (p.method === 'setCredential' && (!resources.state().mcps.some(value => value.id === args[0] && value.auth === 'bearer') || typeof args[1]?.accessToken !== 'string')) throw new SignInError('Select a bearer-authenticated MCP server');
         if (p.method === 'deleteMcp') await mcp.signOut(args[0]);
