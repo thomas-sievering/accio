@@ -71,7 +71,7 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
   await projects.load();
   projects.register(router);
 
-  const threads = new Threads(opts.home, profiles, projects, deps.harness ?? claudeCode, broadcast, models);
+  const threads = new Threads(opts.home, profiles, projects, deps.harness ?? claudeCode, broadcast, models, machines);
   await threads.load();
   threads.register(router);
 

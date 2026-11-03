@@ -1,16 +1,12 @@
-import { useEffect, useState } from 'react';
-import type { MachineInfo } from '@accio/protocol';
 import { useClient, useConnectionStatus } from '../app/connection';
+import { useLive } from '../app/useLive';
 
 /** Which machine this client talks to, and whether the link is up. */
 export function MachineBadge({ onOpen }: { onOpen: () => void }) {
   const client = useClient();
   const status = useConnectionStatus();
-  const [machine, setMachine] = useState<MachineInfo | null>(null);
-
-  useEffect(() => {
-    if (status === 'open') client.call('machine.get', {}).then(setMachine, () => {});
-  }, [client, status]);
+  const machines = useLive(() => client.call('machines.list', {}), 'machines.changed');
+  const machine = machines?.find((m) => m.thisMachine);
 
   const label =
     status === 'open'

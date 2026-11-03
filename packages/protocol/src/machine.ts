@@ -35,6 +35,9 @@ export const SetProfileFolders = z.object({
 export const machineMethods = {
   'machine.get': method<z.ZodObject<{}>, MachineInfo>(z.object({})),
   'machines.list': method<z.ZodObject<{}>, MachineView[]>(z.object({})),
+  'machines.rename': method<z.ZodObject<{ machineId: z.ZodString; name: z.ZodString }>, MachineView>(
+    z.object({ machineId: z.string(), name: z.string().trim().min(1).max(100) }),
+  ),
   'machines.setProfileFolders': method<typeof SetProfileFolders, MachineView>(SetProfileFolders),
 };
 

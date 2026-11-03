@@ -75,8 +75,13 @@ export class Machines {
 
   register(router: Router) {
     router
-      .on('machine.get', () => this.here)
+      .on('machine.get', () => ({ ...this.here, name: this.settings.machine(this.here.id)?.name ?? this.here.name }))
       .on('machines.list', () => this.views())
+      .on('machines.rename', async ({ machineId, name }) => {
+        if (!this.settings.machine(machineId)) throw new UserError('No such machine');
+        await this.settings.renameMachine(machineId, name);
+        return this.views().find((m) => m.id === machineId)!;
+      })
       .on('machines.setProfileFolders', async ({ machineId, profileId, folders }) => {
         if (!this.settings.machine(machineId)) throw new UserError('No such machine');
         if (!this.settings.profiles().some((p) => p.id === profileId)) throw new UserError(`No profile ${profileId}`);

@@ -1,10 +1,9 @@
-import type { CheckoutView, ProfileView, ProjectView, ThreadView } from '@accio/protocol';
+import type { CheckoutView, ProjectView, ThreadView } from '@accio/protocol';
 import { DEFAULT_MODEL, type ModelSelection } from '@accio/protocol';
 import { useState } from 'react';
 import { useClient } from '../app/connection';
-import { ShieldOff } from '../app/icons';
+import { useLive } from '../app/useLive';
 import { claudeAccount, useProfiles } from '../profiles/profiles';
-import { folderName } from '../projects/folderName';
 import { FolderLink } from '../projects/FolderLink';
 import { ProjectMark } from '../projects/ProjectMark';
 import { useProjects } from '../projects/projects';
@@ -21,7 +20,7 @@ function usePlace(checkoutId: string, profileId?: string) {
   const checkout = state?.checkouts.find((c) => c.id === checkoutId);
   const project = state?.projects.find((p) => p.id === checkout?.projectId);
   const profile = profiles.find((p) => p.id === (profileId ?? project?.profileId));
-  return { checkout, project, profile, manyProfiles: profiles.length > 1 };
+  return { checkout, project, profile };
 }
 
 export function ThreadPane({ thread, onOpenProfile }: { thread: ThreadView; onOpenProfile: (profileId: string) => void }) {
@@ -66,6 +65,14 @@ export function DraftPane({ checkoutId, profileId, onOpenProfile }: { checkoutId
   const place = usePlace(checkoutId, profileId);
   const [choice, setChoice] = useState<{ checkoutId: string; profileId?: string; model: ModelSelection }>();
   const model = choice?.checkoutId === checkoutId && choice.profileId === place.profile?.id ? choice.model : DEFAULT_MODEL;
+  const machines = useLive(() => client.call('machines.list', {}), 'machines.changed');
+  const [chosenMachineId, setChosenMachineId] = useState<string>();
+  const local = machines?.find((m) => m.thisMachine);
+  const machineId = chosenMachineId ?? local?.id;
+  const machine = machines?.find((m) => m.id === machineId);
+  const online = machines?.filter((m) => m.connected) ?? [];
+  const unavailable = !machine?.connected;
+  const remote = !!machine && !machine.thisMachine;
 
   return (
     <>
@@ -73,46 +80,44 @@ export function DraftPane({ checkoutId, profileId, onOpenProfile }: { checkoutId
       <div className="hero">
         <h1>{checkoutId ? `What should we build in ${place.project?.name ?? 'this checkout'}?` : 'What should we build?'}</h1>
         <ThreadNotice profile={place.profile} onOpenProfile={onOpenProfile} />
+        {remote && <p className="note" role="status">Running threads on another machine is not available yet. Choose this machine to start a thread.</p>}
+        {chosenMachineId && unavailable && <p className="note" role="status">The selected machine is offline. Choose an online machine.</p>}
         <Composer
-          disabled={!place.profile || !claudeAccount(place.profile)?.signedIn}
+          disabled={!place.profile || !claudeAccount(place.profile)?.signedIn || unavailable || remote}
           placeholder="Ask Claude Code anything"
-          onSend={async (text) => select((await client.call('threads.start', checkoutId ? { checkoutId, text, model } : { profileId: profileId!, text, model })).id)}
-          toolbar={<ModelPicker profileId={place.profile?.id} value={model} onChange={async (model) => setChoice({ checkoutId, profileId: place.profile?.id, model })} />}
+          onSend={async (text) => select((await client.call('threads.start', checkoutId ? { checkoutId, text, model, machineId } : { profileId: profileId!, text, model, machineId })).id)}
+          toolbar={<>
+            <select className="composer-machine" aria-label="Run on machine" value={machineId ?? ''} disabled={!machines} onChange={(e) => setChosenMachineId(e.target.value)}>
+              {!machineId && <option value="">Loading machines…</option>}
+              {chosenMachineId && unavailable && <option value={chosenMachineId} disabled>Selected machine offline</option>}
+              {online.map((m) => <option key={m.id} value={m.id}>{m.name}{m.thisMachine ? ' (local)' : ''}</option>)}
+            </select>
+            <ModelPicker profileId={place.profile?.id} value={model} onChange={async (model) => setChoice({ checkoutId, profileId: place.profile?.id, model })} />
+          </>}
         />
       </div>
     </>
   );
 }
 
-/** One line under the title says where the thread runs: project, checkout folder and, when there is a choice, profile. */
+/** A compact project / thread breadcrumb; hover the project to see its checkout path. */
 function PaneHeader(props: {
   title: string;
   checkout?: CheckoutView;
   project?: ProjectView;
-  profile?: ProfileView;
-  manyProfiles: boolean;
 }) {
-  const { checkout, project, profile } = props;
+  const { checkout, project } = props;
   return (
     <header className="main-top drag">
       <div className="thread-title">
-        <b>{props.title}</b>
         <span className="thread-where" title={checkout?.path}>
-          {project && <ProjectMark id={project.id} size={10} />}
-          {checkout ? <FolderLink path={checkout.path}>
-            {project?.name ?? 'unknown project'}
-            {folderName(checkout.path) !== project?.name && <span className="faint"> / {folderName(checkout.path)}</span>}
-          </FolderLink> : project?.name ?? 'No project'}
-          {props.manyProfiles && (
-            <>
-              <span className="faint">·</span>
-              {profile?.name ?? 'unknown profile'}
-            </>
-          )}
-          <span className="full-access" title="Threads run with full permissions (ADR 0005)">
-            <ShieldOff />
+          {project && <ProjectMark id={project.id} size={14} />}
+          <span className="thread-project-name">
+            {checkout ? <FolderLink path={checkout.path}>{project?.name ?? 'unknown project'}</FolderLink> : project?.name ?? 'No project'}
           </span>
         </span>
+        <span className="faint" aria-hidden="true">/</span>
+        <b title={props.title}>{props.title}</b>
       </div>
     </header>
   );
