@@ -1,12 +1,12 @@
 # The hub manages tools, MCP servers and skills
 
-The hub owns the library and the selections for tools, MCP servers and individual skills. Each item can be enabled globally, for named profiles, or for projects identified by their canonical Git remote. A project without a remote uses its local project identity. An item with no selections is optional. Selections are additive; project and profile settings show inherited selections rather than silently overriding them.
+The hub owns the library and the selections for tools, MCP servers and individual skills. Skills can be enabled globally, for named profiles, or for projects identified by their canonical Git remote. A project without a remote uses its local project identity. An item with no selections is optional. Selections are additive; project and profile settings show inherited selections rather than silently overriding them.
 
 Definitions, skill selections, source revisions and machine tool reports live in `hub/resources.json`. This follows the current JSON implementation of ADR 0004; the settings store itself is not yet versioned in Git. Source content remains in Git repositories. MCP credentials live separately in `hub/mcp-credentials.json` and never appear in settings responses.
 
 ## Tools execute on machines
 
-The first installer supports npm packages at exact versions. Each machine installs them under its Accio home, checks the declared executable and arguments, and adds only selected tools to the PATH passed to a turn. Saving an enabled tool, machine startup and turn preparation reconcile the installation. Tool health describes the configured check; a version check alone does not establish browser or other external dependency readiness.
+The first installer supports npm packages at exact versions. Each machine installs them under its Accio home, checks the declared executable and arguments, and adds all managed tools to the PATH passed to every turn on that machine. Tools and MCP servers have no profile or project selections; existing selections for them are discarded when loaded. Saving a tool, machine startup and turn preparation reconcile the installation. Tool health describes the configured check; a version check alone does not establish browser or other external dependency readiness.
 
 A failed installation or check automatically starts one repair thread on the affected machine. Its profile is chosen explicitly when configured, otherwise from a profile with an available signed-in model. Its prompt includes the managed installation directory and the failure. Repair threads bypass resource readiness so a broken tool cannot prevent its own repair. A completed repair triggers the original health check again; the model's report alone does not mark the tool ready. Repeated failures reuse the existing repair thread. When sign-in is missing, the check remains failed with the repair precondition displayed.
 
@@ -14,7 +14,7 @@ A failed installation or check automatically starts one repair thread on the aff
 
 Remote HTTP MCP definitions support no authentication, bearer tokens and OAuth authorization code with PKCE. OAuth discovers protected-resource and authorization-server metadata, can register a public client or use a configured client ID, and refreshes credentials on the hub. Services requiring another authentication method need their own integration. Sign-in opens the service's authorization page; this requires a callback reachable from the browser. In v0.1 both browser and hub normally run on the same machine.
 
-The hub proxies remote MCP traffic. A turn receives a temporary credential limited to that MCP and its profile/project selection. Removing a selection revokes access on the next request, and ending a turn discards its credentials. Named MCP definitions can use separate accounts and profile selections. Local stdio MCPs execute on the machine; server-specific local sign-in is not presented as hub-owned sign-in.
+The hub proxies remote MCP traffic. A turn receives a temporary credential limited to that MCP. Every configured MCP is available to every profile and project; ending a turn revokes its temporary access. Named MCP definitions can use separate accounts. Local stdio MCPs execute on the machine; server-specific local sign-in is not presented as hub-owned sign-in.
 
 ## Skills have immutable source snapshots
 

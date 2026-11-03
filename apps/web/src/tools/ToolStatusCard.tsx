@@ -2,7 +2,6 @@ import type { MachineView, ToolDefinition, ToolStatus } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { useAction } from '../app/useAction';
 import { useThreads } from '../threads/threads';
-import { isOptional } from '../resources/resources';
 
 export type Readiness = { label: 'Ready' | 'Installing' | 'Needs attention' | 'Offline' | 'Pending'; tone: 'ok' | 'busy' | 'bad' | 'idle' };
 
@@ -45,7 +44,6 @@ export function ToolStatusCard({ tool, machine, status, heading, onOpenThread }:
   else if (r.label === 'Ready') text = `${status?.version ?? tool.version} · checked ${when(status?.checkedAt) ?? 'just now'}`;
   else if (r.label === 'Installing') text = status?.detail ?? 'Installing and checking…';
   else if (r.label === 'Needs attention') text = status?.detail ?? 'The last check failed.';
-  else if (isOptional(tool.scope)) text = 'Optional and not selected anywhere, so it isn’t installed yet. Install now to try it.';
   else text = local ? 'Not checked yet.' : `${machine.name} checks it when accio starts there, or before a thread there needs it.`;
 
   return (

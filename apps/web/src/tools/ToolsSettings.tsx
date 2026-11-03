@@ -6,9 +6,7 @@ import { SettingRow, SettingsSection } from '../app/Settings';
 import { useAction } from '../app/useAction';
 import { useLive } from '../app/useLive';
 import { hasSignedInAccount, useProfiles } from '../profiles/profiles';
-import { useProjects } from '../projects/projects';
-import { optionalScope, scopeSummary, slugId, useDraft, useResources } from '../resources/resources';
-import { ScopeEditor } from '../resources/ScopeEditor';
+import { slugId, useDraft, useResources } from '../resources/resources';
 import { Field } from '../resources/Field';
 import { readiness, ToolStatusCard } from './ToolStatusCard';
 
@@ -16,14 +14,12 @@ import { readiness, ToolStatusCard } from './ToolStatusCard';
 const PLAYWRIGHT_CLI = { name: 'Playwright CLI', package: '@playwright/cli', version: '0.1.23', executable: 'playwright-cli', checkArgs: ['--version'] };
 
 type Draft = Omit<ToolDefinition, 'id'> & { id: string };
-const blank = (): Draft => ({ id: '', name: '', package: '', version: '', executable: '', checkArgs: ['--version'], scope: optionalScope(), repairProfileId: undefined });
+const blank = (): Draft => ({ id: '', name: '', package: '', version: '', executable: '', checkArgs: ['--version'], repairProfileId: undefined });
 
 /** Command-line tools the hub installs with npm into a managed folder on each machine. */
 export function ToolsSettings({ toolId, onOpen, onBack, onOpenThread }: { toolId?: string; onOpen: (id: string) => void; onBack: () => void; onOpenThread: (id: string) => void }) {
   const client = useClient();
   const { state, loadError, retry } = useResources();
-  const { profiles = [] } = useProfiles();
-  const { state: projects } = useProjects();
   const machines = useLive(() => client.call('machines.list', {}), 'machines.changed');
   if (!state) return loadError ? <LoadError error={loadError} retry={retry} /> : <p className="note" role="status">Loading tools…</p>;
   if (toolId === 'new') return <ToolForm taken={state.tools.map((t) => t.id)} onSaved={(t) => onOpen(t.id)} onDone={onBack} />;
@@ -40,7 +36,7 @@ export function ToolsSettings({ toolId, onOpen, onBack, onOpenThread }: { toolId
   const here = machines?.find((m) => m.thisMachine);
   return (
     <>
-      <p className="note">Managed npm tools. accio installs each tool’s exact version into its own folder on every machine, checks it, and adds it to the PATH of threads it’s enabled for. A failed check starts a repair thread.</p>
+      <p className="note">Managed npm tools. accio installs each tool’s exact version into its own folder on every machine, checks it, and adds it to every thread’s PATH on that machine. A failed check starts a repair thread.</p>
       <SettingsSection title="Tools">
         {state.tools.length === 0 && <SettingRow title="No tools yet" description="Start with the Playwright CLI preset, or add any npm package with an executable." />}
         {[...state.tools].sort((a, b) => a.name.localeCompare(b.name)).map((t) => {
@@ -51,7 +47,7 @@ export function ToolsSettings({ toolId, onOpen, onBack, onOpenThread }: { toolId
               <span className="menu-icon"><Wrench /></span>
               <span className="setting-text">
                 <b>{t.name}</b>
-                <small>{t.package}@{t.version} · {scopeSummary(t.scope, profiles, projects?.projects)}</small>
+                <small>{t.package}@{t.version}</small>
               </span>
               {here && <span className={`pill ${r.tone === 'ok' ? 'ok' : r.tone === 'bad' ? 'bad' : r.tone === 'busy' ? 'busy' : ''}`} title="On this machine"><span className="dot" />{r.label}</span>}
               <Chevron />
@@ -172,13 +168,7 @@ function ToolForm({ tool, taken, onSaved, onDone }: { tool?: ToolDefinition; tak
           <small className="hint">accio runs the executable with these arguments (separated by spaces) to check it works.</small>
         </div>
       </SettingsSection>
-      <SettingsSection title="Where it’s installed">
-        <div className="setting-form">
-          <ScopeEditor name={value.name || 'this tool'} scope={value.scope} onChange={(s) => set('scope', s)} disabled={busy}
-            globalLabel="Install on all machines" globalHint="Every profile and project gets it on its PATH." />
-          <small className="hint">Saving a tool that’s enabled anywhere installs and checks it on this machine right away.</small>
-        </div>
-      </SettingsSection>
+      <p className="note">Saving installs and checks this tool on this machine. Managed tools are available to every profile and project on the machine.</p>
       <SettingsSection title="Repair">
         <div className="setting-form">
           <label className="field">

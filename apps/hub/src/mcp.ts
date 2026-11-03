@@ -2,7 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
 import type { McpDefinition } from '@accio/protocol';
-import { enabled, type McpCredential, type Resources } from './resources.js';
+import { type McpCredential, type Resources } from './resources.js';
 
 type Pending = { id: string; verifier: string; redirect: string; endpoint: string; clientId: string; clientSecret?: string; expires: number; resource: string; epoch: number };
 type Grant = { id: string; profileId: string; projectKey?: string };
@@ -105,7 +105,7 @@ export class McpGateway {
     const token = req.headers.authorization?.replace(/^Bearer /, '') ?? '';
     const grant = this.grants.get(token);
     const mcp = grant && this.resources.state().mcps.find(m => m.id === grant.id);
-    if (!grant || !mcp || req.url.split('?')[0] !== `/mcp/access/${mcp.id}` || !enabled(mcp.scope, grant.profileId, grant.projectKey)) { res.writeHead(403); res.end('MCP access is not enabled for this thread'); return true; }
+    if (!grant || !mcp || req.url.split('?')[0] !== `/mcp/access/${mcp.id}`) { res.writeHead(403); res.end('MCP access is not enabled for this thread'); return true; }
     if (mcp.transport !== 'http' || !mcp.url) { res.writeHead(404); res.end(); return true; }
     try {
       const chunks: Buffer[] = []; let size = 0;

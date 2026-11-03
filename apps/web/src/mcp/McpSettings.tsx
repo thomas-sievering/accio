@@ -4,22 +4,17 @@ import { useClient } from '../app/connection';
 import { Chevron, Plug, Plus } from '../app/icons';
 import { SettingRow, SettingsSection } from '../app/Settings';
 import { useAction } from '../app/useAction';
-import { useProfiles } from '../profiles/profiles';
-import { useProjects } from '../projects/projects';
-import { optionalScope, scopeSummary, slugId, useDraft, useResources } from '../resources/resources';
-import { ScopeEditor } from '../resources/ScopeEditor';
+import { slugId, useDraft, useResources } from '../resources/resources';
 import { Field } from '../resources/Field';
 import { LoadError } from '../tools/ToolsSettings';
 import { mcpDefinition } from './mcp';
 
-const blank = (): McpDefinition => ({ id: '', name: '', transport: 'http', url: '', command: '', args: [], scope: optionalScope(), auth: 'none', oauthClientId: undefined });
+const blank = (): McpDefinition => ({ id: '', name: '', transport: 'http', url: '', command: '', args: [], auth: 'none', oauthClientId: undefined });
 const authLabel = { none: 'No sign-in', bearer: 'Bearer token', oauth: 'OAuth sign-in' } as const;
 
 /** MCP servers threads can use. Remote servers go through the hub, which keeps their credentials. */
 export function McpSettings({ mcpId, onOpen, onBack }: { mcpId?: string; onOpen: (id: string) => void; onBack: () => void }) {
   const { state, loadError, retry } = useResources();
-  const { profiles = [] } = useProfiles();
-  const { state: projects } = useProjects();
   if (!state) return loadError ? <LoadError error={loadError} retry={retry} /> : <p className="note" role="status">Loading MCP servers…</p>;
   if (mcpId === 'new') return <McpForm taken={state.mcps.map((m) => m.id)} onSaved={(m) => onOpen(m.id)} onDone={onBack} />;
   const mcp = state.mcps.find((m) => m.id === mcpId);
@@ -35,7 +30,7 @@ export function McpSettings({ mcpId, onOpen, onBack }: { mcpId?: string; onOpen:
             <span className="menu-icon"><Plug /></span>
             <span className="setting-text">
               <b>{m.name}</b>
-              <small>{m.transport === 'http' ? m.url : [m.command, ...m.args].join(' ')} · {scopeSummary(m.scope, profiles, projects?.projects)}</small>
+              <small>{m.transport === 'http' ? m.url : [m.command, ...m.args].join(' ')}</small>
             </span>
             <McpPill mcp={m} />
             <Chevron />
@@ -45,7 +40,7 @@ export function McpSettings({ mcpId, onOpen, onBack }: { mcpId?: string; onOpen:
           <span className="menu-icon"><Plus /></span>
           <span className="setting-text">
             <b>Add MCP server</b>
-            <small>For separate work and personal accounts, add the same server twice, such as “Linear (work)” enabled for your work profile.</small>
+            <small>Connect a remote service or run a local MCP server.</small>
           </span>
         </button>
       </SettingsSection>
@@ -93,8 +88,8 @@ function McpForm({ mcp, taken, onSaved, onDone }: { mcp?: McpView; taken: string
     setTouched(true);
     if (invalid) return;
     const def: McpDefinition = http
-      ? { id: mcp?.id ?? slugId(value.name, taken), name: value.name.trim(), transport: 'http', url: value.url!.trim(), args: [], scope: value.scope, auth: value.auth, oauthClientId: value.auth === 'oauth' ? value.oauthClientId?.trim() || undefined : undefined }
-      : { id: mcp?.id ?? slugId(value.name, taken), name: value.name.trim(), transport: 'stdio', command: value.command!.trim(), args, scope: value.scope, auth: 'none' };
+      ? { id: mcp?.id ?? slugId(value.name, taken), name: value.name.trim(), transport: 'http', url: value.url!.trim(), args: [], auth: value.auth, oauthClientId: value.auth === 'oauth' ? value.oauthClientId?.trim() || undefined : undefined }
+      : { id: mcp?.id ?? slugId(value.name, taken), name: value.name.trim(), transport: 'stdio', command: value.command!.trim(), args, auth: 'none' };
     const saved = await run(() => client.call('mcp.save', def));
     if (saved) { reset(); setArgsText(undefined); setTouched(false); onSaved(saved); }
   };
@@ -156,11 +151,7 @@ function McpForm({ mcp, taken, onSaved, onDone }: { mcp?: McpView; taken: string
             )}
           </div>
         </SettingsSection>
-        <SettingsSection title="Enabled for">
-          <div className="setting-form">
-            <ScopeEditor name={value.name || 'this server'} scope={value.scope} onChange={(s) => set('scope', s)} disabled={busy} />
-          </div>
-        </SettingsSection>
+        <p className="note">This MCP server is available to every profile and project.</p>
       </form>
       {mcp && mcp.transport === 'http' && mcp.auth !== 'none' && <McpCredentials key={`${mcp.id}:${mcp.auth}:${mcp.url}`} mcp={mcp} />}
       {error && <p className="error" role="alert">{error}</p>}
