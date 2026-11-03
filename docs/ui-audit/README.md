@@ -1,6 +1,6 @@
 # UI / UX audit
 
-Independent auditors (Claude Fable 5.1, Claude Opus 5.5, GPT 6.1 Sol) score Accio's web UI once per round. Between rounds the outer loop applies changes on the `ui_analysis` branch. The loop stops when every auditor scores every category 9 or higher.
+Independent auditors (Claude Sonnet 5.5, Claude Opus 5.5, GPT 6.1 Sol) score Accio's web UI once per round. Between rounds the outer loop applies changes on the `ui_analysis` branch. The loop stops when every auditor scores every category 9 or higher.
 
 ## Categories
 
