@@ -83,11 +83,15 @@ export class HubConnections {
     resources.register(router); threads.resources = resources; threads.onRepairFinished = id => resources.tools.afterRepair(id);
     profiles.setReferenceSource(() => [...projects.state().projects.map((p) => p.profileId), ...threads.profileReferences()]);
     let reconciliation: Promise<unknown> = Promise.resolve();
+    let initialized = false;
+    const continueAfterRestart = () => {
+      if (initialized && !this.closing) void threads.continueAfterRestart().catch(error => console.error('[threads] startup recovery failed', error));
+    };
     workspace = { client, router, profiles, machines, models, projects, threads, tools, resources, secrets, home: record.home,
-      initialize: origin => { tools.listen(record.id === this.defaultId ? origin : `${origin}/hubs/${record.id}`); if (client.status === 'connected') reconciliation = resources.reconcile().catch(error => console.error('[resources] startup check failed', error)); },
+      initialize: origin => { tools.listen(record.id === this.defaultId ? origin : `${origin}/hubs/${record.id}`); initialized = true; continueAfterRestart(); if (client.status === 'connected') reconciliation = resources.reconcile().catch(error => console.error('[resources] startup check failed', error)); },
       close: async () => { await threads.close(); await secrets.close(); await resources.close(); await reconciliation; await profiles.close(); await projects.close(); await client.close(); } };
     this.workspaces.set(record.id, workspace);
-    client.onChanged(() => { this.announce(); broadcast('resources.changed', resources.state()); });
+    client.onChanged(() => { this.announce(); broadcast('resources.changed', resources.state()); continueAfterRestart(); });
     if (client.status === 'connected') { await profiles.load(); await profiles.syncReferences(); }
     if (this.origin) workspace.initialize(this.origin);
     return workspace;
