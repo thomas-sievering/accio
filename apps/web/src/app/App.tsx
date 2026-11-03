@@ -10,6 +10,7 @@ import { ProjectSheet } from '../projects/ProjectSheet';
 import { ThreadsProvider, useThreads } from '../threads/threads';
 import { ThreadRows } from '../threads/ThreadRows';
 import { ThreadPane } from '../threads/ThreadPane';
+import { ThreadShelves } from '../threads/ThreadShelves';
 import { FolderPlus, Users } from './icons';
 
 type OpenSheet = { kind: 'accounts'; accountId?: string } | { kind: 'addProject' } | { kind: 'project'; id: string } | null;
@@ -53,6 +54,7 @@ function Shell() {
         </header>
         <nav className="side-body">
           <ProjectList onOpenProject={(p) => setSheet({ kind: 'project', id: p.id })} renderBody={(p) => <ThreadRows project={p} />} />
+          <ThreadShelves />
         </nav>
         <footer className="side-foot">
           <MachineBadge />
