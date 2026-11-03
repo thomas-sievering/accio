@@ -14,7 +14,7 @@ export class Models {
     const models = HARNESSES.flatMap((h) => {
       if (!installed.some((i) => i.harnessId === h.id)) return [];
       return harnessModels(h.id).flatMap((m) => {
-        const provider = profile.providers.find((p) => p.id === m.providerId && p.available && p.accounts.length > 0);
+        const provider = profile.providers.find((p) => p.id === m.providerId && p.available && p.accounts.some((account) => account.signedIn));
         return provider ? [{ ...m, harnessId: h.id, harnessName: h.name, providerName: provider.name }] : [];
       });
     });

@@ -1,4 +1,4 @@
-import type { ProfileView, SaveProfileParams } from '@accio/protocol';
+import type { AccountView, ProfileView, SaveProfileParams } from '@accio/protocol';
 import { PROVIDERS } from '@accio/hub';
 import { UserError } from '../rpc/router.js';
 
@@ -8,18 +8,11 @@ export type Profile = {
   name: string;
 };
 
-/** Who a profile is signed in as, as the hub reports it. */
-export type AccountSummary = { signedIn: boolean; email: string | null; organization: string | null; claudeAccountId: string | null };
-
-/** Profile → providers → accounts. For now only Anthropic, with at most one account. */
-export function toView(profile: Profile, claude: AccountSummary): ProfileView {
+/** Profiles expose selected accounts without credentials. */
+export function toView(profile: Profile, account: AccountView | null): ProfileView {
   return {
-    id: profile.id,
-    name: profile.name,
-    providers: PROVIDERS.map((p) => ({
-      ...p,
-      accounts: p.id === 'anthropic' && claude.signedIn ? [{ email: claude.email, organization: claude.organization }] : [],
-    })),
+    ...profile,
+    providers: PROVIDERS.map((p) => ({ ...p, accounts: p.id === 'anthropic' && account ? [account] : [] })),
   };
 }
 
@@ -47,21 +40,6 @@ export function saveProfile(profiles: readonly Profile[], req: SaveProfileParams
   }
   const next = existing ? profiles.map((a) => (a.id === saved.id ? saved : a)) : [...profiles, saved];
   return { profiles: next, saved };
-}
-
-/** GLOSSARY: an account belongs to exactly one profile, so no two profiles sign in to the same Claude account. */
-export function assertAccountInOneProfile(
-  profiles: readonly Profile[],
-  accountOf: (id: string) => AccountSummary,
-  profileId: string,
-  claudeAccountId: string | null,
-) {
-  if (!claudeAccountId) return;
-  const other = profiles.find((a) => a.id !== profileId && accountOf(a.id).claudeAccountId === claudeAccountId);
-  if (!other) return;
-  throw new UserError(
-    `${other.name} already uses this Claude account, and an account belongs to one profile only. Sign in with a different Claude account.`,
-  );
 }
 
 function uniqueId(profiles: readonly Profile[], base: string): string {

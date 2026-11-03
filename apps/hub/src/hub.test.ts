@@ -1,5 +1,5 @@
 import { createServer, type IncomingHttpHeaders } from 'node:http';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -91,9 +91,42 @@ describe('hub', () => {
     expect(hub.summary('personal')).toEqual({ signedIn: true, email: 'me@example.com', organization: null, claudeAccountId: 'claude-me' });
     await hub.close();
     const stored = JSON.parse(await readFile(join(home, 'hub', 'profiles.json'), 'utf8'));
-    expect(stored[0].account.accessToken).toBe('token-1');
+    expect(stored.accounts[0].account.accessToken).toBe('token-1');
     // A sign-in is used once.
     await expect(hub.completeSignIn(signInId, 'good')).rejects.toThrow(/expired/);
+  });
+
+  it('migrates inline logins, preserving profile keys and account selections', async () => {
+    const { hub, home } = await setup();
+    const key = await hub.ensureProfile('personal');
+    const start = hub.beginSignIn('personal');
+    await hub.completeSignIn(start.signInId, 'good');
+    await hub.close();
+    const data = JSON.parse(await readFile(hub.storePath, 'utf8'));
+    await writeFile(hub.storePath, JSON.stringify([{ id: 'personal', accessKey: key, account: data.accounts[0].account }]));
+    const migrated = new Hub(home);
+    await migrated.load();
+    expect(await migrated.ensureProfile('personal')).toBe(key);
+    expect(migrated.selectedAccount('personal')).toMatchObject({ name: 'me@example.com', signedIn: true });
+    expect(await migrated.accessToken('personal')).toBe('token-1');
+    await migrated.close();
+    const reloaded = new Hub(home);
+    await reloaded.load();
+    expect(reloaded.accountViews()).toEqual(migrated.accountViews());
+    await reloaded.close();
+  });
+
+  it('shares a single refresh across profiles selecting the same account', async () => {
+    const { hub, auth } = await setup();
+    const account = await hub.saveAccount('Family account');
+    const start = hub.beginAccountSignIn(account.id);
+    await hub.completeAccountSignIn(start.signInId, 'short');
+    for (const id of ['personal', 'work']) {
+      await hub.ensureProfile(id);
+      await hub.selectAccount(id, account.id);
+    }
+    expect(await Promise.all([hub.accessToken('personal'), hub.accessToken('work')])).toEqual(['token-2', 'token-2']);
+    expect(auth.grants).toEqual(['authorization_code', 'refresh_token']);
   });
 
   it('lets accio refuse an account before it is stored', async () => {

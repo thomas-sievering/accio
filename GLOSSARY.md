@@ -31,7 +31,7 @@ _Avoid_: Config, fleet, machine settings (for settings stored on the hub)
 ## Profiles
 
 **Profile**:
-A named side of your life that threads run under, such as "personal" or "work". You choose which profiles exist, and they are defined on the hub. It uses one or more providers and has one or more accounts at each, reaches them only through the hub, and never shares an account or traffic with another profile.
+A named side of your life that threads run under, such as "personal" or "work". You choose which profiles exist, and they are defined on the hub. It selects named accounts configured separately on the hub and reaches only those accounts through the hub. An account may be selected by several profiles. Currently each profile selects one Claude account.
 _Avoid_: Account, environment, identity
 
 **Profile folder**:
@@ -47,11 +47,11 @@ A coding program that runs a thread's turns, such as Claude Code, Codex or pi. S
 _Avoid_: Agent, runtime, coding tool, provider (as T3 Code uses it)
 
 **Account**:
-One login at a provider, such as a personal Anthropic account. It belongs to exactly one profile. An account at Anthropic is called a Claude account.
+One login at a provider, such as a personal Anthropic account. It has a custom name, is set up independently, and can be selected by profiles. An account at Anthropic is called a Claude account.
 _Avoid_: Login, sign-in (as a noun for the account), subscription, provider instance
 
 **Sign-in**:
-Adding an account to a profile: you approve accio on the provider's page and paste back the code it shows. The account is stored on the hub only. Signing out removes an account from its profile.
+Signing an account in: you approve accio on the provider's page and paste back the code it shows. The account is stored on the hub only. Signing out clears its credentials while preserving its name and profile selections.
 _Avoid_: Login (as a verb or action), auth, connect
 
 ## Work

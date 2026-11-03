@@ -1,5 +1,5 @@
 import { createContext, useContext, type ReactNode } from 'react';
-import type { ProfileView } from '@accio/protocol';
+import type { AccountView, ProfileView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { useLive, useLocalState } from '../app/useLive';
 import { hueOf } from '../app/hue';
@@ -10,6 +10,7 @@ export type ProfileFilter = 'all' | (string & {});
 
 type ProfilesState = {
   profiles: ProfileView[] | undefined;
+  accounts: AccountView[] | undefined;
   filter: ProfileFilter;
   setFilter: (f: ProfileFilter) => void;
 };
@@ -19,10 +20,11 @@ const Ctx = createContext<ProfilesState | null>(null);
 export function ProfilesProvider({ children }: { children: ReactNode }) {
   const client = useClient();
   const profiles = useLive(() => client.call('profiles.list', {}), 'profiles.changed');
+  const accounts = useLive(() => client.call('accounts.list', {}), 'accounts.changed');
   const [stored, setFilter] = useLocalState<ProfileFilter>('accio.profileFilter', 'all');
   // A deleted profile falls back to showing everything.
   const filter = stored !== 'all' && profiles && !profiles.some((a) => a.id === stored) ? 'all' : stored;
-  return <Ctx.Provider value={{ profiles, filter, setFilter }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ profiles, accounts, filter, setFilter }}>{children}</Ctx.Provider>;
 }
 
 export function useProfiles(): ProfilesState {

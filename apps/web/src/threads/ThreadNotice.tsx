@@ -29,13 +29,13 @@ export function ThreadNotice({
   if (!profile) {
     text = 'The profile this thread started with no longer exists.';
     tone = 'error';
-  } else if (!claudeAccount(profile)) {
+  } else if (!claudeAccount(profile)?.signedIn) {
     text = (
       <>
         <b>{profile.name}</b> isn’t signed in with Claude, so this thread can’t run yet.
       </>
     );
-    action = { label: 'Sign in', run: () => onOpenProfile(profile.id) };
+    action = { label: 'Choose account', run: () => onOpenProfile(profile.id) };
   } else if (thread?.status === 'interrupted') {
     text = detail ?? 'This turn was interrupted. It continues only when you resume it.';
     action = { label: 'Resume', run: () => run(() => client.call('threads.resume', { threadId: thread.id })) };

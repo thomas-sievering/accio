@@ -170,7 +170,7 @@ describe('threads need a signed-in profile', () => {
       await mkdir(folder);
       await c.call('profiles.save', { name: 'Personal' });
       const checkout = await c.call('checkouts.add', { path: folder, profileId: 'personal' });
-      await expect(c.call('threads.start', { checkoutId: checkout.id, text: 'hi' })).rejects.toThrow(/Sign Personal in with Claude first/);
+      await expect(c.call('threads.start', { checkoutId: checkout.id, text: 'hi' })).rejects.toThrow(/Select a signed-in Claude account for Personal/);
       expect(harness.runs).toHaveLength(0);
       // Nothing is stored for a thread that could not start.
       expect(await c.call('threads.list', {})).toEqual([]);

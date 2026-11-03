@@ -1,23 +1,21 @@
 import { useState } from 'react';
-import type { ProfileView } from '@accio/protocol';
+import type { AccountView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { useAction } from '../app/useAction';
-import { claudeAccount } from './profiles';
 
 /**
  * GLOSSARY: Sign-in. Opens Claude's consent page; you approve, and paste back
  * the code Claude's page shows. The account is kept on the hub, never here.
  */
-export function SignInWithClaude({ profile }: { profile: ProfileView }) {
+export function SignInWithClaude({ account }: { account: AccountView }) {
   const client = useClient();
-  const account = claudeAccount(profile);
   const [signInId, setSignInId] = useState<string | null>(null);
   const [code, setCode] = useState('');
   const { busy, error, run } = useAction();
 
   const start = () =>
     run(async () => {
-      const r = await client.call('profiles.beginSignIn', { profileId: profile.id });
+      const r = await client.call('accounts.beginSignIn', { id: account.id });
       setSignInId(r.signInId);
       setCode('');
       window.open(r.url, '_blank', 'noopener');
@@ -27,7 +25,7 @@ export function SignInWithClaude({ profile }: { profile: ProfileView }) {
   const finish = () => {
     if (!signInId || !code.trim()) return;
     void run(async () => {
-      await client.call('profiles.completeSignIn', { signInId, code });
+      await client.call('accounts.completeSignIn', { signInId, code });
       setSignInId(null);
     });
   };
@@ -36,7 +34,7 @@ export function SignInWithClaude({ profile }: { profile: ProfileView }) {
     return (
       <div className="signin">
         <p className="note">
-          Approve accio on Claude’s page, signed in with the Claude account for {profile.name}. Then paste the code it shows.
+          Approve accio on Claude’s page, signed in with the Claude account for {account.name}. Then paste the code it shows.
         </p>
         <span className="row-input">
           <input
@@ -71,7 +69,7 @@ export function SignInWithClaude({ profile }: { profile: ProfileView }) {
 
   return (
     <div className="signin">
-      {account ? (
+      {account.signedIn ? (
         <div className="signin-status">
           <span className="dot ok" />
           <span className="grow">
@@ -79,12 +77,12 @@ export function SignInWithClaude({ profile }: { profile: ProfileView }) {
             {account.organization ? <span className="dim"> · {account.organization}</span> : null}
           </span>
           <button type="button" className="link" onClick={start} disabled={busy}>
-            Switch
+            Sign in again
           </button>
           <button
             type="button"
             className="link"
-            onClick={() => run(() => client.call('profiles.signOut', { profileId: profile.id }))}
+            onClick={() => run(() => client.call('accounts.signOut', { id: account.id }))}
             disabled={busy}
           >
             Sign out
