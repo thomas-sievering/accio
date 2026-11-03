@@ -122,19 +122,75 @@ pre {
   padding: 0 8px;
   background: var(--side);
 }
+.side-title {
+  flex: 1;
+  padding: 0 8px;
+  font-weight: 600;
+}
+.side-icon:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
 .side-body {
   flex: 1 0 auto;
   padding: 2px 8px 16px;
 }
-.side-tools {
+.side-controls {
   position: sticky;
   top: var(--caption-h);
   z-index: 2;
+  padding: 0 8px 6px;
+  background: var(--side);
+}
+.side-tools {
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 0 8px 6px;
-  background: var(--side);
+}
+.side-filter-summary {
+  display: flex;
+  padding: 4px 8px;
+}
+.filter-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 3px 7px;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  background: var(--raised);
+  color: var(--muted);
+  font-size: 12px;
+}
+.filter-chip:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.filter-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.filter-chip svg {
+  flex: none;
+  width: 12px;
+  height: 12px;
+}
+.thread-filter {
+  position: relative;
+}
+.thread-filter:has(+ .menu:popover-open) {
+  background: var(--hover);
+}
+.filter-dot {
+  position: absolute;
+  top: 4px;
+  right: 3px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--green);
 }
 .side-search {
   display: flex;
@@ -316,71 +372,6 @@ pre {
   color: var(--dim);
   text-align: center;
   padding: 0 20px;
-}
-
-/* Profile switcher (botbot's workspace trigger) */
-.switcher {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-width: 0;
-  margin-right: auto;
-  padding: 4px 8px 4px 5px;
-  border-radius: 8px;
-  font-weight: 600;
-}
-.switcher:hover,
-.switcher:has(+ .menu:popover-open) {
-  background: var(--hover);
-}
-.switcher-name {
-  white-space: nowrap;
-  overflow: clip;
-  text-overflow: ellipsis;
-}
-.switcher-updown {
-  display: grid;
-  color: var(--dim);
-}
-.switcher-updown svg {
-  width: 13px;
-  height: 13px;
-}
-
-/* Profile monogram: a solid tile per profile hue, lit from above. */
-.tile {
-  --tile: oklch(0.55 0.13 var(--hue, 0));
-  flex: none;
-  display: grid;
-  place-items: center;
-  border-radius: 28%;
-  color: oklch(0.99 0 none);
-  font-weight: 650;
-  line-height: 1;
-  background: linear-gradient(oklch(1 0 none / 0.16), oklch(1 0 none / 0) 60%), var(--tile);
-  box-shadow:
-    inset 0 0 0 1px oklch(1 0 none / 0.14),
-    0 1px 2px oklch(0 0 none / 0.35);
-}
-.tile-all {
-  flex: none;
-  display: grid;
-  place-items: center;
-  color: var(--muted);
-}
-.tile-all svg {
-  width: 70%;
-  height: 70%;
-}
-.tile-sm {
-  width: 22px;
-  height: 22px;
-  font-size: 12px;
-}
-.tile-md {
-  width: 30px;
-  height: 30px;
-  font-size: 14px;
 }
 
 /* Popover menu */
@@ -1676,12 +1667,6 @@ button.row {
 }
 
 /* Scope menu: profiles with their projects beneath */
-.switcher-mark {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-}
 .scope-menu {
   max-height: min(70vh, 560px);
   overflow-y: auto;
