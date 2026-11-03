@@ -9,6 +9,7 @@ import { FolderLink } from '../projects/FolderLink';
 import { ProjectMark } from '../projects/ProjectMark';
 import { useProjects } from '../projects/projects';
 import { Composer } from './Composer';
+import { QueueTray } from './QueueTray';
 import { PendingPick, optionName } from './Choice';
 import { DeliveryActions } from './DeliveryActions';
 import { ModelPicker } from './ModelPicker';
@@ -62,15 +63,16 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
       )}
       <ThreadNotice thread={thread} profile={place.profile} detail={detail} onOpenProfile={onOpenProfile} />
       <Composer
+        key={thread.id}
+        disabled={savingModel || thread.delivery?.status === 'queued' || thread.delivery?.status === 'running' || !place.profile || !accountForModel(place.profile, thread.model)?.signedIn}
+        actions={<><DeliveryActions key={thread.id} thread={thread} project={place.project} canRun={!!place.profile && !!accountForModel(place.profile, thread.model)?.signedIn} /><QueueTray thread={thread} /></>}
         target={thread.id}
         draftId={`thread:${thread.id}`}
-        disabled={running || savingModel || thread.delivery?.status === 'queued' || !place.profile || !accountForModel(place.profile, thread.model)?.signedIn}
-        actions={<DeliveryActions key={thread.id} thread={thread} project={place.project} canRun={!!place.profile && !!accountForModel(place.profile, thread.model)?.signedIn} />}
         onStop={running ? async () => void (await client.call('threads.stop', { threadId: thread.id })) : undefined}
-        placeholder={running ? 'Working…' : `Ask ${thread.model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}
+        placeholder={running ? 'Send a correction or follow-up…' : `Ask ${thread.model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}
         attachment={pick && pickLabel ? { label: pickLabel, onRemove: () => setPick(undefined) } : undefined}
-        onSend={async (text) => {
-          await client.call('threads.send', { threadId: thread.id, text, ...(pick ? { pick } : {}) });
+        onSend={async (text, mode) => {
+          await client.call('threads.send', { threadId: thread.id, text, mode, ...(pick ? { pick } : {}) });
           setPick(undefined);
         }}
         toolbar={<>

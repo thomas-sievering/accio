@@ -14,6 +14,30 @@ const fixture = (name: string) => readFile(resolve('tests/fixtures', name));
 const token = 'isolated-chat-test-token';
 const image = await fixture('chat.png');
 const harness = new FakeHarness(async function* (run) {
+  if (run.prompt === 'Steering fixture') {
+    const messages: string[] = [];
+    let finished = false;
+    let wake = () => {};
+    const abort = () => { finished = true; wake(); };
+    run.signal.addEventListener('abort', abort, { once: true });
+    run.registerSteer?.(async text => {
+      messages.push(text);
+      if (text === 'Finish steering fixture') finished = true;
+      wake();
+    });
+    try {
+      yield { type: 'harness_event', event: { kind: 'text', id: 'steer-ready', text: 'Waiting for steering.' } };
+      let n = 0;
+      while (!finished || messages.length) {
+        const text = messages.shift();
+        if (!text) { await new Promise<void>(resolve => { wake = resolve; }); continue; }
+        yield { type: 'harness_event', event: { kind: 'text', id: `steered-${n++}`, text: `Steered: ${text}` } };
+      }
+      if (!run.signal.aborted) yield { type: 'harness_event', event: { kind: 'end' } };
+    } finally { run.registerSteer?.(undefined); run.signal.removeEventListener('abort', abort); }
+    return;
+  }
+  if (run.prompt.startsWith('Queued ')) { yield* replyWith(`Finished: ${run.prompt}`); return; }
   if (run.prompt === 'Choice fixture') {
     const options = [['choice-list.png', 'List rows'], ['choice-cards.png', 'Cards'], ['choice-grouped.png', 'Grouped by provider']];
     for (const [name] of options) await writeFile(join(run.cwd, name!), await fixture(name!));

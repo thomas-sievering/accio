@@ -46,6 +46,8 @@ export type HarnessMessage =
   | { type: string; session_id?: string; [k: string]: unknown };
 
 export type HarnessTurn = {
+  /** Registers the live input channel; unregister before the harness finishes. */
+  registerSteer?: (send: ((text: string) => Promise<void>) | undefined) => void;
   resourceInstructions?: string;
   mcps?: Record<string, HarnessMcp>;
   cwd: string;

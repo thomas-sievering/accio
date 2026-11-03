@@ -193,6 +193,7 @@ const Item = memo(function Item({ threadId, item, preparing, picked, pickName }:
   switch (item.kind) {
     case 'user':
       return <div className={`msg user${item.resume ? ' resume' : ''}`} data-item-id={item.id}>
+        {item.steered && <span className="msg-pick">Steered mid-turn</span>}
         {pickName && <span className="msg-pick">✓ {pickName}</span>}
         {item.resume ? 'Resume' : item.text}
       </div>;
