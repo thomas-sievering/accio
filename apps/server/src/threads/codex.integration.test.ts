@@ -125,6 +125,8 @@ describe('Codex and ChatGPT accounts', () => {
     const { key } = await t.app.profiles.client.call('machine.modelKey', { profileId: profile.id });
     const response = await fetch(`${t.app.hubUrl}/openai/responses`, { method: 'POST', headers: {
       authorization: `Bearer ${key}`, 'chatgpt-account-id': 'forged', 'openai-organization': 'forged-org', cookie: 'secret-cookie',
+      'cf-connecting-ip': '203.0.113.1', 'cf-ray': 'edge-ray', 'cf-visitor': '{"scheme":"https"}',
+      'x-forwarded-for': '203.0.113.1', forwarded: 'for=203.0.113.1', 'cdn-loop': 'cloudflare',
     }, body: '{}' });
     expect(await response.text()).toBe('data: ok\n\n');
     expect(calls.map((x) => x.url)).toEqual(['https://chatgpt.com/backend-api/codex/responses', 'https://chatgpt.com/backend-api/codex/responses']);
@@ -134,6 +136,7 @@ describe('Codex and ChatGPT accounts', () => {
     for (const call of calls) {
       expect(call.headers.get('chatgpt-account-id')).toBe('Work');
       expect(call.headers.has('openai-organization')).toBe(false); expect(call.headers.has('cookie')).toBe(false);
+      for (const header of ['cf-connecting-ip', 'cf-ray', 'cf-visitor', 'x-forwarded-for', 'forwarded', 'cdn-loop']) expect(call.headers.has(header)).toBe(false);
     }
     expect((await fetch(`${t.app.hubUrl}/openai/responses`, { method: 'POST', headers: { authorization: 'Bearer invalid' } })).status).toBe(401);
     const other = await c.call('profiles.save', { name: 'No login' });

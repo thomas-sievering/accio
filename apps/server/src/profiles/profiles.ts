@@ -16,6 +16,9 @@ export class Profiles {
   private users = new Map<string, number>();
   private removing = new Set<string>();
   private closing = false;
+  private announcedProfiles = '';
+  private announcedAccounts = '';
+  private announcedModels = '';
   readonly signIns: BrowserSignIns;
   private referenceSource = (): string[] => [];
   private referenceQueue: Promise<unknown> = Promise.resolve();
@@ -93,9 +96,13 @@ export class Profiles {
     await writeConfigFolder(this.home, id, access); return access;
   }
   private announce() {
-    this.broadcast('profiles.changed', this.client.snapshot?.profiles ?? []);
-    this.broadcast('accounts.changed', this.client.snapshot?.accounts ?? []);
-    this.broadcast('models.changed', null);
+    const profiles = this.client.snapshot?.profiles ?? [];
+    const accounts = this.client.snapshot?.accounts ?? [];
+    const profileState = JSON.stringify(profiles), accountState = JSON.stringify(accounts);
+    const modelState = JSON.stringify([profiles, accounts, this.client.snapshot?.models, this.client.snapshot?.favorites]);
+    if (profileState !== this.announcedProfiles) { this.announcedProfiles = profileState; this.broadcast('profiles.changed', profiles); }
+    if (accountState !== this.announcedAccounts) { this.announcedAccounts = accountState; this.broadcast('accounts.changed', accounts); }
+    if (modelState !== this.announcedModels) { this.announcedModels = modelState; this.broadcast('models.changed', null); }
   }
   private change<T>(fn: () => Promise<T>): Promise<T> { if (this.closing) return Promise.reject(new UserError('This machine is shutting down')); const p = this.queue.then(fn); this.queue = p.catch(() => {}); return p; }
 }
