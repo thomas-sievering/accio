@@ -55,6 +55,13 @@ button {
   cursor: pointer;
   user-select: none;
 }
+.folder-link {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.folder-link:hover {
+  color: var(--ink);
+}
 :focus-visible {
   outline: 2px solid var(--blue);
   outline-offset: 2px;

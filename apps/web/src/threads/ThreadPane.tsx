@@ -1,4 +1,5 @@
 import type { ThreadView } from '@accio/protocol';
+import { useState } from 'react';
 import { useClient } from '../app/connection';
 import { Folder, ShieldOff } from '../app/icons';
 import { useProfiles } from '../profiles/profiles';
@@ -16,6 +17,17 @@ export function ThreadPane({ thread, onOpenProfile }: { thread: ThreadView; onOp
   const checkout = state?.checkouts.find((c) => c.id === thread.checkoutId);
   const project = state?.projects.find((p) => p.id === checkout?.projectId);
   const running = thread.status === 'running';
+  const canOpenFolder = window.accioDesktop?.serverOrigin === window.location.origin;
+  const [folderError, setFolderError] = useState<string>();
+  const openFolder = async () => {
+    if (!checkout || !canOpenFolder || !window.accioDesktop) return;
+    setFolderError(undefined);
+    try {
+      await window.accioDesktop.openFolder(checkout.path);
+    } catch (error) {
+      setFolderError(error instanceof Error ? error.message : 'Could not open folder.');
+    }
+  };
   // A thread with nothing said yet centres its composer under a question, as T3 Code does.
   const fresh = items?.length === 0 && !running;
   const harness = <span className="composer-harness">Claude Code</span>;
@@ -30,10 +42,17 @@ export function ThreadPane({ thread, onOpenProfile }: { thread: ThreadView; onOp
           <b>{thread.title}</b>
           <span className="thread-where" title={checkout?.path}>
             {profile?.name ?? 'unknown profile'}
-            {checkout && <span className="faint"> · {checkout.path}</span>}
+            {checkout && (
+              <span className="faint"> · {canOpenFolder ? (
+                <button className="folder-link" title="Open folder in Explorer" onClick={() => void openFolder()}>
+                  {checkout.path}
+                </button>
+              ) : checkout.path}</span>
+            )}
           </span>
         </div>
       </header>
+      {folderError && <p className="error" role="alert">{folderError}</p>}
       {fresh ? (
         <div className="hero">
           <h1>What should we build in {project?.name ?? 'this checkout'}?</h1>
@@ -43,10 +62,13 @@ export function ThreadPane({ thread, onOpenProfile }: { thread: ThreadView; onOp
           {profile && !profile.account && <ProfileNote name={profile.name} onOpen={() => onOpenProfile(profile.id)} />}
           <Composer disabled={false} placeholder="Ask Claude Code anything" onSend={send} toolbar={harness} />
           <div className="hero-meta">
-            <span className="hero-chip" title={checkout?.path}>
+            {checkout && canOpenFolder ? <button className="hero-chip folder-link" title={`Open ${checkout.path} in Explorer`} onClick={() => void openFolder()}>
+              <Folder />
+              {folderName(checkout.path)}
+            </button> : <span className="hero-chip" title={checkout?.path}>
               <Folder />
               {checkout ? folderName(checkout.path) : 'unknown checkout'}
-            </span>
+            </span>}
             <span className="hero-chip push" title="Threads run with full permissions (ADR 0005)">
               <ShieldOff />
               Full access
