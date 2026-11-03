@@ -37,7 +37,7 @@ export function profileHue(id: string): number {
   return h;
 }
 
-export function ProfileTile({ profile, size = 'sm' }: { profile?: ProfileView; size?: 'xs' | 'sm' | 'md' }) {
+export function ProfileTile({ profile, size = 'sm' }: { profile?: ProfileView; size?: 'sm' | 'md' }) {
   if (!profile) {
     // Flat line mark: "all" has no colour of its own, so it gets no tile.
     return (
