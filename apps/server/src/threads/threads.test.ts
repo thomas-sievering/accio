@@ -34,6 +34,23 @@ describe('threads slice', () => {
   let stop: (() => Promise<void>) | undefined;
   afterEach(() => stop?.());
 
+  it('starts without a project in a dedicated workspace and continues there', async () => {
+    const harness = new FakeHarness();
+    const t = await startTestApp({ harness });
+    stop = t.stop;
+    const c = await t.connect();
+    await c.signedIn('HRC');
+    const thread = await c.call('threads.start', { profileId: 'hrc', text: 'Help me plan' });
+    await settled(c, thread.id);
+    expect(thread).toMatchObject({ checkoutId: '', projectId: '', profileId: 'hrc' });
+    const cwd = join(t.home, 'workspaces', thread.id);
+    expect(harness.runs[0]!.cwd).toBe(cwd);
+    await writeFile(join(cwd, 'notes.txt'), 'Keep this');
+    await sendAndSettle(c, thread.id, 'Continue');
+    expect(harness.runs[1]).toMatchObject({ cwd, sessionId: SESSION });
+    expect(await c.call('projects.get', {})).toMatchObject({ projects: [], checkouts: [] });
+  });
+
   it('runs a turn under the thread’s profile, streams the reply and keeps the transcript', async () => {
     const harness = new FakeHarness();
     const { t, c, checkout, folder } = await setup(harness);

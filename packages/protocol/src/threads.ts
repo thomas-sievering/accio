@@ -8,7 +8,9 @@ import { ModelSelection } from './models.js';
  */
 export type ThreadView = {
   id: string;
+  /** Empty for a thread started with No project. */
   checkoutId: string;
+  /** Empty for a thread started with No project. */
   projectId: string;
   profileId: string;
   model: ModelSelection;
@@ -37,7 +39,10 @@ export type TranscriptItem =
   | { kind: 'notice'; id: string; turnId: string; tone: 'info' | 'error'; text: string };
 
 const ThreadId = z.object({ threadId: z.string() });
-const Start = z.object({ checkoutId: z.string(), text: z.string().trim().min(1), model: ModelSelection.optional() });
+const Start = z.union([
+  z.object({ checkoutId: z.string().min(1), text: z.string().trim().min(1), model: ModelSelection.optional() }),
+  z.object({ profileId: z.string().min(1), text: z.string().trim().min(1), model: ModelSelection.optional() }),
+]);
 const SetModel = z.object({ threadId: z.string(), model: ModelSelection });
 const Snooze = z.object({ threadId: z.string(), until: z.iso.datetime({ offset: true }) });
 const Send = z.object({ threadId: z.string(), text: z.string().trim().min(1) });

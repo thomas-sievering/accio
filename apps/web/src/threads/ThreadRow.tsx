@@ -44,8 +44,8 @@ export function ThreadRow({ thread: t, place }: { thread: ThreadView; place: She
       <div className={className} onContextMenu={onContextMenu}>
         <button className="row-main" onClick={() => select(t.id)}>
           <span className="card-top">
-            <ProjectMark id={t.projectId} />
-            <span className="card-project">{project}</span>
+            {t.projectId ? <ProjectMark id={t.projectId} /> : <span className="no-project-mark" />}
+            <span className="card-project">{project ?? 'No project'}</span>
             <CardStatus thread={t} now={now} />
           </span>
           <span className="row-name">{t.title}</span>
