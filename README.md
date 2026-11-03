@@ -2,6 +2,8 @@
 
 Runs coding threads in Claude Code and Codex on your own machines, keeping each profile, such as work and personal, apart. Terms are in [GLOSSARY.md](GLOSSARY.md), decisions in [docs/adr](docs/adr).
 
+For the delivery model, workspace ownership and optional pull requests, see [ADR 0011](docs/adr/0011-threads-own-delivery-with-optional-pull-requests.md) and the [delivery feature notes](docs/plans/thread-delivery.md).
+
 ## v0.1
 
 One machine, with the Claude Agent SDK and a bundled Codex app-server.

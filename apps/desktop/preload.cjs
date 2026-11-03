@@ -6,4 +6,5 @@ contextBridge.exposeInMainWorld('accioDesktop', {
   serverOrigin: process.argv.find((arg) => arg.startsWith('--accio-server-origin='))?.slice('--accio-server-origin='.length),
   pickFolder: () => ipcRenderer.invoke('accio:pick-folder'),
   openFolder: (path) => ipcRenderer.invoke('accio:open-folder', path),
+  openPreview: (url) => ipcRenderer.invoke('accio:open-preview', url),
 });

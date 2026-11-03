@@ -5,6 +5,7 @@ import { dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ServerProcess, type Ready } from './serverProcess.js';
 import { stat } from 'node:fs/promises';
+import { previewUrl } from './openPreview.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -54,6 +55,10 @@ async function createWindow(ready: Ready) {
   const base = process.env.ACCIO_DEV_URL ?? ready.url;
   await win.loadURL(`${base}/#token=${encodeURIComponent(ready.token)}`);
 }
+
+ipcMain.handle('accio:open-preview', async (event, url: unknown) => {
+  await shell.openExternal(previewUrl(event.senderFrame?.url, localServerOrigin, url));
+});
 
 ipcMain.handle('accio:pick-folder', async (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);

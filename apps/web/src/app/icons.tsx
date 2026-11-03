@@ -31,6 +31,9 @@ export const Close = () => (
     <path d="M18 6 6 18M6 6l12 12" />
   </svg>
 );
+export const Ship = () => <svg {...base}><path d="M12 15V3m-5 5 5-5 5 5M4 14v6h16v-6" /></svg>;
+export const Archive = () => <svg {...base}><rect x="3" y="3" width="18" height="5" rx="1" /><path d="M5 8v12h14V8m-10 4h6" /></svg>;
+export const Play = () => <svg {...base}><path d="m7 4 14 8-14 8Z" /></svg>;
 export const ArrowLeft = () => (
   <svg {...base}>
     <path d="M19 12H5M12 19l-7-7 7-7" />
