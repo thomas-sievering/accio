@@ -27,7 +27,8 @@ test('Skills tab lists project and inherited skills, adds, references, edits, di
   // Inherited skills start folded behind their counts.
   const fold = panel(page).getByRole('button', { name: /^Inherited/ });
   await expect(fold).toHaveAttribute('aria-expanded', 'false');
-  await expect(fold).toContainText('1 available · 0 loaded');
+  await expect(fold).toHaveAttribute('title', /^1 available · 0 loaded\./);
+  await expect(fold.locator('.skills-count')).toHaveText('1');
   await expect(skillRow(page, 'lib-docs')).toHaveCount(0);
   await fold.click();
   await expect(skillRow(page, 'lib-docs')).toContainText('Profile · Library');
@@ -95,4 +96,33 @@ test('Skills tab lists project and inherited skills, adds, references, edits, di
   await expect(panel(page).getByText(/Project skills need a project/)).toBeVisible();
   await expect(panel(page).getByRole('button', { name: 'Add skill', exact: true })).toHaveCount(0);
   await expect(skillRow(page, 'repo-notes')).toHaveCount(0);
+});
+
+test('MCP tab lists every MCP server, flags sign-in and opens settings', async ({ page, baseURL }, testInfo) => {
+  await openSkills(page, baseURL!, /Skills fixture/);
+  await page.getByRole('tab', { name: 'MCP', exact: true }).click();
+  const mcp = page.getByRole('tabpanel', { name: 'MCP' });
+  const row = (name: string) => mcp.locator('.mcp-item').filter({ has: page.getByRole('button', { name: new RegExp(`^${name}\\b`) }) });
+
+  await expect(mcp.getByRole('heading', { name: 'Servers 2' })).toBeVisible();
+  await expect(row('docs-search')).toContainText('Remote');
+  await expect(row('docs-search')).toContainText('https://mcp.example.test/docs');
+  await expect(mcp.getByRole('button', { name: 'docs-search: sign in' })).toBeVisible();
+  await expect(row('local-db')).toContainText('db-mcp --readonly');
+  await expect(row('local-db').getByRole('button', { name: /sign in/ })).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath('mcp-panel.png') });
+
+  // Arrow keys move between tabs, and the choice is remembered.
+  await page.getByRole('tab', { name: 'MCP', exact: true }).press('ArrowLeft');
+  await expect(page.getByRole('tab', { name: 'Skills', exact: true })).toBeFocused();
+  await expect(page.getByRole('tab', { name: 'Skills', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await page.getByRole('tab', { name: 'MCP', exact: true }).click();
+  await page.goto(`${baseURL}/#token=${token}`);
+  await page.getByRole('button', { name: /Skills fixture/ }).click();
+  await expect(page.getByRole('tab', { name: 'MCP', exact: true })).toHaveAttribute('aria-selected', 'true');
+
+  // A row opens that server in settings.
+  await page.getByRole('tabpanel', { name: 'MCP' }).getByRole('button', { name: 'docs-search Remote', exact: true }).click();
+  await expect(page.locator('.layout.with-panel')).toBeHidden();
+  await expect(page.getByText('docs-search').first()).toBeVisible();
 });
