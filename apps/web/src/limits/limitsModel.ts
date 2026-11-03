@@ -81,11 +81,13 @@ const KIND_ORDER: Record<LimitWindow['kind'], number> = { session: 0, weekly: 1,
 const byWindow = (a: LimitWindow, b: LimitWindow) =>
   KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || (a.durationMinutes ?? Infinity) - (b.durationMinutes ?? Infinity) || a.label.localeCompare(b.label);
 
-/** General windows first; model or other scoped windows grouped by scope for disclosure below them. */
+/** General windows first, then scoped windows with reported usage or reset information. */
 export function splitWindows(windows: LimitWindow[]): { general: LimitWindow[]; scoped: { scope: string; windows: LimitWindow[] }[] } {
   const general = windows.filter((w) => w.scope === null).sort(byWindow);
   const scoped = new Map<string, LimitWindow[]>();
-  for (const w of windows) if (w.scope !== null) scoped.set(w.scope, [...(scoped.get(w.scope) ?? []), w]);
+  for (const w of windows) if (w.scope !== null && (w.usedPercent !== null || w.resetsAt !== null)) {
+    scoped.set(w.scope, [...(scoped.get(w.scope) ?? []), w]);
+  }
   return {
     general,
     scoped: [...scoped].sort(([a], [b]) => a.localeCompare(b)).map(([scope, list]) => ({ scope, windows: list.sort(byWindow) })),
