@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { ProfileView } from '@accio/protocol';
 import { useClient } from '../app/connection';
+import { useAction } from '../app/useAction';
 
 /**
  * GLOSSARY: Sign-in. Opens Claude's consent page; you approve, and paste back
@@ -10,20 +11,7 @@ export function SignInWithClaude({ profile }: { profile: ProfileView }) {
   const client = useClient();
   const [signInId, setSignInId] = useState<string | null>(null);
   const [code, setCode] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
-
-  const run = async (fn: () => Promise<unknown>) => {
-    setBusy(true);
-    setError(undefined);
-    try {
-      await fn();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
+  const { busy, error, run } = useAction();
 
   const start = () =>
     run(async () => {

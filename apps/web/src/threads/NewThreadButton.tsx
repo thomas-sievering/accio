@@ -1,49 +1,60 @@
 import { useRef } from 'react';
-import { useClient } from '../app/connection';
 import { SquarePen } from '../app/icons';
+import { folderName } from '../projects/folderName';
 import { useProjects } from '../projects/projects';
 import { useThreads } from './threads';
 
-/**
- * Starts a thread. With one checkout in reach (one project in scope, one checkout)
- * it starts there at once; otherwise it asks which project and checkout.
- */
-export function NewThreadButton() {
-  const client = useClient();
-  const { select, projectScope } = useThreads();
+/** The checkouts a new thread could start in: those of the scoped project, or of every visible one. */
+export function useNewThreadChoices() {
+  const { projectScope } = useThreads();
   const { visible, checkoutsOf } = useProjects();
-  const menu = useRef<HTMLDivElement>(null);
   const projects = projectScope ? visible.filter((p) => p.id === projectScope) : visible;
-  const choices = projects.flatMap((p) => {
+  return projects.flatMap((p) => {
     const checkouts = checkoutsOf(p.id);
     return checkouts.map((c) => ({ id: c.id, name: p.name, folder: checkouts.length > 1 ? folderName(c.path) : undefined }));
   });
+}
 
-  const start = async (checkoutId: string) => {
+/**
+ * Opens a new thread's draft. With one checkout in reach it opens there at once;
+ * otherwise it asks which project and checkout. Nothing is created until you send.
+ */
+export function NewThreadButton({ className = 'side-icon', label }: { className?: string; label?: string }) {
+  const { openDraft } = useThreads();
+  const choices = useNewThreadChoices();
+  const menu = useRef<HTMLDivElement>(null);
+  const content = (
+    <>
+      <SquarePen />
+      {label}
+    </>
+  );
+
+  const start = (checkoutId: string) => {
     menu.current?.hidePopover();
-    const thread = await client.call('threads.create', { checkoutId });
-    select(thread.id);
+    openDraft(checkoutId);
   };
 
   if (choices.length <= 1) {
     return (
       <button
-        className="side-icon"
+        className={className}
         title="New thread"
         aria-label="New thread"
         disabled={choices.length === 0}
         onClick={() => choices[0] && start(choices[0].id)}
       >
-        <SquarePen />
+        {content}
       </button>
     );
   }
+  const id = `new-thread-menu${label ? '-labelled' : ''}`;
   return (
     <>
-      <button className="side-icon" title="New thread" aria-label="New thread" popoverTarget="new-thread-menu">
-        <SquarePen />
+      <button className={className} title="New thread" aria-label="New thread" popoverTarget={id}>
+        {content}
       </button>
-      <div className="menu" id="new-thread-menu" popover="auto" ref={menu} role="menu">
+      <div className="menu" id={id} popover="auto" ref={menu} role="menu">
         <div className="menu-label">New thread in</div>
         {choices.map((c) => (
           <button key={c.id} className="menu-item" role="menuitem" onClick={() => start(c.id)}>
@@ -56,8 +67,4 @@ export function NewThreadButton() {
       </div>
     </>
   );
-}
-
-function folderName(path: string) {
-  return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 }

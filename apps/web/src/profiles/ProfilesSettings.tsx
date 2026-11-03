@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from 'react';
 import type { ProfileView } from '@accio/protocol';
 import { useClient } from '../app/connection';
-import { Chevron, Plus } from '../app/icons';
+import { Chevron, Close, Plus } from '../app/icons';
 import { SettingsSection } from '../app/Settings';
+import { useAction } from '../app/useAction';
 import { ProfileTile, useProfiles } from './profiles';
 import { SignInWithClaude } from './SignInWithClaude';
 
@@ -52,31 +53,16 @@ export function ProfilesSettings({
 function ProfileForm({ profile, onSaved, onDone }: { profile?: ProfileView; onSaved: (p: ProfileView) => void; onDone: () => void }) {
   const client = useClient();
   const [name, setName] = useState(profile?.name ?? '');
-  const [folderText, setFolderText] = useState((profile?.folders ?? []).join('\n'));
-  const [error, setError] = useState<string>();
-  const [busy, setBusy] = useState(false);
+  const [folders, setFolders] = useState(profile?.folders ?? []);
+  const { busy, error, run } = useAction();
 
-  const run = async (action: () => Promise<ProfileView | null>) => {
-    setBusy(true);
-    setError(undefined);
-    try {
-      const result = await action();
-      if (result) onSaved(result);
-      else onDone();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const folders = folderText
-      .split('\n')
-      .map((r) => r.trim())
-      .filter(Boolean);
-    void run(() => client.call('profiles.save', { id: profile?.id, name, folders }));
+    const saved = await run(() => client.call('profiles.save', { id: profile?.id, name, folders }));
+    if (saved) onSaved(saved);
+  };
+  const remove = async () => {
+    if (profile && (await run(async () => (await client.call('profiles.delete', { id: profile.id }), true)))) onDone();
   };
 
   return (
@@ -87,11 +73,11 @@ function ProfileForm({ profile, onSaved, onDone }: { profile?: ProfileView; onSa
             <span>Name</span>
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="personal, work…" autoFocus={!profile} required />
           </label>
-          <label className="field">
+          <div className="field">
             <span>Folders</span>
-            <textarea rows={2} value={folderText} onChange={(e) => setFolderText(e.target.value)} placeholder={'S:\\hrc'} spellCheck={false} />
-            <small className="hint">One per line. New projects inside these folders default to this profile.</small>
-          </label>
+            <FolderList folders={folders} onChange={setFolders} />
+            <small className="hint">New projects inside these folders default to this profile.</small>
+          </div>
           {profile && (
             <div className="field">
               <span>Claude</span>
@@ -103,12 +89,7 @@ function ProfileForm({ profile, onSaved, onDone }: { profile?: ProfileView; onSa
       </SettingsSection>
       <footer className="settings-actions">
         {profile && (
-          <button
-            type="button"
-            className="ghost danger"
-            disabled={busy}
-            onClick={() => run(async () => (await client.call('profiles.delete', { id: profile.id }), null))}
-          >
+          <button type="button" className="ghost danger" disabled={busy} onClick={remove}>
             Delete
           </button>
         )}
@@ -121,5 +102,51 @@ function ProfileForm({ profile, onSaved, onDone }: { profile?: ProfileView; onSa
         </button>
       </footer>
     </form>
+  );
+}
+
+/** Profile folders as a list: type a path or browse for one, the same picker as Add project. */
+function FolderList({ folders, onChange }: { folders: string[]; onChange: (f: string[]) => void }) {
+  const [draft, setDraft] = useState('');
+  const add = (path: string) => {
+    const p = path.trim();
+    if (p && !folders.includes(p)) onChange([...folders, p]);
+    setDraft('');
+  };
+  const browse = async () => {
+    const picked = await window.accioDesktop?.pickFolder();
+    if (picked) add(picked);
+  };
+  return (
+    <div className="folder-list">
+      {folders.map((f) => (
+        <div key={f} className="folder-row">
+          <code className="grow">{f}</code>
+          <button type="button" className="row-action" aria-label={`Remove ${f}`} title="Remove" onClick={() => onChange(folders.filter((x) => x !== f))}>
+            <Close />
+          </button>
+        </div>
+      ))}
+      <span className="row-input">
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="S:\hrc"
+          spellCheck={false}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              add(draft);
+            }
+          }}
+          onBlur={() => add(draft)}
+        />
+        {window.accioDesktop && (
+          <button type="button" className="ghost" onClick={browse}>
+            Browse…
+          </button>
+        )}
+      </span>
+    </div>
   );
 }

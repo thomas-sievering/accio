@@ -1,98 +1,108 @@
-import type { ThreadView } from '@accio/protocol';
+import type { CheckoutView, ProfileView, ProjectView, ThreadView } from '@accio/protocol';
 import { useClient } from '../app/connection';
-import { Folder, ShieldOff } from '../app/icons';
+import { ShieldOff } from '../app/icons';
 import { useProfiles } from '../profiles/profiles';
+import { folderName } from '../projects/folderName';
+import { ProjectMark } from '../projects/ProjectMark';
 import { useProjects } from '../projects/projects';
 import { Composer } from './Composer';
+import { ThreadNotice } from './ThreadNotice';
 import { Transcript } from './Transcript';
-import { useTranscript } from './threads';
+import { useThreads, useTranscript } from './threads';
+
+const harness = <span className="composer-harness">Claude Code</span>;
+
+/** Where a thread runs, looked up once for the header, the notice and the composer. */
+function usePlace(checkoutId: string, profileId?: string) {
+  const { profiles = [] } = useProfiles();
+  const { state } = useProjects();
+  const checkout = state?.checkouts.find((c) => c.id === checkoutId);
+  const project = state?.projects.find((p) => p.id === checkout?.projectId);
+  const profile = profiles.find((p) => p.id === (profileId ?? project?.profileId));
+  return { checkout, project, profile, manyProfiles: profiles.length > 1 };
+}
 
 export function ThreadPane({ thread, onOpenProfile }: { thread: ThreadView; onOpenProfile: (profileId: string) => void }) {
   const client = useClient();
-  const { profiles = [] } = useProfiles();
-  const { state } = useProjects();
+  const place = usePlace(thread.checkoutId, thread.profileId);
   const items = useTranscript(thread.id);
-  const profile = profiles.find((a) => a.id === thread.profileId);
-  const checkout = state?.checkouts.find((c) => c.id === thread.checkoutId);
-  const project = state?.projects.find((p) => p.id === checkout?.projectId);
   const running = thread.status === 'running';
-  // A thread with nothing said yet centres its composer under a question, as T3 Code does.
-  const fresh = items?.length === 0 && !running;
-  const harness = <span className="composer-harness">Claude Code</span>;
-  const send = async (text: string) => {
-    await client.call('threads.send', { threadId: thread.id, text });
-  };
+  const lastTurn = items?.findLast((item) => item.kind === 'user')?.turnId;
+  const blocked = thread.status === 'failed' || thread.status === 'interrupted';
+  const notices = blocked ? items?.filter((item) => item.kind === 'notice' && item.turnId === lastTurn) : undefined;
+  const detail = notices?.map((item) => 'text' in item ? item.text : '').join(' ') || undefined;
+  const visibleItems = blocked ? items?.filter((item) => item.kind !== 'notice' || item.turnId !== lastTurn) : items;
 
   return (
     <>
-      <header className="main-top drag">
-        <div className="thread-title">
-          <b>{thread.title}</b>
-          <span className="thread-where" title={checkout?.path}>
-            {profile?.name ?? 'unknown profile'}
-            {checkout && <span className="faint"> · {checkout.path}</span>}
-          </span>
-        </div>
-      </header>
-      {fresh ? (
-        <div className="hero">
-          <h1>What should we build in {project?.name ?? 'this checkout'}?</h1>
-          <p className="hero-sub">
-            as {profile?.name ?? 'unknown profile'}
-          </p>
-          {profile && !profile.account && <ProfileNote name={profile.name} onOpen={() => onOpenProfile(profile.id)} />}
-          <Composer disabled={false} placeholder="Ask Claude Code anything" onSend={send} toolbar={harness} />
-          <div className="hero-meta">
-            <span className="hero-chip" title={checkout?.path}>
-              <Folder />
-              {checkout ? folderName(checkout.path) : 'unknown checkout'}
-            </span>
-            <span className="hero-chip push" title="Threads run with full permissions (ADR 0005)">
-              <ShieldOff />
-              Full access
-            </span>
-          </div>
-        </div>
-      ) : items ? (
-        <Transcript items={items} working={running} />
-      ) : (
-        <div className="empty" />
-      )}
-      {!fresh && profile && !profile.account && <ProfileNote name={profile.name} onOpen={() => onOpenProfile(profile.id)} />}
-      {thread.status === 'interrupted' && (
-        <div className="resume-bar">
-          <span>This turn was interrupted. It continues only when you resume it.</span>
-          <button className="ghost primary" onClick={() => client.call('threads.resume', { threadId: thread.id })}>
-            Resume
-          </button>
-        </div>
-      )}
-      {!fresh && (
-        <Composer
-          disabled={running}
-          onStop={running ? async () => void (await client.call('threads.stop', { threadId: thread.id })) : undefined}
-          placeholder={running ? 'Working…' : 'Ask Claude Code anything'}
-          onSend={send}
-          toolbar={harness}
-        />
-      )}
+      <PaneHeader title={thread.title} {...place} />
+      {visibleItems ? <Transcript items={visibleItems} working={running} /> : <div className="empty" />}
+      <ThreadNotice thread={thread} profile={place.profile} detail={detail} onOpenProfile={onOpenProfile} />
+      <Composer
+        disabled={running || !place.profile?.account}
+        onStop={running ? async () => void (await client.call('threads.stop', { threadId: thread.id })) : undefined}
+        placeholder={running ? 'Working…' : 'Ask Claude Code anything'}
+        onSend={async (text) => void (await client.call('threads.send', { threadId: thread.id, text }))}
+        toolbar={harness}
+      />
     </>
   );
 }
 
-function ProfileNote({ name, onOpen }: { name: string; onOpen: () => void }) {
+/**
+ * A new thread before its first message, centred under a question as in T3 Code.
+ * Sending creates the thread and its first turn together.
+ */
+export function DraftPane({ checkoutId, onOpenProfile }: { checkoutId: string; onOpenProfile: (profileId: string) => void }) {
+  const client = useClient();
+  const { select } = useThreads();
+  const place = usePlace(checkoutId);
+
   return (
-    <div className="profile-note">
-      <span>
-        <b>{name}</b> isn’t signed in with Claude, so this thread can’t run yet.
-      </span>
-      <button className="ghost" onClick={onOpen}>
-        Open {name}
-      </button>
-    </div>
+    <>
+      <PaneHeader title="New thread" {...place} />
+      <div className="hero">
+        <h1>What should we build in {place.project?.name ?? 'this checkout'}?</h1>
+        <ThreadNotice profile={place.profile} onOpenProfile={onOpenProfile} />
+        <Composer
+          disabled={!place.profile?.account}
+          placeholder="Ask Claude Code anything"
+          onSend={async (text) => select((await client.call('threads.start', { checkoutId, text })).id)}
+          toolbar={harness}
+        />
+      </div>
+    </>
   );
 }
 
-function folderName(path: string) {
-  return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+/** One line under the title says where the thread runs: project, checkout folder and, when there is a choice, profile. */
+function PaneHeader(props: {
+  title: string;
+  checkout?: CheckoutView;
+  project?: ProjectView;
+  profile?: ProfileView;
+  manyProfiles: boolean;
+}) {
+  const { checkout, project, profile } = props;
+  return (
+    <header className="main-top drag">
+      <div className="thread-title">
+        <b>{props.title}</b>
+        <span className="thread-where" title={checkout?.path}>
+          {project && <ProjectMark id={project.id} size={10} />}
+          {project?.name ?? 'unknown project'}
+          {checkout && folderName(checkout.path) !== project?.name && <span className="faint">/ {folderName(checkout.path)}</span>}
+          {props.manyProfiles && (
+            <>
+              <span className="faint">·</span>
+              {profile?.name ?? 'unknown profile'}
+            </>
+          )}
+          <span className="full-access" title="Threads run with full permissions (ADR 0005)">
+            <ShieldOff />
+          </span>
+        </span>
+      </div>
+    </header>
+  );
 }

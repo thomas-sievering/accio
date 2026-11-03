@@ -12,38 +12,41 @@ const thread = (id: string, extra: Partial<ThreadView> = {}): ThreadView => ({
   status: 'idle',
   createdAt: '2026-11-03T10:00:00Z',
   updatedAt: '2026-11-03T10:00:00Z',
+  snoozedUntil: null,
+  settledAt: null,
   ...extra,
 });
 const ids = (ts: ThreadView[]) => ts.map((t) => t.id);
+const later = '2026-11-04T09:00:00';
 
 describe('shelveThreads', () => {
-  it('puts settled before snoozed before working', () => {
-    const later = '2026-11-04T09:00:00';
+  it('puts settled before snoozed, and keeps a running thread in the open list', () => {
     const s = shelveThreads(
-      [thread('settled', { status: 'running' }), thread('snoozed', { status: 'running' }), thread('working', { status: 'running' })],
-      { settled: { settledAt: '2026-11-03T11:00:00', snoozedUntil: later }, snoozed: { snoozedUntil: later } },
+      [
+        thread('settled', { settledAt: '2026-11-03T11:00:00', snoozedUntil: later }),
+        thread('snoozed', { snoozedUntil: later }),
+        thread('working', { status: 'running' }),
+      ],
       now,
     );
     expect(ids(s.settled)).toEqual(['settled']);
     expect(ids(s.snoozed)).toEqual(['snoozed']);
-    expect(ids(s.working)).toEqual(['working']);
-    expect(s.open).toEqual([]);
+    expect(ids(s.open)).toEqual(['working']);
   });
 
   it('wakes a thread whose snooze has passed', () => {
-    const s = shelveThreads([thread('woke')], { woke: { snoozedUntil: '2026-11-03T11:00:00' } }, now);
+    const s = shelveThreads([thread('woke', { snoozedUntil: '2026-11-03T11:00:00' })], now);
     expect(s.snoozed).toEqual([]);
     expect(ids(s.open)).toEqual(['woke']);
   });
 
-  it('keeps idle, interrupted and failed threads of every project in one open list, most recently active first', () => {
+  it('keeps threads of every project in one open list, most recently active first', () => {
     const s = shelveThreads(
       [
         thread('old', { updatedAt: '2026-11-01T00:00:00Z' }),
         thread('cut', { status: 'interrupted', updatedAt: '2026-11-03T11:00:00Z' }),
         thread('other', { projectId: 'p2', status: 'failed', updatedAt: '2026-11-03T10:30:00Z' }),
       ],
-      {},
       now,
     );
     expect(ids(s.open)).toEqual(['cut', 'other', 'old']);

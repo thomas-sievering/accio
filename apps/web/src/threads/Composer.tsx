@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { ArrowUp, StopSquare } from '../app/icons';
+import { useAction } from '../app/useAction';
 
 /**
  * T3 Code's boxed composer: the message on top, a toolbar row with Send (or Stop) below.
@@ -21,7 +22,8 @@ export function Composer({
   toolbar?: ReactNode;
 }) {
   const [text, setText] = useState('');
-  const [error, setError] = useState<string>();
+  const { busy, error, run } = useAction();
+  const sending = useRef(false);
   const input = useRef<HTMLTextAreaElement>(null);
 
   useLayoutEffect(() => {
@@ -34,13 +36,15 @@ export function Composer({
   const submit = async (e?: FormEvent) => {
     e?.preventDefault();
     const value = text.trim();
-    if (!value || disabled) return;
-    setError(undefined);
+    if (!value || disabled || sending.current) return;
+    sending.current = true;
     try {
-      await onSend(value);
-      setText('');
-    } catch (err) {
-      setError((err as Error).message);
+      await run(async () => {
+        await onSend(value);
+        setText('');
+      });
+    } finally {
+      sending.current = false;
     }
   };
 
@@ -71,12 +75,12 @@ export function Composer({
               className="send stop"
               title="Stop"
               aria-label="Stop"
-              onClick={() => onStop().catch((e: Error) => setError(e.message))}
+              onClick={() => void run(onStop)}
             >
               <StopSquare />
             </button>
           ) : (
-            <button type="submit" className="send" title="Send" aria-label="Send" disabled={disabled || !text.trim()}>
+            <button type="submit" className="send" title="Send" aria-label="Send" disabled={disabled || busy || !text.trim()}>
               <ArrowUp />
             </button>
           )}
