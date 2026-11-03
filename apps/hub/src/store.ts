@@ -5,7 +5,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 /**
  * The hub's own JSON file, readable by your user only. Atomic, serialised
  * writes; retries the rename Windows refuses while a file is briefly held.
- * (The hub is its own package so it can run alone on the home machine.)
+ * (The hub is its own package so it can later run alone, always on.)
  */
 export class SecretFile<T> {
   private queue: Promise<void> = Promise.resolve();

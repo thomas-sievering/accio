@@ -46,7 +46,7 @@ const Item = memo(function Item({ item }: { item: TranscriptItem }) {
     case 'assistant':
       if (!item.text.trim()) return null;
       return (
-        <div className="msg agent">
+        <div className="msg assistant">
           <Markdown remarkPlugins={[remarkGfm]}>{item.text}</Markdown>
         </div>
       );

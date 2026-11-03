@@ -44,8 +44,8 @@ describe('repo identity', () => {
 
 describe('suggestProfile', () => {
   const profiles = [
-    { id: 'personal', roots: ['S:\\'] },
-    { id: 'hrc', roots: ['S:\\hrc'] },
+    { id: 'personal', folders: ['S:\\'] },
+    { id: 'hrc', folders: ['S:\\hrc'] },
   ];
   it('picks the most specific folder', () => {
     expect(suggestProfile(profiles, 'S:\\hrc\\portal')).toBe('hrc');

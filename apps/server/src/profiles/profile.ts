@@ -5,16 +5,16 @@ import { UserError } from '../rpc/router.js';
 export type Profile = {
   id: string;
   name: string;
-  roots: string[];
+  folders: string[];
 };
 
 /** Who a profile is signed in as, as the hub reports it. */
-export type SignIn = { signedIn: boolean; email: string | null; organization: string | null; claudeAccountId: string | null };
+export type AccountSummary = { signedIn: boolean; email: string | null; organization: string | null; claudeAccountId: string | null };
 
-export function toView(profile: Profile, signIn: SignIn): ProfileView {
+export function toView(profile: Profile, account: AccountSummary): ProfileView {
   return {
     ...profile,
-    signIn: signIn.signedIn ? { email: signIn.email, organization: signIn.organization } : null,
+    account: account.signedIn ? { email: account.email, organization: account.organization } : null,
   };
 }
 
@@ -36,7 +36,7 @@ export function saveProfile(profiles: readonly Profile[], req: SaveProfileParams
   const saved: Profile = {
     id: existing?.id ?? uniqueId(profiles, slugify(req.name)),
     name: req.name,
-    roots: [...new Set(req.roots ?? [])],
+    folders: [...new Set(req.folders ?? [])],
   };
   if (profiles.some((a) => a.id !== saved.id && a.name.toLowerCase() === saved.name.toLowerCase())) {
     throw new UserError(`A profile named ${saved.name} already exists`);
@@ -48,12 +48,12 @@ export function saveProfile(profiles: readonly Profile[], req: SaveProfileParams
 /** GLOSSARY: an account belongs to exactly one profile, so no two profiles sign in to the same Claude account. */
 export function assertAccountInOneProfile(
   profiles: readonly Profile[],
-  signInOf: (id: string) => SignIn,
+  accountOf: (id: string) => AccountSummary,
   profileId: string,
   claudeAccountId: string | null,
 ) {
   if (!claudeAccountId) return;
-  const other = profiles.find((a) => a.id !== profileId && signInOf(a.id).claudeAccountId === claudeAccountId);
+  const other = profiles.find((a) => a.id !== profileId && accountOf(a.id).claudeAccountId === claudeAccountId);
   if (!other) return;
   throw new UserError(
     `${other.name} already uses this Claude account, and an account belongs to one profile only. Sign in with a different Claude account.`,

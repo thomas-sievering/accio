@@ -8,8 +8,8 @@ import type { Projects } from '../projects/projects.js';
 import type { Broadcast, Router } from '../rpc/router.js';
 import { UserError } from '../rpc/router.js';
 import { JsonFile } from '../store/jsonFile.js';
-import type { Agent } from './agent.js';
-import { agentEnv } from './agentEnv.js';
+import type { Harness } from './harness.js';
+import { harnessEnv } from './harnessEnv.js';
 import {
   RESUME_PROMPT,
   assertResumable,
@@ -39,11 +39,12 @@ export class Threads {
     private home: string,
     private profiles: Profiles,
     private projects: Projects,
-    private agent: Agent,
+    private harness: Harness,
     private broadcast: Broadcast,
   ) {
     this.file = new JsonFile(join(home, 'threads.json'), () => []);
     projects.onCheckInUse((checkoutId) => this.countUsing((t) => t.checkoutId === checkoutId));
+    projects.onCheckProjectInUse((projectId) => this.countUsing((t) => t.projectId === projectId));
     profiles.onCheckInUse((profileId) => this.countUsing((t) => t.profileId === profileId));
   }
 
@@ -127,7 +128,7 @@ export class Threads {
 
     const controller = new AbortController();
     this.running.set(thread.id, controller);
-    const env = agentEnv(process.env, access, configFolderOf(this.home, thread.profileId));
+    const env = harnessEnv(process.env, access, configFolderOf(this.home, thread.profileId));
     const turn = this.runTurn(started, turnId, { cwd: checkout.path, prompt: text, env, signal: controller.signal });
     this.turns.add(turn);
     void turn.finally(() => this.turns.delete(turn));
@@ -141,7 +142,7 @@ export class Threads {
     const transcript = new TurnTranscript(turnId);
     let outcome: TurnOutcome | null = null;
     try {
-      for await (const msg of this.agent.run({ ...run, sessionId: thread.sessionId })) {
+      for await (const msg of this.harness.run({ ...run, sessionId: thread.sessionId })) {
         for (const change of transcript.accept(msg)) {
           if (change.type === 'end') outcome = change.outcome;
           await this.apply(thread.id, change);
@@ -156,7 +157,7 @@ export class Threads {
           id: `${turnId}:end`,
           turnId,
           tone: 'error',
-          text: 'The agent stopped without finishing the turn.',
+          text: 'Claude Code stopped without finishing the turn.',
         });
       }
     } catch (err) {

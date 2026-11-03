@@ -1,11 +1,11 @@
 import { mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { FakeAgent, SESSION, replyWith } from '../testing/fakeAgent.js';
+import { FakeHarness, SESSION, replyWith } from '../testing/fakeHarness.js';
 import { startTestApp, type TestClient } from '../testing/testApp.js';
 
-async function setup(agent: FakeAgent) {
-  const t = await startTestApp({ agent });
+async function setup(harness: FakeHarness) {
+  const t = await startTestApp({ harness });
   const c = await t.connect();
   const folder = join(t.home, 'repo');
   await mkdir(folder);
@@ -35,8 +35,8 @@ describe('threads slice', () => {
   afterEach(() => stop?.());
 
   it('runs a turn under the thread’s profile, streams the reply and keeps the transcript', async () => {
-    const agent = new FakeAgent();
-    const { t, c, checkout, folder } = await setup(agent);
+    const harness = new FakeHarness();
+    const { t, c, checkout, folder } = await setup(harness);
     stop = t.stop;
 
     const thread = await c.call('threads.create', { checkoutId: checkout.id });
@@ -46,7 +46,7 @@ describe('threads slice', () => {
     expect(c.events).toContainEqual({ type: 'event', event: 'thread.delta', data: expect.objectContaining({ text: 'reply 1' }) });
     expect(done.find((x) => x.id === thread.id)?.title).toBe('Fix the login bug');
 
-    const run = agent.runs[0]!;
+    const run = harness.runs[0]!;
     expect(run).toMatchObject({ cwd: folder, prompt: 'Fix the login bug\nmore detail', sessionId: null });
     expect(run.env).toMatchObject({
       ANTHROPIC_BASE_URL: t.app.hubUrl,
@@ -62,29 +62,32 @@ describe('threads slice', () => {
 
     // The next turn continues the same Claude session.
     await sendAndSettle(c, thread.id, 'and now?');
-    expect(agent.runs[1]!.sessionId).toBe(SESSION);
+    expect(harness.runs[1]!.sessionId).toBe(SESSION);
   });
 
-  it('keeps a thread on its starting profile after the project moves', async () => {
-    const agent = new FakeAgent();
-    const { t, c, checkout } = await setup(agent);
+  it('moves a project to another profile only while it has no threads', async () => {
+    const harness = new FakeHarness();
+    const { t, c, checkout } = await setup(harness);
     stop = t.stop;
     const thread = await c.call('threads.create', { checkoutId: checkout.id });
     await c.signedIn('Personal');
-    await c.call('projects.setProfile', { projectId: thread.projectId, profileId: 'personal' });
-
-    await sendAndSettle(c, thread.id, 'hi');
-    expect(agent.runs[0]!.env.ANTHROPIC_AUTH_TOKEN).toBe(await hubKeyOf(t.home, 'hrc'));
-    expect(agent.runs[0]!.env.ANTHROPIC_AUTH_TOKEN).not.toBe(await hubKeyOf(t.home, 'personal'));
-    await expect(c.call('profiles.delete', { id: 'hrc' })).rejects.toThrow(/1 thread/);
+    await expect(c.call('projects.setProfile', { projectId: thread.projectId, profileId: 'personal' })).rejects.toThrow(
+      /still has 1 thread/,
+    );
+    await c.call('threads.delete', { threadId: thread.id });
+    const moved = await c.call('projects.setProfile', { projectId: thread.projectId, profileId: 'personal' });
+    expect(moved.profileId).toBe('personal');
+    const next = await c.call('threads.create', { checkoutId: checkout.id });
+    await sendAndSettle(c, next.id, 'hi');
+    expect(harness.runs[0]!.env.ANTHROPIC_AUTH_TOKEN).toBe(await hubKeyOf(t.home, 'personal'));
   });
 
-  it('marks the thread failed and shows the error when the agent fails', async () => {
-    const agent = new FakeAgent(function* () {
+  it('marks the thread failed and shows the error when the harness fails', async () => {
+    const harness = new FakeHarness(function* () {
       yield { type: 'system', subtype: 'init', session_id: SESSION };
       throw new Error('hub refused the key');
     });
-    const { t, c, checkout } = await setup(agent);
+    const { t, c, checkout } = await setup(harness);
     stop = t.stop;
     const thread = await c.call('threads.create', { checkoutId: checkout.id });
     await sendAndSettle(c, thread.id, 'hi', 'failed');
@@ -95,11 +98,11 @@ describe('threads slice', () => {
   it('refuses a second message while a turn is running', async () => {
     let release!: () => void;
     const held = new Promise<void>((r) => (release = r));
-    const agent = new FakeAgent(async function* () {
+    const harness = new FakeHarness(async function* () {
       await held;
       yield* replyWith('late');
     });
-    const { t, c, checkout } = await setup(agent);
+    const { t, c, checkout } = await setup(harness);
     stop = async () => {
       release();
       await t.stop();
@@ -114,8 +117,8 @@ describe('threads slice', () => {
 
 describe('threads need a signed-in profile', () => {
   it('refuses to start a turn until the profile is signed in with Claude', async () => {
-    const agent = new FakeAgent();
-    const t = await startTestApp({ agent });
+    const harness = new FakeHarness();
+    const t = await startTestApp({ harness });
     try {
       const c = await t.connect();
       const folder = join(t.home, 'repo');
@@ -124,7 +127,7 @@ describe('threads need a signed-in profile', () => {
       const checkout = await c.call('checkouts.add', { path: folder, profileId: 'personal' });
       const thread = await c.call('threads.create', { checkoutId: checkout.id });
       await expect(c.call('threads.send', { threadId: thread.id, text: 'hi' })).rejects.toThrow(/Sign Personal in with Claude first/);
-      expect(agent.runs).toHaveLength(0);
+      expect(harness.runs).toHaveLength(0);
     } finally {
       await t.stop();
     }

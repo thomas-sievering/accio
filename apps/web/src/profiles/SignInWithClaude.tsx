@@ -81,12 +81,12 @@ export function SignInWithClaude({ profile }: { profile: ProfileView }) {
 
   return (
     <div className="signin">
-      {profile.signIn ? (
+      {profile.account ? (
         <div className="signin-status">
           <span className="dot ok" />
           <span className="grow">
-            Signed in as <b>{profile.signIn.email ?? 'a Claude account'}</b>
-            {profile.signIn.organization ? <span className="dim"> · {profile.signIn.organization}</span> : null}
+            Signed in as <b>{profile.account.email ?? 'a Claude account'}</b>
+            {profile.account.organization ? <span className="dim"> · {profile.account.organization}</span> : null}
           </span>
           <button type="button" className="link" onClick={start} disabled={busy}>
             Switch

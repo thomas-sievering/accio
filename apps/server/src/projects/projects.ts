@@ -17,14 +17,16 @@ import {
   type ProjectsData,
 } from './project.js';
 
-/** Threads (a later slice) veto removing a checkout they live in. */
+/** Threads (a later slice) veto removing a checkout they live in, or moving a project they belong to. */
 export type CheckoutInUse = (checkoutId: string) => string | undefined;
+export type ProjectInUse = (projectId: string) => string | undefined;
 
 /** Projects and this machine's checkouts of them. */
 export class Projects {
   private file: JsonFile<ProjectsData>;
   private data: ProjectsData = { projects: [], checkouts: [] };
   private inUseChecks: CheckoutInUse[] = [];
+  private projectInUseChecks: ProjectInUse[] = [];
 
   constructor(
     home: string,
@@ -62,6 +64,10 @@ export class Projects {
     this.inUseChecks.push(check);
   }
 
+  onCheckProjectInUse(check: ProjectInUse) {
+    this.projectInUseChecks.push(check);
+  }
+
   register(router: Router) {
     router
       .on('projects.get', () => this.data)
@@ -95,7 +101,14 @@ export class Projects {
         this.profiles.require(profileId);
         const project = this.data.projects.find((p) => p.id === projectId);
         if (!project) throw new UserError('No such project');
-        // GLOSSARY: a thread keeps the profile it started with, so this only affects new threads.
+        // GLOSSARY: a project's profile can change only while it has no threads,
+        // since each thread keeps the profile it started with.
+        if (project.profileId !== profileId) {
+          for (const check of this.projectInUseChecks) {
+            const reason = check(projectId);
+            if (reason) throw new UserError(`This project still has ${reason}. Delete them before moving it to another profile.`);
+          }
+        }
         const updated = { ...project, profileId };
         await this.commit({ ...this.data, projects: this.data.projects.map((p) => (p.id === projectId ? updated : p)) });
         return updated;

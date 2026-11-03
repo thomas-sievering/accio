@@ -7,8 +7,8 @@ import {
   exchangeCode,
   needsRefresh,
   readPastedCode,
-  refreshLogin,
-  type ClaudeLogin,
+  refreshAccount,
+  type ClaudeAccount,
   type Fetch,
   type PendingSignIn,
 } from './claudeOAuth.js';
@@ -18,16 +18,16 @@ import { SecretFile } from './store.js';
  * GLOSSARY: Hub. Holds each profile's Claude account and hands out one access
  * key per profile; a key only ever unlocks its own profile's account (ADR 0007).
  * Profiles here are just ids: names and rules live in accio. For now a profile
- * has at most one account, at Claude; `login` is that account's tokens.
+ * has at most one account, at Claude, with its tokens.
  */
 export type HubProfile = {
   id: string;
   accessKey: string;
-  login: ClaudeLogin | null;
+  account: ClaudeAccount | null;
 };
 
 /** What the hub tells accio about a profile's sign-in. Never the tokens. */
-export type SignInSummary = {
+export type AccountSummary = {
   signedIn: boolean;
   email: string | null;
   organization: string | null;
@@ -40,7 +40,7 @@ export class Hub {
   private file: SecretFile<HubProfile[]>;
   private profiles: HubProfile[] = [];
   private pending = new Map<string, PendingSignIn & { profileId: string; startedAt: number }>();
-  private refreshing = new Map<string, Promise<ClaudeLogin>>();
+  private refreshing = new Map<string, Promise<ClaudeAccount>>();
 
   constructor(
     home: string,
@@ -53,14 +53,16 @@ export class Hub {
     // Before the Account → Profile rename this file was hub/accounts.json.
     const old = join(dirname(this.file.path), 'accounts.json');
     if (!(await exists(this.file.path)) && (await exists(old))) await rename(old, this.file.path);
-    this.profiles = await this.file.read();
+    // Before the Account wording settled, a profile's account was stored as `login`.
+    type Stored = HubProfile & { login?: ClaudeAccount | null };
+    this.profiles = ((await this.file.read()) as Stored[]).map(({ login, ...p }) => ({ ...p, account: p.account ?? login ?? null }));
   }
 
   /** Creates the profile's access key on first use; returns it. */
   async ensureProfile(id: string): Promise<string> {
     const existing = this.profiles.find((a) => a.id === id);
     if (existing) return existing.accessKey;
-    const profile: HubProfile = { id, accessKey: `accio-${randomBytes(24).toString('base64url')}`, login: null };
+    const profile: HubProfile = { id, accessKey: `accio-${randomBytes(24).toString('base64url')}`, account: null };
     await this.commit([...this.profiles, profile]);
     return profile.accessKey;
   }
@@ -69,13 +71,13 @@ export class Hub {
     await this.commit(this.profiles.filter((a) => a.id !== id));
   }
 
-  summary(id: string): SignInSummary {
-    const login = this.profiles.find((a) => a.id === id)?.login ?? null;
+  summary(id: string): AccountSummary {
+    const account = this.profiles.find((a) => a.id === id)?.account ?? null;
     return {
-      signedIn: login !== null,
-      email: login?.email ?? null,
-      organization: login?.organization ?? null,
-      claudeAccountId: login?.claudeAccountId ?? null,
+      signedIn: account !== null,
+      email: account?.email ?? null,
+      organization: account?.organization ?? null,
+      claudeAccountId: account?.claudeAccountId ?? null,
     };
   }
 
@@ -91,26 +93,26 @@ export class Hub {
   }
 
   /**
-   * Exchanges the pasted code for a login. `accept` sees who signed in before
+   * Exchanges the pasted code for an account. `accept` sees who signed in before
    * anything is stored and may refuse (accio's one-profile-per-account rule).
    */
   async completeSignIn(
     signInId: string,
     pasted: string,
-    accept: (who: SignInSummary, profileId: string) => void = () => {},
+    accept: (who: AccountSummary, profileId: string) => void = () => {},
   ): Promise<string> {
     const p = this.pending.get(signInId);
     if (!p || Date.now() - p.startedAt > SIGN_IN_TTL_MS) throw new SignInError('This sign-in has expired. Start it again.');
     const code = readPastedCode(pasted, p);
-    const login = await exchangeCode(this.fetchImpl, p, code);
+    const account = await exchangeCode(this.fetchImpl, p, code);
     this.pending.delete(signInId);
-    accept({ signedIn: true, email: login.email, organization: login.organization, claudeAccountId: login.claudeAccountId }, p.profileId);
-    await this.setLogin(p.profileId, login);
+    accept({ signedIn: true, email: account.email, organization: account.organization, claudeAccountId: account.claudeAccountId }, p.profileId);
+    await this.setAccount(p.profileId, account);
     return p.profileId;
   }
 
   async signOut(profileId: string) {
-    await this.setLogin(profileId, null);
+    await this.setAccount(profileId, null);
   }
 
   /** The profile a request's key belongs to, or undefined for an unknown key. */
@@ -124,14 +126,14 @@ export class Hub {
 
   /** A usable access token for the profile, refreshed first when close to expiry (or when forced). */
   async accessToken(profileId: string, { force = false } = {}): Promise<string | null> {
-    const login = this.require(profileId).login;
-    if (!login) return null;
-    if (!force && !needsRefresh(login)) return login.accessToken;
+    const account = this.require(profileId).account;
+    if (!account) return null;
+    if (!force && !needsRefresh(account)) return account.accessToken;
     // One refresh per profile at a time; concurrent requests share it.
     let pending = this.refreshing.get(profileId);
     if (!pending) {
-      pending = refreshLogin(this.fetchImpl, login).then(async (fresh) => {
-        await this.setLogin(profileId, fresh);
+      pending = refreshAccount(this.fetchImpl, account).then(async (fresh) => {
+        await this.setAccount(profileId, fresh);
         return fresh;
       });
       this.refreshing.set(profileId, pending);
@@ -153,8 +155,8 @@ export class Hub {
     return a;
   }
 
-  private async setLogin(profileId: string, login: ClaudeLogin | null) {
-    await this.commit(this.profiles.map((a) => (a.id === profileId ? { ...a, login } : a)));
+  private async setAccount(profileId: string, account: ClaudeAccount | null) {
+    await this.commit(this.profiles.map((a) => (a.id === profileId ? { ...a, account } : a)));
   }
 
   private async commit(next: HubProfile[]) {

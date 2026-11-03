@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { method } from './rpc.js';
 
 /**
- * GLOSSARY: Thread. A durable conversation with an agent inside one checkout.
+ * GLOSSARY: Thread. A durable conversation with a harness inside one checkout.
  * It keeps the profile it started with for its whole life.
  */
 export type ThreadView = {

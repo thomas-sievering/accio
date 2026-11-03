@@ -26,11 +26,11 @@ function isInside(path: string, root: string): boolean {
   return p === r || p.startsWith(r + '/');
 }
 
-/** The profile whose folders hold this path most specifically, like fleet's roots. */
-export function suggestProfile(profiles: readonly { id: string; roots: string[] }[], path: string): string | null {
+/** The profile whose folders hold this path most specifically (GLOSSARY: Profile folder). */
+export function suggestProfile(profiles: readonly { id: string; folders: string[] }[], path: string): string | null {
   let best: { id: string; len: number } | null = null;
   for (const a of profiles) {
-    for (const root of a.roots) {
+    for (const root of a.folders) {
       if (isInside(path, root) && (!best || root.length > best.len)) best = { id: a.id, len: root.length };
     }
   }

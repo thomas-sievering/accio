@@ -27,8 +27,8 @@ export function ProfilesSheet({ onClose, openProfileId }: { onClose: () => void;
                 <ProfileTile profile={a} size="md" />
                 <span className="menu-text">
                   <b>{a.name}</b>
-                  <small className={a.signIn ? undefined : 'warn'}>
-                    {a.signIn ? (a.signIn.email ?? 'Signed in') : 'Not signed in'}
+                  <small className={a.account ? undefined : 'warn'}>
+                    {a.account ? (a.account.email ?? 'Signed in') : 'Not signed in'}
                   </small>
                 </span>
               </button>
@@ -49,7 +49,7 @@ export function ProfilesSheet({ onClose, openProfileId }: { onClose: () => void;
 function ProfileForm({ profile, onSaved, onCancel }: { profile?: ProfileView; onSaved: (a: ProfileView) => void; onCancel: () => void }) {
   const client = useClient();
   const [name, setName] = useState(profile?.name ?? '');
-  const [roots, setRoots] = useState((profile?.roots ?? []).join('\n'));
+  const [folderText, setFolderText] = useState((profile?.folders ?? []).join('\n'));
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
 
@@ -69,11 +69,11 @@ function ProfileForm({ profile, onSaved, onCancel }: { profile?: ProfileView; on
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    const folders = roots
+    const folders = folderText
       .split('\n')
       .map((r) => r.trim())
       .filter(Boolean);
-    void run(() => client.call('profiles.save', { id: profile?.id, name, roots: folders }));
+    void run(() => client.call('profiles.save', { id: profile?.id, name, folders }));
   };
 
   return (
@@ -86,7 +86,7 @@ function ProfileForm({ profile, onSaved, onCancel }: { profile?: ProfileView; on
           </label>
           <label className="field">
             <span>Folders</span>
-            <textarea rows={2} value={roots} onChange={(e) => setRoots(e.target.value)} placeholder={'S:\\hrc'} spellCheck={false} />
+            <textarea rows={2} value={folderText} onChange={(e) => setFolderText(e.target.value)} placeholder={'S:\\hrc'} spellCheck={false} />
             <small className="hint">One per line. New projects inside these folders default to this profile.</small>
           </label>
           {profile && (

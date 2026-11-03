@@ -27,7 +27,9 @@ export class Profiles {
 
   async load() {
     // Keep only today's fields (v0.1 profiles also had a hand-typed hub URL and key).
-    this.list = (await this.file.read()).map(({ id, name, roots }) => ({ id, name, roots: roots ?? [] }));
+    // Profile folders were stored as `roots` before the glossary named them.
+    type Stored = Profile & { roots?: string[] };
+    this.list = ((await this.file.read()) as Stored[]).map(({ id, name, folders, roots }) => ({ id, name, folders: folders ?? roots ?? [] }));
     // ADR 0003: rewrite every profile's config folder on start.
     for (const a of this.list) await this.connect(a.id);
   }
