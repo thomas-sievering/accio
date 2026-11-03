@@ -1015,24 +1015,31 @@ button.row {
 /* Thread header */
 .thread-title {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: 12px;
   min-width: 0;
   line-height: 1.25;
 }
 .thread-title b {
+  min-width: 0;
   font-weight: 600;
   white-space: nowrap;
-  overflow: clip;
+  overflow: hidden;
   text-overflow: ellipsis;
 }
 .thread-where {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  flex-shrink: 0;
+  max-width: 35%;
+  font-size: 14px;
   color: var(--muted);
   white-space: nowrap;
-  overflow: clip;
+  overflow: hidden;
+}
+.thread-project-name {
+  overflow: hidden;
   text-overflow: ellipsis;
 }
 .faint {
@@ -1325,6 +1332,22 @@ button.row {
 .model-star[aria-pressed="true"] { color: var(--amber); }
 .model-picker-empty { padding: 12px; color: var(--muted); }
 .model-picker-error { margin: 0; padding: 10px 12px; border-top: 1px solid var(--line); }
+.composer-machine {
+  max-width: 240px;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--raised);
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  text-overflow: ellipsis;
+}
+.composer-machine:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
 .send {
   display: grid;
   place-items: center;
@@ -1650,17 +1673,6 @@ button.row {
   flex: none;
   display: block;
   border-radius: 3px;
-}
-
-/* Full-access mark at the end of the thread header's where-line (ADR 0005) */
-.full-access {
-  display: grid;
-  margin-left: 2px;
-  color: var(--dim);
-}
-.full-access svg {
-  width: 12px;
-  height: 12px;
 }
 
 /* Scope menu: profiles with their projects beneath */

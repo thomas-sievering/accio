@@ -31,6 +31,7 @@ import {
   type TurnOutcome,
 } from './thread.js';
 import { TurnTranscript, type TranscriptChange } from './transcript.js';
+import type { Machines } from '../machine/machine.js';
 
 type Live = { items: TranscriptItem[]; file: JsonFile<TranscriptItem[]>; saveTimer?: ReturnType<typeof setTimeout> };
 
@@ -49,6 +50,7 @@ export class Threads {
     private harness: Harness,
     private broadcast: Broadcast,
     private models: Models,
+    private machines: Machines,
   ) {
     this.file = new JsonFile(join(home, 'threads.json'), () => []);
     projects.onCheckInUse((checkoutId) => this.countUsing((t) => t.checkoutId === checkoutId));
@@ -90,7 +92,13 @@ export class Threads {
     router
       .on('threads.list', () => this.list.map(toView))
       .on('threads.start', async (input) => {
-        const { text, model } = input;
+        const { text, model, machineId } = input;
+        if (machineId) {
+          const machine = this.machines.views().find((m) => m.id === machineId);
+          if (!machine) throw new UserError('No such machine');
+          if (!machine.connected) throw new UserError('This machine is offline');
+          if (!machine.thisMachine) throw new UserError('Running threads on another machine is not available yet');
+        }
         const checkout = 'checkoutId' in input ? this.projects.checkout(input.checkoutId) : undefined;
         const project = checkout ? this.projects.projectOf(checkout) : undefined;
         const profileId = project?.profileId ?? ('profileId' in input ? input.profileId : '');

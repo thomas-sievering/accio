@@ -6,6 +6,7 @@ import { Chevron, Monitor } from '../app/icons';
 import { SettingRow, SettingsSection } from '../app/Settings';
 import { useProfiles } from '../profiles/profiles';
 import { FolderList } from './FolderList';
+import { useAction } from '../app/useAction';
 
 /** The machines known to the hub, including those currently offline. */
 export function MachineSettings({ machineId, onOpen }: { machineId?: string; onOpen: (id: string) => void }) {
@@ -13,7 +14,7 @@ export function MachineSettings({ machineId, onOpen }: { machineId?: string; onO
   const machines = useLive(() => client.call('machines.list', {}), 'machines.changed');
   if (!machines) return <p className="note">Loading machines…</p>;
   const machine = machines.find((m) => m.id === machineId);
-  if (machine) return <MachineDetail machine={machine} />;
+  if (machine) return <MachineDetail key={machine.id} machine={machine} />;
   return (
     <>
       <p className="note">Machines known to the hub. Their profile folders are stored on the hub too.</p>
@@ -40,6 +41,7 @@ function MachineDetail({ machine }: { machine: MachineView }) {
   return (
     <>
       <SettingsSection title={machine.name}>
+        <MachineName machine={machine} />
         <SettingRow title="Status" description={machine.thisMachine ? 'The computer this window is talking to.' : undefined}>
           <span className={`pill ${machine.connected ? 'ok' : ''}`}><span className="dot" />{machine.connected ? 'Connected' : 'Offline'}</span>
         </SettingRow>
@@ -62,6 +64,29 @@ function MachineDetail({ machine }: { machine: MachineView }) {
         ))}
       </SettingsSection>
     </>
+  );
+}
+
+function MachineName({ machine }: { machine: MachineView }) {
+  const client = useClient();
+  const [draft, setDraft] = useState<string>();
+  const { busy, error, run } = useAction();
+  const name = draft ?? machine.name;
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    const saved = await run(() => client.call('machines.rename', { machineId: machine.id, name }));
+    if (saved) setDraft(undefined);
+  };
+  return (
+    <form className="setting-form" onSubmit={submit}>
+      <label className="field">
+        <span>Machine name</span>
+        <input value={name} onChange={(e) => setDraft(e.target.value)} maxLength={100} required disabled={busy} />
+        <small className="hint">Shared with everyone connected to the hub.</small>
+      </label>
+      {error && <p className="error" role="alert">{error}</p>}
+      <button type="submit" className="ghost primary" disabled={busy || !name.trim() || name.trim() === machine.name}>Save name</button>
+    </form>
   );
 }
 

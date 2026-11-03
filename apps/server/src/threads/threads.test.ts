@@ -51,6 +51,25 @@ describe('threads slice', () => {
     expect(await c.call('projects.get', {})).toMatchObject({ projects: [], checkouts: [] });
   });
 
+  it('starts on the selected local machine and refuses unavailable targets before creating a thread', async () => {
+    const harness = new FakeHarness();
+    const { t, c, checkout, folder } = await setup(harness);
+    stop = t.stop;
+    const { id: machineId } = await c.call('machine.get', {});
+    const remote = { id: 'remote', name: 'Remote', platform: 'linux', version: '0.1.0', harnesses: [] };
+    await t.app.settings.machineConnected(remote);
+    await expect(c.call('threads.start', { checkoutId: checkout.id, text: 'hello', machineId: remote.id })).rejects.toThrow(/another machine/);
+    await t.app.settings.machineDisconnected(remote.id);
+    await expect(c.call('threads.start', { checkoutId: checkout.id, text: 'hello', machineId: remote.id })).rejects.toThrow(/offline/);
+    await expect(c.call('threads.start', { checkoutId: checkout.id, text: 'hello', machineId: 'unknown' })).rejects.toThrow(/No such machine/);
+    expect(await c.call('threads.list', {})).toEqual([]);
+    expect(harness.runs).toEqual([]);
+
+    const thread = await c.call('threads.start', { checkoutId: checkout.id, text: 'hello', machineId });
+    await settled(c, thread.id);
+    expect(harness.runs[0]).toMatchObject({ cwd: folder, prompt: 'hello' });
+  });
+
   it('runs a turn under the thread’s profile, streams the reply and keeps the transcript', async () => {
     const harness = new FakeHarness();
     const { t, c, checkout, folder } = await setup(harness);

@@ -12,6 +12,8 @@ export type MachineHello = { id: string; name: string; platform: string; version
 
 /** GLOSSARY: Machine, as the hub records it, with the settings that apply to it alone. */
 export type MachineRecord = MachineHello & {
+  /** A name chosen on the hub, preserved when the machine reports its hostname. */
+  customName?: string;
   lastSeen: string;
   /** Profile id → this machine's profile folders. */
   profileFolders: Record<string, string[]>;
@@ -109,7 +111,7 @@ export class SharedSettings {
   async machineConnected(hello: MachineHello) {
     this.connected.add(hello.id);
     const existing = this.machine(hello.id);
-    const record: MachineRecord = { profileFolders: {}, ...existing, ...hello, lastSeen: new Date().toISOString() };
+    const record: MachineRecord = { profileFolders: {}, ...existing, ...hello, name: existing?.customName ?? hello.name, lastSeen: new Date().toISOString() };
     await this.commit({
       ...this.data,
       machines: existing ? this.data.machines.map((m) => (m.id === hello.id ? record : m)) : [...this.data.machines, record],
@@ -123,6 +125,10 @@ export class SharedSettings {
 
   async setProfileFolders(machineId: string, profileId: string, folders: string[]) {
     await this.updateMachine(machineId, (m) => ({ ...m, profileFolders: { ...m.profileFolders, [profileId]: [...new Set(folders)] } }));
+  }
+
+  async renameMachine(machineId: string, name: string) {
+    await this.updateMachine(machineId, (m) => ({ ...m, name, customName: name }));
   }
 
   close(): Promise<void> {

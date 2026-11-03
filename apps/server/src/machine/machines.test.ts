@@ -60,6 +60,43 @@ describe('machines on the hub', () => {
     );
   });
 
+  it('shares renamed machines with clients and preserves their names after reconnecting and restarting', async () => {
+    t = await startTestApp();
+    const a = await t.connect();
+    const b = await t.connect();
+    const { id: machineId } = await a.call('machine.get', {});
+    const renamed = await a.call('machines.rename', { machineId, name: '  Work desktop  ' });
+    expect(renamed).toMatchObject({ id: machineId, name: 'Work desktop', connected: true });
+    await b.waitFor('machines.changed', (list) => list.some((m) => m.id === machineId && m.name === 'Work desktop'));
+    expect((await b.call('machine.get', {})).name).toBe('Work desktop');
+
+    const laptop = { id: 'laptop', name: 'hostname', platform: 'linux', version: '0.1.0', harnesses: [] };
+    await t.app.settings.machineConnected(laptop);
+    await t.app.settings.machineDisconnected(laptop.id);
+    expect(await a.call('machines.rename', { machineId: laptop.id, name: 'Travel laptop' })).toMatchObject({ name: 'Travel laptop', connected: false });
+    await t.app.settings.machineConnected({ ...laptop, name: 'new-hostname', version: '0.1.1' });
+    expect((await a.call('machines.list', {})).find((m) => m.id === laptop.id)).toMatchObject({ name: 'Travel laptop', version: '0.1.1', connected: true });
+
+    const home = t.home;
+    await t.stop({ keepHome: true });
+    t = await startTestApp({}, home);
+    const c = await t.connect();
+    expect((await c.call('machine.get', {})).name).toBe('Work desktop');
+    expect((await c.call('machines.list', {})).find((m) => m.id === laptop.id)).toMatchObject({ name: 'Travel laptop', connected: false });
+  });
+
+  it('rejects invalid names and unknown machines without changing the registry', async () => {
+    t = await startTestApp();
+    const c = await t.connect();
+    const { id: machineId } = await c.call('machine.get', {});
+    const before = await c.call('machines.list', {});
+    for (const name of ['', '   ', 'x'.repeat(101)]) {
+      await expect(c.call('machines.rename', { machineId, name })).rejects.toThrow(/Invalid params/);
+    }
+    await expect(c.call('machines.rename', { machineId: 'unknown', name: 'Desktop' })).rejects.toThrow(/No such machine/);
+    expect(await c.call('machines.list', {})).toEqual(before);
+  });
+
   it('pushes hub machine connections and disconnections and keeps their folders separate', async () => {
     t = await startTestApp();
     const c = await t.connect();

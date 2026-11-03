@@ -39,9 +39,10 @@ export type TranscriptItem =
   | { kind: 'notice'; id: string; turnId: string; tone: 'info' | 'error'; text: string };
 
 const ThreadId = z.object({ threadId: z.string() });
+const StartCommon = { text: z.string().trim().min(1), model: ModelSelection.optional(), machineId: z.string().optional() };
 const Start = z.union([
-  z.object({ checkoutId: z.string().min(1), text: z.string().trim().min(1), model: ModelSelection.optional() }),
-  z.object({ profileId: z.string().min(1), text: z.string().trim().min(1), model: ModelSelection.optional() }),
+  z.object({ checkoutId: z.string().min(1), ...StartCommon }),
+  z.object({ profileId: z.string().min(1), ...StartCommon }),
 ]);
 const SetModel = z.object({ threadId: z.string(), model: ModelSelection });
 const Snooze = z.object({ threadId: z.string(), until: z.iso.datetime({ offset: true }) });
