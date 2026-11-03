@@ -16,7 +16,8 @@ it('reads split readiness and reports unexpected death after readiness', async (
   const died = vi.fn();
   const server = new ServerProcess(fake as unknown as ChildProcess, died);
   fake.stdout.emit('data', Buffer.from('ACCIO_RE'));
-  fake.stdout.emit('data', Buffer.from('ADY {"url":"http://localhost:1","token":"key"}\n'));
+  fake.stdout.emit('data', Buffer.from('ADY {"url":"http://local'));
+  fake.stdout.emit('data', Buffer.from('host:1","token":"key"}\n'));
   expect(await server.ready).toEqual({ url: 'http://localhost:1', token: 'key' });
   fake.emit('exit', 2, null);
   expect(died).toHaveBeenCalledWith(expect.objectContaining({ message: 'accio server exited (2)' }));

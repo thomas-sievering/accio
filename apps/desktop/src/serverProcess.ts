@@ -19,7 +19,8 @@ export class ServerProcess {
       child.stdout?.on('data', (chunk: Buffer) => {
         if (ready) return;
         buffer += chunk.toString();
-        const match = buffer.match(/^ACCIO_READY (.+)$/m);
+        // A data chunk can end halfway through the JSON readiness payload.
+        const match = buffer.match(/^ACCIO_READY ([^\r\n]+)\r?\n/m);
         if (!match?.[1]) return;
         try {
           const value = JSON.parse(match[1]) as Ready;
