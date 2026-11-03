@@ -13,11 +13,12 @@ describe('standalone hub trust and network boundary', () => {
     const home = await mkdtemp(join(tmpdir(), 'accio-hub-service-'));
     cleanup.push(() => rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
     const forwarded: string[] = [];
+    const mcpForwarded: string[] = [];
     const service = await startHubService({ home, port: 0, claudeFetch: async (url, init) => {
       if (String(url).includes('/oauth/token')) return Response.json({ access_token: 'private-provider-token', refresh_token: 'private-refresh-token', expires_in: 3600, account: { uuid: 'me', email_address: 'me@example.com' } });
       forwarded.push(new Headers(init?.headers).get('authorization') ?? '');
       return new Response('data: hello\n\n', { headers: { 'content-type': 'text/event-stream' } });
-    } });
+    }, mcpFetch: async (_url, init) => { mcpForwarded.push(new Headers(init?.headers).get('authorization') ?? ''); return Response.json({ result: 'ok' }); } });
     cleanup.push(() => service.close());
     async function pair(id: string) {
       const { code } = await service.createPairingCode();
@@ -28,7 +29,7 @@ describe('standalone hub trust and network boundary', () => {
       await client.start(); cleanup.push(() => client.close());
       return { client, token: p.token as string, code };
     }
-    return { home, service, forwarded, pair };
+    return { home, service, forwarded, mcpForwarded, pair };
   }
   it('bootstraps a first device with a one-time code and stores only its credential hash', async () => {
     const { home, service, pair } = await fixture();
@@ -92,5 +93,21 @@ describe('standalone hub trust and network boundary', () => {
       expect(status).toBe(404);
     }
     expect(forwarded).toEqual([]);
+  });
+  it('shares resource definitions while retaining MCP credentials and revocable grants on the hub', async () => {
+    const { service, pair, mcpForwarded } = await fixture();
+    const first = await pair('first'); const second = await pair('second');
+    const profile = await first.client.call('profiles.save', { name: 'Personal' });
+    await first.client.call('resources.write', { method: 'saveMcp', args: [{ id: 'remote', name: 'Remote', transport: 'http', url: 'https://mcp.example.test', args: [], auth: 'bearer', scope: { global: false, profileIds: [profile.id], projectKeys: [] } }] });
+    await first.client.call('resources.write', { method: 'setCredential', args: ['remote', { accessToken: 'private-mcp-token' }] });
+    await second.client.refresh(true);
+    expect(second.client.snapshot.resources.mcps[0]).toMatchObject({ id: 'remote', signedIn: true });
+    expect(JSON.stringify(second.client.snapshot)).not.toContain('private-mcp-token');
+    const { token } = await first.client.call('mcp.grant', { id: 'remote', profileId: profile.id });
+    const send = () => fetch(service.url + '/mcp/access/remote', { method: 'POST', headers: { authorization: `Bearer ${token}` }, body: '{}' });
+    expect((await send()).status).toBe(200); expect(mcpForwarded).toEqual(['Bearer private-mcp-token']);
+    await second.client.call('hub.revokeMachine', { machineId: 'first' });
+    expect((await send()).status).toBe(403);
+    expect(second.client.snapshot.resources.mcps[0]?.signedIn).toBe(true);
   });
 });

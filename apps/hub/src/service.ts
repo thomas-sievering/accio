@@ -1,7 +1,7 @@
 import { createServer, request as httpRequest, type IncomingMessage, type ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { WebSocket, WebSocketServer } from 'ws';
-import { methods, type AccountView, type MachineInfo, type ProfileView } from '@accio/protocol';
+import { methods, ResourceScope, type AccountView, type ProfileView, type ResourcesState } from '@accio/protocol';
 import { Hub } from './hub.js';
 import { SharedSettings, type MachineHello, type SharedSeed } from './sharedSettings.js';
 import { OpenAIAuth, type CodexModel } from './openaiAuth.js';
@@ -10,6 +10,9 @@ import { SignInError, type Fetch } from './claudeOAuth.js';
 import { HubTrust } from './trust.js';
 import { startHubProxy } from './proxy.js';
 import { profileViews, saveSharedProfile } from './profile.js';
+import { Resources } from './resources.js';
+import { McpGateway } from './mcp.js';
+import { RESOURCE_WRITES } from './resourceClient.js';
 
 export const HUB_PROTOCOL = 1;
 export type HubSnapshot = {
@@ -19,11 +22,12 @@ export type HubSnapshot = {
   favorites: Record<string, { harnessId: string; modelId: string }[]>;
   models: Record<string, CodexModel[]>;
   store: string; settingsStore: string;
+  resources: ResourcesState;
 };
 export type HubServiceOptions = {
   home: string; host?: string; port?: number; seed?: () => Promise<SharedSeed>;
   claudeFetch?: Fetch; codexFactory?: CodexFactory; anthropicUrl?: string;
-  openaiUrl?: string; openaiFetch?: Fetch;
+  openaiUrl?: string; openaiFetch?: Fetch; mcpFetch?: Fetch; publicUrl?: string;
 };
 type Login = { machineId: string; accountId: string; startedAt: number; complete?: AccountView };
 
@@ -32,7 +36,10 @@ export async function startHubService(opts: HubServiceOptions) {
   const hub = new Hub(opts.home, opts.claudeFetch, new OpenAIAuth(opts.home, opts.codexFactory));
   const settings = new SharedSettings(opts.home);
   const trust = new HubTrust(opts.home);
-  await hub.load(); await settings.load(opts.seed); await trust.load();
+  const resources = new Resources(opts.home);
+  const mcp = new McpGateway(resources, opts.mcpFetch);
+  const grants = new Map<string, { machineId: string; release(): void }>();
+  await hub.load(); await settings.load(opts.seed); await trust.load(); await resources.load();
   const proxy = await startHubProxy({ hub, host: '127.0.0.1', port: 0, upstream: opts.anthropicUrl, fetchImpl: opts.claudeFetch, openaiUpstream: opts.openaiUrl, openaiFetch: opts.openaiFetch });
   const sockets = new WebSocketServer({ noServer: true, maxPayload: 16_384 });
   const owners = new Map<WebSocket, string>();
@@ -46,7 +53,7 @@ export async function startHubService(opts: HubServiceOptions) {
     const profiles = settings.profiles();
     return { hubId: trust.id, protocol: HUB_PROTOCOL, revision, epoch, profiles: profileViews(profiles, hub), accounts: hub.accountViews(), machines: settings.machines(),
       favorites: Object.fromEntries(profiles.map((p) => [p.id, settings.modelFavorites(p.id)])),
-      models: Object.fromEntries(profiles.map((p) => [p.id, hub.codexModels(p.id)])), store: hub.storePath, settingsStore: settings.storePath };
+      models: Object.fromEntries(profiles.map((p) => [p.id, hub.codexModels(p.id)])), resources: resources.state(), store: hub.storePath, settingsStore: settings.storePath };
   }
   function announce() { revision++; for (const ws of sockets.clients) if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ revision })); }
   settings.onMachinesChanged(announce);
@@ -79,10 +86,41 @@ export async function startHubService(opts: HubServiceOptions) {
       case 'hub.revokeMachine': {
         if (typeof p.machineId !== 'string') throw new SignInError('Invalid machine');
         await trust.revoke(p.machineId);
+        for (const [token, grant] of grants) if (grant.machineId === p.machineId) { grant.release(); grants.delete(token); }
         for (const [ws, owner] of owners) if (owner === p.machineId) ws.close(4001, 'Pairing revoked');
         await settings.machineDisconnected(p.machineId); return null;
       }
       case 'accounts.list': return hub.accountViews();
+      case 'resources.write': {
+        if (!RESOURCE_WRITES.includes(p.method) || !Array.isArray(p.args) || p.args.length > 2) throw new SignInError('Invalid resource mutation');
+        const args = [...p.args];
+        const definitionSchema = { saveTool: methods['tools.save'].params, saveMcp: methods['mcp.save'].params, saveSource: methods['skills.addSource'].params }[p.method as 'saveTool' | 'saveMcp' | 'saveSource'];
+        if (definitionSchema) args[0] = definitionSchema.parse(args[0]);
+        else if (p.method !== 'setToolStatus' && (typeof args[0] !== 'string' || !args[0] || args[0].length > 512)) throw new SignInError('Invalid resource identity');
+        if (p.method === 'saveSource' || p.method === 'stageSkills') {
+          if (!Array.isArray(args[1]) || !args[1].length || args[1].length > 10_000) throw new SignInError('Invalid skills');
+          for (const skill of args[1]) {
+            if (!skill || ['id', 'sourceId', 'name', 'description', 'path', 'revision'].some(key => typeof skill[key] !== 'string')) throw new SignInError('Invalid skill');
+            skill.scope = ResourceScope.parse(skill.scope);
+          }
+        }
+        if (p.method === 'setSkillScope') args[1] = ResourceScope.parse(args[1]);
+        if (p.method === 'setToolStatus' && (!args[0] || args[0].machineId !== machineId || typeof args[0].toolId !== 'string' || !['pending', 'installing', 'ready', 'error'].includes(args[0].status))) throw new SignInError('Invalid machine tool status');
+        if (p.method === 'setCredential' && (!resources.state().mcps.some(value => value.id === args[0] && value.auth === 'bearer') || typeof args[1]?.accessToken !== 'string')) throw new SignInError('Select a bearer-authenticated MCP server');
+        if (p.method === 'deleteMcp') await mcp.signOut(args[0]);
+        await (resources[p.method as typeof RESOURCE_WRITES[number]] as (...values: any[]) => Promise<void>).apply(resources, args);
+        return null;
+      }
+      case 'mcp.beginSignIn': return mcp.beginSignIn(p.id).catch(error => { throw new SignInError(error.message); });
+      case 'mcp.completeSignIn': await mcp.completeSignIn(p.callbackUrl, p.id).catch(error => { throw new SignInError(error.message); }); return null;
+      case 'mcp.signOut': await mcp.signOut(p.id); return null;
+      case 'mcp.grant': {
+        if (typeof p.id !== 'string' || typeof p.profileId !== 'string' || !settings.profiles().some(profile => profile.id === p.profileId)) throw new SignInError('Invalid MCP grant');
+        const grant = mcp.grant(p.id, p.profileId, p.projectKey); grants.set(grant.token, { machineId, release: grant.release }); return { token: grant.token };
+      }
+      case 'mcp.release': {
+        const grant = grants.get(p.token); if (grant?.machineId === machineId) { grant.release(); grants.delete(p.token); } return null;
+      }
       case 'accounts.save': return hub.saveAccount(p.name, p.id, p.providerId);
       case 'accounts.delete': await hub.deleteAccount(p.id); return null;
       case 'accounts.signOut': return hub.signOutAccount(p.id);
@@ -146,6 +184,7 @@ export async function startHubService(opts: HubServiceOptions) {
     const target = new URL(req.url ?? '/', 'http://localhost');
     if (!req.url?.startsWith('/') || target.origin !== 'http://localhost') return json(res, 404, { error: 'Unknown hub endpoint' });
     const path = target.pathname;
+    if (path.startsWith('/mcp/') && await mcp.handle(req, res)) { if (path === '/mcp/oauth/callback') announce(); return; }
     if (path === '/' && req.method === 'GET') {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'" });
       res.end('<!doctype html><meta name="viewport" content="width=device-width"><title>Accio hub</title><main style="font-family:system-ui;max-width:38rem;margin:15vh auto;padding:2rem"><h1>Accio hub</h1><p>In Accio, open Settings → Hubs and add this address.</p><p>Use a pairing code from an already connected device, or generate your first code with the hub’s setup command.</p></main>'); return;
@@ -170,12 +209,15 @@ export async function startHubService(opts: HubServiceOptions) {
       if (path !== '/rpc' || req.method !== 'POST') return json(res, 405, { error: 'Method not allowed' });
       const p = await readJson(req);
       if (typeof p.method !== 'string' || !p.params || typeof p.params !== 'object' || Array.isArray(p.params)) throw new SignInError('Invalid hub request');
-      const operation = queue.then(async () => {
+      const invoke = async () => {
         // Authenticate again after waiting for earlier revocation requests.
         if (auth(req) !== machineId) throw new SignInError('Pairing has been revoked.');
         const result = await execute(machineId, p.method, p.params); announce(); return { result, snapshot: snapshot() };
-      });
-      queue = operation.catch(() => {});
+      };
+      // MCP token exchanges must allow sign-out to invalidate an in-flight exchange.
+      const independent = p.method === 'mcp.completeSignIn' || p.method === 'mcp.beginSignIn';
+      const operation = independent ? Promise.resolve().then(invoke) : queue.then(invoke);
+      if (!independent) queue = operation.catch(() => {});
       return json(res, 200, await operation);
     }
     if (req.method !== 'POST' || !['/v1/messages', '/v1/messages/count_tokens', '/openai/responses', '/openai/responses/compact'].includes(path)) return json(res, 404, { error: 'Unknown hub endpoint' });
@@ -217,13 +259,15 @@ export async function startHubService(opts: HubServiceOptions) {
   await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(opts.port ?? 47322, opts.host ?? '127.0.0.1', resolve); });
   const address = server.address();
   const port = typeof address === 'object' && address ? address.port : opts.port!;
-  return { hub, settings, trust, port, url: `http://${opts.host ?? '127.0.0.1'}:${port}`, snapshot, createPairingCode: () => HubTrust.createCode(opts.home),
-    async close() { closing = true; clearInterval(heartbeat); for (const ws of sockets.clients) ws.terminate(); await new Promise<void>((resolve) => server.close(() => resolve())); sockets.close(); await queue; await proxy.close(); await hub.close(); await settings.close(); await trust.close(); } };
+  const url = `http://${opts.host ?? '127.0.0.1'}:${port}`;
+  mcp.setUrl(opts.publicUrl ?? url);
+  return { hub, settings, resources, trust, port, url, snapshot, createPairingCode: () => HubTrust.createCode(opts.home),
+    async close() { closing = true; clearInterval(heartbeat); for (const ws of sockets.clients) ws.terminate(); await new Promise<void>((resolve) => server.close(() => resolve())); sockets.close(); await queue; for (const grant of grants.values()) grant.release(); await proxy.close(); await hub.close(); await resources.close(); await settings.close(); await trust.close(); } };
 }
 
 function json(res: ServerResponse, status: number, value: unknown) { res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify(value)); }
 async function readJson(req: IncomingMessage): Promise<any> {
   let bytes = 0; const chunks: Buffer[] = [];
-  for await (const chunk of req) { bytes += chunk.length; if (bytes > 128 * 1024) throw new SignInError('Hub request is too large'); chunks.push(chunk); }
+  for await (const chunk of req) { bytes += chunk.length; if (bytes > 4 * 1024 * 1024) throw new SignInError('Hub request is too large'); chunks.push(chunk); }
   try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { throw new SignInError('Invalid JSON request'); }
 }
