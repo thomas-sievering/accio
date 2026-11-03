@@ -11,8 +11,8 @@ export type HubInfo = {
   reachable: boolean;
   /** The file on the hub's computer that holds its accounts. */
   store: string;
-  /** Each profile and the account the hub holds for it. */
-  profiles: { profileId: string; name: string; account: { email: string | null; organization: string | null } | null }[];
+  /** The file that holds the shared settings (ADR 0004). */
+  settingsStore: string;
 };
 
 export const hubMethods = {

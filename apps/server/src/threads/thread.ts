@@ -12,14 +12,52 @@ export function toView({ sessionId: _s, ...view }: Thread): ThreadView {
 }
 
 export function newThread(input: { checkoutId: string; projectId: string; profileId: string }, now: string): Thread {
-  return { id: randomUUID(), ...input, title: NEW_THREAD_TITLE, status: 'idle', sessionId: null, createdAt: now, updatedAt: now };
+  return {
+    id: randomUUID(),
+    ...input,
+    title: NEW_THREAD_TITLE,
+    status: 'idle',
+    sessionId: null,
+    createdAt: now,
+    updatedAt: now,
+    snoozedUntil: null,
+    settledAt: null,
+  };
 }
 
-/** A turn may start only when none is running. */
+/** Threads stored before snooze and settle moved to the server have neither field. */
+export function fromStored(t: Omit<Thread, 'snoozedUntil' | 'settledAt'> & Partial<Pick<Thread, 'snoozedUntil' | 'settledAt'>>): Thread {
+  return { ...t, snoozedUntil: t.snoozedUntil ?? null, settledAt: t.settledAt ?? null };
+}
+
+/**
+ * Threads made by an earlier accio before anything was said in them. A thread
+ * now exists only once its first message is sent, so these are dropped on load.
+ */
+export function dropUnstarted(threads: readonly Thread[]): Thread[] {
+  return threads.filter((t) => !(t.status === 'idle' && t.sessionId === null && t.title === NEW_THREAD_TITLE));
+}
+
+/** GLOSSARY: Snooze. A thread hides until `until`; snoozing a settled thread reopens it first. */
+export function snooze(thread: Thread, until: string): Thread {
+  return { ...thread, snoozedUntil: until, settledAt: null };
+}
+
+/** GLOSSARY: Settle. */
+export function settle(thread: Thread, now: string): Thread {
+  return { ...thread, settledAt: now, snoozedUntil: null };
+}
+
+/** Back in the open list. */
+export function reopen(thread: Thread): Thread {
+  return { ...thread, snoozedUntil: null, settledAt: null };
+}
+
+/** A turn may start only when none is running. Talking to a snoozed or settled thread reopens it. */
 export function startTurn(thread: Thread, firstText: string, now: string): Thread {
   if (thread.status === 'running') throw new UserError('This thread is already working. Stop it or wait for it to finish.');
   return {
-    ...thread,
+    ...reopen(thread),
     status: 'running',
     title: thread.title === NEW_THREAD_TITLE ? titleFrom(firstText) : thread.title,
     updatedAt: now,
@@ -75,4 +113,12 @@ export const RESUME_PROMPT =
 
 export function assertResumable(thread: Thread) {
   if (thread.status !== 'interrupted') throw new UserError('Only an interrupted thread can be resumed');
+}
+
+/** What Retry sends: the failed turn's own message, or another resume if that turn was one. */
+export function retryOf(thread: Thread, items: readonly TranscriptItem[]): { text: string; resume: boolean } {
+  if (thread.status !== 'failed') throw new UserError('Only a failed thread can be retried');
+  const last = [...items].reverse().find((i) => i.kind === 'user');
+  if (!last || last.kind !== 'user') throw new UserError('There is no message to retry');
+  return last.resume ? { text: RESUME_PROMPT, resume: true } : { text: last.text, resume: false };
 }

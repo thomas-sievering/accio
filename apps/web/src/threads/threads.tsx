@@ -1,27 +1,36 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { ThreadView, TranscriptItem } from '@accio/protocol';
 import { useClient, useConnectionStatus } from '../app/connection';
 import { useLive, useLocalState } from '../app/useLive';
 import { useProjects } from '../projects/projects';
-import { filterThreads, nextMorning, shelveThreads, type ShelfMarks, type ThreadShelves } from './shelves';
+import { filterThreads, nextMorning, shelveThreads, type ThreadShelves } from './shelves';
 
 type ThreadsCtx = {
   threads: ThreadView[] | undefined;
+  /** The open thread, or '' when none (or a draft) is open. */
   selectedId: string;
   select: (id: string) => void;
-  /** The open list plus the Working, Snoozed and Settled shelves, after the project scope and search. */
+  /** A new thread not yet started: just the checkout it will run in. It exists on the server only once its first message is sent. */
+  draft: string | null;
+  openDraft: (checkoutId: string) => void;
+  /** The open list plus the Snoozed and Settled shelves, after the project scope and search. */
   shelves: ThreadShelves;
   /** The one project the sidebar is narrowed to, or '' for every visible project. */
   projectScope: string;
   setProjectScope: (projectId: string) => void;
   query: string;
   setQuery: (q: string) => void;
-  marks: ShelfMarks;
   now: Date;
-  settle: (id: string) => void;
-  snooze: (id: string) => void;
+  /** Thread actions shared by the row's hover buttons and its right-click menu. */
+  act: ThreadActions;
+};
+
+export type ThreadActions = {
+  snooze: (id: string) => Promise<unknown>;
+  settle: (id: string) => Promise<unknown>;
   /** Takes a thread off the Snoozed or Settled shelf. */
-  reopen: (id: string) => void;
+  reopen: (id: string) => Promise<unknown>;
+  stop: (id: string) => Promise<unknown>;
 };
 
 const Ctx = createContext<ThreadsCtx | null>(null);
@@ -29,42 +38,42 @@ const Ctx = createContext<ThreadsCtx | null>(null);
 export function ThreadsProvider({ children }: { children: ReactNode }) {
   const client = useClient();
   const threads = useLive(() => client.call('threads.list', {}), 'threads.changed');
-  const [selectedId, select] = useLocalState<string>('accio.thread', '');
-  const [marks, setMarks] = useShelfMarks();
+  const [selectedId, setSelected] = useLocalState<string>('accio.thread', '');
+  const [draft, setDraft] = useState<string | null>(null);
   const { visible } = useProjects();
   const [storedScope, setProjectScope] = useLocalState<string>('accio.projectScope', '');
   const [query, setQuery] = useState('');
   // A scope outside the selected profile (or a removed project) falls back to every project.
   const projectScope = visible.some((p) => p.id === storedScope) ? storedScope : '';
   const now = useMinuteClock();
-  const mark = (id: string, next: ShelfMarks[string] | undefined) => {
-    const { [id]: _, ...rest } = marks;
-    setMarks(next ? { ...rest, [id]: next } : rest);
-  };
+  useMoveLegacyShelfMarks(threads);
 
   const value = useMemo<ThreadsCtx>(
     () => ({
       threads,
-      selectedId,
-      select,
-      shelves: shelveThreads(
-        filterThreads(threads ?? [], new Set(projectScope ? [projectScope] : visible.map((p) => p.id)), query),
-        marks,
-        now,
-      ),
+      selectedId: draft ? '' : selectedId,
+      select: (id) => {
+        setDraft(null);
+        setSelected(id);
+      },
+      draft,
+      openDraft: setDraft,
+      shelves: shelveThreads(filterThreads(threads ?? [], new Set(projectScope ? [projectScope] : visible.map((p) => p.id)), query), now),
       projectScope,
       setProjectScope,
       query,
       setQuery,
-      marks,
       now,
-      settle: (id) => mark(id, { settledAt: new Date().toISOString() }),
-      snooze: (id) => mark(id, { snoozedUntil: nextMorning(new Date()).toISOString() }),
-      reopen: (id) => mark(id, undefined),
+      act: {
+        snooze: (id) => client.call('threads.snooze', { threadId: id, until: nextMorning(new Date()).toISOString() }),
+        settle: (id) => client.call('threads.settle', { threadId: id }),
+        reopen: (id) => client.call('threads.reopen', { threadId: id }),
+        stop: (id) => client.call('threads.stop', { threadId: id }),
+      },
     }),
-    // select and mark are stable in behaviour; recreate only when data changes.
+    // The setters are stable in behaviour; recreate only when data changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [threads, selectedId, marks, now, visible, projectScope, query],
+    [client, threads, selectedId, draft, now, visible, projectScope, query],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
@@ -125,25 +134,41 @@ export function useTranscript(threadId: string): TranscriptItem[] | undefined {
 }
 
 /**
- * Snooze and settle marks in localStorage: a stand-in so the shelves can be
- * tried before the server keeps them (GLOSSARY: Client holds no state of its own).
+ * Snooze and settle marks used to live in this browser's localStorage. They now
+ * live on the server with the thread; move any left here once, then forget them.
  */
-function useShelfMarks(): [ShelfMarks, (m: ShelfMarks) => void] {
-  const key = 'accio.shelfMarks';
-  const [marks, setMarks] = useState<ShelfMarks>(() => {
+function useMoveLegacyShelfMarks(threads: ThreadView[] | undefined) {
+  const client = useClient();
+  const migrating = useRef(false);
+  useEffect(() => {
+    const key = 'accio.shelfMarks';
+    const raw = localStorage.getItem(key);
+    if (!threads || !raw || migrating.current) return;
+    let marks: Record<string, { snoozedUntil?: string; settledAt?: string }> = {};
     try {
-      return JSON.parse(localStorage.getItem(key) ?? '{}') as ShelfMarks;
+      marks = JSON.parse(raw);
     } catch {
-      return {};
+      localStorage.removeItem(key);
+      return;
     }
-  });
-  return [
-    marks,
-    (m) => {
-      localStorage.setItem(key, JSON.stringify(m));
-      setMarks(m);
-    },
-  ];
+    if (!marks || typeof marks !== 'object' || Array.isArray(marks)) {
+      localStorage.removeItem(key);
+      return;
+    }
+    migrating.current = true;
+    void Promise.allSettled(
+      threads.map(async (t) => {
+        const m = marks[t.id];
+        if (!m || t.settledAt || t.snoozedUntil) return;
+        if (m.settledAt) await client.call('threads.settle', { threadId: t.id });
+        else if (m.snoozedUntil && new Date(m.snoozedUntil) > new Date())
+          await client.call('threads.snooze', { threadId: t.id, until: m.snoozedUntil });
+      }),
+    ).then((results) => {
+      if (results.every((r) => r.status === 'fulfilled') && localStorage.getItem(key) === raw) localStorage.removeItem(key);
+      migrating.current = false;
+    });
+  }, [client, threads]);
 }
 
 /** The current time, updated every minute so snoozed threads wake on their own. */

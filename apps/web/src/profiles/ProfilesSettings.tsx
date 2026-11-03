@@ -3,10 +3,11 @@ import type { ProfileView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { Chevron, Plus } from '../app/icons';
 import { SettingsSection } from '../app/Settings';
-import { ProfileTile, useProfiles } from './profiles';
+import { useAction } from '../app/useAction';
+import { claudeAccount, ProfileTile, useProfiles } from './profiles';
 import { SignInWithClaude } from './SignInWithClaude';
 
-/** List and edit profiles. Each one signs in to a Claude account, which stays on the hub. */
+/** Profiles and their providers and accounts, shared through the hub. */
 export function ProfilesSettings({
   profileId,
   onOpen,
@@ -31,7 +32,7 @@ export function ProfilesSettings({
           <ProfileTile profile={p} size="md" />
           <span className="setting-text">
             <b>{p.name}</b>
-            <small className={p.account ? undefined : 'warn'}>{p.account ? (p.account.email ?? 'Signed in') : 'Not signed in'}</small>
+            <small className={claudeAccount(p) ? undefined : 'warn'}>{claudeAccount(p)?.email ?? (claudeAccount(p) ? 'Signed in' : 'Not signed in')}</small>
           </span>
           <Chevron />
         </button>
@@ -52,62 +53,53 @@ export function ProfilesSettings({
 function ProfileForm({ profile, onSaved, onDone }: { profile?: ProfileView; onSaved: (p: ProfileView) => void; onDone: () => void }) {
   const client = useClient();
   const [name, setName] = useState(profile?.name ?? '');
-  const [folderText, setFolderText] = useState((profile?.folders ?? []).join('\n'));
-  const [error, setError] = useState<string>();
-  const [busy, setBusy] = useState(false);
+  const { busy, error, run } = useAction();
 
-  const run = async (action: () => Promise<ProfileView | null>) => {
-    setBusy(true);
-    setError(undefined);
-    try {
-      const result = await action();
-      if (result) onSaved(result);
-      else onDone();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const folders = folderText
-      .split('\n')
-      .map((r) => r.trim())
-      .filter(Boolean);
-    void run(() => client.call('profiles.save', { id: profile?.id, name, folders }));
+    const saved = await run(() => client.call('profiles.save', { id: profile?.id, name }));
+    if (saved) onSaved(saved);
+  };
+  const remove = async () => {
+    if (profile && (await run(async () => (await client.call('profiles.delete', { id: profile.id }), true)))) onDone();
   };
 
   return (
-    <form onSubmit={submit}>
+    <form className="settings-profile-form" onSubmit={submit}>
       <SettingsSection title={profile ? profile.name : 'New profile'}>
         <div className="setting-form">
           <label className="field">
             <span>Name</span>
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="personal, work…" autoFocus={!profile} required />
           </label>
-          <label className="field">
-            <span>Folders</span>
-            <textarea rows={2} value={folderText} onChange={(e) => setFolderText(e.target.value)} placeholder={'S:\\hrc'} spellCheck={false} />
-            <small className="hint">One per line. New projects inside these folders default to this profile.</small>
-          </label>
-          {profile && (
-            <div className="field">
-              <span>Claude</span>
-              <SignInWithClaude profile={profile} />
-            </div>
-          )}
+          <small className="hint">Shared on the hub. Set profile folders under Machines.</small>
           {error && <p className="error">{error}</p>}
         </div>
       </SettingsSection>
+      {profile && (
+        <SettingsSection title="Providers">
+          {profile.providers.map((provider) => (
+            <div className="setting-form" key={provider.id}>
+              <div className="field">
+                <b>{provider.name}</b>
+                <span>{provider.accountName}{provider.accounts.length === 1 ? '' : 's'}</span>
+                {provider.available && provider.id === 'anthropic' ? (
+                  <SignInWithClaude profile={profile} />
+                ) : (
+                  <small className="hint">Not available yet.</small>
+                )}
+              </div>
+            </div>
+          ))}
+        </SettingsSection>
+      )}
       <footer className="settings-actions">
         {profile && (
           <button
             type="button"
             className="ghost danger"
             disabled={busy}
-            onClick={() => run(async () => (await client.call('profiles.delete', { id: profile.id }), null))}
+            onClick={remove}
           >
             Delete
           </button>

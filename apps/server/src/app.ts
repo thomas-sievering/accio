@@ -1,14 +1,16 @@
 import { Router, type Broadcast } from './rpc/router.js';
 import { startTransport } from './rpc/transport.js';
-import { registerMachine } from './machine/machine.js';
-import { Hub, startHubProxy, type Fetch } from '@accio/hub';
+import { Machines, loadMachineId, machineInfo } from './machine/machine.js';
+import { Hub, SharedSettings, startHubProxy, type Fetch } from '@accio/hub';
+import { moveProfilesToHub } from './store/moveProfilesToHub.js';
+import { registerHarnesses } from './harnesses/harnesses.js';
 import { Profiles } from './profiles/profiles.js';
 import { registerHub } from './hub/hub.js';
 import { renameAccountsToProfiles } from './store/renameAccountsToProfiles.js';
 import { Projects } from './projects/projects.js';
 import { Threads } from './threads/threads.js';
 import type { Harness } from './threads/harness.js';
-import { claudeCode } from './threads/claudeCode.js';
+import { claudeCode, claudeCodeInstall } from './threads/claudeCode.js';
 
 export type AppOptions = {
   home: string;
@@ -36,13 +38,14 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
   let send: Broadcast = () => {};
   const broadcast: Broadcast = (event, data) => send(event, data);
 
-  registerMachine(router);
-
   await renameAccountsToProfiles(opts.home);
+  const here = machineInfo(await loadMachineId(opts.home));
 
   // In v0.1 this machine runs the hub in-process.
   const hub = new Hub(opts.home, deps.claudeFetch ?? fetch);
   await hub.load();
+  const settings = new SharedSettings(opts.home);
+  await moveProfilesToHub(opts.home, here, settings);
   const hubProxy = await startHubProxy({
     hub,
     host: '127.0.0.1',
@@ -51,12 +54,17 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
     fetchImpl: deps.claudeFetch,
   });
 
-  const profiles = new Profiles(opts.home, hub, hubProxy.url, broadcast);
+  const machines = new Machines(here, settings, broadcast);
+  await machines.connect([await claudeCodeInstall()]);
+  machines.register(router);
+  registerHarnesses(router, settings);
+
+  const profiles = new Profiles(opts.home, hub, settings, hubProxy.url, broadcast);
   await profiles.load();
   profiles.register(router);
-  registerHub(router, { hub, url: hubProxy.url, profiles });
+  registerHub(router, { hub, settings, url: hubProxy.url });
 
-  const projects = new Projects(opts.home, profiles, broadcast);
+  const projects = new Projects(opts.home, profiles, machines, broadcast);
   await projects.load();
   projects.register(router);
 
@@ -73,12 +81,16 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
     projects,
     threads,
     hub,
+    settings,
+    machines,
     hubUrl: hubProxy.url,
     close: async () => {
       await transport.close();
       await threads.close();
+      await machines.disconnect();
       await hubProxy.close();
       await hub.close();
+      await settings.close();
     },
   };
 }
