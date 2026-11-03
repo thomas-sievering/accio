@@ -7,7 +7,9 @@ import { method } from './rpc.js';
  */
 export type ThreadView = {
   id: string;
+  /** Empty for a thread started with No project. */
   checkoutId: string;
+  /** Empty for a thread started with No project. */
   projectId: string;
   profileId: string;
   title: string;
@@ -35,7 +37,10 @@ export type TranscriptItem =
   | { kind: 'notice'; id: string; turnId: string; tone: 'info' | 'error'; text: string };
 
 const ThreadId = z.object({ threadId: z.string() });
-const Start = z.object({ checkoutId: z.string(), text: z.string().trim().min(1) });
+const Start = z.union([
+  z.object({ checkoutId: z.string().min(1), text: z.string().trim().min(1) }),
+  z.object({ profileId: z.string().min(1), text: z.string().trim().min(1) }),
+]);
 const Snooze = z.object({ threadId: z.string(), until: z.iso.datetime({ offset: true }) });
 const Send = z.object({ threadId: z.string(), text: z.string().trim().min(1) });
 const Rename = z.object({ threadId: z.string(), title: z.string().trim().min(1).max(120) });

@@ -53,21 +53,21 @@ export function ThreadPane({ thread, onOpenProfile }: { thread: ThreadView; onOp
  * A new thread before its first message, centred under a question as in T3 Code.
  * Sending creates the thread and its first turn together.
  */
-export function DraftPane({ checkoutId, onOpenProfile }: { checkoutId: string; onOpenProfile: (profileId: string) => void }) {
+export function DraftPane({ checkoutId, profileId, onOpenProfile }: { checkoutId: string; profileId?: string; onOpenProfile: (profileId: string) => void }) {
   const client = useClient();
   const { select } = useThreads();
-  const place = usePlace(checkoutId);
+  const place = usePlace(checkoutId, profileId);
 
   return (
     <>
       <PaneHeader title="New thread" {...place} />
       <div className="hero">
-        <h1>What should we build in {place.project?.name ?? 'this checkout'}?</h1>
+        <h1>{checkoutId ? `What should we build in ${place.project?.name ?? 'this checkout'}?` : 'What should we build?'}</h1>
         <ThreadNotice profile={place.profile} onOpenProfile={onOpenProfile} />
         <Composer
           disabled={!place.profile || !claudeAccount(place.profile)}
           placeholder="Ask Claude Code anything"
-          onSend={async (text) => select((await client.call('threads.start', { checkoutId, text })).id)}
+          onSend={async (text) => select((await client.call('threads.start', checkoutId ? { checkoutId, text } : { profileId: profileId!, text })).id)}
           toolbar={harness}
         />
       </div>
@@ -90,7 +90,7 @@ function PaneHeader(props: {
         <b>{props.title}</b>
         <span className="thread-where" title={checkout?.path}>
           {project && <ProjectMark id={project.id} size={10} />}
-          {project?.name ?? 'unknown project'}
+          {project?.name ?? 'No project'}
           {checkout && folderName(checkout.path) !== project?.name && <span className="faint">/ {folderName(checkout.path)}</span>}
           {props.manyProfiles && (
             <>

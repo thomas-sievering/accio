@@ -3,6 +3,7 @@ import type { ThreadView, TranscriptItem } from '@accio/protocol';
 import { useClient, useConnectionStatus } from '../app/connection';
 import { useLive, useLocalState } from '../app/useLive';
 import { useProjects } from '../projects/projects';
+import { useProfiles } from '../profiles/profiles';
 import { filterThreads, nextMorning, shelveThreads, type ThreadShelves } from './shelves';
 
 type ThreadsCtx = {
@@ -11,8 +12,8 @@ type ThreadsCtx = {
   selectedId: string;
   select: (id: string) => void;
   /** A new thread not yet started: just the checkout it will run in. It exists on the server only once its first message is sent. */
-  draft: string | null;
-  openDraft: (checkoutId: string) => void;
+  draft: { checkoutId: string; profileId?: string } | null;
+  openDraft: (checkoutId: string, profileId?: string) => void;
   /** The open list plus the Snoozed and Settled shelves, after the project scope and search. */
   shelves: ThreadShelves;
   /** The one project the sidebar is narrowed to, or '' for every visible project. */
@@ -39,7 +40,8 @@ export function ThreadsProvider({ children }: { children: ReactNode }) {
   const client = useClient();
   const threads = useLive(() => client.call('threads.list', {}), 'threads.changed');
   const [selectedId, setSelected] = useLocalState<string>('accio.thread', '');
-  const [draft, setDraft] = useState<string | null>(null);
+  const [draft, setDraft] = useState<ThreadsCtx['draft']>(null);
+  const { filter } = useProfiles();
   const { visible } = useProjects();
   const [storedScope, setProjectScope] = useLocalState<string>('accio.projectScope', '');
   const [query, setQuery] = useState('');
@@ -57,8 +59,11 @@ export function ThreadsProvider({ children }: { children: ReactNode }) {
         setSelected(id);
       },
       draft,
-      openDraft: setDraft,
-      shelves: shelveThreads(filterThreads(threads ?? [], new Set(projectScope ? [projectScope] : visible.map((p) => p.id)), query), now),
+      openDraft: (checkoutId, profileId) => setDraft({ checkoutId, profileId }),
+      shelves: shelveThreads(filterThreads(
+        (threads ?? []).filter((t) => t.projectId || filter === 'all' || t.profileId === filter),
+        new Set(projectScope ? [projectScope] : ['', ...visible.map((p) => p.id)]), query,
+      ), now),
       projectScope,
       setProjectScope,
       query,
@@ -73,7 +78,7 @@ export function ThreadsProvider({ children }: { children: ReactNode }) {
     }),
     // The setters are stable in behaviour; recreate only when data changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [client, threads, selectedId, draft, now, visible, projectScope, query],
+    [client, threads, selectedId, draft, now, visible, projectScope, query, filter],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -5,7 +5,7 @@ import { ProjectsProvider, useProjects } from '../projects/projects';
 import { AddProjectSheet } from '../projects/AddProjectSheet';
 import { ProjectSheet } from '../projects/ProjectSheet';
 import { ThreadsProvider, useThreads } from '../threads/threads';
-import { NewThreadButton, useNewThreadChoices } from '../threads/NewThreadButton';
+import { NewThreadButton } from '../threads/NewThreadButton';
 import { ThreadList } from '../threads/ThreadList';
 import { DraftPane, ThreadPane } from '../threads/ThreadPane';
 import { ThreadSearch } from '../threads/ThreadSearch';
@@ -70,7 +70,7 @@ function Shell() {
       </aside>
       <main className="main">
         {draft ? (
-          <DraftPane key={draft} checkoutId={draft} onOpenProfile={openProfile} />
+          <DraftPane key={`${draft.checkoutId}:${draft.profileId}`} {...draft} onOpenProfile={openProfile} />
         ) : thread ? (
           <ThreadPane key={thread.id} thread={thread} onOpenProfile={openProfile} />
         ) : (
@@ -87,11 +87,10 @@ function Shell() {
 }
 
 function Idle() {
-  const choices = useNewThreadChoices();
   return (
     <div className="empty">
       <p>Pick a thread, or start a new one.</p>
-      {choices.length > 0 && <NewThreadButton className="ghost primary with-icon" label="New thread" />}
+      <NewThreadButton className="ghost primary with-icon" label="New thread" />
     </div>
   );
 }

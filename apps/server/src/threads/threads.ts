@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { rm } from 'node:fs/promises';
+import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { TranscriptItem } from '@accio/protocol';
 import type { Profiles } from '../profiles/profiles.js';
@@ -87,13 +87,16 @@ export class Threads {
   register(router: Router) {
     router
       .on('threads.list', () => this.list.map(toView))
-      .on('threads.start', async ({ checkoutId, text }) => {
-        const checkout = this.projects.checkout(checkoutId);
-        const project = this.projects.projectOf(checkout);
+      .on('threads.start', async (input) => {
+        const { text } = input;
+        const checkout = 'checkoutId' in input ? this.projects.checkout(input.checkoutId) : undefined;
+        const project = checkout ? this.projects.projectOf(checkout) : undefined;
+        const profileId = project?.profileId ?? ('profileId' in input ? input.profileId : '');
         // Refuse before anything is stored, so a thread that cannot run never appears.
-        await this.profiles.hubAccess(project.profileId);
+        await this.profiles.hubAccess(profileId);
         // GLOSSARY: a thread keeps the profile it started with for its whole life.
-        const thread = newThread({ checkoutId, projectId: project.id, profileId: project.profileId }, now());
+        const thread = newThread({ checkoutId: checkout?.id ?? '', projectId: project?.id ?? '', profileId }, now());
+        if (!checkout) await mkdir(join(this.home, 'workspaces', thread.id), { recursive: true });
         // Quiet: clients first see the thread once its turn is running, never as an idle empty thread.
         await this.commit([...this.list, thread], { quiet: true });
         await this.beginTurn(thread.id, text);
@@ -144,7 +147,7 @@ export class Threads {
     const thread = this.require(threadId);
     if (!this.profiles.get(thread.profileId)) throw new UserError('The profile this thread started with no longer exists');
     const access = await this.profiles.hubAccess(thread.profileId);
-    const checkout = this.projects.checkout(thread.checkoutId);
+    const cwd = thread.checkoutId ? this.projects.checkout(thread.checkoutId).path : join(this.home, 'workspaces', thread.id);
 
     const started = startTurn(thread, text, now());
     const turnId = randomUUID();
@@ -154,7 +157,7 @@ export class Threads {
     const controller = new AbortController();
     this.running.set(thread.id, controller);
     const env = harnessEnv(process.env, access, configFolderOf(this.home, thread.profileId));
-    const turn = this.runTurn(started, turnId, { cwd: checkout.path, prompt: text, env, signal: controller.signal });
+    const turn = this.runTurn(started, turnId, { cwd, prompt: text, env, signal: controller.signal });
     this.turns.add(turn);
     void turn.finally(() => this.turns.delete(turn));
   }
