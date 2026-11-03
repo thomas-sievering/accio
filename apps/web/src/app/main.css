@@ -13,6 +13,8 @@
   gap: 10px;
   height: var(--caption-h);
   padding: 0 calc(var(--caption) + 16px) 0 16px;
+  background: var(--side);
+  border-bottom: 1px solid var(--line);
 }
 .empty {
   margin: auto;

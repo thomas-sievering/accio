@@ -4,9 +4,8 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 8px;
+  padding: 8px 10px;
   background: var(--side);
-  border-top: 1px solid var(--line);
 }
 .side-icon {
   display: grid;
@@ -15,7 +14,7 @@
   height: 30px;
   flex: none;
   border-radius: 8px;
-  color: var(--muted);
+  color: var(--dim);
 }
 .side-icon:hover {
   background: var(--hover);

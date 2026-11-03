@@ -10,8 +10,8 @@
   padding: 0;
   overflow: hidden;
   border: 1px solid var(--line-2);
-  border-radius: 16px;
-  background: oklch(0.215 0 none);
+  border-radius: 10px;
+  background: var(--panel);
   color: var(--ink);
   box-shadow: 0 18px 60px oklch(0 0 none / 0.5);
   font-size: 14px;

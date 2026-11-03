@@ -89,7 +89,7 @@
 .settings-card {
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: oklch(0.2 0 none);
+  background: var(--panel);
   overflow: clip;
 }
 .setting {

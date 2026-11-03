@@ -5,10 +5,10 @@
   margin: 0;
   padding: 6px;
   border: 1px solid var(--line-2);
-  border-radius: 12px;
-  background: oklch(0.215 0 none);
+  border-radius: 8px;
+  background: var(--panel);
   color: var(--ink);
-  box-shadow: 0 18px 50px oklch(0 0 none / 0.5);
+  box-shadow: 0 12px 32px #0005;
   font-size: 13.5px;
   -webkit-app-region: no-drag;
 }
@@ -35,7 +35,7 @@
   padding: 5px 10px 5px 8px;
   border-radius: 8px;
   text-align: start;
-  color: oklch(0.86 0 none);
+  color: var(--ink);
 }
 .menu-item:hover,
 .list-row:hover {

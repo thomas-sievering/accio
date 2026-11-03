@@ -5,8 +5,8 @@
   margin: min(12vh, 120px) auto auto;
   padding: 0;
   border: 1px solid var(--line-2);
-  border-radius: 14px;
-  background: oklch(0.21 0 none);
+  border-radius: 10px;
+  background: var(--panel);
   color: var(--ink);
   box-shadow: 0 24px 80px oklch(0 0 none / 0.55);
 }

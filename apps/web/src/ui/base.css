@@ -1,22 +1,24 @@
-/* Visual direction follows S:\botbot (neutral greys, green accent), kept minimal. */
+/* Herdr reference: near-black chrome, charcoal content, soft grey text. */
 :root {
   color-scheme: dark;
-  --bg: oklch(0.18 0 none);
-  --side: oklch(0.195 0 none);
-  --raised: oklch(0.225 0 none);
-  --raised-2: oklch(0.255 0 none);
-  --hover: oklch(0.24 0 none);
-  --active: oklch(0.27 0 none);
-  --line: oklch(0.27 0 none);
-  --line-2: oklch(0.31 0 none);
-  --ink: oklch(0.94 0 none);
-  --muted: oklch(0.69 0 none);
-  --dim: oklch(0.53 0 none);
-  --green: oklch(0.72 0.19 150);
-  --green-deep: oklch(0.53 0.137 150);
-  --blue: oklch(0.62 0.19 260);
-  --amber: oklch(0.8 0.14 75);
-  --red: oklch(0.68 0.19 25);
+  --bg: #18191d;
+  --side: #101115;
+  --panel: #1b1c20;
+  --raised: #202125;
+  --raised-2: #28292d;
+  --code: #141519;
+  --hover: #1f2024;
+  --active: #262628;
+  --line: #26272b;
+  --line-2: #34353a;
+  --ink: #c8c9cd;
+  --ink-strong: #dedfe3;
+  --muted: #898a92;
+  --dim: #696a70;
+  --green: #6bc694;
+  --blue: #8b9db8;
+  --amber: #bca777;
+  --red: #c47f84;
   /* Width of the native caption buttons (titleBarOverlay in the desktop app). */
   --caption: 138px;
   --caption-h: 52px;
@@ -56,11 +58,12 @@ button {
   user-select: none;
 }
 .folder-link {
-  text-decoration: underline;
+  text-decoration: none;
   text-underline-offset: 3px;
 }
 .folder-link:hover {
   color: var(--ink);
+  text-decoration: underline;
 }
 :focus-visible {
   outline: 2px solid var(--blue);
@@ -81,7 +84,7 @@ pre {
   width: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  background: oklch(0.29 0 none);
+  background: var(--line-2);
   border: 3px solid transparent;
   border-radius: 6px;
   background-clip: padding-box;

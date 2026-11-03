@@ -1,11 +1,5 @@
 
 /* Scope menu: profiles with their projects beneath */
-.switcher-mark {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-}
 .scope-menu {
   max-height: min(70vh, 560px);
   overflow-y: auto;

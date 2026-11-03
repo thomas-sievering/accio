@@ -6,7 +6,7 @@
   flex: 1;
   min-width: 0;
   padding: 6px;
-  color: var(--muted);
+  color: var(--dim);
   font-size: 12.5px;
 }
 .machine .dot {
