@@ -7,16 +7,16 @@ Limits follow profile → provider → account. The hub caches each named accoun
 - `limits-sidebar`: sidebar button `Limits`; defaults to the open thread/draft profile, then the sidebar filter, then All profiles.
 - `limits-composer`: `.limits-chip` beside the selected model, opening that profile's limits. It appears for a signed-in selected account.
 - `limits-account`: Settings / Accounts / named account / Limits, including an account no profile selects.
-- `limits-navigation`: profile radios, shared-account references, account settings, missing-account profile settings, Escape/close and returning to threads.
+- `limits-navigation`: profile radios, shared-account references, account settings, Escape/close and returning to threads.
 - `limits-refresh`: account/global refresh, failure with last-known values, retry deadline, reset confirmation, disconnect/reconnect and credential changes.
 
 ## Drive the production instance
 
 Use the isolated runner from [3-verify](../SKILL.md). The empty home supports signed-out and missing-account paths. Create a profile and named account through the UI, select that account in the profile, then return to threads.
 
-1. Click `page.getByRole('button', { name: 'Limits', exact: true })`. Require the profile radiogroup and a provider row for each available provider. A selected signed-out account says `Signed out`; an unselected provider offers `Select account`. Neither has a numeric meter.
+1. Click `page.getByRole('button', { name: 'Limits', exact: true })`. Require the profile radiogroup and rows only for selected accounts. A selected signed-out account says `Signed out` without a numeric meter. Providers without selected accounts are hidden in both individual and All profiles scopes; a profile with no selected accounts says `No accounts selected for this profile.`
 2. Choose a radio with `page.getByRole('radio', { name: profileName, exact: true })`. ArrowRight/ArrowLeft must change selection and focus together. `All profiles` shows profile headings. With a shared account, require one account card and a reference from its other profile; `Show limits` must focus the original card.
-3. Click `Select account` in the intended missing-provider row. Require that profile's `Name` textbox in Settings. Back returns to Limits. An account card's `<account name> settings` button and its `Sign in` action must open the named account, whose Limits section uses the same data.
+3. An account card's `<account name> settings` button and its `Sign in` action must open the named account, whose Limits section uses the same data. Back returns to Limits.
 4. Type an unsent message in a signed-in scratch draft or thread, then click `.limits-chip`. Require its profile radio checked, regardless of the previously viewed profile. Close/Escape returns to the unchanged message and restores focus. Repeat through account settings and Back. Opening a thread, including the thread already selected, leaves Limits and preserves its unsent follow-up.
 5. For a successful provider read, require the expected named account, meter values, reset label and observation time. Model-specific windows are under `Model-specific limits`. Unknown usage says `Unknown` rather than a numeric meter. A used-up weekly window leaves reported session values intact.
 6. Refresh the account. During refresh keep its previous values visible. After a failed refresh require `Last known`, the original observation timestamp, safe error text and a disabled Retry until its displayed deadline. When a reset passes, require `awaiting confirmation` or `checking…`, without a fabricated refill. Disconnecting must retain values, show a connection banner and disable refresh; reconnecting must recover.

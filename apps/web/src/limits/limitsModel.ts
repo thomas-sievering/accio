@@ -19,8 +19,7 @@ export type LimitsEntry =
   /** Meters are drawn here. `sharedWith` lists the other profiles selecting this account. */
   | { kind: 'account'; provider: ProfileProviderView; account: AccountView; sharedWith: Named[] }
   /** All profiles: this account's meters are already drawn under `shownUnder`. */
-  | { kind: 'reference'; provider: ProfileProviderView; account: AccountView; shownUnder: Named; sharedWith: Named[] }
-  | { kind: 'none'; provider: ProfileProviderView };
+  | { kind: 'reference'; provider: ProfileProviderView; account: AccountView; shownUnder: Named; sharedWith: Named[] };
 export type LimitsGroup = { profile: ProfileView; entries: LimitsEntry[] };
 
 /**
@@ -37,8 +36,7 @@ export function limitsLayout(profiles: ProfileView[], scope: LimitsScope): Limit
   const drawnUnder = new Map<string, Named>();
   return profiles.filter((p) => scope === 'all' || p.id === scope).map((profile) => ({
     profile,
-    entries: profile.providers.filter((provider) => provider.available || provider.accounts.length > 0).flatMap((provider): LimitsEntry[] => {
-      if (!provider.accounts.length) return [{ kind: 'none', provider }];
+    entries: profile.providers.flatMap((provider): LimitsEntry[] => {
       return provider.accounts.map((account) => {
         const sharedWith = (users.get(account.id) ?? []).filter((u) => u.id !== profile.id);
         const first = drawnUnder.get(account.id);

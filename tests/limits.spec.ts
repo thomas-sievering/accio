@@ -49,8 +49,13 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
   };
 
   await page.goto(`${baseURL}/#token=isolated-limits-test-token`);
+  await button('Continue').click();
   await page.getByPlaceholder('personal, work…').fill('Personal');
-  await button('Add').click();
+  await button('Continue').click();
+  await button('Limits').click();
+  await expect(page.getByText('No accounts selected for this profile.', { exact: true })).toBeVisible();
+  await expect(page.locator('.limits-card, .limits-row')).toHaveCount(0);
+  await button('Close limits').click();
   await createAccount('Shared Claude', 'shared');
   await createAccount('Team Claude', 'work');
   await createAccount('Shared ChatGPT', undefined, true);
@@ -174,6 +179,22 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
   await page.getByRole('button', { name: /A fixture-only turn/ }).click();
   await expect(button('Close limits')).toHaveCount(0);
   await expect(page.locator('.composer textarea')).toHaveValue('Unsent follow-up');
+
+  // A provider selected by another profile stays hidden when unselected here.
+  await settings('Profiles');
+  await page.getByRole('button', { name: /^Work / }).click();
+  await page.getByRole('combobox', { name: /OpenAI · ChatGPT account/ }).selectOption('');
+  await button('Save').click();
+  await button('Back').click();
+  await button('Limits').click();
+  await page.getByRole('radio', { name: 'Work', exact: true }).click();
+  await expect(card('Team Claude')).toBeVisible();
+  await expect(page.locator('.limits-card')).toHaveCount(1);
+  await expect(page.locator('.limits-page')).not.toContainText('OpenAI');
+  await expect(button('Select account')).toHaveCount(0);
+  await page.getByRole('radio', { name: 'All profiles', exact: true }).click();
+  await expect(page.locator('.limits-profile').filter({ has: page.getByRole('heading', { name: 'Work', exact: true }) })).not.toContainText('OpenAI');
+  await expect(card('Shared ChatGPT')).toBeVisible();
   expect(errors).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath('composer.png'), fullPage: true });
 });

@@ -26,10 +26,10 @@ describe('limitsLayout', () => {
   it('draws a shared account once in All profiles and references it from the others', () => {
     const groups = limitsLayout(profiles, 'all');
     expect(groups.map((g) => g.profile.id)).toEqual(['personal', 'work', 'side']);
-    const kinds = groups.map((g) => g.entries.map((e) => e.kind === 'none' ? `none:${e.provider.id}` : `${e.kind}:${e.account.id}`));
+    const kinds = groups.map((g) => g.entries.map((e) => `${e.kind}:${e.account.id}`));
     expect(kinds).toEqual([
       ['account:team', 'account:gpt'],
-      ['reference:team', 'none:openai'],
+      ['reference:team'],
       ['account:own', 'reference:gpt'],
     ]);
     const work = groups[1]!.entries[0]!;
@@ -45,9 +45,9 @@ describe('limitsLayout', () => {
     expect(side!.entries[0]).toMatchObject({ sharedWith: [] });
   });
 
-  it('shows a provider with no selected account, but skips unavailable empty providers', () => {
+  it('skips providers with no selected account regardless of availability', () => {
     const p: ProfileView = { id: 'p', name: 'p', providers: [provider('anthropic', []), provider('openai', [], false)] };
-    expect(limitsLayout([p], 'p')[0]!.entries.map((e) => e.kind)).toEqual(['none']);
+    expect(limitsLayout([p], 'p')[0]!.entries).toEqual([]);
   });
 
   it('returns nothing for a deleted profile', () => {
