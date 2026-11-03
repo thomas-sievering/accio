@@ -7,7 +7,7 @@ import { useThreads } from './threads';
 
 /** The sidebar body, as in T3 Code: every open thread in one list (not grouped by project), then the shelves. Right-click a thread for its menu. */
 export function ThreadList() {
-  const { threads, shelves, query } = useThreads();
+  const { threads, shelves, query, loadError, retryLoad } = useThreads();
   const { visible, state } = useProjects();
   const { filter } = useProfiles();
 
@@ -17,7 +17,13 @@ export function ThreadList() {
 
   return (
     <ThreadMenuProvider>
-      {empty && <p className="side-empty">{empty}</p>}
+      {loadError && (
+        <div className="side-empty">
+          <p className="error" role="alert">Could not load threads: {loadError}</p>
+          <button className="ghost" onClick={retryLoad}>Retry</button>
+        </div>
+      )}
+      {!loadError && empty && <p className="side-empty">{empty}</p>}
       <div className="rows">
         {shelves.open.map((t) => (
           <ThreadRow key={t.id} thread={t} place="open" />

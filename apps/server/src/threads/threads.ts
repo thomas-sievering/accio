@@ -33,13 +33,14 @@ import {
 import { TurnTranscript, type TranscriptChange } from './transcript.js';
 import type { Machines } from '../machine/machine.js';
 
-type Live = { items: TranscriptItem[]; file: JsonFile<TranscriptItem[]>; saveTimer?: ReturnType<typeof setTimeout> };
+type Live = { cursor: number; items: TranscriptItem[]; file: JsonFile<TranscriptItem[]>; saveTimer?: ReturnType<typeof setTimeout> };
 
 /** Threads on this machine, their transcripts, and the turns running in them. */
 export class Threads {
   private file: JsonFile<Thread[]>;
   private list: Thread[] = [];
   private transcripts = new Map<string, Live>();
+  private loadingTranscripts = new Map<string, Promise<Live>>();
   private running = new Map<string, AbortController>();
   private closing = false;
   private starts = new Set<Promise<unknown>>();
@@ -131,6 +132,12 @@ export class Threads {
         }
       }))
       .on('threads.transcript', async ({ threadId }) => (await this.transcript(this.require(threadId).id)).items)
+      .on('threads.observe', async ({ threadId }) => {
+        const live = await this.transcript(this.require(threadId).id);
+        // No await between reading items and cursor. All mutations replace the
+        // array/items, so this snapshot stays fixed even before RPC serialization.
+        return { items: live.items, cursor: live.cursor };
+      })
       .on('threads.send', async ({ threadId, text }) => {
         await this.beginTurn(threadId, text);
         return null;
@@ -305,7 +312,7 @@ export class Threads {
       const live = await this.transcript(threadId);
       live.items = live.items.map((i) => (i.id === change.itemId && i.kind === 'assistant' ? { ...i, text: i.text + change.text } : i));
       this.scheduleSave(threadId, live);
-      this.broadcast('thread.delta', { threadId, itemId: change.itemId, text: change.text });
+      this.broadcast('thread.delta', { threadId, cursor: ++live.cursor, itemId: change.itemId, text: change.text });
     }
   }
 
@@ -338,20 +345,28 @@ export class Threads {
   }
 
   private async transcript(id: string): Promise<Live> {
-    let live = this.transcripts.get(id);
-    if (!live) {
+    const live = this.transcripts.get(id);
+    if (live) return live;
+    // Share cold reads: observing while a turn starts must use the same cursor
+    // and items as the writer, rather than installing two independent copies.
+    let loading = this.loadingTranscripts.get(id);
+    if (!loading) {
       const file = new JsonFile<TranscriptItem[]>(this.transcriptPath(id), () => []);
-      live = { items: await file.read(), file };
-      this.transcripts.set(id, live);
+      loading = file.read().then((items) => {
+        const loaded = { items, file, cursor: 0 };
+        this.transcripts.set(id, loaded);
+        return loaded;
+      }).finally(() => this.loadingTranscripts.delete(id));
+      this.loadingTranscripts.set(id, loading);
     }
-    return live;
+    return loading;
   }
 
   private async addItem(threadId: string, item: TranscriptItem) {
     const live = await this.transcript(threadId);
     live.items = upsertItem(live.items, item);
     this.scheduleSave(threadId, live);
-    this.broadcast('thread.item', { threadId, item });
+    this.broadcast('thread.item', { threadId, cursor: ++live.cursor, item });
   }
 
   private scheduleSave(_threadId: string, live: Live) {

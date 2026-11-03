@@ -1,0 +1,25 @@
+
+/* A thread with no messages yet: question, composer and context in the middle (T3 Code's new thread) */
+.hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(760px, calc(100% - 32px));
+  margin: auto;
+  padding-bottom: 8vh;
+}
+.hero h1 {
+  margin: 0 0 26px;
+  font-size: 30px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  text-align: center;
+  color: var(--ink);
+}
+.hero .notice-bar,
+.hero .composer-wrap {
+  width: 100%;
+}
+.hero .composer-wrap {
+  margin: 0;
+}

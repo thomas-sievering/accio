@@ -1,0 +1,63 @@
+
+/* Sheet extras */
+.row-input {
+  display: flex;
+  gap: 8px;
+}
+.row-input input {
+  flex: 1;
+  min-width: 0;
+}
+.row-input .ghost {
+  height: 36px;
+}
+.field textarea {
+  padding: 8px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--ink);
+  font:
+    13px/1.5 'Cascadia Code',
+    Consolas,
+    monospace;
+  resize: vertical;
+}
+.field textarea:focus {
+  outline: 2px solid var(--blue);
+  outline-offset: -1px;
+}
+.hint {
+  color: var(--dim);
+  font-size: 12px;
+}
+.facts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--raised);
+  font-size: 13px;
+}
+.facts .dim {
+  display: inline-block;
+  min-width: 84px;
+  color: var(--dim);
+}
+.note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.list-row.static {
+  cursor: default;
+}
+.list-row.static:hover {
+  background: none;
+}
+.grow {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

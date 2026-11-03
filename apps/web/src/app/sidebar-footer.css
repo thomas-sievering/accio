@@ -1,0 +1,27 @@
+.side-foot {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px;
+  background: var(--side);
+  border-top: 1px solid var(--line);
+}
+.side-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 8px;
+  color: var(--muted);
+}
+.side-icon:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.side-icon svg {
+  width: 17px;
+  height: 17px;
+}

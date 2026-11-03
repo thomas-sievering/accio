@@ -1,0 +1,16 @@
+
+/* Rename inside the thread menu */
+.menu-form input {
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+}
+.menu-form input:focus {
+  outline: 2px solid var(--blue);
+  outline-offset: -1px;
+}

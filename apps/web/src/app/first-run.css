@@ -1,0 +1,78 @@
+
+/* First run: profile, sign-in and project as steps, done in place */
+.first-run {
+  width: min(560px, calc(100% - 32px));
+  margin: auto;
+  padding-bottom: 8vh;
+}
+.first-run h1 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.first-run-sub {
+  margin: 6px 0 22px;
+  font-size: 13px;
+  color: var(--dim);
+}
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.step {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.step.current {
+  border-color: var(--line-2);
+}
+.step.later {
+  opacity: 0.5;
+}
+.step-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink);
+}
+.step-head b {
+  font-weight: 600;
+}
+.step.done .step-head {
+  color: var(--muted);
+}
+.step-n {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--line-2);
+  font-size: 12px;
+}
+.step.done .step-n {
+  border-color: transparent;
+  background: var(--green);
+  color: var(--bg);
+}
+.step-n svg {
+  width: 12px;
+  height: 12px;
+}
+.step-body {
+  margin-top: 12px;
+}
+.step-body .sheet-body {
+  padding: 0;
+}
+.step-body .sheet-foot {
+  padding: 12px 0 0;
+  border: 0;
+}
