@@ -3,7 +3,11 @@ import type { TranscriptItem } from '@accio/protocol';
 import { AssistantMarkdown } from './AssistantMarkdown';
 import { ToolGroup } from './ToolGroup';
 import { Chevron } from '../app/icons';
-import { layoutTranscript, type TranscriptBlock } from './transcriptBlocks';
+import { useAppEvent } from '../app/appEvents';
+import { blocksHaveItem, layoutTranscript, type TranscriptBlock } from './transcriptBlocks';
+import { RevealContext, useReveal, type Reveal } from './reveal';
+
+const revealFrames = 30;
 import { Choice, optionName } from './Choice';
 import './transcript-media.css';
 
@@ -17,6 +21,39 @@ export function Transcript({ threadId, items, working }: { threadId: string; ite
   const [away, setAway] = useState(false);
   const lastTurn = items.findLast((item) => item.kind === 'user')?.turnId;
   const picks = useMemo(() => pickedOptions(items), [items]);
+  // Another pane (the skills panel) can ask to show an item, even one folded away.
+  const [reveal, setReveal] = useState<Reveal>();
+  useAppEvent('transcript.reveal', (request) => {
+    if (request.threadId === threadId) setReveal((previous) => ({ itemId: request.itemId, request: (previous?.request ?? 0) + 1 }));
+  });
+  // Folds open in their own effects; wait a few frames for the item to render, then give up quietly.
+  useEffect(() => {
+    if (!reveal) return;
+    let frame = 0;
+    let tries = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let shown: HTMLElement | undefined;
+    const find = () => {
+      const element = content.current?.querySelector<HTMLElement>(`[data-item-id="${CSS.escape(reveal.itemId)}"]`);
+      if (!element && ++tries < revealFrames) { frame = requestAnimationFrame(find); return; }
+      setReveal(undefined);
+      if (!element) return;
+      // A tool call focuses its toggle; a message itself takes focus, for screen readers and keyboard scrolling.
+      const target = (element.matches('.tool') && element.querySelector<HTMLElement>('.tool-toggle')) || element;
+      if (target === element && !element.hasAttribute('tabindex')) element.tabIndex = -1;
+      target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      target.focus({ preventScroll: true });
+      shown = element;
+      element.classList.add('revealed');
+      timer = setTimeout(() => element.classList.remove('revealed'), 1600);
+    };
+    frame = requestAnimationFrame(find);
+    return () => {
+      cancelAnimationFrame(frame);
+      // Clearing the request re-runs this effect; the highlight still fades on its own.
+      if (!shown) clearTimeout(timer);
+    };
+  }, [reveal]);
 
   useLayoutEffect(() => {
     pinned.current = true;
@@ -67,7 +104,9 @@ export function Transcript({ threadId, items, working }: { threadId: string; ite
         anchor.current = visible ? { element: visible, offset: visible.getBoundingClientRect().top - top } : undefined;
       }}>
         <div className="thread" ref={content}>
-          <Picks.Provider value={picks}><Blocks threadId={threadId} blocks={layoutTranscript(items, working ? lastTurn : undefined)} preparingTurn={working ? lastTurn : undefined} /></Picks.Provider>
+          <RevealContext.Provider value={reveal}>
+            <Picks.Provider value={picks}><Blocks threadId={threadId} blocks={layoutTranscript(items, working ? lastTurn : undefined)} preparingTurn={working ? lastTurn : undefined} /></Picks.Provider>
+          </RevealContext.Provider>
           {working && !lastTurn && <div className="typing" aria-label="Working"><i /><i /><i /></div>}
         </div>
       </div>
@@ -115,6 +154,8 @@ function TurnWork({ threadId, block }: { threadId: string; block: Extract<Transc
   const bodyId = useId();
   const [open, setOpen] = useState(false);
   const empty = !block.blocks.length;
+  const reveal = useReveal();
+  useEffect(() => { if (reveal && blocksHaveItem(block.blocks, reveal.itemId)) setOpen(true); }, [reveal, block.blocks]);
   return (
     <div className={`turn-work${open ? ' open' : ''}${block.live ? ' live' : ''}`}>
       <button className="turn-work-toggle" onClick={() => setOpen(!open)} disabled={empty} aria-expanded={empty ? undefined : open} aria-controls={empty ? undefined : bodyId}>
@@ -148,7 +189,7 @@ const Item = memo(function Item({ threadId, item, preparing, picked, pickName }:
 }) {
   switch (item.kind) {
     case 'user':
-      return <div className={`msg user${item.resume ? ' resume' : ''}`}>
+      return <div className={`msg user${item.resume ? ' resume' : ''}`} data-item-id={item.id}>
         {pickName && <span className="msg-pick">✓ {pickName}</span>}
         {item.resume ? 'Resume' : item.text}
       </div>;
@@ -156,11 +197,11 @@ const Item = memo(function Item({ threadId, item, preparing, picked, pickName }:
       return <Choice threadId={threadId} item={item} picked={picked} />;
     case 'assistant':
       if (!item.text.trim()) return null;
-      return <div className="msg assistant"><AssistantMarkdown threadId={threadId} text={item.text} media={item.media} preparing={preparing} /></div>;
+      return <div className="msg assistant" data-item-id={item.id}><AssistantMarkdown threadId={threadId} text={item.text} media={item.media} preparing={preparing} /></div>;
     case 'tool':
       return null; // Rendered by ToolGroup.
     case 'notice':
-      return <div className={`notice ${item.tone}`}>{item.text}</div>;
+      return <div className={`notice ${item.tone}`} data-item-id={item.id}>{item.text}</div>;
     case 'finished':
       return <div className="turn-finished">Worked for {formatDuration(item.ms)}</div>;
   }

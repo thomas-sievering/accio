@@ -1,7 +1,8 @@
-import { memo, useId, useState } from 'react';
+import { memo, useEffect, useId, useState } from 'react';
 import { Chevron } from '../app/icons';
 import './tool-group.css';
 import { ToolCallRow } from './ToolCallRow';
+import { useReveal } from './reveal';
 import { describeTools, type ToolItem } from './transcriptBlocks';
 
 /**
@@ -13,6 +14,8 @@ export const ToolGroup = memo(function ToolGroup({ threadId, items, bare = false
   const stepsId = useId();
   const [choice, setChoice] = useState<boolean>();
   const failed = items.filter((item) => item.status === 'error').length;
+  const reveal = useReveal();
+  useEffect(() => { if (reveal && items.some((item) => item.id === reveal.itemId)) setChoice(true); }, [reveal, items]);
   const steps = <div className="tool-steps" id={stepsId}>{items.map((item) => <ToolCallRow key={item.id} threadId={threadId} item={item} />)}</div>;
   if (bare || items.length === 1) return <div className="tool-group single">{steps}</div>;
   const open = choice ?? failed > 0;

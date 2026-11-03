@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { access } from 'node:fs/promises';
 import { enabled, type McpGateway, type Resources } from '@accio/hub';
-import type { McpDefinition, ResourcesState, ToolDefinition } from '@accio/protocol';
+import type { McpDefinition, ResourcesState, ToolDefinition, WorkspaceSkill } from '@accio/protocol';
 import type { Router, Broadcast } from '../rpc/router.js';
 import type { Profiles } from '../profiles/profiles.js';
 import type { Projects } from '../projects/projects.js';
@@ -10,6 +10,7 @@ import { ManagedTools } from './tools.js';
 import type { CommandRunner } from './process.js';
 import type { HarnessMcp, TurnResources } from '../threads/harness.js';
 import { ACCIO_MCP_SERVER } from '../tools/tools.js';
+import { readSkillFile, repositorySkills } from './workspaceSkills.js';
 
 export class ResourceManager {
   readonly skills: SkillFiles;
@@ -24,6 +25,36 @@ export class ResourceManager {
     this.tools = new ManagedTools(home, machineId, store, () => this.announce(), repair, run);
   }
   state(): ResourcesState { return this.store.state(); }
+  async workspaceSkills(profileId?: string, projectId?: string, cwd?: string): Promise<WorkspaceSkill[]> {
+    const state = this.state();
+    const project = this.projects.state().projects.find(p => p.id === projectId);
+    const key = project ? project.repoKey ?? `local:${project.id}` : undefined;
+    const library: WorkspaceSkill[] = state.skills.map(skill => {
+      const enabledBy = skill.scope.global ? 'global' : profileId && skill.scope.profileIds.includes(profileId) ? 'profile' : key && skill.scope.projectKeys.includes(key) ? 'project' : null;
+      return { id: skill.id, name: skill.name, description: skill.description, path: join(skill.path, 'SKILL.md'), origin: 'library', enabled: enabledBy !== null, enabledBy, sourceName: state.sources.find(source => source.id === skill.sourceId)?.name, revision: skill.revision };
+    });
+    const skills = [...(cwd ? await repositorySkills(cwd) : []), ...library];
+    for (const skill of skills) {
+      if (skill.enabled && skills.some(other => other.id !== skill.id && other.enabled && other.name === skill.name)) skill.conflict = `More than one enabled skill is named ${skill.name}. Choose one source before the next turn.`;
+    }
+    return skills;
+  }
+  async skillContent(id: string) {
+    const skill = this.state().skills.find(skill => skill.id === id);
+    if (!skill) throw new Error('No such library skill');
+    await this.skills.validate(skill);
+    return readSkillFile(join(skill.path, 'SKILL.md'));
+  }
+  async setProjectSkill(id: string, projectId: string, on: boolean) {
+    const project = this.projects.state().projects.find(project => project.id === projectId);
+    if (!project) throw new Error('No such project');
+    const skill = this.state().skills.find(skill => skill.id === id);
+    if (!skill) throw new Error('Only library skills can be enabled or disabled');
+    const key = project.repoKey ?? `local:${project.id}`;
+    await this.store.setSkillProject(id, key, on);
+    this.announce();
+  }
+  skillsChanged() { this.announce(); }
   private announce() { this.broadcast('resources.changed', this.state()); }
   private tool(id: string) { const tool = this.state().tools.find(t => t.id === id); if (!tool) throw new Error('No such tool'); return tool; }
   private local(machineId?: string) { if (machineId && machineId !== this.machineId) throw new Error('This machine must be online locally; remote execution is not available yet'); }
@@ -100,7 +131,14 @@ export class ResourceManager {
         if (await access(join(options.cwd, folder, 'skills', skill.name, 'SKILL.md')).then(() => true, () => false)) throw new Error(`This project already has a skill named ${skill.name}. Choose either the project copy or the synced skill in settings.`);
       }
     }
-    const instructions = skills.length ? `Skills enabled for this turn:\n${skills.map(s => `- ${s.name}: ${s.description}\n  Read ${join(s.path, 'SKILL.md')} when relevant. Source revision: ${s.revision}`).join('\n')}\nRead a skill's SKILL.md before using it. Resolve its relative references against its own folder.` : '';
+    const repository = options.cwd ? await repositorySkills(options.cwd) : [];
+    const catalog: WorkspaceSkill[] = [...repository, ...skills.map(s => ({ id: s.id, name: s.name, description: s.description, path: join(s.path, 'SKILL.md'), revision: s.revision, origin: 'library' as const, enabled: true, enabledBy: 'project' as const }))];
+    const catalogNames = new Set<string>();
+    for (const skill of catalog) {
+      if (catalogNames.has(skill.name)) throw new Error(`More than one enabled skill is named ${skill.name}; choose one source`);
+      catalogNames.add(skill.name);
+    }
+    const instructions = catalog.length ? `Skills enabled for this turn:\n${catalog.map(s => `- ${s.name}: ${s.description}\n  Read ${s.path} when relevant.${'revision' in s ? ` Source revision: ${s.revision}` : ''}`).join('\n')}\nRead a skill's SKILL.md before using it. Resolve its relative references against its own folder.` : '';
     const releases: (() => void)[] = [];
     const mcps: Record<string, HarnessMcp> = {};
     for (const mcp of state.mcps.filter(m => enabled(m.scope, profileId, key))) {
@@ -108,7 +146,7 @@ export class ResourceManager {
       if (mcp.transport === 'http') { const grant = this.gateway.grant(mcp.id, profileId, key); releases.push(grant.release); mcps[mcp.id] = { type: 'http', url: grant.url, headers: { Authorization: `Bearer ${grant.token}` } }; }
       else mcps[mcp.id] = { type: 'stdio', command: mcp.command!, args: mcp.args };
     }
-    return { env: this.tools.env(tools, env), instructions, mcps, snapshot: { tools: tools.map(t => ({ id: t.id, version: t.version })), skills: skills.map(s => ({ id: s.id, revision: s.revision })), mcps: Object.keys(mcps) }, release: () => { releases.forEach(release => release()); } };
+    return { env: this.tools.env(tools, env), instructions, mcps, skills: catalog, snapshot: { tools: tools.map(t => ({ id: t.id, version: t.version })), skills: skills.map(s => ({ id: s.id, revision: s.revision })), mcps: Object.keys(mcps) }, release: () => { releases.forEach(release => release()); } };
   }
   async close() { this.closing = true; await this.tools.close(); await Promise.allSettled([...this.sourceOperations]); }
 }

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { method } from './rpc.js';
 import { ModelSelection } from './models.js';
 import type { AssetUrl, MediaBinding, ThreadAsset, ToolDetails } from './media.js';
+import type { LoadedSkill } from './workspaceSkills.js';
 
 /**
  * GLOSSARY: Thread. A durable conversation with a harness inside one checkout.
@@ -81,7 +82,7 @@ export type ChoicePick = { choiceId: string; option: number };
 export type TranscriptItem =
   | { kind: 'user'; id: string; turnId: string; text: string; at: string; resume?: boolean; delivery?: DeliveryMode; pick?: ChoicePick }
   | { kind: 'assistant'; id: string; turnId: string; text: string; media?: MediaBinding[] }
-  | { kind: 'tool'; id: string; turnId: string; name: string; summary: string; status: 'running' | 'done' | 'error' | 'interrupted'; output?: string; detailRevision?: number }
+  | { kind: 'tool'; id: string; turnId: string; name: string; summary: string; status: 'running' | 'done' | 'error' | 'interrupted'; output?: string; detailRevision?: number; loadedSkills?: LoadedSkill[] }
   /** GLOSSARY: Choice. Screenshots the harness offers; you pick one in your next message. */
   | { kind: 'choice'; id: string; turnId: string; question: string; options: ChoiceOption[] }
   | { kind: 'notice'; id: string; turnId: string; tone: 'info' | 'error'; text: string }

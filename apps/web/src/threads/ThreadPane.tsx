@@ -60,6 +60,7 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits 
       )}
       <ThreadNotice thread={thread} profile={place.profile} detail={detail} onOpenProfile={onOpenProfile} />
       <Composer
+        target={thread.id}
         disabled={running || savingModel || thread.delivery?.status === 'queued' || !place.profile || !accountForModel(place.profile, thread.model)?.signedIn}
         actions={<DeliveryActions key={thread.id} thread={thread} project={place.project} canRun={!!place.profile && !!accountForModel(place.profile, thread.model)?.signedIn} />}
         onStop={running ? async () => void (await client.call('threads.stop', { threadId: thread.id })) : undefined}
@@ -110,6 +111,7 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
         {remote && <p className="note" role="status">Running threads on another machine is not available yet. Choose this machine to start a thread.</p>}
         {chosenMachineId && unavailable && <p className="note" role="status">The selected machine is offline. Choose an online machine.</p>}
         <Composer
+          target="draft"
           disabled={!place.profile || !accountForModel(place.profile, model)?.signedIn || unavailable || remote}
           placeholder={`Ask ${model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}
           onSend={async (text) => select((await client.call('threads.start', checkoutId ? { checkoutId, text, model, machineId } : { profileId: profileId!, text, model, machineId })).id)}
