@@ -131,7 +131,7 @@ function Shell() {
         <main className="main">
           {limitsOpen && !settings && (
             <LimitsView scope={limits.scope} onScope={(scope) => setLimits({ scope, navigation })} onClose={closeLimits}
-              onOpenAccount={openAccount} onOpenProfile={openProfile} />
+              onOpenAccount={openAccount} />
           )}
           {/* Keep the composer and reading position mounted while checking limits/settings. */}
           <div className="thread-surface" hidden={limitsOpen || settings !== null}>
