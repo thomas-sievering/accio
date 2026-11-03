@@ -22,5 +22,6 @@ Record feature IDs and entry points in `actions.json`. Pair the action trace wit
 - [Profiles](profiles.md): first-run creation, settings creation, editing, cancel, delete and provider-account selection.
 - [Accounts](accounts.md): named Claude and ChatGPT accounts, provider sign-in, sign-out and deletion guards.
 - [Projects](projects.md): add folders through onboarding or toolbar, inspect duplicates, remote grouping, settings and removal.
+- [System prompt](system-prompt.md): read-only Settings page with each harness's delivery and the shared sections.
 - [Machines](machines.md): status, harness versions, machine names and profile folder defaults.
 - [Threads](threads.md): project/profile picker, models, messages, stop/resume, search/filter, shelves and deletion.

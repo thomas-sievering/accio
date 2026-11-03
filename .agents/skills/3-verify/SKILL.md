@@ -19,7 +19,7 @@ pnpm verify
 
 On Linux, browser system libraries may require `pnpm exec playwright install --with-deps chromium`. The proven target is Windows with local Chromium.
 
-On 2026-11-03 the committed Claude SDK versions were younger than pnpm's default release-age cutoff. The proof used `pnpm --config.minimumReleaseAge=0 install --frozen-lockfile` for those existing locked dependencies. If this exact error recurs, inspect the rejected versions before using a temporary override. Keep repository policy unchanged; pnpm may otherwise auto-add exceptions to `pnpm-workspace.yaml`. The same temporary `--config.minimumReleaseAge=0` option can precede `verify` while the cutoff applies.
+`pnpm-workspace.yaml` exempts `@anthropic-ai/*` and `@openai/*` from pnpm's minimum release age, so new harness SDK releases install directly. If install rejects any other package as too new, inspect the rejected versions; do not override the policy or add exemptions without the user's agreement.
 
 `pnpm verify` builds the workspace and runs [the runner](scripts/verify.mjs) with [the smoke journey](scripts/smoke.mjs). After a successful build, repeat or supply a custom journey with:
 
