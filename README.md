@@ -28,6 +28,6 @@ Code is grouped by domain, one vertical slice each: `machine`, `profiles`, `proj
 
 - `packages/protocol`: client–server messages (zod).
 - `apps/hub`: the hub: Claude sign-in, token refresh, and the proxy threads call. Runs inside this machine's server in v0.1; later it runs alone, always on (ADR 0001).
-- `apps/server`: Node server. Pure domain rules sit next to their infrastructure (`profile.ts` and `profiles.ts`, `project.ts` and `git.ts`, `thread.ts`/`transcript.ts` and `claudeAgent.ts`).
+- `apps/server`: Node server. Pure domain rules sit next to their infrastructure (`profile.ts` and `profiles.ts`, `project.ts` and `git.ts`, `thread.ts`/`transcript.ts` and `claudeCode.ts`).
 - `apps/web`: React client, plain web.
 - `apps/desktop`: Electron shell that starts the local server.

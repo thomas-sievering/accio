@@ -61,14 +61,14 @@ export function readPastedCode(pasted: string, pending: PendingSignIn): string {
   return code;
 }
 
-/** A provider login as the hub keeps it. */
-export type ClaudeLogin = {
+/** A Claude account as the hub keeps it: its tokens and who it is. */
+export type ClaudeAccount = {
   accessToken: string;
   refreshToken: string;
   /** Epoch ms; refreshed a few minutes before. */
   expiresAt: number;
   email: string | null;
-  /** Anthropic account id; tells whether two accio profiles use the same Claude login. */
+  /** Anthropic account id; tells whether two accio profiles use the same Claude account. */
   claudeAccountId: string | null;
   organization: string | null;
 };
@@ -101,7 +101,7 @@ async function tokenRequest(fetchImpl: Fetch, body: Record<string, string>): Pro
   return JSON.parse(text) as TokenResponse;
 }
 
-function toLogin(r: TokenResponse, previous: ClaudeLogin | null, now: number): ClaudeLogin {
+function toAccount(r: TokenResponse, previous: ClaudeAccount | null, now: number): ClaudeAccount {
   return {
     accessToken: r.access_token,
     refreshToken: r.refresh_token ?? previous?.refreshToken ?? '',
@@ -112,7 +112,7 @@ function toLogin(r: TokenResponse, previous: ClaudeLogin | null, now: number): C
   };
 }
 
-export async function exchangeCode(fetchImpl: Fetch, pending: PendingSignIn, code: string, now = Date.now()): Promise<ClaudeLogin> {
+export async function exchangeCode(fetchImpl: Fetch, pending: PendingSignIn, code: string, now = Date.now()): Promise<ClaudeAccount> {
   const r = await tokenRequest(fetchImpl, {
     grant_type: 'authorization_code',
     client_id: CLAUDE_OAUTH.clientId,
@@ -121,21 +121,21 @@ export async function exchangeCode(fetchImpl: Fetch, pending: PendingSignIn, cod
     redirect_uri: CLAUDE_OAUTH.redirectUri,
     code_verifier: pending.verifier,
   });
-  return toLogin(r, null, now);
+  return toAccount(r, null, now);
 }
 
-export async function refreshLogin(fetchImpl: Fetch, login: ClaudeLogin, now = Date.now()): Promise<ClaudeLogin> {
+export async function refreshAccount(fetchImpl: Fetch, account: ClaudeAccount, now = Date.now()): Promise<ClaudeAccount> {
   const r = await tokenRequest(fetchImpl, {
     grant_type: 'refresh_token',
     client_id: CLAUDE_OAUTH.clientId,
-    refresh_token: login.refreshToken,
+    refresh_token: account.refreshToken,
   });
-  return toLogin(r, login, now);
+  return toAccount(r, account, now);
 }
 
 /** Refresh this long before expiry so no request goes out with a token about to lapse. */
 export const REFRESH_MARGIN_MS = 5 * 60 * 1000;
 
-export function needsRefresh(login: ClaudeLogin, now = Date.now()): boolean {
-  return login.expiresAt - now < REFRESH_MARGIN_MS;
+export function needsRefresh(account: ClaudeAccount, now = Date.now()): boolean {
+  return account.expiresAt - now < REFRESH_MARGIN_MS;
 }

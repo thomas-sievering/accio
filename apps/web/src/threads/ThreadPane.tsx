@@ -31,12 +31,12 @@ export function ThreadPane({ thread, onOpenProfile }: { thread: ThreadView; onOp
         items.length ? (
           <Transcript items={items} working={running} />
         ) : (
-          <div className="empty">What should the agent do in {checkout?.path ?? 'this checkout'}?</div>
+          <div className="empty">What should Claude Code do in {checkout?.path ?? 'this checkout'}?</div>
         )
       ) : (
         <div className="empty" />
       )}
-      {profile && !profile.signIn && (
+      {profile && !profile.account && (
         <div className="profile-note">
           <span>
             <b>{profile.name}</b> isn’t signed in with Claude, so this thread can’t run yet.

@@ -3,6 +3,7 @@ import type { ProjectView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { Sheet } from '../app/Sheet';
 import { useProfiles } from '../profiles/profiles';
+import { useThreads } from '../threads/threads';
 import { useProjects } from './projects';
 
 /** A project's profile and its checkouts on this machine. */
@@ -10,6 +11,8 @@ export function ProjectSheet({ project, onClose }: { project: ProjectView; onClo
   const client = useClient();
   const { profiles = [] } = useProfiles();
   const { checkoutsOf } = useProjects();
+  const { threads = [] } = useThreads();
+  const threadCount = threads.filter((t) => t.projectId === project.id).length;
   const [error, setError] = useState<string>();
 
   const act = (p: Promise<unknown>) => p.catch((e: Error) => setError(e.message));
@@ -26,6 +29,7 @@ export function ProjectSheet({ project, onClose }: { project: ProjectView; onClo
           <span>Profile</span>
           <select
             value={project.profileId}
+            disabled={threadCount > 0}
             onChange={(e) => act(client.call('projects.setProfile', { projectId: project.id, profileId: e.target.value }))}
           >
             {profiles.map((a) => (
@@ -34,7 +38,11 @@ export function ProjectSheet({ project, onClose }: { project: ProjectView; onClo
               </option>
             ))}
           </select>
-          <small className="hint">Applies to new threads. Existing threads keep the profile they started with.</small>
+          <small className="hint">
+            {threadCount > 0
+              ? `Fixed while the project has threads (${threadCount}): each thread keeps the profile it started with.`
+              : 'You can change it while the project has no threads.'}
+          </small>
         </label>
         <div className="field">
           <span>Checkouts on this machine</span>

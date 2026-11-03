@@ -12,7 +12,7 @@ describe('profiles slice', () => {
     const c = await t.connect();
     const hrc = await c.call('profiles.save', { name: 'HRC' });
     const personal = await c.call('profiles.save', { name: 'Personal' });
-    expect(hrc).toEqual({ id: 'hrc', name: 'HRC', roots: [], signIn: null });
+    expect(hrc).toEqual({ id: 'hrc', name: 'HRC', folders: [], account: null });
 
     const settingsOf = async (id: string) =>
       JSON.parse(await readFile(join(t.home, 'profiles', id, 'claude', 'settings.json'), 'utf8')).env;
@@ -34,21 +34,21 @@ describe('profiles slice', () => {
 
     await expect(a.call('profiles.completeSignIn', { signInId, code: 'me#wrong-state' })).rejects.toThrow(/different sign-in/);
     const signed = await a.call('profiles.completeSignIn', { signInId, code: `me#${state}` });
-    expect(signed.signIn).toEqual({ email: 'me@example.com', organization: null });
-    const pushed = await b.waitFor('profiles.changed', (list) => list[0]?.signIn !== null);
+    expect(signed.account).toEqual({ email: 'me@example.com', organization: null });
+    const pushed = await b.waitFor('profiles.changed', (list) => list[0]?.account !== null);
     expect(JSON.stringify(pushed)).not.toMatch(/oauth-|refresh-|accio-/);
 
     const out = await a.call('profiles.signOut', { profileId: profile.id });
-    expect(out.signIn).toBeNull();
+    expect(out.account).toBeNull();
   });
 
   it('keeps each Claude account in one profile', async () => {
     t = await startTestApp();
     const c = await t.connect();
-    await c.signedIn('Personal', { claudeLogin: 'me' });
-    await expect(c.signedIn('HRC', { claudeLogin: 'me' })).rejects.toThrow(/Personal already uses this Claude account/);
-    const hrc = await c.signedIn('HRC', { claudeLogin: 'work' });
-    expect(hrc.signIn?.email).toBe('work@example.com');
+    await c.signedIn('Personal', { claudeAccount: 'me' });
+    await expect(c.signedIn('HRC', { claudeAccount: 'me' })).rejects.toThrow(/Personal already uses this Claude account/);
+    const hrc = await c.signedIn('HRC', { claudeAccount: 'work' });
+    expect(hrc.account?.email).toBe('work@example.com');
   });
 
   it('keeps profiles and sign-ins across a restart', async () => {
@@ -60,7 +60,7 @@ describe('profiles slice', () => {
     t = await startTestApp({}, home);
     const list = await (await t.connect()).call('profiles.list', {});
     expect(list).toEqual([
-      { id: 'personal', name: 'Personal', roots: [], signIn: { email: 'claude-personal@example.com', organization: null } },
+      { id: 'personal', name: 'Personal', folders: [], account: { email: 'claude-personal@example.com', organization: null } },
     ]);
   });
 });

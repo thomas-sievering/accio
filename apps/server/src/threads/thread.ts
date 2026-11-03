@@ -66,7 +66,7 @@ export function closeOpenTools(items: readonly TranscriptItem[]): TranscriptItem
 
 /**
  * What Resume sends, on the same Claude session. Modelled on T3's restart
- * continuation: the agent must check before repeating anything with effects.
+ * continuation: the harness must check before repeating anything with effects.
  */
 export const RESUME_PROMPT =
   'Continue where you left off. Your previous turn was interrupted before it finished. ' +

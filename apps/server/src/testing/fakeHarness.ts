@@ -1,13 +1,13 @@
-import type { Agent, AgentMessage, AgentRun } from '../threads/agent.js';
+import type { Harness, HarnessMessage, HarnessTurn } from '../threads/harness.js';
 
-type Script = (run: AgentRun, turn: number) => AsyncIterable<AgentMessage> | Iterable<AgentMessage>;
+type Script = (run: HarnessTurn, turn: number) => AsyncIterable<HarnessMessage> | Iterable<HarnessMessage>;
 
-/** An agent that plays a script per turn and records how it was called. */
-export class FakeAgent implements Agent {
-  readonly runs: AgentRun[] = [];
+/** A harness that plays a script per turn and records how it was called. */
+export class FakeHarness implements Harness {
+  readonly runs: HarnessTurn[] = [];
   constructor(private script: Script = (_r, n) => replyWith(`reply ${n}`)) {}
 
-  async *run(run: AgentRun): AsyncIterable<AgentMessage> {
+  async *run(run: HarnessTurn): AsyncIterable<HarnessMessage> {
     this.runs.push(run);
     yield* this.script(run, this.runs.length);
   }
@@ -16,7 +16,7 @@ export class FakeAgent implements Agent {
 export const SESSION = 'session-abc';
 
 /** A normal, streamed reply. */
-export function* replyWith(text: string, sessionId = SESSION): Iterable<AgentMessage> {
+export function* replyWith(text: string, sessionId = SESSION): Iterable<HarnessMessage> {
   const m = `msg-${text}`;
   yield { type: 'system', subtype: 'init', session_id: sessionId };
   yield { type: 'stream_event', parent_tool_use_id: null, session_id: sessionId, event: { type: 'message_start', message: { id: m } } };

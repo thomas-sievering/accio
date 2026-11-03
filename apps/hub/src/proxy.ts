@@ -22,7 +22,7 @@ const DROP_RESPONSE = new Set(['content-encoding', 'content-length', 'transfer-e
 export type ProxyOptions = { hub: Hub; host: string; port: number; upstream?: string; fetchImpl?: Fetch };
 
 /**
- * The hub's front door for agents. Claude Code calls it with a profile's access
+ * The hub's front door for threads. Claude Code calls it with a profile's access
  * key (ANTHROPIC_AUTH_TOKEN, or an API key header); the hub swaps that key for the
  * profile's OAuth token and forwards to Anthropic. The caller is the real Claude
  * Code, so nothing else about the request changes (ADR 0007).

@@ -5,17 +5,17 @@ import { method } from './rpc.js';
 export type ProfileView = {
   id: string;
   name: string;
-  /** Folders whose new projects default to this profile, like fleet's roots. */
-  roots: string[];
-  /** GLOSSARY: Sign-in. Null until the profile is signed in with Claude. */
-  signIn: { email: string | null; organization: string | null } | null;
+  /** Folders whose new projects default to this profile (GLOSSARY: Profile folder). */
+  folders: string[];
+  /** The Claude account signed in to this profile; null until there is one. */
+  account: { email: string | null; organization: string | null } | null;
 };
 
 export const SaveProfileParams = z.object({
   /** Omit to create. */
   id: z.string().optional(),
   name: z.string().trim().min(1, 'Name is required').max(40),
-  roots: z.array(z.string().trim().min(1)).default([]),
+  folders: z.array(z.string().trim().min(1)).default([]),
 });
 export type SaveProfileParams = z.output<typeof SaveProfileParams>;
 

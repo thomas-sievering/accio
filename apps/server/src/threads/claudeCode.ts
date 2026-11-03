@@ -1,17 +1,17 @@
 import { query } from '@anthropic-ai/claude-agent-sdk';
-import type { Agent, AgentMessage, AgentRun } from './agent.js';
+import type { Harness, HarnessMessage, HarnessTurn } from './harness.js';
 
 /** How long a stopped turn gets to wind down gracefully before its process is killed. */
 const HARD_STOP_AFTER_MS = 3000;
 
 /**
- * Runs a turn through the Claude Agent SDK, the way T3 does (ADR 0006). Agents
+ * Runs a turn through the Claude Agent SDK, the way T3 does (ADR 0006). Harnesses
  * get every permission without prompts (ADR 0005). Settings come from the
  * profile's accio-owned config folder via CLAUDE_CONFIG_DIR (ADR 0003) and from
  * the checkout's own .claude folder and CLAUDE.md.
  */
-export const claudeAgent: Agent = {
-  async *run({ cwd, prompt, sessionId, env, signal }: AgentRun) {
+export const claudeCode: Harness = {
+  async *run({ cwd, prompt, sessionId, env, signal }: HarnessTurn) {
     const abortController = new AbortController();
     const stderr: string[] = [];
     const q = query({
@@ -33,7 +33,7 @@ export const claudeAgent: Agent = {
       },
     });
 
-    // Stop ends the turn for accio at once. The agent is asked to interrupt
+    // Stop ends the turn for accio at once. The harness is asked to interrupt
     // gracefully (so its session stays resumable) and is killed if it lingers.
     const stopped = new Promise<'stopped'>((resolve) => {
       const onAbort = () => {
@@ -52,7 +52,7 @@ export const claudeAgent: Agent = {
         next.catch(() => {}); // may reject after we stop listening
         const step = await Promise.race([next, stopped]);
         if (step === 'stopped' || step.done) return;
-        yield step.value as AgentMessage;
+        yield step.value as HarnessMessage;
       }
     } catch (err) {
       if (signal.aborted) return;
