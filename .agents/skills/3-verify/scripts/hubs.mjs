@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { expect } from '@playwright/test';
 import { fork } from 'node:child_process';
 import { join } from 'node:path';
 import { readFile } from 'node:fs/promises';
@@ -13,6 +14,14 @@ export default async function ({page, context, home, runDir, action, capture}) {
     const ready=JSON.parse(output.match(/ACCIO_HUB_READY (\{[^\r\n]+\})/)[1]);
     const code=output.match(/First-device pairing code: ([A-F0-9-]+)/)[1];
     const button=name=>page.getByRole('button',{name,exact:true});
+    const openSettings=async(target=page)=>{
+      if(!await target.getByRole('button',{name:/^Hub: /}).isVisible()) await target.getByRole('button',{name:'Settings',exact:true}).click();
+    };
+    const chooseHub=async(name,target=page)=>{
+      await openSettings(target);
+      await target.getByRole('button',{name:/^Hub: /}).click();
+      await target.getByRole('menuitemradio',{name:new RegExp('^'+name+' ')}).click();
+    };
     await action('hubs/local: create a profile through onboarding',async()=>{
       await button('Continue').click(); await page.getByPlaceholder(/^personal, work/).fill('Same profile'); await button('Continue').click();
       await page.getByText('Choose an account for Same profile',{exact:true}).waitFor();
@@ -23,7 +32,9 @@ export default async function ({page, context, home, runDir, action, capture}) {
       await page.getByRole('textbox',{name:'Hub address',exact:true}).fill('http://127.0.0.1:'+ready.port);
       await page.getByRole('textbox',{name:'Pairing code',exact:true}).fill(code); await button('Connect hub').click();
       await page.getByRole('heading',{name:'Set up accio',exact:true}).waitFor();
-      assert.equal(await page.getByRole('combobox',{name:'Hub',exact:true}).inputValue(),ready.hubId);
+      await openSettings();
+      await button('Hub: Other dev').waitFor();
+      await button('Back').click();
     });
     await action('hubs/isolation: a new hub starts with separate profiles',async()=>{
       await page.getByPlaceholder(/^personal, work/).fill('Same profile'); await button('Continue').click();
@@ -34,8 +45,37 @@ export default async function ({page, context, home, runDir, action, capture}) {
       await button('Sign in with ChatGPT').waitFor(); await button('Cancel').click(); await button('Back').click();
     });
     await capture('other-hub');
+    await action('hubs/menu: themed menu, selected state, keyboard and dismissal',async()=>{
+      await openSettings();
+      const trigger=button('Hub: Other dev');
+      await trigger.press('ArrowDown');
+      const menu=page.getByRole('menu',{name:'Choose hub',exact:true});
+      const selected=page.getByRole('menuitemradio',{name:/^Other dev /});
+      await selected.waitFor();
+      await expect(trigger).toHaveAttribute('aria-expanded','true');
+      assert.equal(await selected.getAttribute('aria-checked'),'true');
+      await capture('hub-menu-open');
+      const cardBox=await trigger.boundingBox(), menuBox=await menu.boundingBox();
+      assert(Math.abs(cardBox.width-menuBox.width)<2,'Menu matches the card width');
+      assert(menuBox.y>=cardBox.y+cardBox.height,'Menu opens below the card');
+      await selected.press('Home');
+      assert.equal(await page.getByRole('menuitemradio',{name:/^Local dev /}).evaluate(el=>el===document.activeElement),true);
+      await page.keyboard.press('End');
+      assert.equal(await selected.evaluate(el=>el===document.activeElement),true);
+      await page.keyboard.press('ArrowDown');
+      await page.keyboard.press('ArrowUp');
+      assert.equal(await selected.evaluate(el=>el===document.activeElement),true);
+      await page.keyboard.press('Escape');
+      assert.equal(await menu.isVisible(),false);
+      assert.equal(await trigger.evaluate(el=>el===document.activeElement),true);
+      await trigger.click();
+      await selected.waitFor();
+      await page.locator('.crumbs').click();
+      assert.equal(await menu.isVisible(),false);
+      await button('Back').click();
+    });
     await action('hubs/switch: restore the original hub without another pairing',async()=>{
-      await page.getByRole('combobox',{name:'Hub',exact:true}).selectOption({label:'Local dev'});
+      await chooseHub('Local dev');
       await page.getByText('Choose an account for Same profile',{exact:true}).waitFor();
       await button('Settings').click(); await page.locator('.sidebar nav').getByRole('button',{name:'Accounts',exact:true}).click();
       assert.equal(await page.getByRole('button',{name:'Other account Signed out',exact:true}).count(),0);
@@ -47,18 +87,21 @@ export default async function ({page, context, home, runDir, action, capture}) {
       const second=await context.newPage();
       try {
         await second.goto(instance.url+'/#token='+encodeURIComponent(token));
-        await second.getByRole('combobox',{name:'Hub',exact:true}).selectOption({label:'Other dev'});
+        await chooseHub('Other dev',second);
         await second.getByText('Choose an account for Same profile',{exact:true}).waitFor();
-        assert.equal(await page.getByRole('combobox',{name:'Hub',exact:true}).inputValue(),JSON.parse(await readFile(join(home,'hub-connections.json'),'utf8'))[0].id);
+        await openSettings();
+        await button('Hub: Local dev').waitFor();
+        await button('Back').click();
         await second.getByRole('button',{name:'Settings',exact:true}).click();
         await second.locator('.sidebar nav').getByRole('button',{name:'Accounts',exact:true}).click();
         await second.getByRole('button',{name:'Other account Signed out',exact:true}).waitFor();
       } finally { await second.close(); }
     });
     await action('hubs/persistence: retain the selected hub after reload',async()=>{
-      await page.getByRole('combobox',{name:'Hub',exact:true}).selectOption({label:'Other dev'}); await page.reload();
+      await chooseHub('Other dev'); await page.reload();
       await page.getByText('Choose an account for Same profile',{exact:true}).waitFor();
-      assert.equal(await page.getByRole('combobox',{name:'Hub',exact:true}).inputValue(),ready.hubId);
+      await openSettings();
+      await button('Hub: Other dev').waitFor();
     });
     await capture('hub-switching-persisted');
   } finally {
