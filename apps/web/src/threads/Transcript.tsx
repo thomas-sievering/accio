@@ -1,9 +1,10 @@
-import { memo, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { createContext, memo, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { TranscriptItem } from '@accio/protocol';
 import { AssistantMarkdown } from './AssistantMarkdown';
 import { ToolGroup } from './ToolGroup';
 import { Chevron } from '../app/icons';
 import { layoutTranscript, type TranscriptBlock } from './transcriptBlocks';
+import { Choice, optionName } from './Choice';
 import './transcript-media.css';
 
 /** Follow late media/layout changes only while the reader is already at the bottom. */
@@ -15,6 +16,7 @@ export function Transcript({ threadId, items, working }: { threadId: string; ite
   const anchor = useRef<{ element: HTMLElement; offset: number } | undefined>(undefined);
   const [away, setAway] = useState(false);
   const lastTurn = items.findLast((item) => item.kind === 'user')?.turnId;
+  const picks = useMemo(() => pickedOptions(items), [items]);
 
   useLayoutEffect(() => {
     pinned.current = true;
@@ -60,12 +62,12 @@ export function Transcript({ threadId, items, working }: { threadId: string; ite
         pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40 || (pinned.current && !movedUp);
         setAway(!pinned.current);
         const top = el.getBoundingClientRect().top;
-        const visible = [...(content.current?.querySelectorAll<HTMLElement>(':scope .msg:not(.assistant), :scope .turn-work-toggle, :scope .tool-group-toggle, :scope .tool, :scope .notice, :scope .turn-finished, :scope .msg.assistant > *') ?? [])]
+        const visible = [...(content.current?.querySelectorAll<HTMLElement>(':scope .msg:not(.assistant), :scope .turn-work-toggle, :scope .tool-group-toggle, :scope .tool, :scope .choice, :scope .notice, :scope .turn-finished, :scope .msg.assistant > *') ?? [])]
           .find((node) => node.getBoundingClientRect().bottom > top);
         anchor.current = visible ? { element: visible, offset: visible.getBoundingClientRect().top - top } : undefined;
       }}>
         <div className="thread" ref={content}>
-          <Blocks threadId={threadId} blocks={layoutTranscript(items, working ? lastTurn : undefined)} preparingTurn={working ? lastTurn : undefined} />
+          <Picks.Provider value={picks}><Blocks threadId={threadId} blocks={layoutTranscript(items, working ? lastTurn : undefined)} preparingTurn={working ? lastTurn : undefined} /></Picks.Provider>
           {working && !lastTurn && <div className="typing" aria-label="Working"><i /><i /><i /></div>}
         </div>
       </div>
@@ -79,12 +81,28 @@ export function Transcript({ threadId, items, working }: { threadId: string; ite
   );
 }
 
+/** Which option each answered choice got, and how each picking message names its pick. */
+function pickedOptions(items: TranscriptItem[]) {
+  const choices = new Map<string, Extract<TranscriptItem, { kind: 'choice' }>>();
+  const picked = new Map<string, number>();
+  const names = new Map<string, string>();
+  for (const item of items) {
+    if (item.kind === 'choice') choices.set(item.id, item);
+    if (item.kind !== 'user' || !item.pick) continue;
+    const choice = choices.get(item.pick.choiceId);
+    picked.set(item.pick.choiceId, item.pick.option);
+    if (choice) names.set(item.id, optionName(choice, item.pick.option));
+  }
+  return { picked, names };
+}
+const Picks = createContext<ReturnType<typeof pickedOptions>>({ picked: new Map(), names: new Map() });
+
 function Blocks({ threadId, blocks, preparingTurn, inWork = false }: { threadId: string; blocks: TranscriptBlock[]; preparingTurn?: string; inWork?: boolean }) {
   return blocks.map((block) => {
     switch (block.kind) {
       case 'tools': return <ToolGroup key={`${threadId}:${block.id}`} threadId={threadId} items={block.items} bare={inWork} />;
       case 'work': return <TurnWork key={`${threadId}:${block.id}`} threadId={threadId} block={block} />;
-      case 'item': return <Item key={`${threadId}:${block.item.id}`} threadId={threadId} item={block.item} preparing={block.item.turnId === preparingTurn} />;
+      case 'item': return <PickedItem key={`${threadId}:${block.item.id}`} threadId={threadId} item={block.item} preparing={block.item.turnId === preparingTurn} />;
     }
   });
 }
@@ -120,10 +138,22 @@ function Elapsed({ since }: { since: string }) {
   return <span className="turn-work-elapsed">{formatDuration(Math.max(0, now - Date.parse(since)))}</span>;
 }
 
-const Item = memo(function Item({ threadId, item, preparing }: { threadId: string; item: TranscriptItem; preparing: boolean }) {
+function PickedItem(props: { threadId: string; item: TranscriptItem; preparing: boolean }) {
+  const { picked, names } = useContext(Picks);
+  return <Item {...props} picked={props.item.kind === 'choice' ? picked.get(props.item.id) : undefined} pickName={props.item.kind === 'user' ? names.get(props.item.id) : undefined} />;
+}
+
+const Item = memo(function Item({ threadId, item, preparing, picked, pickName }: {
+  threadId: string; item: TranscriptItem; preparing: boolean; picked?: number; pickName?: string;
+}) {
   switch (item.kind) {
     case 'user':
-      return <div className={`msg user${item.resume ? ' resume' : ''}`}>{item.resume ? 'Resume' : item.text}</div>;
+      return <div className={`msg user${item.resume ? ' resume' : ''}`}>
+        {pickName && <span className="msg-pick">✓ {pickName}</span>}
+        {item.resume ? 'Resume' : item.text}
+      </div>;
+    case 'choice':
+      return <Choice threadId={threadId} item={item} picked={picked} />;
     case 'assistant':
       if (!item.text.trim()) return null;
       return <div className="msg assistant"><AssistantMarkdown threadId={threadId} text={item.text} media={item.media} preparing={preparing} /></div>;

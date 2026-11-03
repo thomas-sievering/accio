@@ -50,6 +50,17 @@ const SECTIONS: Section[] = [
     text: ({ platform }) => `The chat shows images, video and audio inline. Embed them with Markdown image syntax and an absolute path, a path relative to the working directory, or an https URL: ![Chart](${exampleDir(platform)}/chart.png). Wrap paths containing spaces in angle brackets. SVG isn't shown inline, so convert it to PNG first. When a picture, chart, diagram or screenshot would help, create the file and embed it. Never say images can't be shown here.`,
   },
   {
+    id: 'choices',
+    title: 'UI choices',
+    text: () => [
+      'When the user asks you to prototype, try, mock up or propose UI for a feature, or asks for variants, build two to four genuinely different versions and show them with the offer_choice tool so the user can pick one. This is for a feature or component, not for designing a whole app.',
+      '- Screenshot only what the options change: the element or region with a little surrounding context, never the whole window or page. Capture every option at the same size, with the same data and state, so they compare fairly.',
+      '- Label each option in a few words by what makes it different, and ask one short question, such as "Which empty state?".',
+      '- After offer_choice, end your turn. Don\'t embed the same images again; at most add a sentence on the main trade-off.',
+      'The user\'s next message starts with their pick, such as `I pick B ("Inline banner")`, and may add feedback. Continue from that option. To show a single result rather than ask for a decision, embed the image inline instead.',
+    ].join('\n'),
+  },
+  {
     id: 'files',
     title: 'File links',
     text: ({ platform }) => `Link any other file you produce by its absolute path, such as [report.pdf](${exampleDir(platform)}/report.pdf), so the user can download it.`,

@@ -14,6 +14,19 @@ const fixture = (name: string) => readFile(resolve('tests/fixtures', name));
 const token = 'isolated-chat-test-token';
 const image = await fixture('chat.png');
 const harness = new FakeHarness(async function* (run) {
+  if (run.prompt === 'Choice fixture') {
+    const options = [['choice-list.png', 'List rows'], ['choice-cards.png', 'Cards'], ['choice-grouped.png', 'Grouped by provider']];
+    for (const [name] of options) await writeFile(join(run.cwd, name!), await fixture(name!));
+    const input = { question: 'Which Accounts layout?', options: options.map(([path, label]) => ({ path, label })) };
+    yield { type: 'assistant', parent_tool_use_id: null, session_id: SESSION, message: { id: 'choice', content: [{ type: 'tool_use', id: 'choice-1', name: 'mcp__accio__offer_choice', input }] } } as HarnessMessage;
+    yield { type: 'user', parent_tool_use_id: null, session_id: SESSION, message: { content: [{ type: 'tool_result', tool_use_id: 'choice-1', content: 'shown' }] } } as HarnessMessage;
+    yield { type: 'result', subtype: 'success', is_error: false, session_id: SESSION };
+    return;
+  }
+  if (run.prompt.startsWith('I pick ')) {
+    yield* replyWith(`Got it: ${run.prompt.split('\n')[0]}`);
+    return;
+  }
   if (run.prompt === 'Build delivery fixture') {
     await writeFile(join(run.cwd, 'feature.txt'), 'A change owned by this thread.\n');
     yield { type: 'harness_event', event: { kind: 'text', id: 'delivery-progress', text: 'Feature implemented. Running checks…' } };
@@ -110,6 +123,8 @@ const deliveryCheckout = await client.call('checkouts.add', { path: deliveryFold
 await client.call('projects.setDelivery', { projectId: deliveryCheckout.projectId, deliveryPolicy: 'direct', previewCommand: 'node preview.cjs' });
 const thread = await client.call('threads.start', { profileId: 'personal', text: 'Inline chat fixture' });
 await client.waitFor('threads.changed', (threads) => threads.some((entry) => entry.id === thread.id && entry.status === 'idle'));
+const choice = await client.call('threads.start', { profileId: 'personal', text: 'Choice fixture' });
+await client.waitFor('threads.changed', (threads) => threads.some((entry) => entry.id === choice.id && entry.status === 'idle'));
 console.log(`Chat fixture ready: http://127.0.0.1:${app.port}`);
 let closing = false;
 const close = async () => {

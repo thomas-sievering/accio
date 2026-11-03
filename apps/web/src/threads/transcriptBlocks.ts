@@ -16,7 +16,7 @@ export type TranscriptBlock =
 /**
  * Lays a transcript out turn by turn. A completed or running turn shows its
  * prompt, its work folded into one block, then its answer (the assistant
- * messages after the last other item). A stopped or failed turn stays fully
+ * messages and choices after the last other item). A stopped or failed turn stays fully
  * laid out. Blank assistant items render nothing, so they're dropped and never
  * split a run.
  */
@@ -38,7 +38,8 @@ function layoutTurn(turn: TranscriptItem[], running: boolean): TranscriptBlock[]
   const body = finished ? turn.slice(0, -1) : turn;
   const prompt = body[0]?.kind === 'user' ? 1 : 0;
   let answer = body.length;
-  while (answer > prompt && body[answer - 1]!.kind === 'assistant') answer--;
+  // A choice is what the turn asks of you, so it stays out of the fold with the reply.
+  while (answer > prompt && (body[answer - 1]!.kind === 'assistant' || body[answer - 1]!.kind === 'choice')) answer--;
   const work = body.slice(prompt, answer);
   if (finished && !work.length) return groupTools(turn);
   const turnId = turn[0]!.turnId;

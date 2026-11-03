@@ -192,3 +192,47 @@ test('Electron renderer supports the same tools, snapshots, viewer and media con
     await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
   }
 });
+
+test('a choice shows screenshots full size and sends the pick with feedback', async ({ page, baseURL }) => {
+  await page.goto(`${baseURL}/#token=${token}`);
+  await page.getByRole('button', { name: /Choice fixture/ }).click();
+  await expect(page.getByText('Which Accounts layout?')).toBeVisible();
+  await expect(page.locator('.choice-option')).toHaveCount(3);
+  for (const label of ['List rows', 'Cards', 'Grouped by provider']) {
+    await expect.poll(() => page.getByAltText(label).evaluate((element: HTMLImageElement) => element.naturalWidth)).toBe(480);
+  }
+
+  // Full size: arrows browse, and the one button picks.
+  await page.getByRole('button', { name: 'View A · List rows' }).click();
+  const viewer = page.getByRole('dialog', { name: 'Which Accounts layout?' });
+  await expect(viewer).toContainText('1 / 3');
+  await page.keyboard.press('ArrowLeft');
+  await expect(viewer).toContainText('3 / 3');
+  await expect(viewer).toContainText('C · Grouped by provider');
+  await viewer.getByRole('button', { name: 'Pick C' }).click();
+  await expect(viewer).toHaveCount(0);
+
+  // The pick waits in the composer, with the cursor ready for feedback.
+  await expect(page.locator('.composer-chip')).toContainText('C · Grouped by provider');
+  await expect(page.getByRole('textbox')).toBeFocused();
+  await page.getByRole('button', { name: 'Pick B · Cards' }).click({ force: true });
+  await expect(page.locator('.composer-chip')).toContainText('B · Cards');
+  await page.getByRole('button', { name: 'Picked B · Cards' }).click();
+  await expect(page.locator('.composer-chip')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Pick C · Grouped by provider' }).click({ force: true });
+  // The viewer shows the pick too, and Escape leaves it as it was.
+  await page.getByRole('button', { name: 'View C · Grouped by provider' }).click();
+  await expect(viewer.getByRole('button', { name: 'Picked' })).toHaveAttribute('aria-pressed', 'true');
+  await page.keyboard.press('Escape');
+  await expect(viewer).toHaveCount(0);
+  await page.getByRole('textbox').fill('but without the toggles');
+  await page.getByRole('button', { name: 'Send' }).click();
+
+  await expect(page.getByText('Got it: I pick C ("Grouped by provider") for "Which Accounts layout?".')).toBeVisible();
+  const sent = page.locator('.msg.user').last();
+  await expect(sent.locator('.msg-pick')).toHaveText('✓ C · Grouped by provider');
+  await expect(sent).toContainText('but without the toggles');
+  await expect(page.locator('.choice')).toHaveClass(/answered/);
+  await expect(page.locator('.choice-option.selected')).toHaveCount(1);
+  await expect(page.locator('.composer-chip')).toHaveCount(0);
+});
