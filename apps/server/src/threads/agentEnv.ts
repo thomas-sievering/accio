@@ -1,0 +1,32 @@
+import type { Account } from '../accounts/account.js';
+
+/**
+ * Variables that could carry another login, another provider or another config
+ * into a thread. They are dropped before the account's own values are set, so a
+ * thread can only ever reach its account's hub proxy (ADR 0002).
+ */
+const INHERITED_BLOCKLIST = [
+  /^ANTHROPIC_/,
+  /^CLAUDE_CODE_USE_/, // Bedrock, Vertex, Foundry
+  /^CLAUDE_CODE_OAUTH/,
+  /^CLAUDE_CODE_ENTRYPOINT$/,
+  /^CLAUDE_CODE_SSE_PORT$/,
+  /^CLAUDE_AGENT_SDK/,
+  /^CLAUDECODE$/,
+  /^CLAUDE_CONFIG_DIR$/,
+  /^AWS_BEARER_TOKEN_BEDROCK$/,
+  /^ELECTRON_RUN_AS_NODE$/,
+];
+
+export function agentEnv(base: NodeJS.ProcessEnv, account: Account, configDir: string): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(base)) {
+    if (value === undefined) continue;
+    if (INHERITED_BLOCKLIST.some((re) => re.test(key.toUpperCase()))) continue;
+    env[key] = value;
+  }
+  env.CLAUDE_CONFIG_DIR = configDir;
+  env.ANTHROPIC_BASE_URL = account.hubUrl;
+  env.ANTHROPIC_AUTH_TOKEN = account.hubKey;
+  return env;
+}

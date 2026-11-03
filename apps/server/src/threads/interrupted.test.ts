@@ -1,0 +1,104 @@
+import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
+import type { AgentMessage, AgentRun } from './agent.js';
+import { RESUME_PROMPT } from './thread.js';
+import { FakeAgent, SESSION, replyWith } from '../testing/fakeAgent.js';
+import { startTestApp, type TestClient } from '../testing/testApp.js';
+
+/** Starts a tool call, then waits until it is aborted, like a long Bash command. */
+async function* hangsUntilStopped(run: AgentRun): AsyncIterable<AgentMessage> {
+  yield { type: 'system', subtype: 'init', session_id: SESSION };
+  yield {
+    type: 'assistant',
+    parent_tool_use_id: null,
+    session_id: SESSION,
+    message: { id: 'm1', content: [{ type: 'tool_use', id: 'tu1', name: 'Bash', input: { command: 'sleep 600' } }] },
+  };
+  await new Promise<void>((resolve) => run.signal.addEventListener('abort', () => resolve(), { once: true }));
+}
+
+const statusIs = (c: TestClient, id: string, status: string) =>
+  c.waitFor('threads.changed', (list) => list.some((t) => t.id === id && t.status === status));
+
+async function setup(agent: FakeAgent, home?: string) {
+  const t = await startTestApp({ agent }, home);
+  const c = await t.connect();
+  return { t, c };
+}
+
+describe('interrupted turns', () => {
+  let stop: (() => Promise<void>) | undefined;
+  afterEach(() => stop?.());
+
+  it('stops a running turn, marks it interrupted, and resumes it on the same session', async () => {
+    const agent = new FakeAgent((run, n) => (n === 1 ? hangsUntilStopped(run) : replyWith('picked up')));
+    const { t, c } = await setup(agent);
+    stop = t.stop;
+    const folder = join(t.home, 'repo');
+    await mkdir(folder);
+    await c.call('accounts.save', { name: 'Personal', isJob: false, hubUrl: 'https://hub.test', hubKey: 'k' });
+    const checkout = await c.call('checkouts.add', { path: folder, accountId: 'personal' });
+    const thread = await c.call('threads.create', { checkoutId: checkout.id });
+
+    await c.call('threads.send', { threadId: thread.id, text: 'run the long thing' });
+    await c.waitFor('thread.item', (e) => e.item.kind === 'tool');
+    await expect(c.call('threads.resume', { threadId: thread.id })).rejects.toThrow(/Only an interrupted/);
+
+    await c.call('threads.stop', { threadId: thread.id });
+    await statusIs(c, thread.id, 'interrupted');
+    const afterStop = await c.call('threads.transcript', { threadId: thread.id });
+    expect(afterStop.find((i) => i.kind === 'tool')).toMatchObject({ status: 'error' });
+    expect(afterStop.at(-1)).toMatchObject({ kind: 'notice', text: 'Stopped.' });
+
+    c.events.length = 0;
+    await c.call('threads.resume', { threadId: thread.id });
+    await statusIs(c, thread.id, 'idle');
+    expect(agent.runs[1]).toMatchObject({ prompt: RESUME_PROMPT, sessionId: SESSION });
+    const items = await c.call('threads.transcript', { threadId: thread.id });
+    expect(items.filter((i) => i.kind === 'user').at(-1)).toMatchObject({ resume: true });
+    expect(items.at(-1)).toMatchObject({ kind: 'assistant', text: 'picked up' });
+  });
+
+  it('marks a turn that was running when accio stopped as interrupted on the next start', async () => {
+    const first = await setup(new FakeAgent());
+    const home = first.t.home;
+    const folder = join(home, 'repo');
+    await mkdir(folder);
+    await first.c.call('accounts.save', { name: 'Personal', isJob: false, hubUrl: 'https://hub.test', hubKey: 'k' });
+    const checkout = await first.c.call('checkouts.add', { path: folder, accountId: 'personal' });
+    const thread = await first.c.call('threads.create', { checkoutId: checkout.id });
+    await first.t.stop({ keepHome: true });
+
+    // What a crash mid-turn leaves on disk: the thread still running, a tool still in flight.
+    const threadsFile = join(home, 'threads.json');
+    const stored = JSON.parse(await readFile(threadsFile, 'utf8'));
+    stored[0].status = 'running';
+    stored[0].sessionId = SESSION;
+    await writeFile(threadsFile, JSON.stringify(stored));
+    await mkdir(join(home, 'transcripts'), { recursive: true });
+    await writeFile(
+      join(home, 'transcripts', `${thread.id}.json`),
+      JSON.stringify([
+        { kind: 'user', id: 't1:u', turnId: 't1', text: 'deploy', at: 'x' },
+        { kind: 'tool', id: 'tu1', turnId: 't1', name: 'Bash', summary: 'deploy.sh', status: 'running' },
+      ]),
+    );
+
+    const agent = new FakeAgent();
+    const second = await setup(agent, home);
+    stop = second.t.stop;
+    const [after] = await second.c.call('threads.list', {});
+    expect(after?.status).toBe('interrupted');
+    const items = await second.c.call('threads.transcript', { threadId: thread.id });
+    expect(items[1]).toMatchObject({ kind: 'tool', status: 'error' });
+    expect(items[2]).toMatchObject({ kind: 'notice', text: expect.stringMatching(/accio stopped/) });
+    // Nothing continues on its own.
+    expect(agent.runs).toHaveLength(0);
+
+    await second.c.call('threads.resume', { threadId: thread.id });
+    await statusIs(second.c, thread.id, 'idle');
+    expect(agent.runs[0]).toMatchObject({ prompt: RESUME_PROMPT, sessionId: SESSION });
+  });
+});
