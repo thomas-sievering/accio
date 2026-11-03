@@ -14,8 +14,14 @@ import {
   RESUME_PROMPT,
   assertResumable,
   closeOpenTools,
+  dropUnstarted,
   endTurn,
+  fromStored,
   newThread,
+  reopen,
+  retryOf,
+  settle,
+  snooze,
   recoverAfterRestart,
   startTurn,
   toView,
@@ -54,7 +60,14 @@ export class Threads {
   }
 
   async load() {
-    const { threads, interrupted } = recoverAfterRestart(await this.file.read());
+    const stored = (await this.file.read()).map(fromStored);
+    const candidates = new Set(dropUnstarted(stored).map((t) => t.id));
+    const started: Thread[] = [];
+    for (const thread of stored) {
+      // A title and session id alone do not prove a thread has no conversation.
+      if (candidates.has(thread.id) || (await this.transcript(thread.id)).items.length > 0) started.push(thread);
+    }
+    const { threads, interrupted } = recoverAfterRestart(started);
     this.list = threads;
     for (const thread of interrupted) {
       const live = await this.transcript(thread.id);
@@ -68,20 +81,23 @@ export class Threads {
       });
       await live.file.write(live.items);
     }
-    if (interrupted.length) await this.file.write(threads);
+    if (interrupted.length || started.length < stored.length) await this.file.write(threads);
   }
 
   register(router: Router) {
     router
       .on('threads.list', () => this.list.map(toView))
-      .on('threads.create', async ({ checkoutId }) => {
+      .on('threads.start', async ({ checkoutId, text }) => {
         const checkout = this.projects.checkout(checkoutId);
         const project = this.projects.projectOf(checkout);
-        this.profiles.require(project.profileId);
+        // Refuse before anything is stored, so a thread that cannot run never appears.
+        await this.profiles.hubAccess(project.profileId);
         // GLOSSARY: a thread keeps the profile it started with for its whole life.
         const thread = newThread({ checkoutId, projectId: project.id, profileId: project.profileId }, now());
-        await this.commit([...this.list, thread]);
-        return toView(thread);
+        // Quiet: clients first see the thread once its turn is running, never as an idle empty thread.
+        await this.commit([...this.list, thread], { quiet: true });
+        await this.beginTurn(thread.id, text);
+        return toView(this.require(thread.id));
       })
       .on('threads.transcript', async ({ threadId }) => (await this.transcript(this.require(threadId).id)).items)
       .on('threads.send', async ({ threadId, text }) => {
@@ -99,6 +115,15 @@ export class Threads {
         await this.beginTurn(threadId, RESUME_PROMPT, { resume: true });
         return null;
       })
+      .on('threads.retry', async ({ threadId }) => {
+        const thread = this.require(threadId);
+        const { text, resume } = retryOf(thread, (await this.transcript(thread.id)).items);
+        await this.beginTurn(thread.id, text, { resume });
+        return null;
+      })
+      .on('threads.snooze', async ({ threadId, until }) => toView(await this.update(threadId, (t) => snooze(t, until))))
+      .on('threads.settle', async ({ threadId }) => toView(await this.update(threadId, (t) => settle(t, now()))))
+      .on('threads.reopen', async ({ threadId }) => toView(await this.update(threadId, reopen)))
       .on('threads.rename', async ({ threadId, title }) => {
         const updated = await this.update(threadId, (t) => ({ ...t, title }));
         return toView(updated);
