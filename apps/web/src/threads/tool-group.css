@@ -1,0 +1,72 @@
+/* A run of tool calls: summary line, then a step rail joining each call's dot. */
+.tool-group {
+  align-self: flex-start;
+  max-width: min(var(--message-width), 92%);
+}
+.tool-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 3px 8px;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.tool-group-toggle:hover {
+  color: var(--ink);
+  background: var(--hover);
+}
+.tool-group-toggle > svg {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  transition: rotate 0.15s;
+}
+.tool-group.open .tool-group-toggle > svg {
+  rotate: 90deg;
+}
+.tool-group-summary {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--ink);
+}
+.tool-group-failed {
+  flex: none;
+  color: var(--red);
+}
+.tool-group-failed::before,
+.tool-group-running::before {
+  content: '·';
+  margin-right: 8px;
+  color: var(--dim);
+}
+.tool-group-running {
+  flex: none;
+}
+.tool-group:not(.single) > .tool-steps {
+  margin-left: 2px;
+}
+/* Connector from each dot down to the next; dots (and the hollow spinner) sit above it. */
+.tool-steps > .tool:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: 12px;
+  top: 16px;
+  bottom: -10px;
+  width: 1px;
+  background: var(--line-2);
+}
+.tool-steps .tool-name::before {
+  position: relative;
+  z-index: 1;
+}
+.tool-steps .tool.running .tool-name::before {
+  background: var(--bg);
+}
+/* Details sit right of the rail so the connector runs past them to the next step. */
+.tool-steps .tool-details {
+  margin-left: 24px;
+}

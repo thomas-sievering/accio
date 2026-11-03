@@ -1,7 +1,9 @@
-import { memo, useLayoutEffect, useRef, useState } from 'react';
+import { memo, useId, useLayoutEffect, useRef, useState } from 'react';
 import type { TranscriptItem } from '@accio/protocol';
 import { AssistantMarkdown } from './AssistantMarkdown';
-import { ToolCallRow } from './ToolCallRow';
+import { ToolGroup } from './ToolGroup';
+import { Chevron } from '../app/icons';
+import { layoutTranscript, type TranscriptBlock } from './transcriptBlocks';
 import './transcript-media.css';
 
 /** Follow late media/layout changes only while the reader is already at the bottom. */
@@ -53,12 +55,12 @@ export function Transcript({ threadId, items, working }: { threadId: string; ite
         pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
         setAway(!pinned.current);
         const top = el.getBoundingClientRect().top;
-        const visible = [...(content.current?.querySelectorAll<HTMLElement>(':scope > .msg:not(.assistant), :scope > .tool, :scope > .notice, :scope > .turn-finished, :scope > .msg.assistant > *') ?? [])]
+        const visible = [...(content.current?.querySelectorAll<HTMLElement>(':scope .msg:not(.assistant), :scope .turn-work-toggle, :scope .tool-group-toggle, :scope .tool, :scope .notice, :scope .turn-finished, :scope .msg.assistant > *') ?? [])]
           .find((node) => node.getBoundingClientRect().bottom > top);
         anchor.current = visible ? { element: visible, offset: visible.getBoundingClientRect().top - top } : undefined;
       }}>
         <div className="thread" ref={content}>
-          {items.map((item) => <Item key={`${threadId}:${item.id}`} threadId={threadId} item={item} preparing={working && item.turnId === lastTurn} />)}
+          <Blocks threadId={threadId} blocks={layoutTranscript(items)} preparingTurn={working ? lastTurn : undefined} />
           {working && <div className="typing" aria-label="Working"><i /><i /><i /></div>}
         </div>
       </div>
@@ -72,6 +74,32 @@ export function Transcript({ threadId, items, working }: { threadId: string; ite
   );
 }
 
+function Blocks({ threadId, blocks, preparingTurn, inWork = false }: { threadId: string; blocks: TranscriptBlock[]; preparingTurn?: string; inWork?: boolean }) {
+  return blocks.map((block) => {
+    switch (block.kind) {
+      case 'tools': return <ToolGroup key={`${threadId}:${block.id}`} threadId={threadId} items={block.items} opened={inWork} />;
+      case 'work': return <TurnWork key={`${threadId}:${block.id}`} threadId={threadId} block={block} />;
+      case 'item': return <Item key={`${threadId}:${block.item.id}`} threadId={threadId} item={block.item} preparing={block.item.turnId === preparingTurn} />;
+    }
+  });
+}
+
+/** A completed turn's tool calls and interim messages, folded above its answer. */
+function TurnWork({ threadId, block }: { threadId: string; block: Extract<TranscriptBlock, { kind: 'work' }> }) {
+  const bodyId = useId();
+  const [open, setOpen] = useState(false);
+  return (
+    <div className={`turn-work${open ? ' open' : ''}`}>
+      <button className="turn-work-toggle" onClick={() => setOpen(!open)} aria-expanded={open} aria-controls={bodyId}>
+        Worked for {formatDuration(block.ms)}
+        {block.failed > 0 && <span className="turn-work-failed">{block.failed} failed</span>}
+        <Chevron />
+      </button>
+      {open && <div className="turn-work-body" id={bodyId}><Blocks threadId={threadId} blocks={block.blocks} inWork /></div>}
+    </div>
+  );
+}
+
 const Item = memo(function Item({ threadId, item, preparing }: { threadId: string; item: TranscriptItem; preparing: boolean }) {
   switch (item.kind) {
     case 'user':
@@ -80,7 +108,7 @@ const Item = memo(function Item({ threadId, item, preparing }: { threadId: strin
       if (!item.text.trim()) return null;
       return <div className="msg assistant"><AssistantMarkdown threadId={threadId} text={item.text} media={item.media} preparing={preparing} /></div>;
     case 'tool':
-      return <ToolCallRow threadId={threadId} item={item} />;
+      return null; // Rendered by ToolGroup.
     case 'notice':
       return <div className={`notice ${item.tone}`}>{item.text}</div>;
     case 'finished':

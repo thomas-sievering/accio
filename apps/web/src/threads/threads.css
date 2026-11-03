@@ -431,10 +431,6 @@ button.row {
 .tool.interrupted .tool-name::before {
   background: var(--amber);
 }
-/* Consecutive calls read as one block. */
-.tool + .tool {
-  margin-top: -6px;
-}
 .tool-toggle > svg {
   opacity: 0;
 }
@@ -511,6 +507,55 @@ button.row {
   flex: 1;
   height: 1px;
   background: var(--line);
+}
+/* Same divider as .turn-finished, but it opens onto the turn's folded work. */
+.turn-work {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.turn-work-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0;
+  padding: 3px 0 3px 12px;
+  color: var(--dim);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.turn-work-toggle::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  margin-left: 4px;
+  background: var(--line);
+}
+.turn-work-toggle:hover,
+.turn-work-toggle:focus-visible {
+  color: var(--ink);
+}
+.turn-work-toggle > svg {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  transition: rotate 0.15s;
+}
+.turn-work.open .turn-work-toggle > svg {
+  rotate: 90deg;
+}
+.turn-work-failed {
+  color: var(--red);
+}
+.turn-work-failed::before {
+  content: '·';
+  margin-right: 6px;
+  color: var(--dim);
+}
+.turn-work-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 .notice {
   align-self: center;

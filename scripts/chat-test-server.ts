@@ -21,6 +21,22 @@ const harness = new FakeHarness(async function* (run) {
     yield* replyWith(Array.from({ length: 70 }, (_, index) => `Paragraph ${index + 1}: history that should stay readable while new output arrives.`).join('\n\n'));
     return;
   }
+  if (run.prompt === 'explore tools') {
+    yield { type: 'assistant', parent_tool_use_id: null, session_id: SESSION, message: { id: 'explore', content: [
+      { type: 'tool_use', id: 'explore-ls', name: 'Bash', input: { command: 'ls -la' } },
+      { type: 'tool_use', id: 'explore-read', name: 'Read', input: { file_path: 'README.md' } },
+      { type: 'tool_use', id: 'explore-grep', name: 'Grep', input: { pattern: 'TODO' } },
+    ] } } as HarnessMessage;
+    // Long enough for a person (and the check) to see the running rail.
+    await setTimeout(Number(process.env.ACCIO_CHAT_TOOL_DELAY ?? 1500));
+    yield { type: 'user', parent_tool_use_id: null, session_id: SESSION, message: { content: [
+      { type: 'tool_result', tool_use_id: 'explore-ls', content: 'README.md\nwebsite/\nworkflow/' },
+      { type: 'tool_result', tool_use_id: 'explore-read', content: '# litewerks' },
+      { type: 'tool_result', tool_use_id: 'explore-grep', content: 'No matches' },
+    ] } } as HarnessMessage;
+    yield* replyWith('Explored the folder.');
+    return;
+  }
   if (run.prompt === 'stream update') {
     const id = 'streamed-update';
     yield { type: 'stream_event', parent_tool_use_id: null, session_id: SESSION, event: { type: 'message_start', message: { id } } };

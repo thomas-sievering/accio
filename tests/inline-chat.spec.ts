@@ -13,6 +13,12 @@ async function openChat(page: Page, baseURL: string, navigate = true) {
 }
 
 async function mediaAndTools(page: Page, desktop?: ElectronApplication) {
+  // A completed turn folds its tool calls under "Worked for"; a failure is flagged on the fold.
+  const work = page.locator('.turn-work').first();
+  await expect(work.locator('.turn-work-toggle')).toHaveAttribute('aria-expanded', 'false');
+  await expect(work.locator('.turn-work-failed')).toHaveText('1 failed');
+  await expect(work.locator('.tool')).toHaveCount(0);
+  await work.locator('.turn-work-toggle').click();
   const success = page.locator('.tool.done').first();
   const failed = page.locator('.tool.error').first();
   await expect(success.locator('.tool-toggle')).toHaveAttribute('aria-expanded', 'false');
@@ -112,6 +118,38 @@ test('web chat replays snapshots, full ordered tool details and playable stable 
   await page.locator('.messages').evaluate((element) => { element.scrollTop = 0; });
   await page.screenshot({ path: test.info().outputPath('chat.png') });
   expect(errors).toEqual([]);
+});
+
+test('a run of tool calls shows live on a step rail, then folds under its turn’s Worked for', async ({ page, baseURL }) => {
+  await openChat(page, baseURL!);
+  await page.locator('.turn-work').first().locator('.turn-work-toggle').click();
+  const mixed = page.locator('.tool-group').filter({ hasText: 'Read 1 file, ran 1 command' });
+  await expect(mixed.locator('.tool-group-toggle')).toHaveAttribute('aria-expanded', 'true');
+  await expect(mixed.locator('.tool-group-failed')).toHaveText('1 failed');
+  await expect(mixed.locator('.tool')).toHaveCount(2);
+
+  await page.locator('textarea').fill('explore tools');
+  await page.locator('textarea').press('Enter');
+  const live = page.locator('.tool-group').filter({ hasText: 'Ran 1 command, read 1 file, ran 1 search' });
+  await expect(live.locator('.tool.running')).toHaveCount(3);
+  await expect(live.getByRole('status')).toHaveText('Working');
+
+  // Once the turn completes, its work folds above the answer, which stays in view.
+  await expect(page.getByText('Explored the folder.')).toBeVisible();
+  const work = page.locator('.turn-work').last();
+  await expect(work.locator('.turn-work-toggle')).toHaveText(/^Worked for \d+s$/);
+  await expect(work.locator('.turn-work-toggle')).toHaveAttribute('aria-expanded', 'false');
+  await expect(work.locator('.tool')).toHaveCount(0);
+  await work.locator('.turn-work-toggle').click();
+  const explore = work.locator('.tool-group');
+  await expect(explore.locator('.tool-group-toggle')).toHaveAttribute('aria-expanded', 'true');
+  await expect(explore.locator('.tool.done')).toHaveCount(3);
+  await expect(explore.locator('.tool-summary')).toHaveText(['ls -la', 'README.md', 'TODO']);
+  await expect(work.getByText('Explored the folder.')).toHaveCount(0);
+  await explore.locator('.tool-group-toggle').click();
+  await expect(explore.locator('.tool')).toHaveCount(0);
+  await work.locator('.turn-work-toggle').click();
+  await expect(work.locator('.tool-group')).toHaveCount(0);
 });
 
 test('reading position stays put through updates and jump-to-latest restores following', async ({ page, baseURL }) => {
