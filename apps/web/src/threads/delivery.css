@@ -12,6 +12,28 @@
 .delivery-split > button:first-child { color: var(--ink); }
 .delivery-queued { border-color: var(--blue); color: var(--ink); }
 .delivery-queued .row-working { width: 12px; height: 12px; }
+.delivery-armed { position: relative; overflow: visible; isolation: isolate; animation: delivery-glow 3s ease-in-out infinite; }
+.delivery-armed > button { border-radius: 0 16px 16px 0; }
+.delivery-armed > .delivery-sparkles { position: absolute; inset: -9px; padding: 0; min-height: 0; pointer-events: none; }
+.delivery-sparkles i { position: absolute; width: 7px; height: 7px; background: var(--blue); clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%); opacity: 0; animation: delivery-sparkle 3.6s ease-in-out infinite; }
+.delivery-sparkles i:nth-child(1) { left: 12%; top: 12%; animation-delay: -.4s; }
+.delivery-sparkles i:nth-child(2) { left: 39%; top: 83%; width: 5px; height: 5px; animation-delay: -2.1s; }
+.delivery-sparkles i:nth-child(3) { left: 65%; top: 5%; animation-delay: -1.3s; }
+.delivery-sparkles i:nth-child(4) { left: 89%; top: 77%; width: 5px; height: 5px; animation-delay: -2.8s; }
+.delivery-sparkles i:nth-child(5) { left: 2%; top: 65%; width: 4px; height: 4px; animation-delay: -1.8s; }
+@keyframes delivery-glow {
+  0%, 100% { box-shadow: 0 0 4px color-mix(in srgb, var(--blue) 15%, transparent), inset 0 0 6px color-mix(in srgb, var(--blue) 4%, transparent); }
+  50% { box-shadow: 0 0 14px color-mix(in srgb, var(--blue) 35%, transparent), inset 0 0 10px color-mix(in srgb, var(--blue) 12%, transparent); }
+}
+@keyframes delivery-sparkle {
+  0%, 70%, 100% { opacity: 0; transform: translateY(3px) scale(.4) rotate(0deg); }
+  30% { opacity: .85; transform: translateY(-2px) scale(1) rotate(35deg); }
+  60% { opacity: 0; transform: translateY(-8px) scale(.5) rotate(70deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .delivery-armed { animation: none; box-shadow: 0 0 8px color-mix(in srgb, var(--blue) 25%, transparent); }
+  .delivery-sparkles { display: none !important; }
+}
 .delivery-added, .delivery-complete > svg { color: var(--green); }
 .delivery-removed { color: var(--red); }
 .delivery-complete { color: var(--ink); }

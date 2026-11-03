@@ -17,6 +17,7 @@ Validation completed:
 - After integration with main at `a2dd7cd`, the full unit suite passes 436 tests across 64 files, including 29 status-resolver tests.
 - `pnpm typecheck` and `pnpm build` pass.
 - `pnpm test:chat` passes all 16 browser/Electron scenarios, including external merge and stop-follow-ups, CI progress, Nothing to ship, delivery and Archive, previews, effort, steering, inline chat, skills and MCP.
+- After preserving main's queued-shipping animation at `3bcc5d8`, typecheck, build and all six delivery browser/Electron scenarios pass again.
 - The integrated production smoke passed with doctor and cleanup evidence in `out/verify/2026-11-03T22-36-52-450Z-bdbaf490`. Its signed-out profile/project coverage is separate from the authenticated harness fixtures.
 
 [Observation tests](../../apps/server/src/threads/deliveryObservation.test.ts) exercise real disposable Git repositories with deterministic hosting responses, including external squash merges after source-branch deletion, pending target checks, long waits, restart recovery, stopped follow-ups, stale results, snoozing and failed persistence. The merge browser tests use the production UI and real Git with injected coding-harness and hosting boundaries. They demonstrate action-to-state transitions, persisted receipts and Reopen, without setting thread state from test endpoints. Screenshots of waiting and merged sidebar/receipt states and stopped follow-ups were inspected. Live GitHub authentication, actual human review and live coding-provider turns remain unverified.
