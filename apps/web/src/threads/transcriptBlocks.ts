@@ -4,39 +4,53 @@ export type ToolItem = Extract<TranscriptItem, { kind: 'tool' }>;
 export type TranscriptBlock =
   | { kind: 'item'; item: TranscriptItem }
   | { kind: 'tools'; id: string; items: ToolItem[] }
-  /** A completed turn's work before its answer, folded under "Worked for …". */
-  | { kind: 'work'; id: string; ms: number; failed: number; blocks: TranscriptBlock[] };
+  /**
+   * A turn's work before its answer, folded behind one line: while the turn
+   * runs, what the harness is doing now; once it completes, "Worked for …".
+   * The id is the same in both states, so an opened fold stays open.
+   */
+  | { kind: 'work'; id: string; failed: number; blocks: TranscriptBlock[] } & (
+    | { live: true; activity: string; startedAt?: string }
+    | { live: false; ms: number });
 
 /**
- * Lays a transcript out turn by turn. A completed turn shows its prompt, its
- * work folded into one block, then its answer (the assistant messages after the
- * last other item). A running, stopped or failed turn stays fully laid out.
- * Blank assistant items render nothing, so they're dropped and never split a run.
+ * Lays a transcript out turn by turn. A completed or running turn shows its
+ * prompt, its work folded into one block, then its answer (the assistant
+ * messages after the last other item). A stopped or failed turn stays fully
+ * laid out. Blank assistant items render nothing, so they're dropped and never
+ * split a run.
  */
-export function layoutTranscript(items: TranscriptItem[]): TranscriptBlock[] {
+export function layoutTranscript(items: TranscriptItem[], runningTurn?: string): TranscriptBlock[] {
   const blocks: TranscriptBlock[] = [];
   let start = 0;
   for (let end = 1; end <= items.length; end++) {
     if (end < items.length && items[end]!.turnId === items[start]!.turnId) continue;
-    blocks.push(...layoutTurn(items.slice(start, end).filter((item) => item.kind !== 'assistant' || item.text.trim())));
+    const turn = items.slice(start, end).filter((item) => item.kind !== 'assistant' || item.text.trim());
+    blocks.push(...layoutTurn(turn, items[start]!.turnId === runningTurn));
     start = end;
   }
   return blocks;
 }
 
-function layoutTurn(turn: TranscriptItem[]): TranscriptBlock[] {
-  const finished = turn.at(-1);
-  if (finished?.kind !== 'finished') return groupTools(turn);
-  const prompt = turn[0]?.kind === 'user' ? 1 : 0;
-  let answer = turn.length - 1;
-  while (answer > prompt && turn[answer - 1]!.kind === 'assistant') answer--;
-  const work = turn.slice(prompt, answer);
-  if (!work.length) return groupTools(turn);
+function layoutTurn(turn: TranscriptItem[], running: boolean): TranscriptBlock[] {
+  const finished = turn.at(-1)?.kind === 'finished' ? turn.at(-1) as Extract<TranscriptItem, { kind: 'finished' }> : undefined;
+  if (!finished && !running) return groupTools(turn);
+  const body = finished ? turn.slice(0, -1) : turn;
+  const prompt = body[0]?.kind === 'user' ? 1 : 0;
+  let answer = body.length;
+  while (answer > prompt && body[answer - 1]!.kind === 'assistant') answer--;
+  const work = body.slice(prompt, answer);
+  if (finished && !work.length) return groupTools(turn);
+  const turnId = turn[0]!.turnId;
   const failed = work.filter((item) => item.kind === 'tool' && item.status === 'error').length;
+  const current = work.findLast((item): item is ToolItem => item.kind === 'tool' && item.status === 'running');
+  const state = finished
+    ? { live: false as const, ms: finished.ms }
+    : { live: true as const, activity: current ? describeActivity(current) : 'Thinking', startedAt: prompt ? (body[0] as Extract<TranscriptItem, { kind: 'user' }>).at : undefined };
   return [
-    ...groupTools(turn.slice(0, prompt)),
-    { kind: 'work', id: finished.id, ms: finished.ms, failed, blocks: groupTools(work) },
-    ...groupTools(turn.slice(answer, -1)),
+    ...groupTools(body.slice(0, prompt)),
+    { kind: 'work', id: `${turnId}:work`, failed, blocks: groupTools(work), ...state },
+    ...groupTools(body.slice(answer)),
   ];
 }
 
@@ -63,6 +77,21 @@ const kinds: Record<string, Kind> = {
   WebFetch: 'fetch',
   Task: 'agent', Agent: 'agent',
 };
+const doing: Record<Kind, string> = { run: 'Running', read: 'Reading', edit: 'Editing', search: 'Searching', fetch: 'Fetching', agent: 'Running agent:', other: 'Using' };
+
+/** "Running pnpm test", "Reading README.md", "Using linear · get_issue". */
+export function describeActivity(item: ToolItem): string {
+  const kind = kinds[item.name] ?? 'other';
+  if (kind === 'other') return `${doing.other} ${toolLabel(item.name)}`;
+  return item.summary ? `${doing[kind]} ${item.summary}` : `${doing[kind]}…`;
+}
+
+/** MCP tools arrive as mcp__server__tool (Claude) or server/tool (Codex). */
+export function toolLabel(name: string): string {
+  const mcp = /^mcp__(.+?)__(.+)$/.exec(name) ?? /^([^/]+)\/(.+)$/.exec(name);
+  return mcp ? `${mcp[1]} · ${mcp[2]}` : name;
+}
+
 const phrases: Record<Kind, [verb: string, one: string, many: string]> = {
   run: ['ran', 'command', 'commands'],
   read: ['read', 'file', 'files'],

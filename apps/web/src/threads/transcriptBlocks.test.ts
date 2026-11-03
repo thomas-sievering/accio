@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TranscriptItem } from '@accio/protocol';
-import { describeTools, layoutTranscript, type ToolItem, type TranscriptBlock } from './transcriptBlocks';
+import { describeActivity, describeTools, layoutTranscript, toolLabel, type ToolItem, type TranscriptBlock } from './transcriptBlocks';
 
 const tool = (id: string, name = 'Bash', turnId = 't1', status: ToolItem['status'] = 'done'): ToolItem => ({ kind: 'tool', id, turnId, name, summary: id, status });
 const say = (id: string, text = id, turnId = 't1'): TranscriptItem => ({ kind: 'assistant', id, turnId, text });
@@ -30,7 +30,7 @@ describe('layoutTranscript', () => {
 
   it('carries the duration, failures and a stable id on the work block', () => {
     const [, work] = layoutTranscript([ask('q'), tool('1', 'Bash', 't1', 'error'), tool('2'), say('a'), done('t1', 42_000)]);
-    expect(work).toMatchObject({ kind: 'work', id: 't1:finished', ms: 42_000, failed: 1 });
+    expect(work).toMatchObject({ kind: 'work', id: 't1:work', live: false, ms: 42_000, failed: 1 });
   });
 
   it('keeps the plain finished divider when a turn did no work', () => {
@@ -39,6 +39,25 @@ describe('layoutTranscript', () => {
 
   it('folds everything when a turn ends without an answer', () => {
     expect(shape(layoutTranscript([ask('q'), tool('1'), done()]))).toEqual(['q', { work: [['1']] }]);
+  });
+
+  it('folds a running turn behind what it is doing now, with the same id it keeps once done', () => {
+    const items = [ask('q'), tool('1', 'Read', 't1'), { ...tool('2', 'Bash', 't1', 'running'), summary: 'pnpm test' }];
+    const [, work] = layoutTranscript(items, 't1');
+    expect(work).toMatchObject({ kind: 'work', id: 't1:work', live: true, activity: 'Running pnpm test', startedAt: '2026-11-03T12:00:00Z' });
+    expect(shape(layoutTranscript(items, 't1'))).toEqual(['q', { work: [['1', '2']] }]);
+    expect(layoutTranscript([...items, say('a'), done()])[1]).toMatchObject({ id: 't1:work', live: false });
+  });
+
+  it('says Thinking between calls and keeps a streaming answer outside the fold', () => {
+    const blocks = layoutTranscript([ask('q'), tool('1'), say('partial answer')], 't1');
+    expect(blocks[1]).toMatchObject({ live: true, activity: 'Thinking' });
+    expect(shape(blocks)).toEqual(['q', { work: [['1']] }, 'partial answer']);
+    expect(layoutTranscript([ask('q')], 't1')[1]).toMatchObject({ live: true, activity: 'Thinking', blocks: [] });
+  });
+
+  it('leaves a stopped or failed turn laid out in full', () => {
+    expect(shape(layoutTranscript([ask('q'), tool('1', 'Bash', 't1', 'interrupted'), say('a')]))).toEqual(['q', ['1'], 'a']);
   });
 
   it('lays out each turn on its own', () => {
@@ -56,5 +75,20 @@ describe('describeTools', () => {
     expect(describeTools([tool('1', 'Edit')])).toBe('Edited 1 file');
     expect(describeTools([tool('1', 'Grep'), tool('2', 'Glob')])).toBe('Ran 2 searches');
     expect(describeTools([tool('1', 'linear/get_issue')])).toBe('Used 1 tool');
+  });
+});
+
+describe('describeActivity', () => {
+  it('names what a running call is doing', () => {
+    expect(describeActivity({ ...tool('1', 'Read'), summary: 'README.md' })).toBe('Reading README.md');
+    expect(describeActivity({ ...tool('1', 'Grep'), summary: 'TODO' })).toBe('Searching TODO');
+    expect(describeActivity({ ...tool('1', 'Edit'), summary: '' })).toBe('Editing…');
+    expect(describeActivity({ ...tool('1', 'mcp__linear__get_issue'), summary: '{"id":"LIT-42"}' })).toBe('Using linear · get_issue');
+  });
+
+  it('labels Claude and Codex MCP tools alike', () => {
+    expect(toolLabel('mcp__linear__get_issue')).toBe('linear · get_issue');
+    expect(toolLabel('linear/get_issue')).toBe('linear · get_issue');
+    expect(toolLabel('Bash')).toBe('Bash');
   });
 });

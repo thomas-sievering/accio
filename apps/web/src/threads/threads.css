@@ -531,9 +531,43 @@ button.row {
   margin-left: 4px;
   background: var(--line);
 }
-.turn-work-toggle:hover,
+.turn-work-toggle:not(:disabled):hover,
 .turn-work-toggle:focus-visible {
   color: var(--ink);
+}
+.turn-work-toggle:disabled {
+  cursor: default;
+}
+/* While the turn runs: a spinner, then what the harness is doing now. */
+.turn-work.live .turn-work-toggle {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.turn-work.live .turn-work-toggle::before {
+  content: '';
+  flex: none;
+  width: 9px;
+  height: 9px;
+  margin-right: 2px;
+  border-radius: 50%;
+  border: 1.5px solid var(--line-2);
+  border-top-color: var(--muted);
+  animation: spin 0.9s linear infinite;
+}
+.turn-work-activity {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.turn-work-elapsed {
+  flex: none;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+.turn-work-elapsed::before {
+  content: '·';
+  margin-right: 6px;
 }
 .turn-work-toggle > svg {
   flex: none;

@@ -37,14 +37,10 @@
   flex: none;
   color: var(--red);
 }
-.tool-group-failed::before,
-.tool-group-running::before {
+.tool-group-failed::before {
   content: '·';
   margin-right: 8px;
   color: var(--dim);
-}
-.tool-group-running {
-  flex: none;
 }
 .tool-group:not(.single) > .tool-steps {
   margin-left: 2px;
@@ -69,4 +65,9 @@
 /* Details sit right of the rail so the connector runs past them to the next step. */
 .tool-steps .tool-details {
   margin-left: 24px;
+}
+/* The group already caps the width; a % width or cap here would shrink rows below their own content. */
+.tool-steps > .tool {
+  width: auto;
+  max-width: none;
 }

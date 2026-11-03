@@ -22,18 +22,17 @@ const harness = new FakeHarness(async function* (run) {
     return;
   }
   if (run.prompt === 'explore tools') {
-    yield { type: 'assistant', parent_tool_use_id: null, session_id: SESSION, message: { id: 'explore', content: [
-      { type: 'tool_use', id: 'explore-ls', name: 'Bash', input: { command: 'ls -la' } },
-      { type: 'tool_use', id: 'explore-read', name: 'Read', input: { file_path: 'README.md' } },
-      { type: 'tool_use', id: 'explore-grep', name: 'Grep', input: { pattern: 'TODO' } },
-    ] } } as HarnessMessage;
-    // Long enough for a person (and the check) to see the running rail.
-    await setTimeout(Number(process.env.ACCIO_CHAT_TOOL_DELAY ?? 1500));
-    yield { type: 'user', parent_tool_use_id: null, session_id: SESSION, message: { content: [
-      { type: 'tool_result', tool_use_id: 'explore-ls', content: 'README.md\nwebsite/\nworkflow/' },
-      { type: 'tool_result', tool_use_id: 'explore-read', content: '# litewerks' },
-      { type: 'tool_result', tool_use_id: 'explore-grep', content: 'No matches' },
-    ] } } as HarnessMessage;
+    // One call at a time, each long enough for a person (and the check) to see the status line change.
+    const steps = [
+      { id: 'explore-ls', name: 'Bash', input: { command: 'ls -la' }, result: 'README.md\nwebsite/\nworkflow/' },
+      { id: 'explore-read', name: 'Read', input: { file_path: 'README.md' }, result: '# litewerks' },
+      { id: 'explore-grep', name: 'Grep', input: { pattern: 'TODO' }, result: 'No matches' },
+    ];
+    for (const step of steps) {
+      yield { type: 'assistant', parent_tool_use_id: null, session_id: SESSION, message: { id: step.id, content: [{ type: 'tool_use', id: step.id, name: step.name, input: step.input }] } } as HarnessMessage;
+      await setTimeout(Number(process.env.ACCIO_CHAT_TOOL_DELAY ?? 700));
+      yield { type: 'user', parent_tool_use_id: null, session_id: SESSION, message: { content: [{ type: 'tool_result', tool_use_id: step.id, content: step.result }] } } as HarnessMessage;
+    }
     yield* replyWith('Explored the folder.');
     return;
   }
