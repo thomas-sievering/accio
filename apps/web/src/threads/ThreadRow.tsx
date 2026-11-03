@@ -6,6 +6,7 @@ import { useNeedsSecret } from '../secrets/pendingSecrets';
 import { useThreadMenu } from './ThreadMenu';
 import type { ShelfPlace } from './shelves';
 import { useThreads, type ThreadActions } from './threads';
+import { ciSummary } from './DeliveryProgress';
 
 /**
  * Compact rows keep project identity and activity secondary to the title.
@@ -19,6 +20,7 @@ export function ThreadRow({ thread: t, place }: { thread: ThreadView; place: She
   const open = place === 'open' || place === 'working';
   // Only a running turn can wait on a secret; the mark stays on the Working shelf row.
   const needsSecret = (useNeedsSecret(t.id) || t.needsSecret === true) && t.status === 'running' && place === 'working';
+  const ci = t.delivery?.status === 'waiting' && t.delivery.waitingOn === 'checks' ? ciSummary(t.delivery.ci) ?? 'Waiting for checks' : undefined;
   const openMenu = useThreadMenu();
   const onContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -48,6 +50,7 @@ export function ThreadRow({ thread: t, place }: { thread: ThreadView; place: She
         <span className="row-name">
           <span className="row-title">{t.title}</span>
           {needsSecret ? <span className="row-project needs-secret">Needs a secret</span>
+            : ci ? <span className="row-project" title={ci}>{ci}</span>
             : (open || project) && <span className="row-project">{project ?? 'No project'}</span>}
         </span>
         {open && <RowStatus thread={t} now={now} needsSecret={needsSecret} />}
@@ -73,12 +76,13 @@ function hoverActions(t: ThreadView, place: ShelfPlace): HoverAction[] {
 }
 
 function RowStatus({ thread: t, now, needsSecret }: { thread: ThreadView; now: Date; needsSecret?: boolean }) {
-  const label = needsSecret ? 'Needs a secret' : { running: 'Working', interrupted: 'Interrupted', failed: 'Failed', idle: 'Done' }[t.status];
+  const waiting = t.delivery?.status === 'waiting';
+  const label = needsSecret ? 'Needs a secret' : waiting ? (t.delivery?.waitingOn === 'review' ? 'Waiting for review' : t.delivery?.waitingOn === 'agent' ? 'Continuing delivery' : ciSummary(t.delivery?.ci) ?? 'Waiting for checks') : { running: 'Working', interrupted: 'Interrupted', failed: 'Failed', idle: 'Done' }[t.status];
   return (
     <span className="row-status" title={label}>
       <span className="row-meta">{timeAgo(t.updatedAt, now)}</span>
       <span className="row-mark" role="img" aria-label={label}>
-        {needsSecret ? <span className="row-flag needs-secret" /> : t.status === 'running' ? <span className="row-working" /> : <span className={`row-flag ${t.status}`} />}
+        {needsSecret ? <span className="row-flag needs-secret" /> : t.status === 'running' || waiting ? <span className="row-working" /> : <span className={`row-flag ${t.status}`} />}
       </span>
     </span>
   );

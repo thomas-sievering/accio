@@ -2,13 +2,13 @@ import { execFile } from 'node:child_process';
 import { lstat, mkdir, readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
-import type { DeliverySummary, ThreadDelivery, ThreadWorkspace } from '@accio/protocol';
+import type { DeliveryCI, DeliverySummary, ThreadDelivery, ThreadWorkspace } from '@accio/protocol';
 import { UserError } from '../rpc/router.js';
 
 const exec = promisify(execFile);
 /** Waiting uses machine-side checks; a model is woken only when it has more work. */
 export class DeliveryPending extends UserError {
-  constructor(message: string, readonly continueAgent = false, readonly waitingOn: 'checks' | 'review' = 'checks') { super(message); }
+  constructor(message: string, readonly continueAgent = false, readonly waitingOn: 'checks' | 'review' = 'checks', readonly ci?: DeliveryCI) { super(message); }
 }
 export async function git(cwd: string, ...args: string[]): Promise<string> {
   const { stdout } = await exec('git', ['-C', cwd, ...args], { windowsHide: true, timeout: 30_000, maxBuffer: 4 * 1024 * 1024 });
@@ -92,11 +92,11 @@ export class DeliveryGit {
       const pr = prs.find((p: any) => p.headRefOid === revision && p.baseRefName === delivery.baseBranch && (p.state === 'OPEN' || p.state === 'MERGED'));
       if (!pr) throw new UserError(delivery.mode === 'review' ? 'No PR for this revision is ready. The workspace has been kept.' : 'The PR has not merged this revision. The workspace has been kept.');
       if (pr.isDraft || pr.reviewDecision === 'CHANGES_REQUESTED') throw new DeliveryPending('The PR needs review changes. Continuing in the owning thread.', true);
-      assertChecks(pr.statusCheckRollup ?? []);
+      await assertChecksWithProgress(workspace.path, slug, revision, pr.statusCheckRollup ?? [], this.hostingJson);
       pullRequestUrl = pr.url;
       if (pr.state === 'OPEN') {
         await verifyGitHubChecks(workspace.path, slug, revision, delivery.requestedAt, this.hostingJson);
-        if (delivery.mode === 'review') return { ...delivery, status: 'ready', revision, pullRequestUrl, detail: 'Ready for review. Workspace retained.' };
+        if (delivery.mode === 'review') return { ...delivery, ci: undefined, status: 'ready', revision, pullRequestUrl, detail: 'Ready for review. Workspace retained.' };
         if (pr.reviewDecision === 'REVIEW_REQUIRED') throw new DeliveryPending('Waiting for the required PR review.', false, 'review');
         throw new DeliveryPending('The PR is ready. Continuing the authorized merge in the owning thread.', true);
       }
@@ -105,7 +105,7 @@ export class DeliveryGit {
     }
     if (await maybeGit(workspace.path, 'merge-base', '--is-ancestor', publishedRevision, `refs/remotes/origin/${delivery.baseBranch}`) === null) throw new UserError('This revision has not reached the target branch. The workspace has been kept.');
     if (slug) await verifyGitHubChecks(workspace.path, slug, publishedRevision, delivery.requestedAt, this.hostingJson);
-    return { ...delivery, status: 'delivered', revision, publishedRevision, pullRequestUrl, detail: undefined };
+    return { ...delivery, ci: undefined, status: 'delivered', revision, publishedRevision, pullRequestUrl, detail: undefined };
   }
 
   async release(threadId: string, workspace: ThreadWorkspace, revision: string) {
@@ -147,8 +147,7 @@ async function verifyGitHubChecks(cwd: string, slug: string, revision: string, r
   const checks = await hostingJson(cwd, ['api', `repos/${slug}/commits/${revision}/check-runs?per_page=100`]);
   const statuses = await hostingJson(cwd, ['api', `repos/${slug}/commits/${revision}/status?per_page=100`]);
   if (checks.total_count > 100 || statuses.total_count > 100) throw new UserError('Too many checks to verify automatically. The workspace has been kept.');
-  assertChecks(checks.check_runs ?? []);
-  assertChecks(statuses.statuses ?? []);
+  await assertChecksWithProgress(cwd, slug, revision, [...(checks.check_runs ?? []), ...(statuses.statuses ?? [])], hostingJson);
   if (!(checks.check_runs?.length || statuses.statuses?.length)) {
     const workflows = await hostingJson(cwd, ['api', `repos/${slug}/actions/workflows?per_page=100`]);
     if (workflows.workflows?.some((w: any) => w.state === 'active')) {
@@ -157,6 +156,34 @@ async function verifyGitHubChecks(cwd: string, slug: string, revision: string, r
       if (Date.now() - Date.parse(requestedAt) < 2 * 60_000) throw new DeliveryPending('Waiting for GitHub to report checks for this revision.');
       throw new UserError('GitHub reported no checks for this revision within two minutes of the delivery request. Workflows may exclude its branch or changed paths. Run the applicable verification, then request delivery again. The workspace has been kept.');
     }
+  }
+}
+
+/** Progress is optional evidence: a missing Actions permission must never change delivery decisions. */
+async function assertChecksWithProgress(cwd: string, slug: string, revision: string, checks: any[], hostingJson: typeof ghJson) {
+  try { assertChecks(checks); }
+  catch (error) {
+    if (!(error instanceof DeliveryPending) || error.continueAgent) throw error;
+    const progress: DeliveryCI = { revision, updatedAt: new Date().toISOString(), checks: [] };
+    progress.checks = await Promise.all(checks.map(async check => {
+      const status = String(check.conclusion || check.status || check.state || 'pending').toLowerCase();
+      const url = check.html_url ?? check.detailsUrl ?? check.target_url ?? check.targetUrl;
+      const entry: DeliveryCI['checks'][number] = { name: check.name ?? check.context ?? 'CI check', status, url };
+      // Only fetch active Actions jobs, and only on this repository's GitHub URL.
+      const job = typeof url === 'string' && url.startsWith(`https://github.com/${slug}/actions/runs/`)
+        ? url.match(/\/job\/(\d+)(?:[/?#]|$)/)?.[1] : undefined;
+      if (job && ['in_progress', 'queued', 'pending', 'waiting', 'requested'].includes(status)) {
+        try {
+          const data = await hostingJson(cwd, ['api', `repos/${slug}/actions/jobs/${job}`]);
+          const steps = data.steps ?? [];
+          const active = steps.findIndex((s: any) => s.status === 'in_progress');
+          if (active >= 0) entry.step = { name: steps[active].name, current: active + 1, total: steps.length };
+          if (data.status && !data.conclusion) entry.status = data.status;
+        } catch { /* Keep the check-level state when Actions details are unavailable. */ }
+      }
+      return entry;
+    }));
+    throw new DeliveryPending(error.message, false, 'checks', progress);
   }
 }
 
