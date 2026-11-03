@@ -63,7 +63,7 @@ export function ScopeMenu({ onOpenProject }: { onOpenProject: (p: ProjectView) =
                     title={p.repoKey ?? undefined}
                     onClick={() => pick(profile.id, p.id)}
                   >
-                    <ProjectMark id={p.id} />
+                    <ProjectMark id={p.id} size={16} />
                     <span className="menu-text">{p.name}</span>
                     {checked(profile.id, p.id) && <Check />}
                   </button>

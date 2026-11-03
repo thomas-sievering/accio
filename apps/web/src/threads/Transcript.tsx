@@ -53,7 +53,7 @@ export function Transcript({ threadId, items, working }: { threadId: string; ite
         pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
         setAway(!pinned.current);
         const top = el.getBoundingClientRect().top;
-        const visible = [...(content.current?.querySelectorAll<HTMLElement>(':scope > .msg:not(.assistant), :scope > .tool, :scope > .notice, :scope > .msg.assistant > *') ?? [])]
+        const visible = [...(content.current?.querySelectorAll<HTMLElement>(':scope > .msg:not(.assistant), :scope > .tool, :scope > .notice, :scope > .turn-finished, :scope > .msg.assistant > *') ?? [])]
           .find((node) => node.getBoundingClientRect().bottom > top);
         anchor.current = visible ? { element: visible, offset: visible.getBoundingClientRect().top - top } : undefined;
       }}>
@@ -83,5 +83,17 @@ const Item = memo(function Item({ threadId, item, preparing }: { threadId: strin
       return <ToolCallRow threadId={threadId} item={item} />;
     case 'notice':
       return <div className={`notice ${item.tone}`}>{item.text}</div>;
+    case 'finished':
+      return <div className="turn-finished">Worked for {formatDuration(item.ms)}</div>;
   }
 });
+
+/** <1s, 9s, 1m 44s, 2h 5m. */
+export function formatDuration(ms: number): string {
+  const s = Math.round(ms / 1000);
+  if (s < 1) return '<1s';
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ${s % 60}s`;
+  return `${Math.floor(m / 60)}h ${m % 60}m`;
+}

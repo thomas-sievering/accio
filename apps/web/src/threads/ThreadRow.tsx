@@ -68,12 +68,13 @@ function hoverActions(t: ThreadView, place: ShelfPlace): HoverAction[] {
 }
 
 function RowStatus({ thread: t, now }: { thread: ThreadView; now: Date }) {
-  const label = { running: 'Working', interrupted: 'Interrupted', failed: 'Failed', idle: 'Idle' }[t.status];
+  const label = { running: 'Working', interrupted: 'Interrupted', failed: 'Failed', idle: 'Done' }[t.status];
   return (
     <span className="row-status" title={label}>
       <span className="row-meta">{timeAgo(t.updatedAt, now)}</span>
-      {t.status === 'running' && <span className="row-working" role="img" aria-label={label} />}
-      {(t.status === 'interrupted' || t.status === 'failed') && <span className={`row-flag ${t.status}`} role="img" aria-label={label} />}
+      <span className="row-mark" role="img" aria-label={label}>
+        {t.status === 'running' ? <span className="row-working" /> : <span className={`row-flag ${t.status}`} />}
+      </span>
     </span>
   );
 }
