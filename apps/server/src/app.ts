@@ -35,7 +35,7 @@ export type AppDeps = {
   resourceCommand: CommandRunner;
   mcpFetch: typeof fetch;
   harness: Harness;
-  /** Reaches Anthropic for sign-in and token refresh. */
+  /** Reaches Anthropic for sign-in, token refresh and account limits. */
   claudeFetch: Fetch;
   /** Where the hub forwards threads' requests. */
   anthropicUrl: string;

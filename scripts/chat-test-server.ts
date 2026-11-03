@@ -102,7 +102,11 @@ const harness = new FakeHarness(async function* (run) {
   // The first browser view occurs after these source files have gone away.
   for (const name of ['chat.png', 'chat.webm', 'chat.ogg', 'my image.png', '漢字.png', 'literal%20image.png']) await rm(join(run.cwd, name));
 });
-const app = await startApp({ home, host: '127.0.0.1', port: Number(process.env.ACCIO_CHAT_TEST_PORT ?? 47481), hubPort: 0, token, webRoot: resolve('apps/web/dist') }, { harness, claudeFetch: fakeClaudeFetch });
+const app = await startApp({ home, host: '127.0.0.1', port: Number(process.env.ACCIO_CHAT_TEST_PORT ?? 47481), hubPort: 0, token, webRoot: resolve('apps/web/dist') }, {
+  harness,
+  claudeFetch: (url, init) => String(url).endsWith('/api/oauth/usage')
+    ? Promise.resolve(Response.json({ rate_limits_available: false })) : fakeClaudeFetch(url, init),
+});
 const client = await TestClient.open(`ws://127.0.0.1:${app.port}/ws?token=${token}`);
 await client.signedIn('Personal');
 const deliveryFolder = join(home, 'delivery-project');

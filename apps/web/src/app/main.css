@@ -1,5 +1,8 @@
 
 /* Main */
+.thread-surface {
+  display: contents;
+}
 .main {
   display: flex;
   flex-direction: column;

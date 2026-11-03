@@ -84,8 +84,11 @@ export class Profiles {
   }
 
   register(router: Router) {
+    this.hub.limits.subscribe((views) => this.broadcast('accounts.limitsChanged', views));
     router
       .on('accounts.list', () => this.hub.accountViews())
+      .on('accounts.limits', () => this.hub.limits.views())
+      .on('accounts.refreshLimits', ({ accountIds, force }) => asUserError(() => this.hub.refreshLimits(accountIds, force)))
       .on('accounts.save', async ({ id, name, providerId }) => {
         const account = await asUserError(() => this.hub.saveAccount(name, id, providerId));
         this.announce();
@@ -163,6 +166,7 @@ export class Profiles {
   private announce() {
     this.broadcast('profiles.changed', this.views());
     this.broadcast('accounts.changed', this.hub.accountViews());
+    this.broadcast('accounts.limitsChanged', this.hub.limits.views());
     this.broadcast('models.changed', null);
   }
 

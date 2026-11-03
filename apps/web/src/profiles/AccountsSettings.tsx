@@ -4,6 +4,8 @@ import { useClient } from '../app/connection';
 import { SettingsSection } from '../app/Settings';
 import { Chevron, Plus } from '../app/icons';
 import { useAction } from '../app/useAction';
+import { AccountLimits } from '../limits/AccountLimits';
+import { useWatchLimits } from '../limits/limits';
 import { useProfiles } from './profiles';
 import { SignInWithClaude } from './SignInWithClaude';
 import { SignInWithOpenAI } from './SignInWithOpenAI';
@@ -39,6 +41,7 @@ function AccountForm({ account, providerId, onSaved, onDone }: { account?: Accou
   const [name, setName] = useState(account?.name ?? '');
   const { busy, error, run } = useAction();
   const usedBy = profiles?.filter((p) => p.providers.some((provider) => provider.accounts.some((a) => a.id === account?.id))) ?? [];
+  useWatchLimits(account?.signedIn ? [account.id] : []);
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     const saved = await run(() => client.call('accounts.save', { id: account?.id, name, providerId }));
@@ -56,6 +59,12 @@ function AccountForm({ account, providerId, onSaved, onDone }: { account?: Accou
       </div>
     </SettingsSection>
     {account && <SettingsSection title={providerId === 'openai' ? 'OpenAI' : 'Anthropic'}><div className="setting-form">{providerId === 'openai' ? <SignInWithOpenAI account={account} /> : <SignInWithClaude account={account} />}<small className="hint">{usedBy.length ? `Used by ${usedBy.map((p) => p.name).join(', ')}. Remove it from these profiles before deleting.` : 'Select this account in a profile to use it.'}</small></div></SettingsSection>}
+    {account && <SettingsSection title="Limits">
+      <div className="setting-form account-limits">
+        <AccountLimits account={account} />
+        <small className="hint">{usedBy.length > 1 ? `One allowance shared by ${usedBy.map((p) => p.name).join(', ')}. ` : ''}Set by {providerId === 'openai' ? 'OpenAI' : 'Anthropic'} and counting all of this account’s use, including use outside accio.</small>
+      </div>
+    </SettingsSection>}
     <footer className="settings-actions">
       {account && <button type="button" className="ghost danger" disabled={busy || usedBy.length > 0} onClick={remove}>Delete</button>}
       <span className="spacer" /><button type="button" className="ghost" onClick={onDone}>Cancel</button>

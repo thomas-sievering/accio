@@ -13,6 +13,7 @@ One machine, with the Claude Agent SDK and a bundled Codex app-server.
 - **Projects** are folders on this machine, matched by git remote. Each belongs to one profile; the profile folders suggest it.
 - **Threads** stream the harness's reply and keep their profile for life. **Stop** interrupts a turn; a turn cut off by Stop or by accio restarting waits for **Resume**.
 - **Models** come from the selected profile's signed-in providers. Codex's available models are discovered at ChatGPT sign-in; its default follows that account's reported default. A profile with only ChatGPT signed in starts Codex threads automatically. An existing thread can change models within its harness; changing harnesses requires a new thread.
+- **Limits** opens from the sidebar or the selected account's composer indicator. It follows profile → provider → account and shows each account's reported allowance windows and reset times. Profiles sharing an account share one allowance. The hub reads limits using its own credentials, caches each account for a minute, and keeps the last successful values with their timestamp when a refresh fails. Account settings show the same limits, including for accounts no profile selects. Usage outside accio counts too; a passed reset awaits provider confirmation.
 
 To use Codex: **Settings / Accounts / Add ChatGPT account**, name it, then **Sign in with ChatGPT**. Select that account under **Settings / Profiles**, then choose **OpenAI / Codex** in a new thread's model picker. Codex is bundled; no global CLI installation or API key is required.
 
@@ -33,6 +34,7 @@ pnpm server        # server only; open the printed http://127.0.0.1:47321/#token
 pnpm test          # vitest
 pnpm typecheck
 pnpm test:chat     # build, then run isolated Chromium and hidden Electron chat checks
+pnpm test:limits   # build, then drive profiles/accounts/limits with fixture provider I/O
 pnpm exec playwright install chromium # one-time browser setup for verification
 pnpm verify        # build, drive the real UI in isolation, retain proof in out/verify
 ```
