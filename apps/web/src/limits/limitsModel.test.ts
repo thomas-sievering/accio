@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AccountLimitsView, AccountView, LimitWindow, ProfileProviderView, ProfileView } from '@accio/protocol';
 import {
-  blockingWindow, defaultLimitsScope, formatRemaining, limitsLayout, needsRefresh, nextReset, remainingPercent, resetPassed, retryBlockedUntil, splitWindows, tightestWindow,
+  allowancePace, blockingWindow, defaultLimitsScope, formatRemaining, limitsLayout, needsRefresh, nextReset, remainingPercent, resetPassed, retryBlockedUntil, splitWindows, tightestWindow,
 } from './limitsModel';
 
 const account = (id: string, providerId: 'anthropic' | 'openai' = 'anthropic'): AccountView =>
@@ -66,6 +66,24 @@ describe('defaultLimitsScope', () => {
 });
 
 describe('windows', () => {
+  it('compares allowance with time until reset, expressed as a time buffer at an even pace', () => {
+    const halfSession = { resetsAt: iso(150 * 60_000) };
+    expect(allowancePace(win({ ...halfSession, usedPercent: 30 }), T)).toEqual({ timeRemainingPercent: 50, minutesAhead: 60 });
+    expect(allowancePace(win({ ...halfSession, usedPercent: 70 }), T)).toEqual({ timeRemainingPercent: 50, minutesAhead: -60 });
+    expect(allowancePace(win({ ...halfSession, usedPercent: 50 }), T)?.minutesAhead).toBe(0);
+    expect(allowancePace(win({ kind: 'weekly', durationMinutes: 10080, resetsAt: iso(5 * 86_400_000), usedPercent: 29 }), T)?.minutesAhead).toBe(-43);
+    // As reset approaches without further usage, the buffer grows.
+    expect(allowancePace(win({ ...halfSession, usedPercent: 30 }), T + 60 * 60_000)?.minutesAhead).toBe(120);
+  });
+
+  it('omits pacing when usage, duration or a current valid reset window is unknown', () => {
+    for (const over of [
+      { usedPercent: null }, { durationMinutes: null }, { durationMinutes: 0 },
+      { resetsAt: null }, { resetsAt: 'invalid' }, { resetsAt: iso(0) },
+      { resetsAt: iso(-60_000) }, { resetsAt: iso(301 * 60_000) },
+    ]) expect(allowancePace(win({ resetsAt: iso(60_000), ...over }), T)).toBeNull();
+  });
+
   it('keeps unknown usage unknown and never rounds a remainder to 0% or 100%', () => {
     expect(remainingPercent(win({ usedPercent: null }))).toBeNull();
     expect(remainingPercent(win({ usedPercent: 38 }))).toBe(62);

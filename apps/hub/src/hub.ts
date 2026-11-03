@@ -66,6 +66,7 @@ export class Hub {
 
   async load() {
     const data = await loadAccounts(this.file);
+    await this.file.write(data);
     this.profiles = data.profiles;
     this.accounts = data.accounts;
   }
@@ -130,12 +131,12 @@ export class Hub {
     };
   }
 
-  beginAccountSignIn(accountId: string): { signInId: string; url: string } {
+  beginAccountSignIn(accountId: string, redirectUri?: string): { signInId: string; url: string } {
     this.requireProvider(accountId, 'anthropic');
     const now = Date.now();
     for (const [key, p] of this.pending) if (now - p.startedAt > SIGN_IN_TTL_MS || p.accountId === accountId) this.pending.delete(key);
     const signInId = randomUUID();
-    const p = beginSignIn();
+    const p = beginSignIn(undefined, redirectUri);
     this.pending.set(signInId, { ...p, accountId, startedAt: now });
     return { signInId, url: p.url };
   }
@@ -154,14 +155,19 @@ export class Hub {
     });
   }
 
-  async beginOpenAISignIn(accountId: string) {
+  async beginOpenAISignIn(accountId: string, browser = false) {
     return this.change(async () => {
       this.requireProvider(accountId, 'openai');
       await this.cancelOpenAISignIn(accountId);
-      const result = await this.openai.begin();
+      const result = await this.openai.begin(browser);
       this.openaiPending.set(result.signInId, accountId);
       return result;
     });
+  }
+
+  async completeOpenAICallback(signInId: string, code: string, state: string) {
+    if (!this.openaiPending.has(signInId)) throw new SignInError('This sign-in has expired or was cancelled. Start it again.');
+    await this.openai.callback(signInId, code, state);
   }
 
   openaiSignInStatus(signInId: string) {

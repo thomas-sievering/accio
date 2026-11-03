@@ -17,6 +17,7 @@ export class UserError extends Error {}
 /** Dispatches validated requests to the handlers each domain slice registers. */
 export class Router {
   private handlers = new Map<string, Handler<any>>();
+  constructor(private fallback?: Router) {}
 
   on<M extends MethodName>(name: M, handler: Handler<M>): this {
     this.handlers.set(name, handler);
@@ -30,6 +31,7 @@ export class Router {
     const fail = (error: string): ResponseEnvelope => ({ type: 'response', id, ok: false, error });
     const def = (methods as Record<string, { params: z.ZodType }>)[method];
     const handler = this.handlers.get(method);
+    if (!handler && this.fallback) return this.fallback.handle(raw);
     if (!def || !handler) return fail(`Unknown method ${method}`);
     const params = def.params.safeParse(parsed.data.params ?? {});
     const privateInput = method === 'secretRequests.answer' || method.startsWith('secrets.');

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { mediaKind, mediaMimeType, normalizeMarkdownSource, type ChoicePick, type DeliveryMode, type ThreadDelivery, type ParamsOf, type TranscriptItem } from '@accio/protocol';
+import { mediaKind, mediaMimeType, normalizeMarkdownSource, type ChoicePick, type DeliveryMode, type ThreadDelivery, type ParamsOf, type TranscriptItem, type SkillContext, type WorkspaceSkill, type WorkspaceSkills } from '@accio/protocol';
 import type { Profiles } from '../profiles/profiles.js';
 import { configFolderOf } from '../profiles/claudeConfigFolder.js';
 import type { Projects } from '../projects/projects.js';
@@ -37,23 +37,29 @@ import { ThreadAssets } from './assets.js';
 import { ThreadContent } from './content.js';
 import { markdownReferences } from './markdown.js';
 import { SecretRequests } from '../secrets/secrets.js';
-import type { SecretsVault } from '@accio/hub';
+import type { SecretsAccess } from '@accio/hub';
 import { isChoiceTool, parseChoice, pickPrompt } from './choice.js';
 import type { AccioTools, ToolAccess } from '../tools/tools.js';
 import { DeliveryGit, DeliveryPending, deliveryPrompt } from './delivery.js';
 import { Previews } from './previews.js';
 import { samePath } from '../projects/project.js';
+import { observedSkillLoads, readSkillFile, repositorySkillTarget, saveRepositorySkill } from '../resources/workspaceSkills.js';
 
-type TurnOptions = { resume?: boolean; retry?: boolean; delivery?: boolean; pick?: ChoicePick };
+type TurnOptions = { resume?: boolean; retry?: boolean; delivery?: boolean; pick?: ChoicePick; queuedId?: string };
 type Live = { cursor: number; items: TranscriptItem[]; file: JsonFile<TranscriptItem[]>; saveTimer?: ReturnType<typeof setTimeout> };
 
 /** Threads on this machine, their transcripts, and the turns running in them. */
 export class Threads {
+  get runningCount() { return this.running.size; }
+  profileReferences() { return this.list.map((thread) => thread.profileId); }
   private file: JsonFile<Thread[]>;
   private list: Thread[] = [];
   private transcripts = new Map<string, Live>();
   private loadingTranscripts = new Map<string, Promise<Live>>();
   private running = new Map<string, AbortController>();
+  private liveInputs = new Map<string, { turnId: string; send?: (text: string) => Promise<void> }>();
+  private messageOps = new Map<string, Promise<unknown>>();
+  private queuedStarts = new Map<string, string>();
   private closing = false;
   private starts = new Set<Promise<unknown>>();
   private startingThreads = new Set<string>();
@@ -78,7 +84,7 @@ export class Threads {
     private broadcast: Broadcast,
     private models: Models,
     private machines: Machines,
-    vault: SecretsVault,
+    vault: SecretsAccess,
     private tools?: AccioTools,
   ) {
     this.file = new JsonFile(join(home, 'threads.json'), () => []);
@@ -104,7 +110,14 @@ export class Threads {
   async load() {
     await this.secrets.load();
     await this.previews.load();
-    const stored = (await this.file.read()).map(fromStored);
+    const stored = (await this.file.read()).map(fromStored).map(t => ({ ...t,
+      queuedMessages: t.queuedMessages?.map(m => ({ ...m, editing: undefined })),
+    }));
+    let bound = false;
+    for (const thread of stored) {
+      if (thread.hubId && thread.hubId !== this.profiles.client.id) throw new UserError('Thread storage belongs to a different hub');
+      if (!thread.hubId) { thread.hubId = this.profiles.client.id; bound = true; }
+    }
     const candidates = new Set(dropUnstarted(stored).map((t) => t.id));
     const started: Thread[] = [];
     for (const thread of stored) {
@@ -138,13 +151,41 @@ export class Threads {
       });
       await live.file.write(live.items);
     }
-    if (recoveredRelease || interrupted.length || started.length < stored.length || this.list.some(t => t.delivery?.status === 'blocked')) await this.file.write(this.list);
+    if (bound || recoveredRelease || interrupted.length || started.length < stored.length || this.list.some(t => t.delivery?.status === 'blocked')) await this.file.write(this.list);
     for (const thread of this.list) if (thread.delivery?.status === 'waiting') this.scheduleDeliveryCheck(thread.id);
   }
 
   register(router: Router) {
     this.secrets.register(router, this.profiles, this.projects, this.broadcast);
     router
+      .on('threads.skills', context => this.workspaceSkills(context))
+      .on('threads.skillContent', async input => {
+        const { scope, skill } = await this.workspaceSkill(input);
+        if (skill.origin === 'library') return { content: await this.resources!.skillContent(skill.id), path: skill.path, editable: false };
+        if (!scope.cwd) throw new UserError('This workspace is unavailable');
+        const file = await repositorySkillTarget(scope.cwd, skill);
+        return { content: await readSkillFile(file), path: skill.path, editable: true };
+      })
+      .on('threads.saveSkillContent', async input => {
+        const save = async () => {
+          const { scope, skill } = await this.workspaceSkill(input);
+          if (!scope.cwd || skill.origin !== 'repository') throw new UserError('Only repository skills can be edited here');
+          if (scope.thread?.status === 'running') throw new UserError('Wait for this turn to finish before editing its skills');
+          const release = scope.checkoutId ? this.projects.useCheckout(scope.checkoutId) : undefined;
+          try { await saveRepositorySkill(scope.cwd, skill, input.content); this.resources!.skillsChanged(); }
+          finally { release?.(); }
+          return null;
+        };
+        return input.threadId ? this.withLifecycle(input.threadId, save) : save();
+      })
+      .on('threads.setSkillEnabled', async input => {
+        const { scope, skill } = await this.workspaceSkill(input);
+        if (!scope.projectId) throw new UserError('Choose a project to enable skills');
+        if (skill.origin !== 'library') throw new UserError('Repository skills are managed in the repository');
+        if (!input.enabled && (skill.enabledBy === 'global' || skill.enabledBy === 'profile')) throw new UserError('This skill is inherited. Change its selection in Settings.');
+        await this.resources!.setProjectSkill(skill.id, scope.projectId, input.enabled);
+        return null;
+      })
       .on('threads.list', () => this.views())
       .on('threads.start', input => this.start(input))
       .on('threads.transcript', async ({ threadId }) => {
@@ -183,10 +224,39 @@ export class Threads {
         if (!linked) throw new UserError('This file is not linked in the thread');
         return this.assets.fileUrl(threadId, this.cwd(thread), path);
       })
-      .on('threads.send', async ({ threadId, text, pick }) => {
-        await this.beginTurn(threadId, text, { pick });
+      .on('threads.send', ({ threadId, text, pick, mode }) => {
+        // Never wait behind a starting turn for steering: it may be blocked on
+        // authentication, and the caller must keep its unsent draft immediately.
+        if (this.running.has(threadId) && mode !== 'queue' && !this.liveInputs.get(threadId)?.send) {
+          throw new UserError('The agent is starting or finishing. Try sending again in a moment.');
+        }
+        return this.withMessages(threadId, async () => {
+        this.assertMessageAllowed(threadId);
+        if (!this.running.has(threadId)) await this.beginTurn(threadId, text, { pick });
+        else if (mode === 'queue') await this.changeQueue(threadId, queue => [...queue, { id: randomUUID(), text, ...(pick ? { pick } : {}) }]);
+        else await this.steer(threadId, text, pick);
         return null;
+        });
       })
+      .on('threads.queued', ({ threadId, messageId, action, text }) => this.withMessages(threadId, async () => {
+        if (this.queuedStarts.get(threadId) === messageId) throw new UserError('This queued message is already starting.');
+        const message = this.require(threadId).queuedMessages?.find(m => m.id === messageId);
+        if (!message) throw new UserError('This message is no longer queued.');
+        if (action === 'steer') {
+          this.assertMessageAllowed(threadId);
+          if (message.editing) throw new UserError('Finish editing this message first.');
+          if (this.running.has(threadId)) {
+            await this.steer(threadId, message.text, message.pick);
+            await this.changeQueue(threadId, queue => queue.filter(m => m.id !== messageId));
+          } else await this.beginTurn(threadId, message.text, { pick: message.pick, queuedId: messageId });
+        } else {
+          if (action === 'save' && !text) throw new UserError('Write a message before saving.');
+          await this.changeQueue(threadId, queue => action === 'remove' ? queue.filter(m => m.id !== messageId)
+            : queue.map(m => m.id !== messageId ? m : { ...m, text: action === 'save' ? text! : m.text, editing: action === 'edit' }));
+          await this.dispatchQueued(threadId);
+        }
+        return null;
+      }))
       .on('threads.deliverySummary', async ({ threadId }) => {
         const thread = this.require(threadId);
         const summary = await this.deliveryGit.summary(thread.workspace);
@@ -261,6 +331,7 @@ export class Threads {
     return this.trackStart(async () => {
         const { text, model, machineId } = input;
         if (machineId) {
+          await this.machines.refresh();
           const machine = this.machines.views().find((m) => m.id === machineId);
           if (!machine) throw new UserError('No such machine');
           if (!machine.connected) throw new UserError('This machine is offline');
@@ -281,7 +352,7 @@ export class Threads {
           if (this.closing) throw new UserError('This machine is shutting down');
           const selected = model ? this.models.requireExact(profileId, choice) : this.models.require(profileId, choice);
           // GLOSSARY: a thread keeps the profile it started with for its whole life.
-          const thread = newThread({ checkoutId: checkout?.id ?? '', projectId: project?.id ?? '', profileId, model: selected }, now());
+          const thread = newThread({ checkoutId: checkout?.id ?? '', projectId: project?.id ?? '', profileId, hubId: this.profiles.client.id, model: selected }, now());
           if (options.repairToolId) { thread.repairToolId = options.repairToolId; thread.title = `Repair ${options.repairToolId}`; }
           if (checkout) thread.workspace = await this.deliveryGit.allocate(thread.id, checkout.path);
           if (!checkout) await mkdir(join(this.home, 'workspaces', thread.id), { recursive: true });
@@ -316,6 +387,57 @@ export class Threads {
 
   // ---- turns ----
 
+  private withMessages<T>(id: string, action: () => Promise<T>): Promise<T> {
+    const pending = (this.messageOps.get(id) ?? Promise.resolve()).catch(() => {}).then(action);
+    this.messageOps.set(id, pending);
+    this.starts.add(pending);
+    void pending.finally(() => {
+      if (this.messageOps.get(id) === pending) this.messageOps.delete(id);
+      this.starts.delete(pending);
+    }).catch(() => {});
+    return pending;
+  }
+
+  private assertMessageAllowed(id: string) {
+    if (this.closing) throw new UserError('This machine is shutting down');
+    if (this.lifecycle.has(id)) throw new UserError('Wait for the current thread action to finish.');
+    const delivery = this.require(id).delivery?.status;
+    if (delivery === 'queued' || delivery === 'running') throw new UserError('Finish or cancel delivery before sending more work.');
+    if (this.running.get(id)?.signal.aborted) throw new UserError('Wait for this turn to stop.');
+  }
+
+  private async changeQueue(id: string, change: (queue: NonNullable<Thread['queuedMessages']>) => NonNullable<Thread['queuedMessages']>) {
+    if (this.closing) throw new UserError('This machine is shutting down');
+    const previous = this.require(id).queuedMessages;
+    try { await this.update(id, t => ({ ...t, queuedMessages: change(t.queuedMessages ?? []) })); }
+    catch (error) {
+      this.list = this.list.map(t => t.id === id ? { ...t, queuedMessages: previous } : t);
+      this.broadcast('threads.changed', this.views());
+      throw error;
+    }
+  }
+
+  private async steer(id: string, text: string, pick?: ChoicePick) {
+    const input = this.liveInputs.get(id);
+    const send = input?.send;
+    if (!input || !send) throw new UserError('The agent is starting or finishing. Try sending again in a moment.');
+    const prompt = pick ? pickPrompt((await this.transcript(id)).items, pick, text) : text;
+    if (prompt === undefined) throw new UserError('That option is no longer available');
+    await send(prompt);
+    await this.addItem(id, { kind: 'user', id: randomUUID(), turnId: input.turnId, text, at: now(), steered: true, ...(pick ? { pick } : {}) });
+    await this.flush(id);
+  }
+
+  private async dispatchQueued(id: string) {
+    const thread = this.require(id);
+    const message = thread.queuedMessages?.[0];
+    if (!message || message.editing || this.closing || this.lifecycle.has(id) || this.running.has(id) || thread.status !== 'idle') return;
+    try { await this.beginTurn(id, message.text, { pick: message.pick, queuedId: message.id }); }
+    catch (error) {
+      await this.addItem(id, { kind: 'notice', id: randomUUID(), turnId: 'queue', tone: 'error', text: `Queued message could not start: ${(error as Error).message}` });
+    }
+  }
+
   private assertWorkspaceUnused(thread: Thread) {
     const path = thread.workspace!.path;
     if (this.projects.state().checkouts.some(c => samePath(c.path, path)) || this.list.some(t => t.id !== thread.id && t.workspace && !t.workspace.releasedAt && (samePath(t.workspace.path, path) || samePath(t.workspace.sourcePath, path)))) throw new UserError('Another checkout or thread still uses this workspace.');
@@ -332,14 +454,18 @@ export class Threads {
     finally {
       this.lifecycle.delete(id); this.starts.delete(pending);
       // Preview startup can overlap the end of work. Release its reservation
-      // before dispatching a queued delivery that waited behind it.
-      if (this.list.find(t => t.id === id)?.status === 'idle') await this.dispatchDelivery(id);
+      // before dispatching work that waited behind it.
+      if (this.list.find(t => t.id === id)?.status === 'idle') {
+        await this.dispatchQueued(id);
+        await this.dispatchDelivery(id);
+      }
     }
   }
 
   private async requestDelivery(threadId: string, mode: DeliveryMode) {
     await this.withLifecycle(threadId, async () => {
       const thread = this.require(threadId);
+      if (thread.queuedMessages?.length) throw new UserError('Send or remove queued messages before requesting delivery.');
       if (!thread.workspace || thread.workspace.releasedAt) throw new UserError('Start a new thread in a committed Git project to use an owned worktree.');
       if (thread.delivery && ['queued', 'running', 'waiting'].includes(thread.delivery.status)) throw new UserError('Delivery is already requested.');
       const baseBranch = await this.deliveryGit.target(thread.workspace);
@@ -463,9 +589,13 @@ export class Threads {
     if (this.running.has(threadId) || thread.status === 'running') throw new UserError('This thread is already working. Stop it or wait for it to finish.');
     const controller = new AbortController();
     this.running.set(threadId, controller);
+    if (options.queuedId) this.queuedStarts.set(threadId, options.queuedId);
     const preparation = this.prepareTurn(threadId, text, options, controller, stored);
     this.preparing.add(preparation);
-    void preparation.then(() => this.preparing.delete(preparation), () => this.preparing.delete(preparation));
+    void preparation.finally(() => {
+      this.preparing.delete(preparation);
+      this.queuedStarts.delete(threadId);
+    }).catch(() => {});
     return preparation;
   }
 
@@ -505,11 +635,13 @@ export class Threads {
       const cwd = this.cwd(thread);
       const prompt = delivering && !resume ? deliveryPrompt(thread.workspace!, thread.delivery!) : picked;
       if (delivering && !resume) text = thread.delivery!.mode === 'review' ? 'Prepare for review.' : `Ship to ${thread.delivery!.baseBranch} when ready.`;
-      const next = startTurn(thread, text, now());
+      let next = startTurn(thread, text, now());
       const turnId = randomUUID();
       started = true;
       this.startingThreads.delete(thread.id);
-      await this.update(thread.id, () => next);
+      next = await this.update(thread.id, t => ({ ...next,
+        queuedMessages: options.queuedId ? t.queuedMessages?.filter(m => m.id !== options.queuedId) : t.queuedMessages,
+      }));
       await this.addItem(thread.id, { kind: 'user', id: `${turnId}:u`, turnId, text, at: now(), ...(resume ? { resume } : {}), ...(delivering ? { delivery: thread.delivery!.mode } : {}), ...(pick ? { pick } : {}) });
       const env = harnessEnv(process.env, access, configFolderOf(this.home, thread.profileId));
       if (thread.model.harnessId === 'codex') {
@@ -525,7 +657,9 @@ export class Threads {
       }
       const grant = this.tools?.grant(thread.id);
       const turnResources = resources;
-      const turn = this.runTurn(next, turnId, { cwd, prompt, env: resources?.env ?? env, signal: controller.signal, ...(grant ? { tools: grant.access } : {}), resourceInstructions: resources?.instructions, mcps: resources?.mcps }, delivering).finally(() => { turnResources?.release(); grant?.revoke(); });
+      const input: { turnId: string; send?: (text: string) => Promise<void> } = { turnId };
+      this.liveInputs.set(thread.id, input);
+      const turn = this.runTurn(next, turnId, { cwd, prompt, env: resources?.env ?? env, signal: controller.signal, ...(grant ? { tools: grant.access } : {}), resourceInstructions: resources?.instructions, mcps: resources?.mcps }, delivering, resources?.skills).finally(() => { turnResources?.release(); grant?.revoke(); });
       resources = undefined;
       this.turns.add(turn);
       void turn.then(() => this.turns.delete(turn), (err) => {
@@ -547,6 +681,7 @@ export class Threads {
     turnId: string,
     run: { cwd: string; prompt: string; env: Record<string, string>; tools?: ToolAccess; signal: AbortSignal; resourceInstructions?: string; mcps?: import('./harness.js').HarnessTurn['mcps'] },
     delivering = false,
+    skills: WorkspaceSkill[] = [],
   ) {
     const transcript = new TurnTranscript(turnId);
     const startedAt = Date.now();
@@ -563,10 +698,11 @@ export class Threads {
         projectName: this.projects.state().projects.find(p => p.id === thread.projectId)?.name ?? 'No project',
         machineName: this.machines.views().find(m => m.thisMachine)?.name ?? 'This machine', signal: run.signal });
       for await (const msg of harness.run({ ...run, sessionId: thread.sessionId, model: thread.model.modelId, effort: this.models.effort(thread.profileId, thread.model), requestSecret, modelName: this.models.modelName(thread.profileId, thread.model),
+        registerSteer: send => { const input = this.liveInputs.get(thread.id); if (input?.turnId === turnId) input.send = send; },
         secretPurposes: this.secrets.purposes(thread.profileId, thread.projectId || null) })) {
         for (const change of transcript.accept(msg)) {
           if (change.type === 'end') outcome = change.outcome;
-          await this.apply(thread.id, change, run.cwd);
+          await this.apply(thread.id, change, run.cwd, skills);
         }
       }
       if (run.signal.aborted) {
@@ -588,6 +724,10 @@ export class Threads {
         await this.addItem(thread.id, { kind: 'notice', id: `${turnId}:err`, turnId, tone: 'error', text: (err as Error).message });
       }
     } finally {
+      const input = this.liveInputs.get(thread.id);
+      if (input) input.send = undefined;
+      await this.messageOps.get(thread.id)?.catch(() => {});
+      this.liveInputs.delete(thread.id);
       try {
         await this.secrets.endTurn(turnId);
         if (delivering) {
@@ -620,19 +760,23 @@ export class Threads {
         // Every turn spends the account's allowance, so a model it used up is marked as soon as possible.
         this.profiles.refreshLimits(thread.profileId, thread.model.harnessId === 'codex' ? 'openai' : 'anthropic');
         if (thread.repairToolId && outcome === 'completed') this.onRepairFinished?.(thread.repairToolId);
-        if (outcome === 'completed') await this.dispatchDelivery(thread.id);
+        if (outcome === 'completed') {
+          await this.dispatchQueued(thread.id);
+          await this.dispatchDelivery(thread.id);
+        }
       }
     }
   }
 
-  private async apply(threadId: string, change: TranscriptChange, cwd: string) {
+  private async apply(threadId: string, change: TranscriptChange, cwd: string, skills: WorkspaceSkill[] = []) {
     if (change.type === 'session') {
       await this.update(threadId, (t) => ({ ...t, sessionId: change.sessionId }), { quiet: true });
     } else if (change.type === 'tool' && isChoiceTool(change.item.name)) {
       await this.offerChoice(threadId, change, cwd);
     } else if (change.type === 'tool') {
       await this.content.saveTool(threadId, change.item.id, change.input, change.content);
-      await this.addItem(threadId, change.item);
+      const loadedSkills = change.item.status === 'done' ? observedSkillLoads(change.item.name, change.input, change.item.summary, cwd, skills) : [];
+      await this.addItem(threadId, loadedSkills.length ? { ...change.item, loadedSkills } : change.item);
     } else if (change.type === 'item') {
       let item = change.item;
       if (item.kind === 'assistant' && item.text) {
@@ -676,6 +820,47 @@ export class Threads {
   }
 
   // ---- storage ----
+
+  private skillContext(context: SkillContext) {
+    if (context.threadId) {
+      if (context.checkoutId || context.profileId) throw new UserError('Choose a thread or a draft skill context, not both');
+      const thread = this.require(context.threadId);
+      return { thread, checkoutId: thread.checkoutId, projectId: thread.projectId || undefined, profileId: thread.profileId, cwd: thread.checkoutId && !thread.workspace?.releasedAt ? this.cwd(thread) : undefined, unavailable: thread.workspace?.releasedAt ? 'This workspace was archived. Repository skills are unavailable until it is restored.' : undefined };
+    }
+    if (context.checkoutId) {
+      const checkout = this.projects.checkout(context.checkoutId);
+      const project = this.projects.projectOf(checkout);
+      if (context.profileId && context.profileId !== project.profileId) throw new UserError('This project belongs to another profile');
+      return { checkoutId: checkout.id, projectId: project.id, profileId: project.profileId, cwd: checkout.path, thread: undefined, unavailable: undefined };
+    }
+    if (!context.profileId) throw new UserError('Choose a thread, project or profile to see skills');
+    this.profiles.require(context.profileId);
+    return { profileId: context.profileId, checkoutId: undefined, projectId: undefined, cwd: undefined, thread: undefined, unavailable: undefined };
+  }
+
+  private async workspaceSkills(context: SkillContext): Promise<WorkspaceSkills> {
+    if (!this.resources) throw new UserError('Skills are unavailable');
+    const scope = this.skillContext(context);
+    const skills = await this.resources.workspaceSkills(scope.profileId, scope.projectId, scope.cwd);
+    if (scope.thread) {
+      const live = await this.transcript(scope.thread.id);
+      for (const item of live.items) if (item.kind === 'tool' && item.status === 'done') {
+        for (const loaded of item.loadedSkills ?? []) {
+          const skill = skills.find(skill => skill.id === loaded.id);
+          if (skill) skill.loaded = { itemId: item.id, turnId: item.turnId };
+        }
+      }
+    }
+    return { skills, projectId: scope.projectId, unavailable: scope.unavailable };
+  }
+
+  private async workspaceSkill(input: SkillContext & { skillId: string }) {
+    const scope = this.skillContext(input);
+    const { skills } = await this.workspaceSkills(input);
+    const skill = skills.find(skill => skill.id === input.skillId);
+    if (!skill) throw new UserError('No such skill in this workspace');
+    return { scope, skill };
+  }
 
   private cwd(thread: Thread) {
     return thread.workspace && !thread.workspace.releasedAt ? thread.workspace.path : thread.checkoutId ? this.projects.checkout(thread.checkoutId).path : join(this.home, 'workspaces', thread.id);

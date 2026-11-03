@@ -32,7 +32,7 @@ export function ToolCallRow({ threadId, item }: { threadId: string; item: ToolIt
     return () => { active = false; };
   }, [client, threadId, item.id, item.detailRevision, open, retry, connection]);
 
-  return <div className={`tool ${item.status}${open ? ' open' : ''}`}>
+  return <div className={`tool ${item.status}${open ? ' open' : ''}`} data-item-id={item.id}>
     <button className="tool-toggle" onClick={() => setChoice(!open)} aria-expanded={open} aria-controls={detailId}>
       <span className="tool-name">{item.name}</span>
       <span className="tool-summary" title={item.summary}>{item.summary}</span>

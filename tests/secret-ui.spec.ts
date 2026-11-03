@@ -25,6 +25,7 @@ async function send(page: Page, text: string) {
   const composer = page.locator('textarea');
   await expect(composer).toBeEnabled({ timeout: 15_000 });
   await composer.fill(text);
+  await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled({ timeout: 15_000 });
   await composer.press('Enter');
 }
 

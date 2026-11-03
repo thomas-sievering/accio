@@ -1,0 +1,13 @@
+.git
+node_modules
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+out
+.agents
+.claude
+docs
+*.env
+**/*.env
+**/*.pem
+**/*.key

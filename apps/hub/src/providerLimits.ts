@@ -56,7 +56,7 @@ export function anthropicLimits(raw: unknown): LimitsRead {
       if (!w || !kind) continue;
       const model = object(object(w.scope)?.model);
       const scope = text(model?.display_name) ?? text(model?.id) ?? text(w.label);
-      const minutes = duration(w.window_duration_minutes) ?? (kind.startsWith('weekly') ? 10080 : kind === 'five_hour' ? 300 : null);
+      const minutes = duration(w.window_duration_minutes) ?? (kind.startsWith('weekly') ? 10080 : kind === 'five_hour' || kind === 'session' ? 300 : null);
       const name = windowName(minutes, text(w.label) ?? kind.replaceAll('_', ' '));
       windows.push({ id: text(w.id) ?? `${kind}:${text(model?.id) ?? scope ?? 'general'}`, ...name,
         scope: kind === 'weekly_scoped' || model ? scope : null, usedPercent: percent(w.percent ?? w.utilization),
@@ -65,7 +65,14 @@ export function anthropicLimits(raw: unknown): LimitsRead {
     }
   }
   if (!recognized) throw invalid();
-  return { windows: [...new Map(windows.map((w) => [w.id, w])).values()] };
+  // Both API formats can describe the same allowance with different IDs.
+  // Prefer the newer list entry, but keep distinct durations and model scopes.
+  const allowances = new Map<string, LimitWindow>();
+  for (const w of windows) {
+    const key = w.durationMinutes === null ? `id:${w.id}` : JSON.stringify([w.kind, w.durationMinutes, w.scope?.toLowerCase() ?? null]);
+    allowances.set(key, w);
+  }
+  return { windows: [...allowances.values()] };
 }
 
 /** Full account/rateLimits/read response from the hub's authenticated app-server. */

@@ -32,9 +32,14 @@ const app = await startApp({ home, host: '127.0.0.1', port: 47482, hubPort: 0, t
     if (who === 'shared' && count === 2) return new Response('Private fixture diagnostic', { status: 503, headers: { 'retry-after': '2' } });
     if (who === 'empty') return Response.json({ five_hour: null, seven_day: null });
     const reset = new Date(Date.now() + (who === 'expired' ? -10_000 : 3600_000)).toISOString();
-    return Response.json({ five_hour: { utilization: who === 'unknown' ? null : who === 'expired' ? 100 : who === 'work' ? 33 : 48, resets_at: reset },
-      seven_day: { utilization: who === 'work' ? 100 : 28, resets_at: new Date(Date.now() + 2 * 86_400_000).toISOString() },
-      limits: [{ kind: 'weekly_scoped', percent: 1, scope: { model: { display_name: 'Fable' } } }],
+    const session = { utilization: who === 'unknown' ? null : who === 'expired' ? 100 : who === 'work' ? 33 : 48, resets_at: reset };
+    const weekly = { utilization: who === 'work' ? 100 : 28, resets_at: new Date(Date.now() + 2 * 86_400_000).toISOString() };
+    return Response.json({ five_hour: session, seven_day: weekly,
+      limits: [
+        { id: 'session-v2', kind: 'session', percent: session.utilization, resets_at: session.resets_at },
+        { id: 'weekly-v2', kind: 'weekly', percent: weekly.utilization, resets_at: weekly.resets_at },
+        { kind: 'weekly_scoped', percent: 1, scope: { model: { display_name: 'Fable' } } },
+      ],
     });
   },
 });

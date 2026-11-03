@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { method } from './rpc.js';
 import { ModelSelection } from './models.js';
 import type { AssetUrl, MediaBinding, ThreadAsset, ToolDetails } from './media.js';
+import type { LoadedSkill } from './workspaceSkills.js';
 import type { SecretRequestItem } from './secrets.js';
 
 /**
@@ -10,6 +11,8 @@ import type { SecretRequestItem } from './secrets.js';
  */
 export type ThreadView = {
   repairToolId?: string;
+  /** The hub that owns this thread's profile; immutable across view switches. */
+  hubId?: string;
   id: string;
   /** Empty for a thread started with No project. */
   checkoutId: string;
@@ -30,7 +33,10 @@ export type ThreadView = {
   /** Absent on older threads that still use their original, shared checkout. */
   workspace?: ThreadWorkspace;
   delivery?: ThreadDelivery;
+  queuedMessages?: QueuedMessage[];
 };
+
+export type QueuedMessage = { id: string; text: string; pick?: ChoicePick; editing?: boolean };
 
 export type ThreadWorkspace = {
   path: string;
@@ -83,9 +89,9 @@ export type ChoicePick = { choiceId: string; option: number };
 /** One entry of a thread's transcript. */
 export type TranscriptItem =
   | SecretRequestItem
-  | { kind: 'user'; id: string; turnId: string; text: string; at: string; resume?: boolean; delivery?: DeliveryMode; pick?: ChoicePick }
+  | { kind: 'user'; id: string; turnId: string; text: string; at: string; resume?: boolean; delivery?: DeliveryMode; pick?: ChoicePick; steered?: boolean }
   | { kind: 'assistant'; id: string; turnId: string; text: string; media?: MediaBinding[] }
-  | { kind: 'tool'; id: string; turnId: string; name: string; summary: string; status: 'running' | 'done' | 'error' | 'interrupted'; output?: string; detailRevision?: number }
+  | { kind: 'tool'; id: string; turnId: string; name: string; summary: string; status: 'running' | 'done' | 'error' | 'interrupted'; output?: string; detailRevision?: number; loadedSkills?: LoadedSkill[] }
   /** GLOSSARY: Choice. Screenshots the harness offers; you pick one in your next message. */
   | { kind: 'choice'; id: string; turnId: string; question: string; options: ChoiceOption[] }
   | { kind: 'notice'; id: string; turnId: string; tone: 'info' | 'error'; text: string }
@@ -108,13 +114,14 @@ const Start = z.union([
 const SetModel = z.object({ threadId: z.string(), model: ModelSelection });
 const Snooze = z.object({ threadId: z.string(), until: z.iso.datetime({ offset: true }) });
 const PickInput = z.object({ choiceId: z.string().min(1).max(512), option: z.int().min(0).max(63) });
-const Send = z.object({ threadId: z.string(), text: z.string().trim(), pick: PickInput.optional() })
+const Send = z.object({ threadId: z.string(), text: z.string().trim(), pick: PickInput.optional(), mode: z.enum(['steer', 'queue']).optional() })
   .refine((send) => send.text.length > 0 || send.pick, { message: 'Write a message or pick an option' });
 const Rename = z.object({ threadId: z.string(), title: z.string().trim().min(1).max(120) });
 const ToolDetailRequest = z.object({ threadId: z.string(), itemId: z.string().min(1).max(512) });
 const AssetRequest = z.object({ threadId: z.string(), assetId: z.string().uuid(), download: z.boolean().optional() });
 const FileRequest = z.object({ threadId: z.string(), path: z.string().min(1).max(4096) });
 const Deliver = z.object({ threadId: z.string(), mode: z.enum(['ship', 'review']) });
+const Queued = z.object({ threadId: z.string(), messageId: z.string(), action: z.enum(['steer', 'remove', 'edit', 'save', 'cancel']), text: z.string().trim().min(1).optional() });
 
 export const threadMethods = {
   'threads.list': method<z.ZodObject<{}>, ThreadView[]>(z.object({})),
@@ -128,6 +135,7 @@ export const threadMethods = {
   /** A download grant for a current file explicitly linked in the thread. */
   'threads.fileUrl': method<typeof FileRequest, AssetUrl>(FileRequest),
   'threads.send': method<typeof Send, null>(Send),
+  'threads.queued': method<typeof Queued, null>(Queued),
   'threads.deliverySummary': method<typeof ThreadId, DeliverySummary>(ThreadId),
   /** Durable intent: a running work turn completes before the delivery turn starts. */
   'threads.deliver': method<typeof Deliver, ThreadView>(Deliver),

@@ -6,6 +6,51 @@ import { join, resolve } from 'node:path';
 
 const require = createRequire(import.meta.url);
 const token = 'isolated-chat-test-token';
+
+test('Enter steers, Ctrl changes Send and queues; queued edits are held until saved', async ({ page, baseURL }, testInfo) => {
+  await page.goto(`${baseURL}/#token=${token}`);
+  await page.getByRole('button', { name: /Inline chat fixture/ }).click();
+  const input = page.locator('.composer textarea');
+  await input.fill('Steering fixture'); await input.press('Enter');
+  await expect(page.getByText('Waiting for steering.', { exact: true })).toBeVisible();
+  await expect(page.locator('.composer').getByRole('button', { name: 'Stop', exact: true })).toBeVisible();
+  await input.fill('Use the existing helper');
+  const normalColor = await page.getByRole('button', { name: 'Send', exact: true }).evaluate(el => getComputedStyle(el).backgroundColor);
+  await page.keyboard.down('Control');
+  const queueSend = page.getByRole('button', { name: 'Queue message', exact: true });
+  await expect(queueSend).toHaveClass('send queue');
+  expect(await queueSend.evaluate(el => getComputedStyle(el).backgroundColor)).not.toBe(normalColor);
+  await page.screenshot({ path: testInfo.outputPath('ctrl-queue.png') });
+  await page.keyboard.up('Control');
+  await expect(page.getByRole('button', { name: 'Send', exact: true })).not.toHaveClass(/queue/);
+  await input.press('Enter');
+  await expect(page.getByText('Steered: Use the existing helper', { exact: true })).toBeVisible();
+  await expect(page.getByText('Steered mid-turn', { exact: true })).toBeVisible();
+
+  await input.fill('Queued first'); await input.press('Control+Enter');
+  const tray = page.getByRole('region', { name: 'Queued messages' });
+  await expect(tray).toContainText('Queued first');
+  await input.fill('Queued second');
+  await page.getByRole('button', { name: 'Send', exact: true }).click({ modifiers: ['Control'] });
+  await expect(tray.locator('.queued-message')).toHaveCount(2);
+  await tray.getByRole('button', { name: 'Steer now', exact: true }).first().click();
+  await expect(page.getByText('Steered: Queued first', { exact: true })).toBeVisible();
+  await tray.getByRole('button', { name: 'Edit', exact: true }).click();
+  await tray.getByRole('textbox', { name: 'Edit queued message' }).fill('Queued edited');
+  await input.fill('Queued remove me');
+  await page.getByRole('button', { name: /^Queue Ctrl/ }).click();
+  await tray.getByRole('button', { name: 'Remove queued message' }).click();
+  await input.fill('Finish steering fixture'); await input.press('Enter');
+  await expect(page.locator('.composer .stop')).toHaveCount(0);
+  await expect(tray.getByRole('textbox')).toHaveValue('Queued edited');
+  await expect(page.getByText('Finished: Queued edited', { exact: true })).toHaveCount(0);
+  await tray.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByText('Finished: Queued edited', { exact: true })).toBeVisible();
+  await expect(tray).toHaveCount(0);
+  await page.reload();
+  await page.getByRole('button', { name: /Inline chat fixture/ }).click();
+  await expect(page.getByText('Steered: Use the existing helper', { exact: true })).toBeVisible();
+});
 async function openChat(page: Page, baseURL: string, navigate = true) {
   if (navigate) await page.goto(`${baseURL}/#token=${token}`);
   await page.getByRole('button', { name: /Inline chat fixture/ }).click();

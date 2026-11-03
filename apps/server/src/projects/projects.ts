@@ -113,6 +113,7 @@ export class Projects {
       .on('checkouts.add', async ({ path, profileId }) => {
         const release = profileId ? this.profiles.useProfile(profileId) : () => {};
         try {
+          await this.profiles.syncReferences();
           const facts = await inspectFolder(path);
           const { data, checkout } = addCheckout(this.data, facts, profileId);
           await this.commit(data);

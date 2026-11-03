@@ -55,6 +55,16 @@ export function remainingPercent(w: LimitWindow): number | null {
   return w.usedPercent === null ? null : Math.max(0, Math.min(100, 100 - w.usedPercent));
 }
 
+/** Compare reported allowance with even use over the provider's full reset window. */
+export function allowancePace(w: LimitWindow, now: number): { timeRemainingPercent: number; minutesAhead: number } | null {
+  const remaining = remainingPercent(w);
+  const minutes = w.durationMinutes;
+  const untilReset = w.resetsAt ? (Date.parse(w.resetsAt) - now) / 60_000 : NaN;
+  if (remaining === null || minutes === null || !Number.isFinite(minutes) || minutes <= 0
+    || !Number.isFinite(untilReset) || untilReset <= 0 || untilReset > minutes) return null;
+  return { timeRemainingPercent: untilReset / minutes * 100, minutesAhead: Math.round(remaining / 100 * minutes - untilReset) };
+}
+
 /** Never rounds a nearly used-up allowance to 0% or a barely used one to 100%. */
 export function formatRemaining(remaining: number): string {
   if (remaining <= 0) return '0%';

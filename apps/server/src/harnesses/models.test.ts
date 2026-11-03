@@ -161,7 +161,8 @@ describe('profile model choices', () => {
     // When Fable's limit resets, clients hear so without another read of the limits.
     c.events.length = 0;
     await c.waitFor('models.changed');
-    expect((await c.call('models.list', { profileId: 'personal' })).models.find((m) => m.id === 'fable')?.limited).toBeUndefined();
+    // Hub snapshots can also announce other model changes before the reset arrives.
+    await expect.poll(async () => (await c.call('models.list', { profileId: 'personal' })).models.find((m) => m.id === 'fable')?.limited, { timeout: 6000 }).toBeUndefined();
     expect(await c.call('threads.setModel', { threadId: thread.id, model: fable })).toMatchObject({ model: fable });
   });
 

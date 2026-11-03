@@ -25,6 +25,23 @@ const turn = (signal: AbortSignal) => claudeCode.run({ cwd: '.', prompt: 'hello'
 beforeEach(() => vi.clearAllMocks());
 afterEach(() => vi.useRealTimers());
 
+it('streams steering into the same Claude query with immediate priority and closes the channel on result', async () => {
+  const q = query(); queryMock.mockReturnValue(q);
+  let send: ((text: string) => Promise<void>) | undefined;
+  const iterator = claudeCode.run({ cwd: '.', prompt: 'start', sessionId: 's', env: {}, signal: new AbortController().signal,
+    registerSteer: value => { send = value; } })[Symbol.asyncIterator]();
+  const output = iterator.next();
+  const input = queryMock.mock.calls[0]![0].prompt[Symbol.asyncIterator]();
+  expect((await input.next()).value.message.content).toBe('start');
+  const sending = send!('correction');
+  expect((await input.next()).value).toMatchObject({ priority: 'now', message: { role: 'user', content: 'correction' } });
+  await sending;
+  q.close();
+  await output;
+  expect(send).toBeUndefined();
+  expect((await input.next()).done).toBe(true);
+});
+
 it('closes the query after completion and removes its stop listener', async () => {
   const q = query();
   q.next.mockResolvedValueOnce({ done: false, value: { type: 'result', subtype: 'success', is_error: false, session_id: 's' } });

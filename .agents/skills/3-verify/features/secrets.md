@@ -10,6 +10,8 @@ Run `pnpm test:secrets`. It builds and drives the production UI/server with a sc
 
 Native bridge coverage is separate: `pnpm exec vitest run apps/server/src/secrets` includes actual Claude CLI/SDK and pinned Codex calls against local scripted provider responses, including a pre-feature Codex thread resumed through the scoped MCP endpoint. It also checks encryption/reopening, project binding, cross-profile rejection, duplicate answers, cancellation, expiry, replacement/deletion invalidation and private file/media exclusions. These checks establish protocol behavior, not live-provider authentication or remote relay.
 
+For hub connection changes, also run the hub service and machine connection tests. They exercise scoped secret resolution over authenticated HTTP, metadata-only snapshots/cache, rejection of model keys, matching profile IDs on independent hubs, and deletion of a machine-local delivery after hub removal or rotation of its saved secret. These use disposable keys and values; a production tunnel still needs its own observed check.
+
 ## User-facing entry points
 
 - **secrets-request:** A harness calls `request_secret` with a stable service/operation/target purpose, label and reason. Open the thread's Working row and require `section.secret` with Needs a secret, correct profile/project/machine, masked input and the file-delivery privacy note. Type into `getByPlaceholder('Paste secret')`; Save & use is primary in a project, Use once is available, and Decline resolves without storing a value. A No project thread omits Save & use. Pending turns remain running and Stop stays available.

@@ -1,0 +1,8 @@
+[Unit]
+Description=Update Accio hub from the verified deployment image
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/tom/accio
+ExecStart=/home/tom/accio/deploy.sh

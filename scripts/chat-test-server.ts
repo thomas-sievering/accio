@@ -14,6 +14,30 @@ const fixture = (name: string) => readFile(resolve('tests/fixtures', name));
 const token = 'isolated-chat-test-token';
 const image = await fixture('chat.png');
 const harness = new FakeHarness(async function* (run) {
+  if (run.prompt === 'Steering fixture') {
+    const messages: string[] = [];
+    let finished = false;
+    let wake = () => {};
+    const abort = () => { finished = true; wake(); };
+    run.signal.addEventListener('abort', abort, { once: true });
+    run.registerSteer?.(async text => {
+      messages.push(text);
+      if (text === 'Finish steering fixture') finished = true;
+      wake();
+    });
+    try {
+      yield { type: 'harness_event', event: { kind: 'text', id: 'steer-ready', text: 'Waiting for steering.' } };
+      let n = 0;
+      while (!finished || messages.length) {
+        const text = messages.shift();
+        if (!text) { await new Promise<void>(resolve => { wake = resolve; }); continue; }
+        yield { type: 'harness_event', event: { kind: 'text', id: `steered-${n++}`, text: `Steered: ${text}` } };
+      }
+      if (!run.signal.aborted) yield { type: 'harness_event', event: { kind: 'end' } };
+    } finally { run.registerSteer?.(undefined); run.signal.removeEventListener('abort', abort); }
+    return;
+  }
+  if (run.prompt.startsWith('Queued ')) { yield* replyWith(`Finished: ${run.prompt}`); return; }
   if (run.prompt === 'Choice fixture') {
     const options = [['choice-list.png', 'List rows'], ['choice-cards.png', 'Cards'], ['choice-grouped.png', 'Grouped by provider']];
     for (const [name] of options) await writeFile(join(run.cwd, name!), await fixture(name!));
@@ -42,6 +66,14 @@ const harness = new FakeHarness(async function* (run) {
     if (run.prompt.includes('NEVER merge')) await git(run.cwd, 'push', '--quiet', 'origin', 'HEAD');
     else await git(run.cwd, 'push', '--quiet', 'origin', 'HEAD:refs/heads/main');
     yield* replyWith('Verification complete. Published the committed change.');
+    return;
+  }
+  if (run.prompt === 'Skills fixture') {
+    // A successful read of a repository skill's instructions: the Skills panel marks it loaded.
+    const step = { id: 'skills-read', name: 'Read', input: { file_path: join(run.cwd, '.agents', 'skills', 'repo-notes', 'SKILL.md') } };
+    yield { type: 'assistant', parent_tool_use_id: null, session_id: SESSION, message: { id: step.id, content: [{ type: 'tool_use', ...step }] } } as HarnessMessage;
+    yield { type: 'user', parent_tool_use_id: null, session_id: SESSION, message: { content: [{ type: 'tool_result', tool_use_id: step.id, content: await readFile(step.input.file_path, 'utf8') }] } } as HarnessMessage;
+    yield* replyWith('Read the repository notes skill.');
     return;
   }
   if (run.prompt === 'Delivery follow-up') { yield* replyWith('Fresh workspace ready.'); return; }
@@ -125,6 +157,35 @@ await git(deliveryFolder, 'push', '--quiet', '-u', 'origin', 'main');
 await git(deliveryFolder, 'remote', 'set-head', 'origin', '-a');
 const deliveryCheckout = await client.call('checkouts.add', { path: deliveryFolder, profileId: 'personal' });
 await client.call('projects.setDelivery', { projectId: deliveryCheckout.projectId, deliveryPolicy: 'direct', previewCommand: 'node preview.cjs' });
+// Skills panel: a project with one repository skill, and a library source with one profile skill and one optional.
+const skillsFolder = join(home, 'skills-project');
+const skillsLibrary = join(home, 'skills-library');
+const skillFile = (name: string, description: string, body: string) => `---\nname: ${name}\ndescription: ${description}\n---\n${body}\n`;
+for (const [folder, files] of [
+  [skillsFolder, { '.agents/skills/repo-notes/SKILL.md': skillFile('repo-notes', 'How this repository writes notes', 'Write notes in plain sentences.') }],
+  [skillsLibrary, {
+    'lib-review/SKILL.md': skillFile('lib-review', 'Review a change before shipping', 'Review instructions.'),
+    'lib-docs/SKILL.md': skillFile('lib-docs', 'Keep documentation current', 'Docs instructions.'),
+  }],
+] as const) {
+  await mkdir(folder);
+  await git(folder, 'init', '--quiet', '-b', 'main');
+  await git(folder, 'config', 'user.name', 'Accio Browser Test');
+  await git(folder, 'config', 'user.email', 'browser@example.test');
+  await git(folder, 'config', 'core.autocrlf', 'false');
+  for (const [path, content] of Object.entries(files)) {
+    await mkdir(join(folder, path, '..'), { recursive: true });
+    await writeFile(join(folder, path), content);
+  }
+  await git(folder, 'add', '.');
+  await git(folder, 'commit', '--quiet', '-m', 'skills fixture');
+}
+const skillsCheckout = await client.call('checkouts.add', { path: skillsFolder, profileId: 'personal' });
+await client.call('skills.addSource', { id: 'library', name: 'Library', url: skillsLibrary, ref: 'HEAD' });
+const docs = (await client.call('resources.get', {})).skills.find((skill) => skill.name === 'lib-docs')!;
+await client.call('skills.setScope', { id: docs.id, scope: { ...docs.scope, profileIds: ['personal'] } });
+const skillsThread = await client.call('threads.start', { checkoutId: skillsCheckout.id, text: 'Skills fixture' });
+await client.waitFor('threads.changed', (threads) => threads.some((entry) => entry.id === skillsThread.id && entry.status === 'idle'));
 const thread = await client.call('threads.start', { profileId: 'personal', text: 'Inline chat fixture' });
 await client.waitFor('threads.changed', (threads) => threads.some((entry) => entry.id === thread.id && entry.status === 'idle'));
 const choice = await client.call('threads.start', { profileId: 'personal', text: 'Choice fixture' });

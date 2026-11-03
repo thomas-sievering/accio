@@ -28,6 +28,7 @@ export type TransportOptions = {
   port: number;
   token: string;
   router: Router;
+  routerFor?: (hubId: string | null) => Router | undefined;
   /** Built web client to serve; omitted in dev, where Vite serves it. */
   webRoot?: string;
   /** Other HTTP routes, such as thread assets and accio's MCP tools; resolves true when it answered. */
@@ -49,6 +50,7 @@ export async function startTransport(opts: TransportOptions) {
     });
   });
   const wss = new WebSocketServer({ noServer: true });
+  const contexts = new WeakMap<WebSocket, string | null>();
 
   http.on('upgrade', (req, socket, head) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
@@ -58,6 +60,8 @@ export async function startTransport(opts: TransportOptions) {
       return;
     }
     wss.handleUpgrade(req, socket, head, (ws) => {
+      const hubId = url.searchParams.get('hub');
+      contexts.set(ws, hubId);
       ws.on('message', async (data) => {
         let raw: unknown;
         try {
@@ -65,15 +69,16 @@ export async function startTransport(opts: TransportOptions) {
         } catch {
           return;
         }
-        const response = await opts.router.handle(raw);
+        const router = opts.routerFor ? opts.routerFor(hubId) : opts.router;
+        const response = router ? await router.handle(raw) : { type: 'response', id: (raw as any)?.id, ok: false, error: 'This hub connection is no longer available.' };
         if (response && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(response));
       });
     });
   });
 
-  const broadcast: Broadcast = (event, data) => {
+  const broadcast = (event: Parameters<Broadcast>[0], data: any, hubId?: string) => {
     const msg = JSON.stringify({ type: 'event', event, data } satisfies EventEnvelope);
-    for (const client of wss.clients) if (client.readyState === WebSocket.OPEN) client.send(msg);
+    for (const client of wss.clients) if (client.readyState === WebSocket.OPEN && (hubId === undefined || contexts.get(client) === hubId || contexts.get(client) === null && opts.routerFor?.(null) === opts.routerFor?.(hubId))) client.send(msg);
   };
 
   await new Promise<void>((done, fail) => {

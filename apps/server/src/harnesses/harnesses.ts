@@ -1,11 +1,11 @@
 import type { HarnessView } from '@accio/protocol';
-import { HARNESSES, type SharedSettings } from '@accio/hub';
+import { HARNESSES, type SettingsAccess } from '@accio/hub';
 import type { Router } from '../rpc/router.js';
 import type { Models } from './models.js';
 import { systemPromptView } from './systemPrompt.js';
 
 /** GLOSSARY: Harness. The ones accio knows, with the machines that report having each. */
-export function registerHarnesses(router: Router, settings: SharedSettings, models: Models) {
+export function registerHarnesses(router: Router, settings: SettingsAccess, models: Models) {
   router.on('harnesses.list', (): HarnessView[] =>
     HARNESSES.map((h) => {
       const offered = models.harnessModels(h.id);

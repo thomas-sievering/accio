@@ -33,6 +33,8 @@ export function layoutTranscript(items: TranscriptItem[], runningTurn?: string):
 }
 
 function layoutTurn(turn: TranscriptItem[], running: boolean): TranscriptBlock[] {
+  // Mid-turn corrections belong in the visible conversation, in their original order.
+  if (turn.some(item => item.kind === 'user' && item.steered)) return groupTools(turn);
   const finished = turn.at(-1)?.kind === 'finished' ? turn.at(-1) as Extract<TranscriptItem, { kind: 'finished' }> : undefined;
   if (!finished && !running) return groupTools(turn);
   const body = finished ? turn.slice(0, -1) : turn;
@@ -119,4 +121,11 @@ export function describeTools(items: ToolItem[]): string {
     return `${verb} ${n} ${n === 1 ? one : many}`;
   }).join(', ');
   return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** Whether a block shows the item, directly or inside a fold. */
+export function blocksHaveItem(blocks: TranscriptBlock[], itemId: string): boolean {
+  return blocks.some((block) => block.kind === 'item' ? block.item.id === itemId
+    : block.kind === 'tools' ? block.items.some((item) => item.id === itemId)
+    : blocksHaveItem(block.blocks, itemId));
 }

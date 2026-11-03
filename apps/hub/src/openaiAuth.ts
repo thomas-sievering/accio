@@ -26,7 +26,7 @@ async function listModels(client: CodexClient): Promise<CodexModel[]> {
 /** Only metadata is stored in profiles.json. Codex owns auth.json inside this hub-only credential home. */
 export type OpenAIAccount = { credentialId: string; email: string | null; planType: string | null; models: CodexModel[] };
 export type OpenAICredentials = { accessToken: string; accountId: string };
-type Pending = { client: CodexClient; credentialId: string; loginId?: string; success?: boolean; error?: string; timer: ReturnType<typeof setTimeout> };
+type Pending = { client: CodexClient; credentialId: string; loginId?: string; success?: boolean; error?: string; authUrl?: string; callbackUsed?: boolean; timer: ReturnType<typeof setTimeout> };
 const TTL = 15 * 60_000;
 
 /** Hub-side authentication only. This class never starts a Codex thread or turn. */
@@ -35,7 +35,8 @@ export class OpenAIAuth {
   private refreshing = new Map<string, Promise<OpenAICredentials>>();
   constructor(private home: string, private factory: CodexFactory = startCodex) {}
 
-  async begin() {
+  async begin(browser = false) {
+    if (browser && this.pending.size) throw new SignInError('Another ChatGPT sign-in is in progress on this hub. Finish or cancel it first.');
     const credentialId = randomUUID();
     const dir = this.directory(credentialId);
     await mkdir(dir, { recursive: true });
@@ -54,10 +55,36 @@ export class OpenAIAuth {
     });
     client.onExit(() => { if (pending.success === undefined) { pending.success = false; pending.error = 'Codex closed before sign-in finished. Start again.'; } });
     try {
-      const result = await client.request<{ loginId: string; verificationUrl: string; userCode: string }>('account/login/start', { type: 'chatgptDeviceCode' });
+      const result = await client.request<{ loginId: string; verificationUrl: string; userCode: string; authUrl?: string }>('account/login/start', { type: browser ? 'chatgpt' : 'chatgptDeviceCode' });
       pending.loginId = result.loginId;
-      return { signInId: id, url: result.verificationUrl, userCode: result.userCode };
+      pending.authUrl = result.authUrl;
+      return { signInId: id, url: result.authUrl ?? result.verificationUrl, ...(browser ? {} : { userCode: result.userCode }) };
     } catch (error) { await this.cancel(id); throw new SignInError((error as Error).message); }
+  }
+
+  async callback(id: string, code: string, state: string) {
+    const p = this.pending.get(id);
+    if (!p?.authUrl || p.callbackUsed || p.success !== undefined) throw new SignInError('This sign-in is no longer waiting for a browser callback.');
+    const auth = new URL(p.authUrl);
+    if (!state || state !== auth.searchParams.get('state') || typeof code !== 'string' || !code || code.length > 16_384) throw new SignInError('The browser callback does not match this sign-in.');
+    const target = new URL(auth.searchParams.get('redirect_uri') ?? '');
+    if (target.protocol !== 'http:' || !['localhost', '127.0.0.1'].includes(target.hostname) || target.pathname !== '/auth/callback' || !target.port || target.username || target.password || target.search || target.hash) throw new SignInError('Codex returned an unsupported browser callback.');
+    target.search = new URLSearchParams({ code, state }).toString();
+    p.callbackUsed = true;
+    const response = await fetch(target, { redirect: 'manual', signal: AbortSignal.timeout(30_000) });
+    await response.body?.cancel();
+    if (response.status !== 302 && !response.ok) throw new SignInError('Codex could not complete the browser sign-in. Start it again.');
+    if (response.status === 302 && response.headers.has('location')) {
+      const success = new URL(response.headers.get('location')!, target);
+      // Native Codex completes local-page logins only when /success is visited.
+      // Keep any token-bearing URL inside the hub and follow only this exact origin/path.
+      if (success.origin === target.origin && success.pathname === '/success' && !success.username && !success.password && !success.hash) {
+        const complete = await fetch(success, { redirect: 'manual', signal: AbortSignal.timeout(10_000) });
+        await complete.body?.cancel();
+        if (!complete.ok) throw new SignInError('Codex could not finish the browser sign-in. Start it again.');
+      }
+      // Hosted-success redirects already complete the native login. Never forward them.
+    }
   }
 
   async status(id: string): Promise<{ status: 'pending' } | { status: 'complete'; account: OpenAIAccount }> {
