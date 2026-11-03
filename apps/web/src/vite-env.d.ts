@@ -7,5 +7,6 @@ interface Window {
     serverOrigin?: string;
     pickFolder(): Promise<string | null>;
     openFolder(path: string): Promise<void>;
+    openPreview?(url: string): Promise<void>;
   };
 }

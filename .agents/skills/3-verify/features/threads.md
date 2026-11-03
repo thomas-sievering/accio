@@ -10,6 +10,7 @@ Users choose a project or profile, select a model, send prompts, observe streame
 - `threads-stop`: stop from composer/row/menu; resume interruptions; retry failed turns.
 - `threads-find`: title search, clear, profile/project filters and clear filter chip.
 - `threads-organize`: rename, snooze/wake, settle/reopen, shelf expansion/paging, confirmed deletion.
+- `threads-delivery`: owned Git worktrees, Ship/review intent, cancellation, remote verification, preview ownership and safe Archive.
 
 ## How to get to it (user POV)
 
@@ -32,6 +33,7 @@ Preconditions: healthy instance. Picker and signed-out gating can be tested afte
 - **Menus and shelves.** Right-click the intended thread's `.row-main` button using `{ button: 'right' }`; click menuitem matching `/^Rename/`, fill textbox `Thread title`, press Enter, reopen/reload to require persistence. Test hover `Snooze` and menuitem `Snooze until morning` separately, expand the `Snoozed` button, then test hover `Wake` and menu `Wake now`. Similarly test hover/menu `Settle`, expand `Settled`, then hover/menu `Reopen`. With more than five settled threads, exercise `Show … more` and require the additional rows.
 - **Delete confirmation.** Right-click a stopped/nonrunning row, click menuitem matching `/^Delete thread/`; require `Delete for good` before deletion. Dismiss the menu once to prove cancellation. Repeat and confirm; require row, stored thread and transcript removal. A running thread must disable deletion until stopped.
 - **Proof.** Capture actions, streaming and final snapshots, `threads.json` metadata and selected non-secret `transcripts/<id>.json` fields before teardown. The default smoke does not claim authenticated thread coverage.
+- **Delivery.** Use a disposable committed Git project with a disposable origin; never ship the user's repository as a verification step. New Git threads must have different worktree paths. Click `Shipping options`, choose `Prepare for review`, and require a PR without a merge. For Ship, click while a gated test harness is working; require `Ships when done`, persisted queued intent and exactly one subsequent delivery turn. `Cancel queued delivery` preserves the work turn. Require remote proof before `On <branch>` and `Archive` appear. Add an untracked file before Archive and require a refusal with the file and workspace preserved. After successful Archive, inspect only the owned worktree/branch removal and preserved conversation, then send a follow-up to prove fresh workspace allocation. The committed delivery browser fixture injects the coding harness; identify that boundary and keep real-provider/GitHub review coverage separate. An ordinary ready PR retains its workspace. Configure a project preview command that responds on PORT; require Open app to open a responding service, and Archive to stop that owned process tree. See [delivery notes](../../../../docs/plans/thread-delivery.md) for current limits.
 
 ## Gotchas
 
