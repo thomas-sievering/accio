@@ -193,8 +193,11 @@
   border-radius: 10px;
   background: var(--raised);
   color: var(--muted);
+  width: 100%;
+  text-align: start;
 }
-.hub-switcher.switchable:hover {
+.hub-switcher.switchable:hover,
+.hub-switcher[aria-expanded="true"] {
   background: var(--hover);
 }
 .hub-switcher-icon {
@@ -229,26 +232,48 @@
   color: var(--dim);
   font-size: 12px;
 }
-.hub-switcher .dot {
+.hub-switcher .dot,
+.hub-menu .dot {
+  flex: none;
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: var(--red);
 }
-.hub-switcher .dot.connected {
+.hub-switcher .dot.connected,
+.hub-menu .dot.connected {
   background: var(--green);
 }
-.hub-switcher .dot.connecting {
+.hub-switcher .dot.connecting,
+.hub-menu .dot.connecting {
   background: var(--dim);
 }
-.hub-switcher select {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  opacity: 0;
-  cursor: pointer;
-}
-.hub-switcher:has(select:focus-visible) {
+.hub-switcher:focus-visible {
   outline: 2px solid var(--line-2);
   outline-offset: 1px;
+}
+.hub-switcher > svg {
+  flex: none;
+  transition: transform 120ms ease;
+}
+.hub-switcher[aria-expanded="true"] > svg {
+  transform: rotate(180deg);
+}
+.menu.hub-menu {
+  width: anchor-size(width, 284px);
+  max-width: calc(100vw - 16px);
+  max-height: min(420px, 70vh);
+  overflow-y: auto;
+  border-radius: 12px;
+}
+.hub-menu .menu-item {
+  min-height: 54px;
+}
+.hub-menu .menu-item[aria-checked="true"] {
+  background: var(--active);
+}
+.hub-menu .menu-item:focus-visible {
+  background: var(--hover);
+  outline: 1px solid var(--line-2);
+  outline-offset: -1px;
 }
