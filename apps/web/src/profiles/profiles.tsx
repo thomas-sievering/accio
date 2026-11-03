@@ -1,5 +1,5 @@
 import { createContext, useContext, type ReactNode } from 'react';
-import type { AccountView, ProfileView, ModelSelection } from '@accio/protocol';
+import { DEFAULT_MODEL, type AccountView, type ProfileView, type ModelSelection } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { useLive, useLocalState } from '../app/useLive';
 
@@ -42,6 +42,8 @@ export function accountForModel(profile: ProfileView, model: ModelSelection) {
 export function hasSignedInAccount(profile: ProfileView) {
   return profile.providers.some((p) => p.available && p.accounts.some((a) => a.signedIn));
 }
+/** Codex-only profiles start on the ChatGPT account's default; everyone else on DEFAULT_MODEL. */
 export function defaultModel(profile?: ProfileView): ModelSelection {
-  return { harnessId: profile && !claudeAccount(profile)?.signedIn && profile.providers.some((p) => p.id === 'openai' && p.accounts.some((a) => a.signedIn)) ? 'codex' : 'claudeCode', modelId: 'default' };
+  const codexOnly = profile && !claudeAccount(profile)?.signedIn && profile.providers.some((p) => p.id === 'openai' && p.accounts.some((a) => a.signedIn));
+  return codexOnly ? { harnessId: 'codex', modelId: 'default' } : DEFAULT_MODEL;
 }

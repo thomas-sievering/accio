@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { modelKey, type ModelSelection, type ModelsState } from '@accio/protocol';
 import { useClient, useConnectionStatus } from '../app/connection';
+import { ChevronDown, ProviderLogo } from '../app/icons';
 
 /** A profile-scoped picker: favourites first, then each provider/harness pair. */
 export function ModelPicker({ profileId, harnessId, value, onChange, disabled = false }: {
@@ -53,6 +54,8 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
   }])).values()];
   const activeTab = tab === 'favorites' || groups.some((g) => g.id === tab) ? tab : 'favorites';
   const selected = models.find((m) => m.harnessId === value.harnessId && m.id === value.modelId);
+  // The provider logo already names the brand, so the trigger drops the "Claude " prefix.
+  const shortName = (selected?.name ?? fallbackName).replace(/^Claude\s+/, '').replace(/^./, (c) => c.toUpperCase());
   const visible = models.filter((m) => {
     const inTab = activeTab === 'favorites' ? favorites.has(modelKey({ harnessId: m.harnessId, modelId: m.id })) : JSON.stringify([m.providerId, m.harnessId]) === activeTab;
     return inTab && `${m.name} ${m.providerName} ${m.harnessName}`.toLowerCase().includes(query.toLowerCase().trim());
@@ -93,7 +96,9 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
         setPosition({ width, left: Math.max(12, Math.min(rect.left, window.innerWidth - width - 12)),
           ...(above ? { bottom: window.innerHeight - rect.top + 8, top: 'auto', maxHeight: rect.top - 20 } : { top: rect.bottom + 8, bottom: 'auto', maxHeight: window.innerHeight - rect.bottom - 20 }) });
       }}>
-      {selected?.name ?? fallbackName} <span aria-hidden="true">⌄</span>
+      <ProviderLogo providerId={selected?.providerId ?? (value.harnessId === 'codex' ? 'openai' : 'anthropic')} />
+      <span>{shortName}</span>
+      <ChevronDown />
     </button>
     <div id={id} ref={panel} popover="auto" className="model-picker" style={position} role="dialog" aria-label="Choose a model"
       onToggle={(event) => { if (event.newState === 'open') { setQuery(''); search.current?.focus(); } }}>

@@ -6,7 +6,8 @@ export const ModelSelection = z.object({ harnessId: z.string().min(1), modelId: 
 export type ModelSelection = z.output<typeof ModelSelection>;
 export type ModelView = HarnessModel & { harnessId: string; harnessName: string; providerName: string };
 export type ModelsState = { models: ModelView[]; favorites: ModelSelection[] };
-export const DEFAULT_MODEL: ModelSelection = { harnessId: 'claudeCode', modelId: 'default' };
+/** What new threads use until you pick another. Always a real model, never Claude Code's account default. */
+export const DEFAULT_MODEL: ModelSelection = { harnessId: 'claudeCode', modelId: 'opus' };
 export const modelKey = (model: ModelSelection) => JSON.stringify([model.harnessId, model.modelId]);
 
 const ProfileId = z.object({ profileId: z.string() });

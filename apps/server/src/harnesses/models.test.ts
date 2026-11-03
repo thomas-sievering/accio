@@ -19,8 +19,7 @@ describe('profile model choices', () => {
     const work = await c.call('profiles.save', { name: 'Work' });
     const available = await c.call('models.list', { profileId: personal.id });
     expect(available.models.map((m) => [m.harnessId, m.providerId, m.id])).toEqual([
-      ['claudeCode', 'anthropic', 'default'], ['claudeCode', 'anthropic', 'opus'],
-      ['claudeCode', 'anthropic', 'sonnet'], ['claudeCode', 'anthropic', 'haiku'],
+      ['claudeCode', 'anthropic', 'opus'], ['claudeCode', 'anthropic', 'sonnet'], ['claudeCode', 'anthropic', 'haiku'],
     ]);
     expect(await c.call('models.list', { profileId: work.id })).toEqual({ models: [], favorites: [] });
     await expect(c.call('models.favorite', { profileId: work.id, model: opus, favorite: true })).rejects.toThrow(/not available/);
@@ -87,7 +86,7 @@ describe('profile model choices', () => {
     expect(await c.call('threads.list', {})).toEqual([]);
     const thread = await c.call('threads.start', { checkoutId: checkout.id, text: 'hi' });
     expect(thread.model).toEqual(DEFAULT_MODEL);
-    expect(harness.runs[0]?.model).toBeUndefined();
+    expect(harness.runs[0]?.model).toBe('opus');
     await expect(c.call('threads.setModel', { threadId: thread.id, model: opus })).rejects.toThrow(/finish/);
     held.release();
     await c.waitFor('threads.changed', (ts) => ts.some((t) => t.id === thread.id && t.status === 'idle'));

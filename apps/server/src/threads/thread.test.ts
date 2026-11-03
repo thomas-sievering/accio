@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { TranscriptItem } from '@accio/protocol';
+import { DEFAULT_MODEL, type TranscriptItem } from '@accio/protocol';
 import {
   RESUME_PROMPT,
   assertResumable,
@@ -85,6 +85,11 @@ describe('shelving', () => {
   it('fills in shelf fields for threads stored before they existed', () => {
     const { snoozedUntil: _s, settledAt: _d, ...old } = t0;
     expect(fromStored(old)).toMatchObject({ snoozedUntil: null, settledAt: null });
+  });
+
+  it('moves threads off the Claude Code account default, which is no longer a choice', () => {
+    expect(fromStored({ ...t0, model: { harnessId: 'claudeCode', modelId: 'default' } }).model).toEqual(DEFAULT_MODEL);
+    expect(fromStored({ ...t0, model: { harnessId: 'claudeCode', modelId: 'haiku' } }).model).toEqual({ harnessId: 'claudeCode', modelId: 'haiku' });
   });
 });
 

@@ -27,9 +27,14 @@ export function newThread(input: { checkoutId: string; projectId: string; profil
   };
 }
 
-/** Threads stored before snooze and settle moved to the server have neither field. */
+/**
+ * Threads stored before snooze and settle moved to the server have neither field.
+ * Threads stored before model selection have no model, and ones stored while
+ * Claude Code's account default was a choice have modelId 'default'; both get DEFAULT_MODEL.
+ */
 export function fromStored(t: Omit<Thread, 'snoozedUntil' | 'settledAt' | 'model'> & Partial<Pick<Thread, 'snoozedUntil' | 'settledAt' | 'model'>>): Thread {
-  return { ...t, model: t.model ?? { ...DEFAULT_MODEL }, snoozedUntil: t.snoozedUntil ?? null, settledAt: t.settledAt ?? null };
+  const model = !t.model || (t.model.harnessId === 'claudeCode' && t.model.modelId === 'default') ? { ...DEFAULT_MODEL } : t.model;
+  return { ...t, model, snoozedUntil: t.snoozedUntil ?? null, settledAt: t.settledAt ?? null };
 }
 
 /**

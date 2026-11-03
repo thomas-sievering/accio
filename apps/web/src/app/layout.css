@@ -2,8 +2,32 @@
 /* Layout */
 .layout {
   display: grid;
-  grid-template-columns: 272px minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-w, 272px) minmax(0, 1fr);
   height: 100dvh;
+  position: relative;
+}
+
+/* Sits over the sidebar's border; out of the grid flow so the columns stay two. */
+.sidebar-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--sidebar-w, 272px) - 3px);
+  z-index: 5;
+  width: 6px;
+  cursor: col-resize;
+  -webkit-app-region: no-drag;
+  touch-action: none;
+}
+.sidebar-resizer:hover,
+.sidebar-resizer:focus-visible,
+.resizing-sidebar .sidebar-resizer {
+  background: linear-gradient(to right, transparent 2px, var(--line-2) 2px, var(--line-2) 4px, transparent 4px);
+  outline: none;
+}
+.resizing-sidebar {
+  cursor: col-resize;
+  user-select: none;
 }
 
 /* Sidebar: one scroller with sticky top bar and footer. */
