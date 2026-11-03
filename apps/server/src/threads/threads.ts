@@ -61,6 +61,7 @@ export class Threads {
   private messageOps = new Map<string, Promise<unknown>>();
   private queuedStarts = new Map<string, string>();
   private closing = false;
+  private restartCandidates = new Set<string>();
   private starts = new Set<Promise<unknown>>();
   private startingThreads = new Set<string>();
   private preparing = new Set<Promise<void>>();
@@ -153,6 +154,26 @@ export class Threads {
     }
     if (bound || recoveredRelease || interrupted.length || started.length < stored.length || this.list.some(t => t.delivery?.status === 'blocked')) await this.file.write(this.list);
     for (const thread of this.list) if (thread.delivery?.status === 'waiting') this.scheduleDeliveryCheck(thread.id);
+    this.restartCandidates = new Set(this.list.filter(t => t.status === 'interrupted' && t.resumeAfterRestart && t.sessionId && !t.delivery).map(t => t.id));
+  }
+
+  /** Called once tools are listening, and again when an offline hub reconnects. */
+  async continueAfterRestart() {
+    if (this.closing || this.profiles.client.status !== 'connected') return;
+    for (const id of this.restartCandidates) {
+      if (this.closing) return;
+      this.restartCandidates.delete(id);
+      const thread = this.list.find(t => t.id === id);
+      if (!thread || thread.status !== 'interrupted' || this.running.has(id)) continue;
+      try {
+        await this.beginTurn(id, RESUME_PROMPT, { resume: true });
+      } catch (error) {
+        if (this.closing) continue;
+        await this.update(id, t => ({ ...t, resumeAfterRestart: undefined }));
+        await this.addItem(id, { kind: 'notice', id: `${randomUUID()}:restart`, turnId: 'restart', tone: 'error',
+          text: `Could not automatically resume this thread: ${error instanceof Error ? error.message : String(error)}` });
+      }
+    }
   }
 
   register(router: Router) {
@@ -300,10 +321,11 @@ export class Threads {
         if (selected.harnessId !== thread.model.harnessId) throw new UserError('Start a new thread to change its harness.');
         return toView(await this.update(threadId, (t) => ({ ...t, model: selected })));
       })
-      .on('threads.stop', ({ threadId }) => {
+      .on('threads.stop', async ({ threadId }) => {
         const controller = this.running.get(this.require(threadId).id);
         if (!controller) throw new UserError('This thread is not working');
-        controller.abort();
+        try { await this.update(threadId, t => ({ ...t, resumeAfterRestart: false }), { quiet: true }); }
+        finally { controller.abort(); }
         return null;
       })
       .on('threads.resume', async ({ threadId }) => {
@@ -947,7 +969,11 @@ export class Threads {
   async close() {
     this.closing = true;
     for (const id of this.deliveryTimers.keys()) this.clearDeliveryCheck(id);
-    for (const controller of this.running.values()) controller.abort();
+    // Persist intent before aborting. An already-aborted controller belongs to an explicit Stop.
+    this.list = this.list.map(t => t.resumeAfterRestart !== false && this.running.has(t.id) && !this.running.get(t.id)!.signal.aborted && t.sessionId && !t.delivery
+      ? { ...t, resumeAfterRestart: true } : t);
+    try { await this.file.write(this.list); }
+    finally { for (const controller of this.running.values()) controller.abort(); }
     await Promise.allSettled([...this.starts]);
     await Promise.allSettled([...this.preparing]);
     await Promise.allSettled([...this.turns]);

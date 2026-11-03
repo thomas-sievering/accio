@@ -60,7 +60,7 @@ describe('interrupted turns', () => {
     expect(items.at(-1)).toMatchObject({ kind: 'finished' });
   });
 
-  it('marks a turn that was running when accio stopped as interrupted on the next start', async () => {
+  it('recovers crashed tools and automatically continues the saved session on the next start', async () => {
     const first = await setup(new FakeHarness());
     const home = first.t.home;
     const folder = join(home, 'repo');
@@ -86,19 +86,47 @@ describe('interrupted turns', () => {
       ]),
     );
 
-    const harness = new FakeHarness();
+    const harness = new FakeHarness(async function* (run) {
+      yield { type: 'system', subtype: 'init', session_id: SESSION };
+      await new Promise<void>(resolve => {
+        if (run.signal.aborted) resolve();
+        else run.signal.addEventListener('abort', () => resolve(), { once: true });
+      });
+    });
     const second = await setup(harness, home);
     stop = second.t.stop;
+    await expect.poll(() => harness.runs.length).toBe(1);
     const [after] = await second.c.call('threads.list', {});
-    expect(after?.status).toBe('interrupted');
+    expect(after?.status).toBe('running');
     const items = await second.c.call('threads.transcript', { threadId: thread.id });
     expect(items[1]).toMatchObject({ kind: 'tool', status: 'interrupted' });
     expect(items[2]).toMatchObject({ kind: 'notice', text: expect.stringMatching(/accio stopped/) });
-    // Nothing continues on its own.
-    expect(harness.runs).toHaveLength(0);
-
-    await second.c.call('threads.resume', { threadId: thread.id });
-    await statusIs(second.c, thread.id, 'idle');
     expect(harness.runs[0]).toMatchObject({ prompt: RESUME_PROMPT, sessionId: SESSION });
+  });
+
+  it.each(['missing profile', 'missing session', 'explicit stop'])('leaves recovery with %s available for manual action without retrying', async (failure) => {
+    const first = await setup(new FakeHarness());
+    const profile = await first.c.signedIn('Personal');
+    const thread = await first.c.call('threads.start', { profileId: profile.id, text: 'work' });
+    await statusIs(first.c, thread.id, 'idle');
+    await first.t.stop({ keepHome: true });
+    const path = join(first.t.home, 'threads.json');
+    const stored = JSON.parse(await readFile(path, 'utf8'));
+    stored[0].status = 'running';
+    if (failure === 'missing profile') stored[0].profileId = 'missing';
+    else if (failure === 'missing session') stored[0].sessionId = null;
+    else stored[0].resumeAfterRestart = false;
+    await writeFile(path, JSON.stringify(stored));
+    const harness = new FakeHarness();
+    const second = await setup(harness, first.t.home);
+    stop = second.t.stop;
+    await second.t.app.threads.continueAfterRestart();
+    if (failure === 'missing profile') {
+      await expect.poll(async () => (await second.c.call('threads.transcript', { threadId: thread.id }))
+        .some(item => item.kind === 'notice' && item.text.includes('Could not automatically resume'))).toBe(true);
+    }
+    await second.t.app.threads.continueAfterRestart();
+    expect(harness.runs).toHaveLength(0);
+    expect((await second.c.call('threads.list', {}))[0]?.status).toBe('interrupted');
   });
 });
