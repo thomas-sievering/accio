@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { normalizeRemoteUrl, parseRemotes, repoKeyOf } from './repoIdentity.js';
-import { addCheckout, removeCheckout, suggestAccount, type ProjectsData } from './project.js';
+import { addCheckout, removeCheckout, suggestProfile, type ProjectsData } from './project.js';
 
 describe('repo identity', () => {
   it.each([
@@ -42,33 +42,33 @@ describe('repo identity', () => {
   });
 });
 
-describe('suggestAccount', () => {
-  const accounts = [
+describe('suggestProfile', () => {
+  const profiles = [
     { id: 'personal', roots: ['S:\\'] },
     { id: 'hrc', roots: ['S:\\hrc'] },
   ];
   it('picks the most specific folder', () => {
-    expect(suggestAccount(accounts, 'S:\\hrc\\portal')).toBe('hrc');
-    expect(suggestAccount(accounts, 's:/accio')).toBe('personal');
-    expect(suggestAccount(accounts, 'S:\\hrcx')).toBe('personal');
-    expect(suggestAccount(accounts, 'C:\\other')).toBeNull();
+    expect(suggestProfile(profiles, 'S:\\hrc\\portal')).toBe('hrc');
+    expect(suggestProfile(profiles, 's:/accio')).toBe('personal');
+    expect(suggestProfile(profiles, 'S:\\hrcx')).toBe('personal');
+    expect(suggestProfile(profiles, 'C:\\other')).toBeNull();
   });
 });
 
 describe('checkouts', () => {
   const empty: ProjectsData = { projects: [], checkouts: [] };
 
-  it('creates a project for a new repo under the chosen account', () => {
+  it('creates a project for a new repo under the chosen profile', () => {
     const { data, checkout } = addCheckout(empty, { root: 'S:\\accio', repoKey: 'github.com/me/accio' }, 'personal');
-    expect(data.projects).toEqual([expect.objectContaining({ name: 'accio', accountId: 'personal', repoKey: 'github.com/me/accio' })]);
+    expect(data.projects).toEqual([expect.objectContaining({ name: 'accio', profileId: 'personal', repoKey: 'github.com/me/accio' })]);
     expect(checkout.projectId).toBe(data.projects[0]!.id);
   });
 
-  it('joins a second checkout of the same repo to its project, keeping its account', () => {
+  it('joins a second checkout of the same repo to its project, keeping its profile', () => {
     const first = addCheckout(empty, { root: 'S:\\accio', repoKey: 'github.com/me/accio' }, 'personal').data;
     const { data } = addCheckout(first, { root: 'C:\\wt\\accio', repoKey: 'github.com/me/accio' }, 'hrc');
     expect(data.projects).toHaveLength(1);
-    expect(data.projects[0]!.accountId).toBe('personal');
+    expect(data.projects[0]!.profileId).toBe('personal');
     expect(data.checkouts).toHaveLength(2);
   });
 
@@ -78,10 +78,10 @@ describe('checkouts', () => {
     expect(data.projects).toHaveLength(2);
   });
 
-  it('refuses the same folder twice and a new project without an account', () => {
+  it('refuses the same folder twice and a new project without a profile', () => {
     const first = addCheckout(empty, { root: 'S:\\a', repoKey: null }, 'personal').data;
     expect(() => addCheckout(first, { root: 's:/a/', repoKey: null }, 'personal')).toThrow(/already added/);
-    expect(() => addCheckout(empty, { root: 'S:\\b', repoKey: null }, undefined)).toThrow(/account/);
+    expect(() => addCheckout(empty, { root: 'S:\\b', repoKey: null }, undefined)).toThrow(/profile/);
   });
 
   it('drops a project with its last checkout', () => {

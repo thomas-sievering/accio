@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { TranscriptItem } from '@accio/protocol';
-import type { Accounts } from '../accounts/accounts.js';
-import { configFolderOf } from '../accounts/claudeConfigFolder.js';
+import type { Profiles } from '../profiles/profiles.js';
+import { configFolderOf } from '../profiles/claudeConfigFolder.js';
 import type { Projects } from '../projects/projects.js';
 import type { Broadcast, Router } from '../rpc/router.js';
 import { UserError } from '../rpc/router.js';
@@ -37,14 +37,14 @@ export class Threads {
 
   constructor(
     private home: string,
-    private accounts: Accounts,
+    private profiles: Profiles,
     private projects: Projects,
     private agent: Agent,
     private broadcast: Broadcast,
   ) {
     this.file = new JsonFile(join(home, 'threads.json'), () => []);
     projects.onCheckInUse((checkoutId) => this.countUsing((t) => t.checkoutId === checkoutId));
-    accounts.onCheckInUse((accountId) => this.countUsing((t) => t.accountId === accountId));
+    profiles.onCheckInUse((profileId) => this.countUsing((t) => t.profileId === profileId));
   }
 
   private countUsing(pred: (t: Thread) => boolean): string | undefined {
@@ -76,9 +76,9 @@ export class Threads {
       .on('threads.create', async ({ checkoutId }) => {
         const checkout = this.projects.checkout(checkoutId);
         const project = this.projects.projectOf(checkout);
-        this.accounts.require(project.accountId);
-        // GLOSSARY: a thread keeps the account it started with for its whole life.
-        const thread = newThread({ checkoutId, projectId: project.id, accountId: project.accountId }, now());
+        this.profiles.require(project.profileId);
+        // GLOSSARY: a thread keeps the profile it started with for its whole life.
+        const thread = newThread({ checkoutId, projectId: project.id, profileId: project.profileId }, now());
         await this.commit([...this.list, thread]);
         return toView(thread);
       })
@@ -116,8 +116,8 @@ export class Threads {
 
   private async beginTurn(threadId: string, text: string, { resume = false } = {}) {
     const thread = this.require(threadId);
-    if (!this.accounts.get(thread.accountId)) throw new UserError('The account this thread started with no longer exists');
-    const access = await this.accounts.hubAccess(thread.accountId);
+    if (!this.profiles.get(thread.profileId)) throw new UserError('The profile this thread started with no longer exists');
+    const access = await this.profiles.hubAccess(thread.profileId);
     const checkout = this.projects.checkout(thread.checkoutId);
 
     const started = startTurn(thread, text, now());
@@ -127,7 +127,7 @@ export class Threads {
 
     const controller = new AbortController();
     this.running.set(thread.id, controller);
-    const env = agentEnv(process.env, access, configFolderOf(this.home, thread.accountId));
+    const env = agentEnv(process.env, access, configFolderOf(this.home, thread.profileId));
     const turn = this.runTurn(started, turnId, { cwd: checkout.path, prompt: text, env, signal: controller.signal });
     this.turns.add(turn);
     void turn.finally(() => this.turns.delete(turn));

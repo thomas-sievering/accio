@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import type { ProjectsState } from '@accio/protocol';
-import type { Accounts } from '../accounts/accounts.js';
+import type { Profiles } from '../profiles/profiles.js';
 import type { Broadcast, Router } from '../rpc/router.js';
 import { UserError } from '../rpc/router.js';
 import { JsonFile } from '../store/jsonFile.js';
@@ -11,7 +11,7 @@ import {
   projectNameFor,
   removeCheckout,
   samePath,
-  suggestAccount,
+  suggestProfile,
   type Checkout,
   type Project,
   type ProjectsData,
@@ -28,12 +28,12 @@ export class Projects {
 
   constructor(
     home: string,
-    private accounts: Accounts,
+    private profiles: Profiles,
     private broadcast: Broadcast,
   ) {
     this.file = new JsonFile(join(home, 'projects.json'), () => ({ projects: [], checkouts: [] }));
-    accounts.onCheckInUse((accountId) => {
-      const names = this.data.projects.filter((p) => p.accountId === accountId).map((p) => p.name);
+    profiles.onCheckInUse((profileId) => {
+      const names = this.data.projects.filter((p) => p.profileId === profileId).map((p) => p.name);
       return names.length ? `project${names.length > 1 ? 's' : ''} ${names.join(', ')}` : undefined;
     });
   }
@@ -73,13 +73,13 @@ export class Projects {
           repoKey: facts.repoKey,
           existingProject: findProjectFor(this.data, facts),
           alreadyAdded: this.data.checkouts.some((c) => samePath(c.path, facts.root)),
-          suggestedAccountId: suggestAccount(this.accounts.all(), facts.root),
+          suggestedProfileId: suggestProfile(this.profiles.all(), facts.root),
         };
       })
-      .on('checkouts.add', async ({ path, accountId }) => {
-        if (accountId) this.accounts.require(accountId);
+      .on('checkouts.add', async ({ path, profileId }) => {
+        if (profileId) this.profiles.require(profileId);
         const facts = await inspectFolder(path);
-        const { data, checkout } = addCheckout(this.data, facts, accountId);
+        const { data, checkout } = addCheckout(this.data, facts, profileId);
         await this.commit(data);
         return checkout;
       })
@@ -91,12 +91,12 @@ export class Projects {
         await this.commit(removeCheckout(this.data, id));
         return null;
       })
-      .on('projects.setAccount', async ({ projectId, accountId }) => {
-        this.accounts.require(accountId);
+      .on('projects.setProfile', async ({ projectId, profileId }) => {
+        this.profiles.require(profileId);
         const project = this.data.projects.find((p) => p.id === projectId);
         if (!project) throw new UserError('No such project');
-        // GLOSSARY: a thread keeps the account it started with, so this only affects new threads.
-        const updated = { ...project, accountId };
+        // GLOSSARY: a thread keeps the profile it started with, so this only affects new threads.
+        const updated = { ...project, profileId };
         await this.commit({ ...this.data, projects: this.data.projects.map((p) => (p.id === projectId ? updated : p)) });
         return updated;
       });

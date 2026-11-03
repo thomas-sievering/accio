@@ -2,7 +2,8 @@ import { Router, type Broadcast } from './rpc/router.js';
 import { startTransport } from './rpc/transport.js';
 import { registerMachine } from './machine/machine.js';
 import { Hub, startHubProxy, type Fetch } from '@accio/hub';
-import { Accounts } from './accounts/accounts.js';
+import { Profiles } from './profiles/profiles.js';
+import { renameAccountsToProfiles } from './store/renameAccountsToProfiles.js';
 import { Projects } from './projects/projects.js';
 import { Threads } from './threads/threads.js';
 import type { Agent } from './threads/agent.js';
@@ -36,6 +37,8 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
 
   registerMachine(router);
 
+  await renameAccountsToProfiles(opts.home);
+
   // This machine is the home machine in v0.1, so it runs the hub in-process.
   const hub = new Hub(opts.home, deps.claudeFetch ?? fetch);
   await hub.load();
@@ -47,15 +50,15 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
     fetchImpl: deps.claudeFetch,
   });
 
-  const accounts = new Accounts(opts.home, hub, hubProxy.url, broadcast);
-  await accounts.load();
-  accounts.register(router);
+  const profiles = new Profiles(opts.home, hub, hubProxy.url, broadcast);
+  await profiles.load();
+  profiles.register(router);
 
-  const projects = new Projects(opts.home, accounts, broadcast);
+  const projects = new Projects(opts.home, profiles, broadcast);
   await projects.load();
   projects.register(router);
 
-  const threads = new Threads(opts.home, accounts, projects, deps.agent ?? claudeAgent, broadcast);
+  const threads = new Threads(opts.home, profiles, projects, deps.agent ?? claudeAgent, broadcast);
   await threads.load();
   threads.register(router);
 
@@ -64,7 +67,7 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
   return {
     ...transport,
     router,
-    accounts,
+    profiles,
     projects,
     threads,
     hub,

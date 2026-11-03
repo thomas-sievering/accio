@@ -199,7 +199,7 @@ pre {
   padding: 0 20px;
 }
 
-/* Account switcher (botbot's workspace trigger) */
+/* Profile switcher (botbot's workspace trigger) */
 .switcher {
   display: flex;
   align-items: center;
@@ -228,7 +228,7 @@ pre {
   height: 13px;
 }
 
-/* Account monogram: a solid tile per account hue, lit from above. */
+/* Profile monogram: a solid tile per profile hue, lit from above. */
 .tile {
   --tile: oklch(0.55 0.13 var(--hue, 0));
   flex: none;
@@ -1117,8 +1117,8 @@ button.row {
   color: var(--amber) !important;
 }
 
-/* Shown above the composer when the thread's account can't run */
-.account-note {
+/* Shown above the composer when the thread's profile can't run */
+.profile-note {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -1128,10 +1128,10 @@ button.row {
   font-size: 13px;
   color: var(--muted);
 }
-.account-note span {
+.profile-note span {
   flex: 1;
 }
-.account-note b {
+.profile-note b {
   color: var(--ink);
   font-weight: 600;
 }

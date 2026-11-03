@@ -2,13 +2,13 @@ import { useState } from 'react';
 import type { ProjectView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { Sheet } from '../app/Sheet';
-import { useAccounts } from '../accounts/accounts';
+import { useProfiles } from '../profiles/profiles';
 import { useProjects } from './projects';
 
-/** A project's account and its checkouts on this machine. */
+/** A project's profile and its checkouts on this machine. */
 export function ProjectSheet({ project, onClose }: { project: ProjectView; onClose: () => void }) {
   const client = useClient();
-  const { accounts = [] } = useAccounts();
+  const { profiles = [] } = useProfiles();
   const { checkoutsOf } = useProjects();
   const [error, setError] = useState<string>();
 
@@ -23,18 +23,18 @@ export function ProjectSheet({ project, onClose }: { project: ProjectView; onClo
           </div>
         </div>
         <label className="field">
-          <span>Account</span>
+          <span>Profile</span>
           <select
-            value={project.accountId}
-            onChange={(e) => act(client.call('projects.setAccount', { projectId: project.id, accountId: e.target.value }))}
+            value={project.profileId}
+            onChange={(e) => act(client.call('projects.setProfile', { projectId: project.id, profileId: e.target.value }))}
           >
-            {accounts.map((a) => (
+            {profiles.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name}
               </option>
             ))}
           </select>
-          <small className="hint">Applies to new threads. Existing threads keep the account they started with.</small>
+          <small className="hint">Applies to new threads. Existing threads keep the profile they started with.</small>
         </label>
         <div className="field">
           <span>Checkouts on this machine</span>

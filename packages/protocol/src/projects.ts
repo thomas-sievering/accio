@@ -1,11 +1,11 @@
 import { z } from 'zod';
 import { method } from './rpc.js';
 
-/** GLOSSARY: Project. A repository, recognised by its git remote; belongs to exactly one account. */
+/** GLOSSARY: Project. A repository, recognised by its git remote; belongs to exactly one profile. */
 export type ProjectView = {
   id: string;
   name: string;
-  accountId: string;
+  profileId: string;
   /** Normalised remote, such as github.com/owner/repo. Null for a folder without a remote. */
   repoKey: string | null;
 };
@@ -31,21 +31,21 @@ export type FolderInspection = {
   /** Set when a checkout of the same repository is already a project. */
   existingProject: ProjectView | null;
   alreadyAdded: boolean;
-  /** From the accounts' folders; null when none matches. */
-  suggestedAccountId: string | null;
+  /** From the profiles' folders; null when none matches. */
+  suggestedProfileId: string | null;
 };
 
 const Path = z.object({ path: z.string().trim().min(1, 'Choose a folder') });
-const AddCheckout = z.object({ path: z.string().trim().min(1), accountId: z.string().optional() });
+const AddCheckout = z.object({ path: z.string().trim().min(1), profileId: z.string().optional() });
 const ById = z.object({ id: z.string() });
-const SetAccount = z.object({ projectId: z.string(), accountId: z.string() });
+const SetProfile = z.object({ projectId: z.string(), profileId: z.string() });
 
 export const projectMethods = {
   'projects.get': method<z.ZodObject<{}>, ProjectsState>(z.object({})),
   'checkouts.inspect': method<typeof Path, FolderInspection>(Path),
   'checkouts.add': method<typeof AddCheckout, CheckoutView>(AddCheckout),
   'checkouts.remove': method<typeof ById, null>(ById),
-  'projects.setAccount': method<typeof SetAccount, ProjectView>(SetAccount),
+  'projects.setProfile': method<typeof SetProfile, ProjectView>(SetProfile),
 };
 
 export type ProjectEvents = {

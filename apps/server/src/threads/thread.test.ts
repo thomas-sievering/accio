@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { TranscriptItem } from '@accio/protocol';
 import { assertResumable, closeOpenTools, endTurn, newThread, recoverAfterRestart, startTurn, titleFrom } from './thread.js';
 
-const t0 = newThread({ checkoutId: 'c', projectId: 'p', accountId: 'a' }, '2026-01-01T00:00:00Z');
+const t0 = newThread({ checkoutId: 'c', projectId: 'p', profileId: 'a' }, '2026-01-01T00:00:00Z');
 
 describe('thread lifecycle', () => {
   it('names the thread after the first message only', () => {

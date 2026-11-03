@@ -1,9 +1,9 @@
-import type { HubAccess } from '../accounts/claudeConfigFolder.js';
+import type { HubAccess } from '../profiles/claudeConfigFolder.js';
 
 /**
  * Variables that could carry another login, another provider or another config
- * into a thread. They are dropped before the account's own values are set, so a
- * thread can only ever reach its account's hub proxy (ADR 0002, ADR 0007).
+ * into a thread. They are dropped before the profile's own values are set, so a
+ * thread can only ever reach its profile's hub proxy (ADR 0002, ADR 0007).
  */
 const INHERITED_BLOCKLIST = [
   /^ANTHROPIC_/,

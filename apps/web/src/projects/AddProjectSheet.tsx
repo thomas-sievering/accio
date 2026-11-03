@@ -2,15 +2,15 @@ import { useEffect, useState, type FormEvent } from 'react';
 import type { FolderInspection } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { Sheet } from '../app/Sheet';
-import { useAccounts } from '../accounts/accounts';
+import { useProfiles } from '../profiles/profiles';
 
 /** Add a folder on this machine. A known repo joins its project; anything else starts one. */
 export function AddProjectSheet({ onClose }: { onClose: () => void }) {
   const client = useClient();
-  const { accounts = [], filter } = useAccounts();
+  const { profiles = [], filter } = useProfiles();
   const [path, setPath] = useState('');
   const [seen, setSeen] = useState<FolderInspection | null>(null);
-  const [accountId, setAccountId] = useState('');
+  const [profileId, setProfileId] = useState('');
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
 
@@ -25,7 +25,7 @@ export function AddProjectSheet({ onClose }: { onClose: () => void }) {
         (r) => {
           if (!live) return;
           setSeen(r);
-          setAccountId(r.existingProject?.accountId ?? r.suggestedAccountId ?? (filter !== 'all' ? filter : (accounts[0]?.id ?? '')));
+          setProfileId(r.existingProject?.profileId ?? r.suggestedProfileId ?? (filter !== 'all' ? filter : (profiles[0]?.id ?? '')));
         },
         (e: Error) => live && setError(e.message),
       );
@@ -48,7 +48,7 @@ export function AddProjectSheet({ onClose }: { onClose: () => void }) {
     if (!seen) return;
     setBusy(true);
     try {
-      await client.call('checkouts.add', { path: seen.path, accountId: seen.existingProject ? undefined : accountId });
+      await client.call('checkouts.add', { path: seen.path, profileId: seen.existingProject ? undefined : profileId });
       onClose();
     } catch (err) {
       setError((err as Error).message);
@@ -95,21 +95,21 @@ export function AddProjectSheet({ onClose }: { onClose: () => void }) {
             <p className="note">This folder is already added.</p>
           ) : joining ? (
             <p className="note">
-              Joins the existing project <b>{joining.name}</b> as another checkout, under its account{' '}
-              <b>{accounts.find((a) => a.id === joining.accountId)?.name}</b>.
+              Joins the existing project <b>{joining.name}</b> as another checkout, under its profile{' '}
+              <b>{profiles.find((a) => a.id === joining.profileId)?.name}</b>.
             </p>
           ) : (
             seen && (
               <label className="field">
-                <span>Account</span>
-                <select value={accountId} onChange={(e) => setAccountId(e.target.value)} required>
+                <span>Profile</span>
+                <select value={profileId} onChange={(e) => setProfileId(e.target.value)} required>
                   <option value="" disabled>
                     Choose…
                   </option>
-                  {accounts.map((a) => (
+                  {profiles.map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.name}
-                      {a.id === seen.suggestedAccountId ? ' (from its folders)' : ''}
+                      {a.id === seen.suggestedProfileId ? ' (from its folders)' : ''}
                     </option>
                   ))}
                 </select>
@@ -123,7 +123,7 @@ export function AddProjectSheet({ onClose }: { onClose: () => void }) {
           <button type="button" className="ghost" onClick={onClose}>
             Cancel
           </button>
-          <button type="submit" className="ghost primary" disabled={!seen || seen.alreadyAdded || (!joining && !accountId) || busy}>
+          <button type="submit" className="ghost primary" disabled={!seen || seen.alreadyAdded || (!joining && !profileId) || busy}>
             Add
           </button>
         </footer>

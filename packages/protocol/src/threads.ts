@@ -3,13 +3,13 @@ import { method } from './rpc.js';
 
 /**
  * GLOSSARY: Thread. A durable conversation with an agent inside one checkout.
- * It keeps the account it started with for its whole life.
+ * It keeps the profile it started with for its whole life.
  */
 export type ThreadView = {
   id: string;
   checkoutId: string;
   projectId: string;
-  accountId: string;
+  profileId: string;
   title: string;
   status: ThreadStatus;
   createdAt: string;

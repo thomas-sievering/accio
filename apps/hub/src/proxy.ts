@@ -22,9 +22,9 @@ const DROP_RESPONSE = new Set(['content-encoding', 'content-length', 'transfer-e
 export type ProxyOptions = { hub: Hub; host: string; port: number; upstream?: string; fetchImpl?: Fetch };
 
 /**
- * The hub's front door for agents. Claude Code calls it with an account's access
+ * The hub's front door for agents. Claude Code calls it with a profile's access
  * key (ANTHROPIC_AUTH_TOKEN, or an API key header); the hub swaps that key for the
- * account's OAuth token and forwards to Anthropic. The caller is the real Claude
+ * profile's OAuth token and forwards to Anthropic. The caller is the real Claude
  * Code, so nothing else about the request changes (ADR 0007).
  */
 export async function startHubProxy({ hub, host, port, upstream = ANTHROPIC_API, fetchImpl = fetch }: ProxyOptions) {
@@ -38,11 +38,11 @@ export async function startHubProxy({ hub, host, port, upstream = ANTHROPIC_API,
 
   async function handle(req: IncomingMessage, res: ServerResponse) {
     const key = keyOf(req);
-    const account = key ? hub.accountForKey(key) : undefined;
-    if (!account) return sendError(res, 401, 'authentication_error', 'Unknown accio hub key');
+    const profile = key ? hub.profileForKey(key) : undefined;
+    if (!profile) return sendError(res, 401, 'authentication_error', 'Unknown accio hub key');
 
-    let token = await hub.accessToken(account.id);
-    if (!token) return sendError(res, 401, 'authentication_error', `accio account ${account.id} is not signed in with Claude`);
+    let token = await hub.accessToken(profile.id);
+    if (!token) return sendError(res, 401, 'authentication_error', `accio profile ${profile.id} is not signed in with Claude`);
 
     const body = await readBody(req);
     const send = (accessToken: string) =>
@@ -56,7 +56,7 @@ export async function startHubProxy({ hub, host, port, upstream = ANTHROPIC_API,
     if (upstreamRes.status === 401) {
       // The token may have been revoked or rotated early: refresh once and retry.
       await upstreamRes.body?.cancel();
-      token = await hub.accessToken(account.id, { force: true });
+      token = await hub.accessToken(profile.id, { force: true });
       upstreamRes = await send(token!);
     }
 

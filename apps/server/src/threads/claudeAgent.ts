@@ -7,7 +7,7 @@ const HARD_STOP_AFTER_MS = 3000;
 /**
  * Runs a turn through the Claude Agent SDK, the way T3 does (ADR 0006). Agents
  * get every permission without prompts (ADR 0005). Settings come from the
- * account's accio-owned config folder via CLAUDE_CONFIG_DIR (ADR 0003) and from
+ * profile's accio-owned config folder via CLAUDE_CONFIG_DIR (ADR 0003) and from
  * the checkout's own .claude folder and CLAUDE.md.
  */
 export const claudeAgent: Agent = {

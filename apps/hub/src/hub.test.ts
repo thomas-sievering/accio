@@ -82,15 +82,15 @@ describe('hub', () => {
     return { home, hub, auth, api, call };
   }
 
-  it('signs an account in from a pasted code and stores only on the hub', async () => {
+  it('signs a profile in from a pasted code and stores only on the hub', async () => {
     const { hub, home } = await setup();
-    await hub.ensureAccount('personal');
+    await hub.ensureProfile('personal');
     const { signInId, url } = hub.beginSignIn('personal');
     const state = new URL(url).searchParams.get('state');
     await hub.completeSignIn(signInId, `good#${state}`);
     expect(hub.summary('personal')).toEqual({ signedIn: true, email: 'me@example.com', organization: null, claudeAccountId: 'claude-me' });
     await hub.close();
-    const stored = JSON.parse(await readFile(join(home, 'hub', 'accounts.json'), 'utf8'));
+    const stored = JSON.parse(await readFile(join(home, 'hub', 'profiles.json'), 'utf8'));
     expect(stored[0].login.accessToken).toBe('token-1');
     // A sign-in is used once.
     await expect(hub.completeSignIn(signInId, 'good')).rejects.toThrow(/expired/);
@@ -98,7 +98,7 @@ describe('hub', () => {
 
   it('lets accio refuse a login before it is stored', async () => {
     const { hub } = await setup();
-    await hub.ensureAccount('hrc');
+    await hub.ensureProfile('hrc');
     const { signInId } = hub.beginSignIn('hrc');
     await expect(
       hub.completeSignIn(signInId, 'job', () => {
@@ -108,10 +108,10 @@ describe('hub', () => {
     expect(hub.summary('hrc').signedIn).toBe(false);
   });
 
-  it('forwards an account’s requests with its own token, and only its own', async () => {
+  it('forwards a profile’s requests with its own token, and only its own', async () => {
     const { hub, api, call } = await setup();
-    const personalKey = await hub.ensureAccount('personal');
-    const hrcKey = await hub.ensureAccount('hrc');
+    const personalKey = await hub.ensureProfile('personal');
+    const hrcKey = await hub.ensureProfile('hrc');
     const a = hub.beginSignIn('personal');
     await hub.completeSignIn(a.signInId, 'good');
     const b = hub.beginSignIn('hrc');
@@ -132,9 +132,9 @@ describe('hub', () => {
     expect(api.seen[1]!.headers.authorization).toBe('Bearer token-2');
   });
 
-  it('refuses unknown keys and accounts that are not signed in', async () => {
+  it('refuses unknown keys and profiles that are not signed in', async () => {
     const { hub, api, call } = await setup();
-    const key = await hub.ensureAccount('personal');
+    const key = await hub.ensureProfile('personal');
     expect((await call('nope')).status).toBe(401);
     const notSignedIn = await call(key);
     expect(notSignedIn.status).toBe(401);
@@ -144,7 +144,7 @@ describe('hub', () => {
 
   it('refreshes a token close to expiry, and retries once after a 401', async () => {
     const { hub, auth, api, call } = await setup();
-    const key = await hub.ensureAccount('personal');
+    const key = await hub.ensureProfile('personal');
     const s = hub.beginSignIn('personal');
     await hub.completeSignIn(s.signInId, 'short'); // expires within the refresh margin
 

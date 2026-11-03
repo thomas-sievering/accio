@@ -1,17 +1,17 @@
 import type { ThreadView } from '@accio/protocol';
 import { useClient } from '../app/connection';
-import { AccountTile, useAccounts } from '../accounts/accounts';
+import { ProfileTile, useProfiles } from '../profiles/profiles';
 import { useProjects } from '../projects/projects';
 import { Composer } from './Composer';
 import { Transcript } from './Transcript';
 import { useTranscript } from './threads';
 
-export function ThreadPane({ thread, onOpenAccount }: { thread: ThreadView; onOpenAccount: (accountId: string) => void }) {
+export function ThreadPane({ thread, onOpenProfile }: { thread: ThreadView; onOpenProfile: (profileId: string) => void }) {
   const client = useClient();
-  const { accounts = [] } = useAccounts();
+  const { profiles = [] } = useProfiles();
   const { state } = useProjects();
   const items = useTranscript(thread.id);
-  const account = accounts.find((a) => a.id === thread.accountId);
+  const profile = profiles.find((a) => a.id === thread.profileId);
   const checkout = state?.checkouts.find((c) => c.id === thread.checkoutId);
   const running = thread.status === 'running';
 
@@ -21,8 +21,8 @@ export function ThreadPane({ thread, onOpenAccount }: { thread: ThreadView; onOp
         <div className="thread-title">
           <b>{thread.title}</b>
           <span className="thread-where" title={checkout?.path}>
-            <AccountTile account={account} size="xs" />
-            {account?.name ?? 'unknown account'}
+            <ProfileTile profile={profile} size="xs" />
+            {profile?.name ?? 'unknown profile'}
             {checkout && <span className="faint"> · {checkout.path}</span>}
           </span>
         </div>
@@ -36,13 +36,13 @@ export function ThreadPane({ thread, onOpenAccount }: { thread: ThreadView; onOp
       ) : (
         <div className="empty" />
       )}
-      {account && !account.signIn && (
-        <div className="account-note">
+      {profile && !profile.signIn && (
+        <div className="profile-note">
           <span>
-            <b>{account.name}</b> isn’t signed in with Claude, so this thread can’t run yet.
+            <b>{profile.name}</b> isn’t signed in with Claude, so this thread can’t run yet.
           </span>
-          <button className="ghost" onClick={() => onOpenAccount(account.id)}>
-            Open {account.name}
+          <button className="ghost" onClick={() => onOpenProfile(profile.id)}>
+            Open {profile.name}
           </button>
         </div>
       )}

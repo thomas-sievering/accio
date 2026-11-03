@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react';
 import type { ProjectView } from '@accio/protocol';
 import { More } from '../app/icons';
-import { AccountTile, useAccounts } from '../accounts/accounts';
+import { ProfileTile, useProfiles } from '../profiles/profiles';
 import { useProjects } from './projects';
 
-/** Sidebar groups, one per project of the selected account. */
+/** Sidebar groups, one per project of the selected profile. */
 export function ProjectList({
   onOpenProject,
   renderBody,
@@ -13,11 +13,11 @@ export function ProjectList({
   /** What goes under each project head (its threads, from the threads slice). */
   renderBody?: (p: ProjectView) => ReactNode;
 }) {
-  const { accounts = [], filter } = useAccounts();
+  const { profiles = [], filter } = useProfiles();
   const { visible, state } = useProjects();
 
   if (state && visible.length === 0) {
-    return <p className="side-empty">No projects{filter === 'all' ? '' : ' for this account'} yet.</p>;
+    return <p className="side-empty">No projects{filter === 'all' ? '' : ' for this profile'} yet.</p>;
   }
 
   return (
@@ -25,7 +25,7 @@ export function ProjectList({
       {visible.map((p) => (
         <section key={p.id} className="group">
           <div className="group-head">
-            {filter === 'all' && <AccountTile account={accounts.find((a) => a.id === p.accountId)} size="xs" />}
+            {filter === 'all' && <ProfileTile profile={profiles.find((a) => a.id === p.profileId)} size="xs" />}
             <span className="group-name" title={p.repoKey ?? undefined}>
               {p.name}
             </span>

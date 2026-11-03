@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { MachineBadge } from '../machine/MachineBadge';
-import { AccountsProvider, useAccounts } from '../accounts/accounts';
-import { AccountSwitcher } from '../accounts/AccountSwitcher';
-import { AccountsSheet } from '../accounts/AccountsSheet';
+import { ProfilesProvider, useProfiles } from '../profiles/profiles';
+import { ProfileSwitcher } from '../profiles/ProfileSwitcher';
+import { ProfilesSheet } from '../profiles/ProfilesSheet';
 import { ProjectsProvider, useProjects } from '../projects/projects';
 import { ProjectList } from '../projects/ProjectList';
 import { AddProjectSheet } from '../projects/AddProjectSheet';
@@ -13,40 +13,40 @@ import { ThreadPane } from '../threads/ThreadPane';
 import { ThreadShelves } from '../threads/ThreadShelves';
 import { FolderPlus, Users } from './icons';
 
-type OpenSheet = { kind: 'accounts'; accountId?: string } | { kind: 'addProject' } | { kind: 'project'; id: string } | null;
+type OpenSheet = { kind: 'profiles'; profileId?: string } | { kind: 'addProject' } | { kind: 'project'; id: string } | null;
 
 export function App() {
   return (
-    <AccountsProvider>
+    <ProfilesProvider>
       <ProjectsProvider>
         <ThreadsProvider>
           <Shell />
         </ThreadsProvider>
       </ProjectsProvider>
-    </AccountsProvider>
+    </ProfilesProvider>
   );
 }
 
 function Shell() {
-  const { accounts } = useAccounts();
+  const { profiles } = useProfiles();
   const { state } = useProjects();
   const { threads, selectedId } = useThreads();
   const thread = threads?.find((t) => t.id === selectedId);
   const [sheet, setSheet] = useState<OpenSheet>(null);
   const close = () => setSheet(null);
   const openProject = sheet?.kind === 'project' ? state?.projects.find((p) => p.id === sheet.id) : undefined;
-  const noAccounts = accounts?.length === 0;
+  const noProfiles = profiles?.length === 0;
 
   return (
     <div className="layout">
       <aside className="sidebar">
         <header className="side-top drag">
-          <AccountSwitcher onManage={() => setSheet({ kind: 'accounts' })} />
+          <ProfileSwitcher onManage={() => setSheet({ kind: 'profiles' })} />
           <button
             className="side-icon"
             title="Add project"
             aria-label="Add project"
-            disabled={noAccounts}
+            disabled={noProfiles}
             onClick={() => setSheet({ kind: 'addProject' })}
           >
             <FolderPlus />
@@ -58,23 +58,23 @@ function Shell() {
         </nav>
         <footer className="side-foot">
           <MachineBadge />
-          <button className="side-icon" title="Accounts" aria-label="Accounts" onClick={() => setSheet({ kind: 'accounts' })}>
+          <button className="side-icon" title="Profiles" aria-label="Profiles" onClick={() => setSheet({ kind: 'profiles' })}>
             <Users />
           </button>
         </footer>
       </aside>
       <main className="main">
         {thread ? (
-          <ThreadPane key={thread.id} thread={thread} onOpenAccount={(accountId) => setSheet({ kind: 'accounts', accountId })} />
+          <ThreadPane key={thread.id} thread={thread} onOpenProfile={(profileId) => setSheet({ kind: 'profiles', profileId })} />
         ) : (
           <>
             <header className="main-top drag" />
             <div className="empty">
-              {noAccounts ? (
+              {noProfiles ? (
                 <>
-                  <p>Add an account first. Every thread runs under one.</p>
-                  <button className="ghost" onClick={() => setSheet({ kind: 'accounts' })}>
-                    Add account
+                  <p>Add a profile first. Every thread runs under one.</p>
+                  <button className="ghost" onClick={() => setSheet({ kind: 'profiles' })}>
+                    Add profile
                   </button>
                 </>
               ) : state?.projects.length === 0 ? (
@@ -91,7 +91,7 @@ function Shell() {
           </>
         )}
       </main>
-      {sheet?.kind === 'accounts' && <AccountsSheet onClose={close} openAccountId={sheet.accountId} />}
+      {sheet?.kind === 'profiles' && <ProfilesSheet onClose={close} openProfileId={sheet.profileId} />}
       {sheet?.kind === 'addProject' && <AddProjectSheet onClose={close} />}
       {openProject && <ProjectSheet project={openProject} onClose={close} />}
     </div>

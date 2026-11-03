@@ -68,7 +68,7 @@ export type ClaudeLogin = {
   /** Epoch ms; refreshed a few minutes before. */
   expiresAt: number;
   email: string | null;
-  /** Anthropic account id; tells whether two accio accounts use the same Claude login. */
+  /** Anthropic account id; tells whether two accio profiles use the same Claude login. */
   claudeAccountId: string | null;
   organization: string | null;
 };

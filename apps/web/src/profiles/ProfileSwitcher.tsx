@@ -1,12 +1,12 @@
 import { useRef } from 'react';
 import { Check, Users, UpDown } from '../app/icons';
-import { AccountTile, useAccounts } from './accounts';
+import { ProfileTile, useProfiles } from './profiles';
 
-/** Top of the sidebar: which account's work is shown (like botbot's workspace menu). */
-export function AccountSwitcher({ onManage }: { onManage: () => void }) {
-  const { accounts = [], filter, setFilter } = useAccounts();
+/** Top of the sidebar: which profile's work is shown (like botbot's workspace menu). */
+export function ProfileSwitcher({ onManage }: { onManage: () => void }) {
+  const { profiles = [], filter, setFilter } = useProfiles();
   const menu = useRef<HTMLDivElement>(null);
-  const current = accounts.find((a) => a.id === filter);
+  const current = profiles.find((a) => a.id === filter);
 
   const pick = (f: string) => {
     setFilter(f);
@@ -15,29 +15,28 @@ export function AccountSwitcher({ onManage }: { onManage: () => void }) {
 
   return (
     <>
-      <button className="switcher" popoverTarget="account-menu" title="Switch account">
-        <AccountTile account={current} />
-        <span className="switcher-name">{current?.name ?? 'All accounts'}</span>
+      <button className="switcher" popoverTarget="profile-menu" title="Switch profile">
+        <ProfileTile profile={current} />
+        <span className="switcher-name">{current?.name ?? 'All profiles'}</span>
         <span className="switcher-updown">
           <UpDown />
         </span>
       </button>
-      <div className="menu" id="account-menu" popover="auto" ref={menu} role="menu">
+      <div className="menu" id="profile-menu" popover="auto" ref={menu} role="menu">
         <button className="menu-item" role="menuitem" onClick={() => pick('all')}>
-          <AccountTile size="md" />
+          <ProfileTile size="md" />
           <span className="menu-text">
-            <b>All accounts</b>
+            <b>All profiles</b>
           </span>
           {filter === 'all' && <Check />}
         </button>
-        {accounts.map((a) => (
+        {profiles.map((a) => (
           <button key={a.id} className="menu-item" role="menuitem" onClick={() => pick(a.id)}>
-            <AccountTile account={a} size="md" />
+            <ProfileTile profile={a} size="md" />
             <span className="menu-text">
               <b>{a.name}</b>
               <small className={a.signIn ? undefined : 'warn'}>
-                {a.isJob ? 'Job account' : 'Personal'}
-                {a.signIn ? '' : ' · not signed in'}
+                {a.signIn ? (a.signIn.email ?? 'Signed in') : 'Not signed in'}
               </small>
             </span>
             {filter === a.id && <Check />}
@@ -55,7 +54,7 @@ export function AccountSwitcher({ onManage }: { onManage: () => void }) {
           <span className="menu-icon">
             <Users />
           </span>
-          <span className="menu-text">Manage accounts…</span>
+          <span className="menu-text">Manage profiles…</span>
         </button>
       </div>
     </>

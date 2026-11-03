@@ -97,7 +97,7 @@ describe('TurnTranscript', () => {
 describe('agentEnv', () => {
   const hrc = { baseUrl: 'http://127.0.0.1:47322', accessKey: 'accio-hrc-key' };
 
-  it('runs a thread only against its own account, dropping any inherited login', () => {
+  it('runs a thread only against its own profile, dropping any inherited login', () => {
     const env = agentEnv(
       {
         PATH: '/bin',
@@ -111,12 +111,12 @@ describe('agentEnv', () => {
         CLAUDE_CODE_GIT_BASH_PATH: 'C:\\git\\bash.exe',
       },
       hrc,
-      '/accio/accounts/hrc/claude',
+      '/accio/profiles/hrc/claude',
     );
     expect(env).toEqual({
       PATH: '/bin',
       CLAUDE_CODE_GIT_BASH_PATH: 'C:\\git\\bash.exe',
-      CLAUDE_CONFIG_DIR: '/accio/accounts/hrc/claude',
+      CLAUDE_CONFIG_DIR: '/accio/profiles/hrc/claude',
       ANTHROPIC_BASE_URL: 'http://127.0.0.1:47322',
       ANTHROPIC_AUTH_TOKEN: 'accio-hrc-key',
     });

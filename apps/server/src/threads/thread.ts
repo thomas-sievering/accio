@@ -11,7 +11,7 @@ export function toView({ sessionId: _s, ...view }: Thread): ThreadView {
   return view;
 }
 
-export function newThread(input: { checkoutId: string; projectId: string; accountId: string }, now: string): Thread {
+export function newThread(input: { checkoutId: string; projectId: string; profileId: string }, now: string): Thread {
   return { id: randomUUID(), ...input, title: NEW_THREAD_TITLE, status: 'idle', sessionId: null, createdAt: now, updatedAt: now };
 }
 

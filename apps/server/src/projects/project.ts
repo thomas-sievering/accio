@@ -26,10 +26,10 @@ function isInside(path: string, root: string): boolean {
   return p === r || p.startsWith(r + '/');
 }
 
-/** The account whose folders hold this path most specifically, like fleet's roots. */
-export function suggestAccount(accounts: readonly { id: string; roots: string[] }[], path: string): string | null {
+/** The profile whose folders hold this path most specifically, like fleet's roots. */
+export function suggestProfile(profiles: readonly { id: string; roots: string[] }[], path: string): string | null {
   let best: { id: string; len: number } | null = null;
-  for (const a of accounts) {
+  for (const a of profiles) {
     for (const root of a.roots) {
       if (isInside(path, root) && (!best || root.length > best.len)) best = { id: a.id, len: root.length };
     }
@@ -51,12 +51,12 @@ export function findProjectFor(data: ProjectsData, facts: FolderFacts): Project 
 
 /**
  * Adds a checkout. A known repo joins its project and keeps that project's
- * account; anything else becomes a new project under the chosen account.
+ * profile; anything else becomes a new project under the chosen profile.
  */
 export function addCheckout(
   data: ProjectsData,
   facts: FolderFacts,
-  accountId: string | undefined,
+  profileId: string | undefined,
 ): { data: ProjectsData; checkout: Checkout } {
   if (data.checkouts.some((c) => samePath(c.path, facts.root))) {
     throw new UserError(`${facts.root} is already added`);
@@ -64,8 +64,8 @@ export function addCheckout(
   let project = findProjectFor(data, facts);
   let projects = data.projects;
   if (!project) {
-    if (!accountId) throw new UserError('Choose the account this project belongs to');
-    project = { id: randomUUID(), name: projectNameFor(facts), accountId, repoKey: facts.repoKey };
+    if (!profileId) throw new UserError('Choose the profile this project belongs to');
+    project = { id: randomUUID(), name: projectNameFor(facts), profileId, repoKey: facts.repoKey };
     projects = [...projects, project];
   }
   const checkout: Checkout = { id: randomUUID(), projectId: project.id, path: facts.root };
