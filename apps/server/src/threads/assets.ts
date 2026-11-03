@@ -73,7 +73,7 @@ export class ThreadAssets {
       }
       const mime = mediaMimeType(source);
       if (!mime) throw new Error('Unsupported local media type.');
-      const file = await openLocal(cwd, source);
+      const file = await openLocal(cwd, source, this.home);
       try {
         const info = await file.handle.stat();
         checkSize(info.size, mime.startsWith('image/') ? IMAGE_LIMIT : MEDIA_LIMIT);
@@ -97,7 +97,7 @@ export class ThreadAssets {
   /** Caller must first establish that the exact destination is present in this thread's transcript. */
   async fileUrl(threadId: string, cwd: string, source: string): Promise<AssetUrl> {
     this.assertThread(threadId);
-    const { handle } = await openLocal(cwd, source);
+    const { handle } = await openLocal(cwd, source, this.home);
     try {
       checkSize((await handle.stat()).size, FILE_LIMIT);
     } finally {
@@ -130,7 +130,7 @@ export class ThreadAssets {
         mimeType = opened.asset.mimeType;
         name = opened.asset.name;
       } else {
-        const opened = await openLocal(grant.cwd, grant.source);
+        const opened = await openLocal(grant.cwd, grant.source, this.home);
         handle = opened.handle;
         mimeType = 'application/octet-stream';
         name = safeName(basename(opened.path));
@@ -322,7 +322,7 @@ function within(root: string, path: string) {
   return rel === '' || (!isAbsolute(rel) && rel !== '..' && !rel.startsWith(`..${sep}`));
 }
 
-async function openLocal(cwd: string, source: string): Promise<{ path: string; handle: FileHandle }> {
+async function openLocal(cwd: string, source: string, home: string): Promise<{ path: string; handle: FileHandle }> {
   if (!source || source.includes('\0') || source.startsWith('\\\\') || source.startsWith('//')) throw new Error('Blocked local file path.');
   let authored = source;
   if (/^file:/i.test(source)) {
@@ -347,6 +347,12 @@ async function openLocal(cwd: string, source: string): Promise<{ path: string; h
   // Reject symbolic links in the authored path, including links which resolve back inside cwd.
   await assertNoLinks(target, root);
   const canonical = await realpath(target);
+  for (const part of ['hub', 'secret-delivery']) {
+    const blocked = resolve(home, part);
+    if (within(blocked, target) || within(blocked, canonical)) throw new Error('Private Accio files cannot be downloaded or embedded.');
+    const actual = await realpath(blocked).catch(() => blocked);
+    if (within(actual, canonical)) throw new Error('Private Accio files cannot be downloaded or embedded.');
+  }
   if (!absolute && !within(root, canonical)) throw new Error('Relative file path escapes its checkout.');
   const handle = await openRegular(target);
   try {

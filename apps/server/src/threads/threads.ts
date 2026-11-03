@@ -36,6 +36,8 @@ import type { Machines } from '../machine/machine.js';
 import { ThreadAssets } from './assets.js';
 import { ThreadContent } from './content.js';
 import { markdownReferences } from './markdown.js';
+import { SecretRequests } from '../secrets/secrets.js';
+import type { SecretsVault } from '@accio/hub';
 import { isChoiceTool, parseChoice, pickPrompt } from './choice.js';
 import type { AccioTools, ToolAccess } from '../tools/tools.js';
 import { DeliveryGit, DeliveryPending, deliveryPrompt } from './delivery.js';
@@ -66,6 +68,7 @@ export class Threads {
   private previews: Previews;
   readonly assets: ThreadAssets;
   private content: ThreadContent;
+  readonly secrets: SecretRequests;
 
   constructor(
     private home: string,
@@ -75,6 +78,7 @@ export class Threads {
     private broadcast: Broadcast,
     private models: Models,
     private machines: Machines,
+    vault: SecretsVault,
     private tools?: AccioTools,
   ) {
     this.file = new JsonFile(join(home, 'threads.json'), () => []);
@@ -82,6 +86,10 @@ export class Threads {
     this.previews = new Previews(home);
     this.assets = new ThreadAssets(home, (threadId) => this.list.some((thread) => thread.id === threadId));
     this.content = new ThreadContent(home, this.assets);
+    this.secrets = new SecretRequests(home, vault, async (threadId, item) => {
+      await this.addItem(threadId, item);
+      this.broadcast('threads.changed', this.views());
+    });
     projects.onRemoveThreads((id) => this.deleteThreads(this.list.filter((t) => t.checkoutId === id)));
     projects.onCheckInUse((checkoutId) => this.countUsing((t) => t.checkoutId === checkoutId));
     projects.onCheckProjectInUse((projectId) => this.countUsing((t) => t.projectId === projectId));
@@ -94,6 +102,7 @@ export class Threads {
   }
 
   async load() {
+    await this.secrets.load();
     await this.previews.load();
     const stored = (await this.file.read()).map(fromStored);
     const candidates = new Set(dropUnstarted(stored).map((t) => t.id));
@@ -118,6 +127,7 @@ export class Threads {
     }
     for (const thread of interrupted) {
       const live = await this.transcript(thread.id);
+      live.items = live.items.map(item => item.kind === 'secret' && item.status === 'pending' ? { ...item, status: 'cancelled', candidates: [] } : item);
       const turnId = [...live.items].reverse().find((i) => i.kind === 'user')?.turnId ?? 'restart';
       live.items = upsertItem(closeOpenTools(live.items), {
         kind: 'notice',
@@ -133,6 +143,7 @@ export class Threads {
   }
 
   register(router: Router) {
+    this.secrets.register(router, this.profiles, this.projects, this.broadcast);
     router
       .on('threads.list', () => this.views())
       .on('threads.start', input => this.start(input))
@@ -544,7 +555,12 @@ export class Threads {
       }
       const harness = this.harnesses[thread.model.harnessId];
       if (!harness) throw new UserError('This harness is not installed on this machine');
-      for await (const msg of harness.run({ ...run, sessionId: thread.sessionId, model: thread.model.modelId, modelName: this.models.modelName(thread.profileId, thread.model) })) {
+      const requestSecret = this.secrets.forTurn({ threadId: thread.id, turnId, profileId: thread.profileId,
+        profileName: this.profiles.require(thread.profileId).name, projectId: thread.projectId || null,
+        projectName: this.projects.state().projects.find(p => p.id === thread.projectId)?.name ?? 'No project',
+        machineName: this.machines.views().find(m => m.thisMachine)?.name ?? 'This machine', signal: run.signal });
+      for await (const msg of harness.run({ ...run, sessionId: thread.sessionId, model: thread.model.modelId, requestSecret, modelName: this.models.modelName(thread.profileId, thread.model),
+        secretPurposes: this.secrets.purposes(thread.profileId, thread.projectId || null) })) {
         for (const change of transcript.accept(msg)) {
           if (change.type === 'end') outcome = change.outcome;
           await this.apply(thread.id, change, run.cwd);
@@ -570,6 +586,7 @@ export class Threads {
       }
     } finally {
       try {
+        await this.secrets.endTurn(turnId);
         if (delivering) {
           const current = this.require(thread.id);
           try {
@@ -681,11 +698,12 @@ export class Threads {
     await this.file.write(next);
   }
 
-  private views() { return this.list.filter(t => !this.startingThreads.has(t.id)).map(toView); }
+  private views() { return this.list.filter(t => !this.startingThreads.has(t.id)).map(t => this.view(t)); }
 
   private transcriptPath(id: string) {
     return join(this.home, 'transcripts', `${id}.json`);
   }
+  private view(thread: Thread) { return { ...toView(thread), ...(this.secrets.hasPending(thread.id) ? { needsSecret: true } : {}) }; }
 
   private async transcript(id: string): Promise<Live> {
     const live = this.transcripts.get(id);

@@ -12,18 +12,21 @@ export function ProfilesSettings({
   profileId,
   onOpen,
   onBack,
+  onOpenSecrets,
 }: {
   /** The profile being edited, 'new' to add one, or none for the list. */
   profileId?: string;
   onOpen: (id: string) => void;
   onBack: () => void;
+  /** Opens Settings / Secrets filtered to a profile. */
+  onOpenSecrets?: (profileId: string) => void;
 }) {
   const { profiles } = useProfiles();
   if (!profiles) return null;
   if (profileId === 'new') return <ProfileForm onSaved={(p) => onOpen(p.id)} onDone={onBack} />;
   // Always the latest view, so sign-in changes show up while the form is open.
   const current = profileId ? profiles.find((p) => p.id === profileId) : undefined;
-  if (current) return <ProfileForm key={current.id} profile={current} onSaved={onBack} onDone={onBack} />;
+  if (current) return <ProfileForm key={current.id} profile={current} onSaved={onBack} onDone={onBack} onOpenSecrets={onOpenSecrets} />;
 
   return (
     <SettingsSection title="Profiles">
@@ -50,7 +53,7 @@ export function ProfilesSettings({
   );
 }
 
-function ProfileForm({ profile, onSaved, onDone }: { profile?: ProfileView; onSaved: (p: ProfileView) => void; onDone: () => void }) {
+function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: ProfileView; onSaved: (p: ProfileView) => void; onDone: () => void; onOpenSecrets?: (profileId: string) => void }) {
   const client = useClient();
   const { accounts } = useProfiles();
   const [accountId, setAccountId] = useState(profile ? claudeAccount(profile)?.id ?? '' : '');
@@ -101,6 +104,14 @@ function ProfileForm({ profile, onSaved, onDone }: { profile?: ProfileView; onSa
           <small className="hint">Set up and name accounts in Settings / Accounts. Choose one account per provider for this profile.</small>
         </div>
       </SettingsSection>
+      {profile && onOpenSecrets && (
+        <SettingsSection title="Secrets">
+          <button type="button" className="setting setting-link" onClick={() => onOpenSecrets(profile.id)}>
+            <span className="setting-text"><b>Saved secrets</b><small>Tokens this profile’s threads can use, managed in Settings / Secrets.</small></span>
+            <Chevron />
+          </button>
+        </SettingsSection>
+      )}
       {profile && (
         <SettingsSection title="Tools, MCP servers and skills">
           <div className="setting-form">

@@ -40,17 +40,21 @@ function layoutTurn(turn: TranscriptItem[], running: boolean): TranscriptBlock[]
   let answer = body.length;
   // A choice is what the turn asks of you, so it stays out of the fold with the reply.
   while (answer > prompt && (body[answer - 1]!.kind === 'assistant' || body[answer - 1]!.kind === 'choice')) answer--;
-  const work = body.slice(prompt, answer);
+  const beforeAnswer = body.slice(prompt, answer);
+  // Private entry and its usage records stay visible even when other work is folded.
+  const secrets = beforeAnswer.filter((item) => item.kind === 'secret');
+  const work = beforeAnswer.filter((item) => item.kind !== 'secret');
   if (finished && !work.length) return groupTools(turn);
   const turnId = turn[0]!.turnId;
   const failed = work.filter((item) => item.kind === 'tool' && item.status === 'error').length;
   const current = work.findLast((item): item is ToolItem => item.kind === 'tool' && item.status === 'running');
   const state = finished
     ? { live: false as const, ms: finished.ms }
-    : { live: true as const, activity: current ? describeActivity(current) : 'Thinking', startedAt: prompt ? (body[0] as Extract<TranscriptItem, { kind: 'user' }>).at : undefined };
+    : { live: true as const, activity: secrets.some(item => item.status === 'pending') ? 'Waiting for secret' : current ? describeActivity(current) : 'Thinking', startedAt: prompt ? (body[0] as Extract<TranscriptItem, { kind: 'user' }>).at : undefined };
   return [
     ...groupTools(body.slice(0, prompt)),
     { kind: 'work', id: `${turnId}:work`, failed, blocks: groupTools(work), ...state },
+    ...groupTools(secrets),
     ...groupTools(body.slice(answer)),
   ];
 }

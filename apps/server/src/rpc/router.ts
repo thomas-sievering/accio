@@ -32,11 +32,13 @@ export class Router {
     const handler = this.handlers.get(method);
     if (!def || !handler) return fail(`Unknown method ${method}`);
     const params = def.params.safeParse(parsed.data.params ?? {});
-    if (!params.success) return fail(`Invalid params for ${method}: ${params.error.message}`);
+    const privateInput = method === 'secretRequests.answer' || method.startsWith('secrets.');
+    if (!params.success) return fail(privateInput ? 'Invalid secret request. Check the fields and try again.' : `Invalid params for ${method}: ${params.error.message}`);
     try {
       return { type: 'response', id, ok: true, result: (await handler(params.data as never)) ?? null };
     } catch (err) {
       if (err instanceof UserError) return fail(err.message);
+      if (privateInput) return fail('Could not save or deliver the secret. Try again.');
       console.error(`[rpc] ${method} failed`, err);
       return fail(err instanceof Error ? err.message : String(err));
     }

@@ -6,6 +6,8 @@ import type { HubAccess } from '../profiles/claudeConfigFolder.js';
  * thread can only ever reach its profile's hub proxy (ADR 0002, ADR 0007).
  */
 const INHERITED_BLOCKLIST = [
+  /^ACCIO_SECRET_/,
+  /^ACCIO_TOOL_TOKEN$/,
   /^ANTHROPIC_/,
   /^CLAUDE_CODE_USE_/, // Bedrock, Vertex, Foundry
   /^CLAUDE_CODE_OAUTH/,

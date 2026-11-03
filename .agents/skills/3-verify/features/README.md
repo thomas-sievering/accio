@@ -26,4 +26,5 @@ Record feature IDs and entry points in `actions.json`. Pair the action trace wit
 - [System prompt](system-prompt.md): read-only Settings page with each harness's delivery and the shared sections.
 - [Machines](machines.md): status, harness versions, machine names and profile folder defaults.
 - [Threads](threads.md): project/profile picker, models, messages, stop/resume, search/filter, shelves and deletion.
+- [Secrets](secrets.md): private entry, automatic saved reuse, one-time delivery, project access, replacement and deletion; includes the isolated scripted-harness journey.
 - [Tools, MCP servers and skills](resources.md): shared library, scopes, machine readiness, repair threads, MCP sign-in, Git updates and project copies.

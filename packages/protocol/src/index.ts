@@ -9,6 +9,7 @@ import { profileMethods, type ProfileEvents } from './profiles.js';
 import { limitsMethods, type LimitsEvents } from './limits.js';
 import { projectMethods, type ProjectEvents } from './projects.js';
 import { threadMethods, type ThreadEvents } from './threads.js';
+import { secretMethods, type SecretEvents } from './secrets.js';
 
 export * from './rpc.js';
 export * from './machine.js';
@@ -20,6 +21,7 @@ export * from './limits.js';
 export * from './projects.js';
 export * from './threads.js';
 export * from './media.js';
+export * from './secrets.js';
 
 export const methods = {
   ...resourceMethods,
@@ -31,6 +33,7 @@ export const methods = {
   ...limitsMethods,
   ...projectMethods,
   ...threadMethods,
+  ...secretMethods,
 };
 
 export type Methods = typeof methods;
@@ -39,7 +42,7 @@ export type ParamsOf<M extends MethodName> = z.input<Methods[M]['params']>;
 export type ResultOf<M extends MethodName> = Methods[M]['result'];
 
 /** Server-pushed events and their payloads. */
-export type Events = MachineEvents & ProfileEvents & LimitsEvents & ProjectEvents & ThreadEvents & ModelEvents & ResourceEvents;
+export type Events = MachineEvents & ProfileEvents & LimitsEvents & ProjectEvents & ThreadEvents & ModelEvents & SecretEvents & ResourceEvents;
 export type EventName = keyof Events;
 
 export const DEFAULT_PORT = 47321;

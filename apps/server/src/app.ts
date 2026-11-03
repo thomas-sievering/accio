@@ -16,7 +16,7 @@ import type { Harness } from './threads/harness.js';
 import { claudeCode, claudeCodeInstall } from './threads/claudeCode.js';
 import { codexHarness } from './threads/codex.js';
 import { codexInstall, type CodexFactory } from '@accio/codex';
-import { OpenAIAuth } from '@accio/hub';
+import { OpenAIAuth, SecretsVault } from '@accio/hub';
 import { AccioTools } from './tools/tools.js';
 import { offerChoice } from './threads/choice.js';
 
@@ -92,9 +92,11 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
   await projects.load();
   projects.register(router);
 
+  const secrets = new SecretsVault(opts.home);
+  await secrets.load();
   // Served by this machine to its own harnesses (ADR 0011).
   const tools = new AccioTools([offerChoice]);
-  const threads = new Threads(opts.home, profiles, projects, { claudeCode: deps.harness ?? claudeCode, codex: deps.codexHarness ?? codexHarness(deps.codexFactory) }, broadcast, models, machines, tools);
+  const threads = new Threads(opts.home, profiles, projects, { claudeCode: deps.harness ?? claudeCode, codex: deps.codexHarness ?? codexHarness(deps.codexFactory) }, broadcast, models, machines, secrets, tools);
   await threads.load();
   threads.register(router);
   const resources = new ResourceManager(opts.home, here.id, resourceStore, mcpGateway, profiles, projects, broadcast, async (tool, detail) => {
@@ -123,6 +125,7 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
     threads,
     tools,
     hub,
+    secrets,
     settings,
     machines,
     resources,
@@ -133,6 +136,7 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
       const profilesClosed = profiles.close();
       await transport.close();
       await turnsClosed;
+      await secrets.close();
       await resourcesClosed;
       await reconciliation;
       await profilesClosed;

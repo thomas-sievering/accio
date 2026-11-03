@@ -15,6 +15,7 @@ import { ModelPicker } from './ModelPicker';
 import { ThreadNotice } from './ThreadNotice';
 import { ThreadActionsMenu } from './ThreadActionsMenu';
 import { Transcript } from './Transcript';
+import { useReportPendingSecrets } from '../secrets/pendingSecrets';
 import { useThreads, useTranscript } from './threads';
 
 /** Where a thread runs, looked up once for the header, the notice and the composer. */
@@ -27,10 +28,11 @@ function usePlace(checkoutId: string, profileId?: string) {
   return { checkout, project, profile };
 }
 
-export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits }: { thread: ThreadView; active?: boolean; onOpenProfile: (profileId: string) => void; onOpenLimits: (profileId: string) => void }) {
+export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits, onOpenSecrets }: { thread: ThreadView; active?: boolean; onOpenProfile: (profileId: string) => void; onOpenLimits: (profileId: string) => void; onOpenSecrets?: (profileId: string) => void }) {
   const client = useClient();
   const place = usePlace(thread.checkoutId, thread.profileId);
   const { items, error, retry } = useTranscript(thread.id);
+  useReportPendingSecrets(thread.id, items);
   const running = thread.status === 'running';
   const [savingModel, setSavingModel] = useState(false);
   const lastTurn = items?.findLast((item) => item.kind === 'user')?.turnId;
@@ -49,7 +51,7 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits 
     <>
       <PaneHeader title={thread.title} {...place} checkout={thread.workspace && !thread.workspace.releasedAt && place.checkout ? { ...place.checkout, path: thread.workspace.path } : place.checkout} actions={<ThreadActionsMenu key={thread.id} thread={thread} items={items} />} />
       {visibleItems ? <PendingPick.Provider value={{ pick, setPick, enabled: !running }}>
-        <Transcript threadId={thread.id} items={visibleItems} working={running} />
+        <Transcript threadId={thread.id} items={visibleItems} working={running} onOpenSecrets={onOpenSecrets} />
       </PendingPick.Provider> : (
         <div className="empty">
           {error && <>

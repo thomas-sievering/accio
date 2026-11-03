@@ -59,6 +59,10 @@ export type HarnessTurn = {
   /** This turn's access to accio's MCP tools; omitted when the machine serves none. */
   tools?: ToolAccess;
   signal: AbortSignal;
+  /** Bound by the machine to this turn, project and profile; never accepts identity arguments. */
+  requestSecret?: (input: import('../secrets/secrets.js').SecretToolArgs) => Promise<import('../secrets/secrets.js').SecretDelivery>;
+  /** Authorized saved-purpose metadata lets a fresh harness reuse the exact stable key. */
+  secretPurposes?: { slot: string; name: string }[];
 };
 
 export type HarnessMcp = { type: 'http'; url: string; headers: Record<string, string> } | { type: 'stdio'; command: string; args: string[] };
