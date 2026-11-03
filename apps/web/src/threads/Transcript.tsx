@@ -1,7 +1,9 @@
-import { memo, useLayoutEffect, useRef, useState } from 'react';
+import { memo, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import type { TranscriptItem } from '@accio/protocol';
 import { AssistantMarkdown } from './AssistantMarkdown';
-import { ToolCallRow } from './ToolCallRow';
+import { ToolGroup } from './ToolGroup';
+import { Chevron } from '../app/icons';
+import { layoutTranscript, type TranscriptBlock } from './transcriptBlocks';
 import './transcript-media.css';
 
 /** Follow late media/layout changes only while the reader is already at the bottom. */
@@ -9,6 +11,7 @@ export function Transcript({ threadId, items, working }: { threadId: string; ite
   const scroller = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
+  const lastTop = useRef(0);
   const anchor = useRef<{ element: HTMLElement; offset: number } | undefined>(undefined);
   const [away, setAway] = useState(false);
   const lastTurn = items.findLast((item) => item.kind === 'user')?.turnId;
@@ -50,16 +53,20 @@ export function Transcript({ threadId, items, working }: { threadId: string; ite
     <div className="transcript-scroll">
       <div className="messages" ref={scroller} onScroll={(e) => {
         const el = e.currentTarget;
-        pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+        // Late media can grow the content between our scroll-to-bottom and this event;
+        // only a move up (the reader scrolling) stops following.
+        const movedUp = el.scrollTop < lastTop.current;
+        lastTop.current = el.scrollTop;
+        pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40 || (pinned.current && !movedUp);
         setAway(!pinned.current);
         const top = el.getBoundingClientRect().top;
-        const visible = [...(content.current?.querySelectorAll<HTMLElement>(':scope > .msg:not(.assistant), :scope > .tool, :scope > .notice, :scope > .turn-finished, :scope > .msg.assistant > *') ?? [])]
+        const visible = [...(content.current?.querySelectorAll<HTMLElement>(':scope .msg:not(.assistant), :scope .turn-work-toggle, :scope .tool-group-toggle, :scope .tool, :scope .notice, :scope .turn-finished, :scope .msg.assistant > *') ?? [])]
           .find((node) => node.getBoundingClientRect().bottom > top);
         anchor.current = visible ? { element: visible, offset: visible.getBoundingClientRect().top - top } : undefined;
       }}>
         <div className="thread" ref={content}>
-          {items.map((item) => <Item key={`${threadId}:${item.id}`} threadId={threadId} item={item} preparing={working && item.turnId === lastTurn} />)}
-          {working && <div className="typing" aria-label="Working"><i /><i /><i /></div>}
+          <Blocks threadId={threadId} blocks={layoutTranscript(items, working ? lastTurn : undefined)} preparingTurn={working ? lastTurn : undefined} />
+          {working && !lastTurn && <div className="typing" aria-label="Working"><i /><i /><i /></div>}
         </div>
       </div>
       {away && <button className="jump-latest" onClick={() => {
@@ -72,6 +79,47 @@ export function Transcript({ threadId, items, working }: { threadId: string; ite
   );
 }
 
+function Blocks({ threadId, blocks, preparingTurn, inWork = false }: { threadId: string; blocks: TranscriptBlock[]; preparingTurn?: string; inWork?: boolean }) {
+  return blocks.map((block) => {
+    switch (block.kind) {
+      case 'tools': return <ToolGroup key={`${threadId}:${block.id}`} threadId={threadId} items={block.items} bare={inWork} />;
+      case 'work': return <TurnWork key={`${threadId}:${block.id}`} threadId={threadId} block={block} />;
+      case 'item': return <Item key={`${threadId}:${block.item.id}`} threadId={threadId} item={block.item} preparing={block.item.turnId === preparingTurn} />;
+    }
+  });
+}
+
+/**
+ * A turn's tool calls and interim messages behind one line above its answer:
+ * what the harness is doing now while it runs, "Worked for …" once complete.
+ */
+function TurnWork({ threadId, block }: { threadId: string; block: Extract<TranscriptBlock, { kind: 'work' }> }) {
+  const bodyId = useId();
+  const [open, setOpen] = useState(false);
+  const empty = !block.blocks.length;
+  return (
+    <div className={`turn-work${open ? ' open' : ''}${block.live ? ' live' : ''}`}>
+      <button className="turn-work-toggle" onClick={() => setOpen(!open)} disabled={empty} aria-expanded={empty ? undefined : open} aria-controls={empty ? undefined : bodyId}>
+        {block.live
+          ? <><span className="turn-work-activity" role="status">{block.activity}</span>{block.startedAt && <Elapsed since={block.startedAt} />}</>
+          : <>Worked for {formatDuration(block.ms)}</>}
+        {block.failed > 0 && <span className="turn-work-failed">{block.failed} failed</span>}
+        {!empty && <Chevron />}
+      </button>
+      {open && !empty && <div className="turn-work-body" id={bodyId}><Blocks threadId={threadId} blocks={block.blocks} inWork /></div>}
+    </div>
+  );
+}
+
+function Elapsed({ since }: { since: string }) {
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  return <span className="turn-work-elapsed">{formatDuration(Math.max(0, now - Date.parse(since)))}</span>;
+}
+
 const Item = memo(function Item({ threadId, item, preparing }: { threadId: string; item: TranscriptItem; preparing: boolean }) {
   switch (item.kind) {
     case 'user':
@@ -80,7 +128,7 @@ const Item = memo(function Item({ threadId, item, preparing }: { threadId: strin
       if (!item.text.trim()) return null;
       return <div className="msg assistant"><AssistantMarkdown threadId={threadId} text={item.text} media={item.media} preparing={preparing} /></div>;
     case 'tool':
-      return <ToolCallRow threadId={threadId} item={item} />;
+      return null; // Rendered by ToolGroup.
     case 'notice':
       return <div className={`notice ${item.tone}`}>{item.text}</div>;
     case 'finished':
