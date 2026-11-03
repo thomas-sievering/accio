@@ -180,3 +180,75 @@
 .pill.bad .dot {
   background: var(--red);
 }
+
+/* Hub switcher: names the hub the settings apply to. */
+.hub-switcher {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 2px 0 14px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--raised);
+  color: var(--muted);
+}
+.hub-switcher.switchable:hover {
+  background: var(--hover);
+}
+.hub-switcher-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--active);
+  color: var(--ink);
+}
+.hub-switcher-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+}
+.hub-switcher-text b {
+  overflow: hidden;
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 13.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hub-switcher-text small {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--dim);
+  font-size: 12px;
+}
+.hub-switcher .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--red);
+}
+.hub-switcher .dot.connected {
+  background: var(--green);
+}
+.hub-switcher .dot.connecting {
+  background: var(--dim);
+}
+.hub-switcher select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.hub-switcher:has(select:focus-visible) {
+  outline: 2px solid var(--line-2);
+  outline-offset: 1px;
+}

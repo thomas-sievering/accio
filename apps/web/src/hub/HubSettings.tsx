@@ -2,7 +2,6 @@ import { useState, type FormEvent } from 'react';
 import { useHubs } from '../app/connection';
 import { SettingsSection, SettingRow } from '../app/Settings';
 import { useAction } from '../app/useAction';
-import { HubSelector } from './HubSelector';
 
 export function HubSettings() {
   const { hubs, selectedId, select, root } = useHubs();
@@ -15,7 +14,6 @@ export function HubSettings() {
   }); };
   return <>
     <SettingsSection title="Saved hubs">
-      {hubs.length > 0 && <div className="setting-form"><HubSelector /></div>}
       {hubs.map((hub) => <SettingRow key={hub.id} title={hub.name} description={hub.url}>
         <span className={`pill ${hub.status === 'connected' ? 'ok' : 'bad'}`}>{hub.status === 'connected' ? 'Connected' : hub.status === 'connecting' ? 'Connecting' : 'Offline'}</span>
         {hub.id !== selectedId && <button type="button" className="link" onClick={() => select(hub.id)}>Use hub</button>}
