@@ -56,6 +56,7 @@ function ProfileForm({ profile, onSaved, onDone }: { profile?: ProfileView; onSa
   const [openaiAccountId, setOpenAIAccountId] = useState(profile?.providers.find((p) => p.id === 'openai')?.accounts[0]?.id ?? '');
   const [name, setName] = useState(profile?.name ?? '');
   const { busy, error, run } = useAction();
+  const dirty = !profile || name !== profile.name || accountId !== (claudeAccount(profile)?.id ?? '') || openaiAccountId !== (profile.providers.find((p) => p.id === 'openai')?.accounts[0]?.id ?? '');
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -112,9 +113,9 @@ function ProfileForm({ profile, onSaved, onDone }: { profile?: ProfileView; onSa
         )}
         <span className="spacer" />
         <button type="button" className="ghost" onClick={onDone}>
-          {profile ? 'Done' : 'Cancel'}
+          Cancel
         </button>
-        <button type="submit" className="ghost primary" disabled={busy || !accounts}>
+        <button type="submit" className="ghost primary" disabled={busy || !accounts || !dirty}>
           {profile ? 'Save' : 'Add profile'}
         </button>
       </footer>
