@@ -7,25 +7,34 @@
   position: relative;
 }
 
-/* Sits over the sidebar's border; out of the grid flow so the columns stay two. */
-.sidebar-resizer {
+.layout.with-panel {
+  grid-template-columns: var(--sidebar-w, 272px) minmax(0, 1fr) var(--panel-w, 320px);
+}
+
+/* Each sits over its column's border, out of the grid flow so it adds no column. */
+.resizer {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: calc(var(--sidebar-w, 272px) - 3px);
   z-index: 5;
   width: 6px;
   cursor: col-resize;
   -webkit-app-region: no-drag;
   touch-action: none;
 }
-.sidebar-resizer:hover,
-.sidebar-resizer:focus-visible,
-.resizing-sidebar .sidebar-resizer {
+.resizer-left {
+  left: calc(var(--sidebar-w, 272px) - 3px);
+}
+.resizer-right {
+  right: calc(var(--panel-w, 320px) - 3px);
+}
+.resizer:hover,
+.resizer:focus-visible,
+.resizing .resizer:active {
   background: linear-gradient(to right, transparent 2px, var(--line-2) 2px, var(--line-2) 4px, transparent 4px);
   outline: none;
 }
-.resizing-sidebar {
+.resizing {
   cursor: col-resize;
   user-select: none;
 }
@@ -179,4 +188,44 @@
 }
 .side-icon.on {
   color: var(--green);
+}
+
+/* Side panel: the right-hand column, under the window's caption buttons. */
+.side-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-y: auto;
+  background: var(--side);
+  border-inline-start: 1px solid var(--line);
+  font-size: 13px;
+}
+.side-panel-top {
+  flex: none;
+  height: var(--caption-h);
+  border-bottom: 1px solid var(--line);
+}
+.side-panel-empty {
+  margin: auto;
+  color: var(--dim);
+}
+/* The toggle sits left of the caption buttons, wherever the column edges are. */
+.panel-toggle {
+  position: fixed;
+  top: calc((var(--caption-h) - 30px) / 2);
+  right: calc(var(--caption) + 4px);
+  z-index: 6;
+  -webkit-app-region: no-drag;
+}
+.panel-toggle[aria-pressed='true'] {
+  background: var(--hover);
+  color: var(--ink);
+}
+/* The pane header makes room for the toggle while it reaches the caption buttons... */
+.layout:has(> .panel-toggle) .main-top {
+  padding-inline-end: calc(var(--caption) + 48px);
+}
+/* ...and needs none once the side panel takes that corner. */
+.layout.with-panel .main-top {
+  padding-inline-end: 16px;
 }

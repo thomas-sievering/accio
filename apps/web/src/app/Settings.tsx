@@ -11,7 +11,7 @@ import { McpSettings } from '../mcp/McpSettings';
 import { SkillsSettings } from '../skills/SkillsSettings';
 import { useResources } from '../resources/resources';
 import { ArrowLeft, BookOpen, Hub, Layers, Monitor, Plug, ScrollText, Users, Wrench } from './icons';
-import { SidebarResizer } from './SidebarResizer';
+import { SidebarResizer } from './Resizer';
 
 /** Where Settings is open. `profileId` opens one profile ('new' to add one). */
 export type SettingsRoute = { section: 'profiles'; profileId?: string } | { section: 'accounts'; accountId?: string } | { section: 'hub' } | { section: 'harnesses' } | { section: 'systemPrompt' } | { section: 'machines'; machineId?: string }
