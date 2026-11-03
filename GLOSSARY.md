@@ -43,7 +43,7 @@ A company whose models threads use, such as Anthropic or OpenAI.
 _Avoid_: Vendor, backend, harness
 
 **Harness**:
-A coding program that runs a thread's turns, such as Claude Code, Codex or pi. Some harnesses can use several providers and models, such as pi; others only one provider's. Which harnesses exist and which providers each can use is a shared setting; each machine reports which harnesses it has installed.
+A coding program that runs a thread's turns. Accio currently supports Claude Code with Anthropic and Codex with OpenAI. Each machine reports which harnesses it has installed.
 _Avoid_: Agent, runtime, coding tool, provider (as T3 Code uses it)
 
 **Effort**:
@@ -76,16 +76,26 @@ _Avoid_: Workspace, repo (in UI text)
 One machine's copy of a project's repository. A folder without a git remote is a project with a single checkout.
 _Avoid_: Clone, project folder
 
+**Owned worktree**:
+A separate Git working copy and branch allocated to one thread. New threads in committed Git projects work here; existing threads, ordinary folders and empty repositories keep their original directories. Ownership lasts until Archive releases it. Process management currently covers Accio's preview runner; this is not complete process isolation.
+_Avoid_: Sandbox, project (for the thread's working copy)
+
 **Thread**:
-A durable conversation with a harness inside one checkout. It exists from its first message on. It keeps the profile it started with for its whole life, but not any one account, provider or harness.
+A durable conversation with a harness, optionally attached to a project's checkout and owned worktree. It exists from its first message on. It keeps its starting hub, profile and harness; its model can change within that harness. Accounts follow the profile's current selections. A No project thread runs under a profile without a project checkout.
 _Avoid_: Chat, session, agent, conversation
 
 **Turn**:
-One message from you and all the work that follows it until the thread stops and waits for you again. The hub picks which of the profile's accounts serves each turn, and may switch to another account, or to another provider when the harness can use several.
+Work by the harness until it finishes or is interrupted, started by a user message, Resume or a delivery request. Each turn uses the profile's selected account for that harness's provider. Steering can add messages during the same turn.
 _Avoid_: Run, request
 
+**Queued message**:
+A message saved to start a later turn after the current turn finishes. It can be edited, removed or sent as steering while the harness accepts input.
+
+**Steering**:
+Sending a message to the harness during its current turn, without interrupting it or starting a separate turn.
+
 **Handoff**:
-Moving a thread to another harness, such as from Claude Code to Codex. The new harness starts with a selection of the thread's history, and the thread shows where the handoff happened.
+Planned capability to move a thread to another harness with selected history. Currently changing harnesses requires a new thread.
 _Avoid_: Switch, transfer, migration
 
 **Running**:
@@ -108,8 +118,18 @@ Hiding a thread until a chosen time, when it comes back.
 _Avoid_: Mute, defer
 
 **Settle**:
-Marking a thread as done. It stays readable and can be reopened.
+Marking a thread as done in the sidebar. It stays readable and can be reopened; its owned worktree and processes remain allocated.
 _Avoid_: Archive, close, resolve
+
+**Ship**:
+Requesting delivery from the owning thread: finish the work, integrate the target branch, verify and publish under the project's direct or pull-request policy. A request made during work waits for that turn to finish. It authorizes publication under its recorded policy.
+
+**Prepare for review**:
+Requesting preparation and verification of a pull request without authorizing its merge. The owned worktree stays available for review fixes.
+
+**Archive**:
+Releasing a delivered thread's owned worktree and branch after checking its published revision, preserving unpublished work and stopping its owned preview. Conversation history remains, the thread is settled, and a follow-up allocates a fresh worktree. See the [delivery notes](docs/plans/thread-delivery.md) for eligibility and recovery.
+_Avoid_: Settle, delete (for releasing execution resources)
 
 **Shelf**:
 A group of threads in the sidebar apart from the open list: Working (a turn is running), Snoozed and Settled.
@@ -118,5 +138,5 @@ _Avoid_: Folder, inbox, tab
 ## Skills
 
 **Skill source**:
-A git repository of skills that the hub pulls and hands out, such as spellbook. A profile chooses which skill sources it gets.
+A git repository of skills that the hub pulls and hands out, such as spellbook. Individual skills can be enabled globally, for profiles or for projects, or kept optional in the library. Copying one into a project creates independent files owned by that project's Git history.
 _Avoid_: Skill pack, plugin

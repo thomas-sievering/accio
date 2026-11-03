@@ -22,6 +22,9 @@ const card = (page: Page) => page.locator('section.secret').last();
 const valueField = (page: Page) => card(page).getByPlaceholder('Paste secret');
 
 async function send(page: Page, text: string) {
+  // These requests test separate turns. Enter during a running turn steers
+  // instead, so a supplied secret card alone is not a completion signal.
+  await expect(page.locator('.composer').getByRole('button', { name: 'Stop', exact: true })).toHaveCount(0, { timeout: 15_000 });
   const composer = page.locator('textarea');
   await expect(composer).toBeEnabled({ timeout: 15_000 });
   await composer.fill(text);

@@ -27,7 +27,7 @@ type Data = SharedSeed & {
   modelFavorites?: Record<string, FavoriteModel[]>;
 };
 
-/** GLOSSARY: Provider. The ones accio knows; only Anthropic can be signed in to so far. */
+/** GLOSSARY: Provider. Both Anthropic and OpenAI support named account sign-in. */
 export const PROVIDERS = [
   { id: 'anthropic', name: 'Anthropic', accountName: 'Claude account', available: true },
   { id: 'openai', name: 'OpenAI', accountName: 'ChatGPT account', available: true },
@@ -115,7 +115,7 @@ export class SharedSettings {
     return this.data.machines.find((m) => m.id === id);
   }
 
-  /** Records the machine (pairing is not built yet, so any machine that connects is known) and marks it connected. */
+  /** Records a machine admitted by the hub's connection handler and marks it connected. */
   async machineConnected(hello: MachineHello) {
     return this.change(async () => {
       const existing = this.machine(hello.id);

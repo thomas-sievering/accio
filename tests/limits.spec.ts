@@ -52,6 +52,7 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
   await button('Continue').click();
   await page.getByPlaceholder('personal, work…').fill('Personal');
   await button('Continue').click();
+  await expect(page.getByRole('heading', { name: 'Choose an account for Personal' })).toBeVisible();
   await button('Limits').click();
   await expect(page.getByText('No accounts selected for this profile.', { exact: true })).toBeVisible();
   await expect(page.locator('.limits-card, .limits-row')).toHaveCount(0);
