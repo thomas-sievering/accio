@@ -1,6 +1,6 @@
 import type { CheckoutView, ProjectView, ThreadView } from '@accio/protocol';
 import { type ModelSelection } from '@accio/protocol';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useClient } from '../app/connection';
 import { useLive } from '../app/useLive';
 import { accountForModel, defaultModel, useProfiles } from '../profiles/profiles';
@@ -10,6 +10,7 @@ import { useProjects } from '../projects/projects';
 import { Composer } from './Composer';
 import { ModelPicker } from './ModelPicker';
 import { ThreadNotice } from './ThreadNotice';
+import { ThreadActionsMenu } from './ThreadActionsMenu';
 import { Transcript } from './Transcript';
 import { useThreads, useTranscript } from './threads';
 
@@ -37,7 +38,7 @@ export function ThreadPane({ thread, onOpenProfile }: { thread: ThreadView; onOp
 
   return (
     <>
-      <PaneHeader title={thread.title} {...place} />
+      <PaneHeader title={thread.title} {...place} actions={<ThreadActionsMenu key={thread.id} thread={thread} items={items} />} />
       {visibleItems ? <Transcript threadId={thread.id} items={visibleItems} working={running} /> : (
         <div className="empty">
           {error && <>
@@ -112,13 +113,14 @@ function PaneHeader(props: {
   title: string;
   checkout?: CheckoutView;
   project?: ProjectView;
+  actions?: ReactNode;
 }) {
   const { checkout, project } = props;
   return (
     <header className="main-top drag">
       <div className="thread-title">
         <span className="thread-where" title={checkout?.path}>
-          {project && <ProjectMark id={project.id} size={14} />}
+          {project && <ProjectMark id={project.id} size={16} />}
           <span className="thread-project-name">
             {checkout ? <FolderLink path={checkout.path}>{project?.name ?? 'unknown project'}</FolderLink> : project?.name ?? 'No project'}
           </span>
@@ -126,6 +128,7 @@ function PaneHeader(props: {
         <span className="faint" aria-hidden="true">/</span>
         <b title={props.title}>{props.title}</b>
       </div>
+      {props.actions}
     </header>
   );
 }

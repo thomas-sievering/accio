@@ -281,7 +281,7 @@ export class Threads {
       const access = await this.profiles.hubAccess(thread.profileId, thread.model.harnessId === 'codex' ? 'openai' : 'anthropic');
       if (controller.signal.aborted || this.closing) throw new UserError('Turn interrupted before starting');
       thread = this.require(threadId);
-      this.models.require(thread.profileId, thread.model);
+      thread = { ...thread, model: this.models.require(thread.profileId, thread.model) };
       const cwd = this.cwd(thread);
       const next = startTurn(thread, text, now());
       const turnId = randomUUID();
@@ -316,6 +316,7 @@ export class Threads {
     run: { cwd: string; prompt: string; env: Record<string, string>; signal: AbortSignal },
   ) {
     const transcript = new TurnTranscript(turnId);
+    const startedAt = Date.now();
     let outcome: TurnOutcome | null = null;
     try {
       if (run.signal.aborted) {
@@ -324,7 +325,7 @@ export class Threads {
       }
       const harness = this.harnesses[thread.model.harnessId];
       if (!harness) throw new UserError('This harness is not installed on this machine');
-      for await (const msg of harness.run({ ...run, sessionId: thread.sessionId, model: this.models.executionModel(thread.profileId, thread.model), modelName: this.models.executionModelName(thread.profileId, thread.model) })) {
+      for await (const msg of harness.run({ ...run, sessionId: thread.sessionId, model: thread.model.modelId, modelName: this.models.modelName(thread.profileId, thread.model) })) {
         for (const change of transcript.accept(msg)) {
           if (change.type === 'end') outcome = change.outcome;
           await this.apply(thread.id, change, run.cwd);
@@ -354,6 +355,7 @@ export class Threads {
           await this.addItem(thread.id, { kind: 'notice', id: `${turnId}:stop`, turnId, tone: 'info', text: 'Stopped.' });
         }
         for (const item of transcript.unfinishedTools(outcome === 'interrupted' ? 'interrupted' : 'error')) await this.addItem(thread.id, item);
+        if (outcome === 'completed') await this.addItem(thread.id, { kind: 'finished', id: `${turnId}:finished`, turnId, ms: Date.now() - startedAt });
         await this.flush(thread.id);
       } catch (error) {
         if (outcome !== 'interrupted') outcome = 'failed';

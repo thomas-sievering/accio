@@ -56,7 +56,8 @@ describe('interrupted turns', () => {
     expect(harness.runs[1]).toMatchObject({ prompt: RESUME_PROMPT, sessionId: SESSION });
     const items = await c.call('threads.transcript', { threadId: thread.id });
     expect(items.filter((i) => i.kind === 'user').at(-1)).toMatchObject({ resume: true });
-    expect(items.at(-1)).toMatchObject({ kind: 'assistant', text: 'picked up' });
+    expect(items.at(-2)).toMatchObject({ kind: 'assistant', text: 'picked up' });
+    expect(items.at(-1)).toMatchObject({ kind: 'finished' });
   });
 
   it('marks a turn that was running when accio stopped as interrupted on the next start', async () => {
