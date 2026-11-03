@@ -37,6 +37,8 @@ export type HarnessTurn = {
   prompt: string;
   /** Claude session to continue; null starts a new one. */
   sessionId: string | null;
+  /** Harness model alias; omitted to use the account's default. */
+  model?: string;
   env: Record<string, string>;
   signal: AbortSignal;
 };

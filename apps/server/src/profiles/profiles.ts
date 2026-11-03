@@ -43,6 +43,10 @@ export class Profiles {
     return a;
   }
 
+  profileView(id: string): ProfileView {
+    return this.view(this.require(id));
+  }
+
   /** What a thread needs to run under this profile; refuses until it is signed in. */
   async hubAccess(id: string): Promise<HubAccess> {
     const profile = this.require(id);
