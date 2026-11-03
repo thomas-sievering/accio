@@ -12,6 +12,9 @@ export type ProfileInUse = (profileId: string) => string | undefined;
 export class Profiles {
   private queue: Promise<unknown> = Promise.resolve();
   private inUseChecks: ProfileInUse[] = [];
+  private users = new Map<string, number>();
+  private removing = new Set<string>();
+  private closing = false;
 
   constructor(
     private home: string,
@@ -59,6 +62,27 @@ export class Profiles {
     this.inUseChecks.push(check);
   }
 
+  /** Protect a new project or thread before its persistent reference exists. */
+  useProfile(id: string): () => void {
+    this.require(id);
+    if (this.closing) throw new UserError('This machine is shutting down');
+    if (this.removing.has(id)) throw new UserError('This profile is being removed');
+    this.users.set(id, (this.users.get(id) ?? 0) + 1);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      const count = this.users.get(id)! - 1;
+      if (count) this.users.set(id, count);
+      else this.users.delete(id);
+    };
+  }
+
+  async close() {
+    this.closing = true;
+    await this.queue;
+  }
+
   register(router: Router) {
     router
       .on('accounts.list', () => this.hub.accountViews())
@@ -95,13 +119,19 @@ export class Profiles {
       }))
       .on('profiles.delete', ({ id }) => this.change(async () => {
         const profile = this.require(id);
-        for (const check of this.inUseChecks) {
-          const reason = check(id);
-          if (reason) throw new UserError(`${profile.name} is still used by ${reason}`);
+        if (this.users.has(id)) throw new UserError(`${profile.name} is being used to start a thread or add a project. Wait for it to finish.`);
+        this.removing.add(id);
+        try {
+          for (const check of this.inUseChecks) {
+            const reason = check(id);
+            if (reason) throw new UserError(`${profile.name} is still used by ${reason}`);
+          }
+          await this.hub.removeProfile(id, () => this.settings.setProfiles(this.list.filter((a) => a.id !== id)));
+          this.announce();
+          return null;
+        } finally {
+          this.removing.delete(id);
         }
-        await this.hub.removeProfile(id, () => this.settings.setProfiles(this.list.filter((a) => a.id !== id)));
-        this.announce();
-        return null;
       }));
   }
 
@@ -125,6 +155,7 @@ export class Profiles {
   }
 
   private change<T>(run: () => Promise<T>): Promise<T> {
+    if (this.closing) return Promise.reject(new UserError('This machine is shutting down'));
     const result = this.queue.then(run, run);
     this.queue = result.catch(() => {});
     return result;

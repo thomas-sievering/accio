@@ -7,7 +7,7 @@ import { configFolderOf } from '../profiles/claudeConfigFolder.js';
 import type { Projects } from '../projects/projects.js';
 import type { Broadcast, Router } from '../rpc/router.js';
 import { UserError } from '../rpc/router.js';
-import { JsonFile } from '../store/jsonFile.js';
+import { JsonFile } from '@accio/persistence';
 import type { Harness } from './harness.js';
 import type { Models } from '../harnesses/models.js';
 import { harnessEnv } from './harnessEnv.js';
@@ -108,8 +108,10 @@ export class Threads {
         const checkout = 'checkoutId' in input ? this.projects.checkout(input.checkoutId) : undefined;
         const project = checkout ? this.projects.projectOf(checkout) : undefined;
         const profileId = project?.profileId ?? ('profileId' in input ? input.profileId : '');
-        const release = checkout ? this.projects.useCheckout(checkout.id) : () => {};
+        const releaseProfile = this.profiles.useProfile(profileId);
+        let release = () => {};
         try {
+          if (checkout) release = this.projects.useCheckout(checkout.id);
           // Refuse before anything is stored, so a thread that cannot run never appears.
           await this.profiles.hubAccess(profileId);
           if (this.closing) throw new UserError('This machine is shutting down');
@@ -129,6 +131,7 @@ export class Threads {
           return toView(this.require(thread.id));
         } finally {
           release();
+          releaseProfile();
         }
       }))
       .on('threads.transcript', async ({ threadId }) => (await this.transcript(this.require(threadId).id)).items)

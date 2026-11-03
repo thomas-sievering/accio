@@ -4,7 +4,7 @@ import type { Profiles } from '../profiles/profiles.js';
 import type { Machines } from '../machine/machine.js';
 import type { Broadcast, Router } from '../rpc/router.js';
 import { UserError } from '../rpc/router.js';
-import { JsonFile } from '../store/jsonFile.js';
+import { JsonFile } from '@accio/persistence';
 import { inspectFolder } from './git.js';
 import {
   addCheckout,
@@ -104,11 +104,15 @@ export class Projects {
         };
       })
       .on('checkouts.add', async ({ path, profileId }) => {
-        if (profileId) this.profiles.require(profileId);
-        const facts = await inspectFolder(path);
-        const { data, checkout } = addCheckout(this.data, facts, profileId);
-        await this.commit(data);
-        return checkout;
+        const release = profileId ? this.profiles.useProfile(profileId) : () => {};
+        try {
+          const facts = await inspectFolder(path);
+          const { data, checkout } = addCheckout(this.data, facts, profileId);
+          await this.commit(data);
+          return checkout;
+        } finally {
+          release();
+        }
       })
       .on('checkouts.remove', async ({ id, deleteThreads }) => {
         this.checkout(id);
@@ -130,23 +134,27 @@ export class Projects {
         }
       })
       .on('projects.setProfile', async ({ projectId, profileId }) => {
-        this.profiles.require(profileId);
-        const project = this.data.projects.find((p) => p.id === projectId);
-        if (!project) throw new UserError('No such project');
-        // GLOSSARY: a project's profile can change only while it has no threads,
-        // since each thread keeps the profile it started with.
-        if (project.profileId !== profileId) {
-          if (this.data.checkouts.some((c) => c.projectId === projectId && (this.checkoutUsers.has(c.id) || this.removing.has(c.id)))) {
-            throw new UserError('This project is busy. Wait for its turns to start or finish.');
+        const release = this.profiles.useProfile(profileId);
+        try {
+          const project = this.data.projects.find((p) => p.id === projectId);
+          if (!project) throw new UserError('No such project');
+          // GLOSSARY: a project's profile can change only while it has no threads,
+          // since each thread keeps the profile it started with.
+          if (project.profileId !== profileId) {
+            if (this.data.checkouts.some((c) => c.projectId === projectId && (this.checkoutUsers.has(c.id) || this.removing.has(c.id)))) {
+              throw new UserError('This project is busy. Wait for its turns to start or finish.');
+            }
+            for (const check of this.projectInUseChecks) {
+              const reason = check(projectId);
+              if (reason) throw new UserError(`This project still has ${reason}. Delete them before moving it to another profile.`);
+            }
           }
-          for (const check of this.projectInUseChecks) {
-            const reason = check(projectId);
-            if (reason) throw new UserError(`This project still has ${reason}. Delete them before moving it to another profile.`);
-          }
+          const updated = { ...project, profileId };
+          await this.commit({ ...this.data, projects: this.data.projects.map((p) => (p.id === projectId ? updated : p)) });
+          return updated;
+        } finally {
+          release();
         }
-        const updated = { ...project, profileId };
-        await this.commit({ ...this.data, projects: this.data.projects.map((p) => (p.id === projectId ? updated : p)) });
-        return updated;
       });
   }
 

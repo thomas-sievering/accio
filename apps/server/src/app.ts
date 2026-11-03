@@ -90,8 +90,10 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
     hubUrl: hubProxy.url,
     close: () => closing ??= (async () => {
       const turnsClosed = threads.close();
+      const profilesClosed = profiles.close();
       await transport.close();
       await turnsClosed;
+      await profilesClosed;
       await projects.close();
       await machines.disconnect();
       await hubProxy.close();
