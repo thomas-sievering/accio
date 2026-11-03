@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { ArrowUp, Close, Queue, StopSquare } from '../app/icons';
+import { useAppEvent } from '../app/appEvents';
 import { useAction } from '../app/useAction';
+import { useClient } from '../app/connection';
 
 /**
  * Enter steers the running turn; Ctrl+Enter queues. Shift+Enter adds a line.
@@ -13,6 +15,8 @@ export function Composer({
   toolbar,
   attachment,
   actions,
+  target,
+  draftId = 'new',
 }: {
   onSend: (text: string, mode?: 'steer' | 'queue') => Promise<void>;
   /** Set while a turn runs; Stop stays beside Send. */
@@ -25,8 +29,14 @@ export function Composer({
   attachment?: { label: string; onRemove: () => void };
   /** Compact thread delivery controls, outside the message input. */
   actions?: ReactNode;
+  /** Which `composer.insert` requests this composer accepts: its thread id, or 'draft'. */
+  target?: string;
+  draftId?: string;
 }) {
-  const [text, setText] = useState('');
+  const client = useClient();
+  const storageKey = `accio:${client.hubId}:composer:${draftId}`;
+  const [text, updateText] = useState(() => sessionStorage.getItem(storageKey) ?? '');
+  const setText = (value: string) => { updateText(value); if (value) sessionStorage.setItem(storageKey, value); else sessionStorage.removeItem(storageKey); };
   const [controlHeld, setControlHeld] = useState(false);
   const { busy, error, run } = useAction();
   const sending = useRef(false);
@@ -49,6 +59,21 @@ export function Composer({
     };
   }, []);
 
+  // Text another pane hands over (such as a skill reference) goes in at the cursor, without replacing the message.
+  useAppEvent('composer.insert', ({ target: to, text: insert }) => {
+    const el = input.current;
+    if (!target || to !== target || !el) return;
+    // A textarea keeps its selection while unfocused.
+    const before = text.slice(0, el.selectionStart);
+    const after = text.slice(el.selectionEnd);
+    const lead = before && !/\s$/.test(before) ? ' ' : '';
+    const trail = after && !/^\s/.test(after) ? ' ' : '';
+    const next = before + lead + insert + trail + after;
+    const end = (before + lead + insert + trail).length;
+    setText(next);
+    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(end, end); });
+  });
+
   // Picking an option is the start of a message: put the cursor there.
   useEffect(() => { if (attachment) input.current?.focus(); }, [attachment?.label]);
 
@@ -66,7 +91,7 @@ export function Composer({
     try {
       await run(async () => {
         await onSend(value, mode);
-        setText(current => current === text ? '' : current);
+        if (input.current?.value === text) setText('');
       });
     } finally {
       sending.current = false;

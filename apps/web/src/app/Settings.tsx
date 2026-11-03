@@ -13,6 +13,7 @@ import { SkillsSettings } from '../skills/SkillsSettings';
 import { useResources } from '../resources/resources';
 import { ArrowLeft, BookOpen, Hub, Key, Layers, Monitor, Plug, ScrollText, Users, Wrench } from './icons';
 import { SidebarResizer } from './Resizer';
+import { HubSelector } from '../hub/HubSelector';
 
 /** Where Settings is open. `profileId` opens one profile ('new' to add one). */
 export type SettingsRoute = { section: 'profiles'; profileId?: string } | { section: 'accounts'; accountId?: string } | ({ section: 'secrets' } & SecretsRoute) | { section: 'hub' } | { section: 'harnesses' } | { section: 'systemPrompt' } | { section: 'machines'; machineId?: string }
@@ -36,7 +37,7 @@ const GROUPS: { label?: string; items: { id: Section; label: string; icon: React
   {
     label: 'Connections',
     items: [
-      { id: 'hub', label: 'Hub', icon: <Hub /> },
+      { id: 'hub', label: 'Hubs', icon: <Hub /> },
     ],
   },
 ];
@@ -81,6 +82,7 @@ export function Settings({ route, onRoute, onClose, onOpenThread }: { route: Set
           </button>
         </header>
         <nav className="side-body">
+          <HubSelector />
           {GROUPS.map((g, n) => (
             <div key={n} className="settings-group">
               {g.label && <div className="settings-group-label">{g.label}</div>}

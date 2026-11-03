@@ -11,7 +11,7 @@ describe('hub', () => {
 
     const info = await client.call('hub.get', {});
 
-    expect(info).toMatchObject({ runs: 'inThisServer', url: t.app.hubUrl, reachable: true });
+    expect(info).toMatchObject({ runs: 'local', url: t.app.hubUrl, reachable: true });
     expect(info.store).toContain(t.home);
     expect(info.settingsStore).toContain(t.home);
   });

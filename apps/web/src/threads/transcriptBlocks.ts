@@ -122,3 +122,10 @@ export function describeTools(items: ToolItem[]): string {
   }).join(', ');
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
+
+/** Whether a block shows the item, directly or inside a fold. */
+export function blocksHaveItem(blocks: TranscriptBlock[], itemId: string): boolean {
+  return blocks.some((block) => block.kind === 'item' ? block.item.id === itemId
+    : block.kind === 'tools' ? block.items.some((item) => item.id === itemId)
+    : blocksHaveItem(block.blocks, itemId));
+}

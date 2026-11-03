@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { normalizeRemoteUrl, parseRemotes, repoKeyOf } from './repoIdentity.js';
-import { addCheckout, removeCheckout, suggestProfile, type ProjectsData } from './project.js';
+import { addCheckout, removeCheckout, samePath, suggestProfile, type ProjectsData } from './project.js';
 
 describe('repo identity', () => {
   it.each([
@@ -49,7 +49,8 @@ describe('suggestProfile', () => {
   ];
   it('picks the most specific folder', () => {
     expect(suggestProfile(profiles, 'S:\\hrc\\portal')).toBe('hrc');
-    expect(suggestProfile(profiles, 's:/accio')).toBe('personal');
+    expect(suggestProfile(profiles, 'S:/accio')).toBe('personal');
+    expect(suggestProfile(profiles, 's:/accio')).toBe(process.platform === 'linux' ? null : 'personal');
     expect(suggestProfile(profiles, 'S:\\hrcx')).toBe('personal');
     expect(suggestProfile(profiles, 'C:\\other')).toBeNull();
   });
@@ -57,6 +58,11 @@ describe('suggestProfile', () => {
 
 describe('checkouts', () => {
   const empty: ProjectsData = { projects: [], checkouts: [] };
+
+  it('normalizes separators while respecting the machine platform’s case rules', () => {
+    expect(samePath('S:\\a', 'S:/a/')).toBe(true);
+    expect(samePath('S:\\a', 's:/a/')).toBe(process.platform !== 'linux');
+  });
 
   it('creates a project for a new repo under the chosen profile', () => {
     const { data, checkout } = addCheckout(empty, { root: 'S:\\accio', repoKey: 'github.com/me/accio' }, 'personal');
@@ -80,7 +86,7 @@ describe('checkouts', () => {
 
   it('refuses the same folder twice and a new project without a profile', () => {
     const first = addCheckout(empty, { root: 'S:\\a', repoKey: null }, 'personal').data;
-    expect(() => addCheckout(first, { root: 's:/a/', repoKey: null }, 'personal')).toThrow(/already added/);
+    expect(() => addCheckout(first, { root: 'S:/a/', repoKey: null }, 'personal')).toThrow(/already added/);
     expect(() => addCheckout(empty, { root: 'S:\\b', repoKey: null }, undefined)).toThrow(/profile/);
   });
 

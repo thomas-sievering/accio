@@ -1,10 +1,9 @@
 import { createHash, randomBytes } from 'node:crypto';
 
 /**
- * Claude sign-in (ADR 0007): OAuth with PKCE, using Claude Code's public client
- * and Anthropic's hosted code page as the redirect, so you paste the code back
- * instead of the hub listening on a local port. Values match what pi and
- * CLIProxyAPI use.
+ * Claude OAuth with PKCE and Claude Code's public client. Production sign-in
+ * supplies a machine-local callback (ADR 0013); the hosted redirect remains
+ * the default for callers of the original library API.
  */
 export const CLAUDE_OAUTH = {
   clientId: '9d1c250a-e61b-44d9-88ed-5944d1962f5e',
@@ -14,12 +13,12 @@ export const CLAUDE_OAUTH = {
   scopes: 'org:create_api_key user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload',
 };
 
-/** One sign-in in progress: what was sent, so the pasted code can be checked and exchanged. */
-export type PendingSignIn = { verifier: string; state: string; url: string };
+/** One sign-in in progress, including the exact redirect used in the token exchange. */
+export type PendingSignIn = { verifier: string; state: string; url: string; redirectUri: string };
 
 const b64url = (buf: Buffer) => buf.toString('base64url');
 
-export function beginSignIn(random: (n: number) => Buffer = randomBytes): PendingSignIn {
+export function beginSignIn(random: (n: number) => Buffer = randomBytes, redirectUri = CLAUDE_OAUTH.redirectUri): PendingSignIn {
   const verifier = b64url(random(32));
   const state = b64url(random(32));
   const challenge = b64url(createHash('sha256').update(verifier).digest());
@@ -27,13 +26,13 @@ export function beginSignIn(random: (n: number) => Buffer = randomBytes): Pendin
     code: 'true',
     client_id: CLAUDE_OAUTH.clientId,
     response_type: 'code',
-    redirect_uri: CLAUDE_OAUTH.redirectUri,
+    redirect_uri: redirectUri,
     scope: CLAUDE_OAUTH.scopes,
     code_challenge: challenge,
     code_challenge_method: 'S256',
     state,
   });
-  return { verifier, state, url: `${CLAUDE_OAUTH.authorizeUrl}?${params}` };
+  return { verifier, state, redirectUri, url: `${CLAUDE_OAUTH.authorizeUrl}?${params}` };
 }
 
 export class SignInError extends Error {}
@@ -118,7 +117,7 @@ export async function exchangeCode(fetchImpl: Fetch, pending: PendingSignIn, cod
     client_id: CLAUDE_OAUTH.clientId,
     code,
     state: pending.state,
-    redirect_uri: CLAUDE_OAUTH.redirectUri,
+    redirect_uri: pending.redirectUri,
     code_verifier: pending.verifier,
   });
   return toAccount(r, null, now);

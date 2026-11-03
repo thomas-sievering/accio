@@ -10,8 +10,7 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
   });
   page.on('pageerror', (error) => errors.push(error.message));
   // Sign-in is faked only at the provider boundary; every Accio action uses its UI.
-  await context.route('https://**/*', (route) => route.fulfill({ status: 200, body: 'Provider fixture: finish sign-in in Accio.' }));
-  context.on('page', (popup) => { if (popup !== page) void popup.close(); });
+  await context.route('https://**/*', (route) => route.fulfill({ status: 200, body: 'Scripted provider consent.' }));
   const button = (name: string) => page.getByRole('button', { name, exact: true });
   const section = (name: string) => page.locator('.sidebar nav').getByRole('button', { name, exact: true });
   const card = (name: string) => page.getByRole('article', { name: new RegExp(`^${name},`) });
@@ -25,16 +24,20 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
     await page.getByRole('textbox', { name: 'Account name' }).fill(name);
     await button('Add account').click();
     if (openai) {
-      await button('Sign in with ChatGPT').click();
+      const opened = page.waitForEvent('popup'); await button('Sign in with ChatGPT').click();
+      const popup = await opened; await popup.waitForURL(url => url.hostname === 'auth.openai.com'); await popup.close();
       await expect(page.getByText('Signed in as', { exact: false })).toBeVisible({ timeout: 10_000 });
     } else if (code) await signIn(code);
     await button('Cancel').click();
   };
   const signIn = async (code: string) => {
     const again = button('Sign in again');
-    await (await again.isVisible() ? again : button('Sign in with Claude')).click();
-    await page.getByPlaceholder('Code from Claude').fill(code);
-    await button('Finish').click();
+    const opened = page.waitForEvent('popup'); await (await again.isVisible() ? again : button('Sign in with Claude')).click();
+    const popup = await opened; await popup.waitForURL(url => url.hostname === 'claude.ai');
+    // The provider fixture redirects through the real loopback callback, as browser approval does.
+    const authorize = new URL(popup.url()); const callback = new URL(authorize.searchParams.get('redirect_uri')!);
+    callback.searchParams.set('code', code); callback.searchParams.set('state', authorize.searchParams.get('state')!);
+    await popup.goto(callback.href); await popup.close();
     await expect(page.getByText('Signed in as', { exact: false })).toBeVisible();
   };
   const selectAccounts = async (name: string, claude: string, chatgpt: string) => {
@@ -72,6 +75,11 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
   await button('Show limits').click();
   await expect(card('Shared ChatGPT')).toBeFocused();
   await expect(card('Shared Claude').getByRole('meter', { name: '5-hour allowance remaining' })).toHaveAttribute('aria-valuenow', '52');
+  await expect(card('Shared Claude').locator('.limits-meters').first().getByRole('meter')).toHaveCount(2);
+  await expect(card('Shared Claude').getByRole('meter', { name: 'Weekly allowance remaining', exact: true })).toHaveCount(1);
+  await expect(card('Shared Claude').locator('.limit-pace.ahead')).toHaveCount(2);
+  await expect(card('Shared Claude').locator('.limit-time-marker')).toHaveCount(2);
+  await expect(card('Team Claude').locator('.limit-pace.behind')).toContainText('behind pace');
   await expect(card('Team Claude')).toContainText('Weekly limit reached.');
   await expect(card('Team Claude').getByRole('meter', { name: '5-hour allowance remaining' })).toHaveAttribute('aria-valuenow', '67');
   await expect(card('Team Claude').locator('.limit-meter.exhausted')).toHaveCSS('display', 'grid');
@@ -118,6 +126,7 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
   await card('Team Claude').getByRole('button', { name: 'Team Claude settings' }).click();
   await expect(page.getByRole('textbox', { name: 'Account name' })).toHaveValue('Team Claude');
   await expect(page.locator('.account-limits').getByRole('meter')).toHaveCount(2);
+  await expect(page.locator('.account-limits .limit-pace')).toHaveCount(2);
   await button('Sign out').click();
   await expect(page.locator('.account-limits')).toContainText('Signed out.');
   await button('Back').click();
@@ -131,11 +140,13 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
   await createAccount('Unused Claude', 'unknown');
   await page.getByRole('button', { name: /^Unused Claude / }).click();
   await expect(page.locator('.account-limits')).toContainText('Unknown');
+  await expect(page.locator('.account-limits .limit-pace')).toHaveCount(1);
   await signIn('empty');
   await expect(page.locator('.account-limits')).toContainText('No limits were reported');
   await signIn('expired');
   await expect(page.locator('.account-limits')).toContainText('Reset time passed · awaiting confirmation');
   await expect(page.locator('.account-limits').getByRole('meter', { name: '5-hour allowance remaining' })).toHaveAttribute('aria-valuenow', '0');
+  await expect(page.locator('.account-limits .limit-pace')).toHaveCount(1);
   await button('Back').click();
 
   // The active draft, not the previous Limits selection, determines default scope.

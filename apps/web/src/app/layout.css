@@ -1,5 +1,22 @@
 
 /* Layout */
+.hub-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.hub-selector select {
+  min-width: 0;
+  width: 100%;
+  height: 30px;
+  color: var(--ink);
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
 .layout {
   display: grid;
   grid-template-columns: var(--sidebar-w, 272px) minmax(0, 1fr);
@@ -201,13 +218,49 @@
   font-size: 13px;
 }
 .side-panel-top {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
   flex: none;
+  align-items: center;
   height: var(--caption-h);
+  /* The panel toggle and caption buttons sit over its right end. */
+  padding: 0 calc(var(--caption) + 40px) 0 10px;
   border-bottom: 1px solid var(--line);
+  background: var(--side);
+}
+.side-panel-tabs {
+  display: flex;
+  gap: 2px;
+  min-width: 0;
+}
+.side-panel-tab {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 7px;
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.side-panel-tab:hover {
+  color: var(--ink);
+  background: var(--hover);
+}
+.side-panel-tab[aria-selected='true'] {
+  color: var(--ink-strong);
+  background: var(--active);
+}
+.side-panel-body {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
 }
 .side-panel-empty {
   margin: auto;
+  padding: 0 24px;
   color: var(--dim);
+  text-align: center;
 }
 /* The toggle sits left of the caption buttons, wherever the column edges are. */
 .panel-toggle {

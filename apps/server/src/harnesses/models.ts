@@ -1,5 +1,5 @@
 import { DEFAULT_MODEL, modelKey, type ModelSelection, type ModelsState } from '@accio/protocol';
-import { HARNESSES, type SharedSettings } from '@accio/hub';
+import { HARNESSES, type SettingsAccess } from '@accio/hub';
 import type { Profiles } from '../profiles/profiles.js';
 import { UserError, type Broadcast, type Router } from '../rpc/router.js';
 import { harnessModels } from './catalog.js';
@@ -16,7 +16,7 @@ function newestFirst<T extends { name: string }>(models: T[]): T[] {
 
 /** Choices are scoped to one profile and the machine that will execute the turn. */
 export class Models {
-  constructor(private profiles: Profiles, private settings: SharedSettings, private machineId: string) {}
+  constructor(private profiles: Profiles, private settings: SettingsAccess, private machineId: string) {}
 
   list(profileId: string): ModelsState {
     const profile = this.profiles.profileView(profileId);

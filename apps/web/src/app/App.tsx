@@ -1,3 +1,4 @@
+import { HubSelector } from '../hub/HubSelector';
 import { useCallback, useRef, useState } from 'react';
 import { LimitsProvider } from '../limits/limits';
 import type { LimitsScope } from '../limits/limitsModel';
@@ -93,6 +94,7 @@ function Shell() {
       <div className={`layout${panelOpen ? ' with-panel' : ''}`} hidden={settings !== null}>
         <aside className="sidebar">
           <div className="side-controls drag">
+            <HubSelector />
             <div className="side-tools">
               <ThreadSearch />
               <ScopeMenu onOpenProject={(p) => setSheet({ kind: 'project', id: p.id })} />
