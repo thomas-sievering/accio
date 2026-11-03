@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { ProfileView } from '@accio/protocol';
 import { useClient } from '../app/connection';
+import { claudeAccount } from './profiles';
 
 /**
  * GLOSSARY: Sign-in. Opens Claude's consent page; you approve, and paste back
@@ -8,6 +9,7 @@ import { useClient } from '../app/connection';
  */
 export function SignInWithClaude({ profile }: { profile: ProfileView }) {
   const client = useClient();
+  const account = claudeAccount(profile);
   const [signInId, setSignInId] = useState<string | null>(null);
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
@@ -81,12 +83,12 @@ export function SignInWithClaude({ profile }: { profile: ProfileView }) {
 
   return (
     <div className="signin">
-      {profile.account ? (
+      {account ? (
         <div className="signin-status">
           <span className="dot ok" />
           <span className="grow">
-            Signed in as <b>{profile.account.email ?? 'a Claude account'}</b>
-            {profile.account.organization ? <span className="dim"> · {profile.account.organization}</span> : null}
+            Signed in as <b>{account.email ?? 'a Claude account'}</b>
+            {account.organization ? <span className="dim"> · {account.organization}</span> : null}
           </span>
           <button type="button" className="link" onClick={start} disabled={busy}>
             Switch

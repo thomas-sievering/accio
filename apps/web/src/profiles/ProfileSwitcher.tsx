@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import { Check, Users, UpDown } from '../app/icons';
-import { ProfileTile, useProfiles } from './profiles';
+import { claudeAccount, ProfileTile, useProfiles } from './profiles';
 
 /** Top of the sidebar: which profile's work is shown (like botbot's workspace menu). */
 export function ProfileSwitcher({ onManage }: { onManage: () => void }) {
@@ -35,8 +35,8 @@ export function ProfileSwitcher({ onManage }: { onManage: () => void }) {
             <ProfileTile profile={a} size="md" />
             <span className="menu-text">
               <b>{a.name}</b>
-              <small className={a.account ? undefined : 'warn'}>
-                {a.account ? (a.account.email ?? 'Signed in') : 'Not signed in'}
+              <small className={claudeAccount(a) ? undefined : 'warn'}>
+                {claudeAccount(a)?.email ?? (claudeAccount(a) ? 'Signed in' : 'Not signed in')}
               </small>
             </span>
             {filter === a.id && <Check />}

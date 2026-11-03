@@ -9,7 +9,7 @@ One running accio server together with the computer, files and settings it contr
 _Avoid_: Environment, host, node
 
 **Hub**:
-accio's single always-on service, reachable from anywhere, that every machine and client connects to. It holds the profiles, their accounts and the shared settings, forwards each profile's requests to that profile's accounts and no others, and relays messages between machines and clients. It is a service, not a machine: the computer that runs it may also be a machine.
+accio's single always-on service, reachable from anywhere, that every machine and client connects to. It holds the profiles, their accounts and the shared settings, knows which machines are paired and which are connected right now, forwards each profile's requests to that profile's accounts and no others, and relays messages between machines and clients. It is a service, not a machine: the computer that runs it may also be a machine.
 _Avoid_: Home machine, accio hub, accio proxy, CLI proxy, gateway, master, connector
 
 **Pairing**:
@@ -25,8 +25,8 @@ The hub passing messages between a client and a machine, or between two machines
 _Avoid_: Sync (for threads), tunnel
 
 **Shared settings**:
-What the hub hands to every paired machine: the profiles, which project belongs to which profile, skill sources and MCP servers.
-_Avoid_: Config, fleet
+Everything the hub stores and hands to every paired machine, so that you change it once from any client: the profiles with their providers and accounts, which project belongs to which profile, the harnesses, skill sources, MCP servers, and each machine's profile folders. A few of them apply to one machine only, such as its profile folders, but they are still stored on the hub. A client keeps only its own look and feel, such as the theme.
+_Avoid_: Config, fleet, machine settings (for settings stored on the hub)
 
 ## Profiles
 
@@ -35,7 +35,7 @@ A named side of your life that threads run under, such as "personal" or "work". 
 _Avoid_: Account, environment, identity
 
 **Profile folder**:
-A folder on a machine whose new projects default to a profile.
+A folder on one machine whose new projects default to a profile. Each machine has its own, since paths differ between machines, but the hub stores them with the other shared settings.
 _Avoid_: Root
 
 **Provider**:
@@ -43,7 +43,7 @@ A company whose models threads use, such as Anthropic or OpenAI.
 _Avoid_: Vendor, backend, harness
 
 **Harness**:
-A coding program that runs a thread's turns, such as Claude Code, Codex or pi. Some harnesses can use several providers and models, such as pi; others only one provider's.
+A coding program that runs a thread's turns, such as Claude Code, Codex or pi. Some harnesses can use several providers and models, such as pi; others only one provider's. Which harnesses exist and which providers each can use is a shared setting; each machine reports which harnesses it has installed.
 _Avoid_: Agent, runtime, coding tool, provider (as T3 Code uses it)
 
 **Account**:

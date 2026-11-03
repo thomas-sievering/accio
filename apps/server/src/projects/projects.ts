@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import type { ProjectsState } from '@accio/protocol';
 import type { Profiles } from '../profiles/profiles.js';
+import type { Machines } from '../machine/machine.js';
 import type { Broadcast, Router } from '../rpc/router.js';
 import { UserError } from '../rpc/router.js';
 import { JsonFile } from '../store/jsonFile.js';
@@ -31,6 +32,7 @@ export class Projects {
   constructor(
     home: string,
     private profiles: Profiles,
+    private machines: Machines,
     private broadcast: Broadcast,
   ) {
     this.file = new JsonFile(join(home, 'projects.json'), () => ({ projects: [], checkouts: [] }));
@@ -79,7 +81,7 @@ export class Projects {
           repoKey: facts.repoKey,
           existingProject: findProjectFor(this.data, facts),
           alreadyAdded: this.data.checkouts.some((c) => samePath(c.path, facts.root)),
-          suggestedProfileId: suggestProfile(this.profiles.all(), facts.root),
+          suggestedProfileId: suggestProfile(this.machines.profileFoldersHere(), facts.root),
         };
       })
       .on('checkouts.add', async ({ path, profileId }) => {

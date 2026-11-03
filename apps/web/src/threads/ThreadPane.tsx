@@ -1,7 +1,7 @@
 import type { ThreadView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { Folder, ShieldOff } from '../app/icons';
-import { ProfileTile, useProfiles } from '../profiles/profiles';
+import { claudeAccount, ProfileTile, useProfiles } from '../profiles/profiles';
 import { useProjects } from '../projects/projects';
 import { Composer } from './Composer';
 import { Transcript } from './Transcript';
@@ -42,7 +42,7 @@ export function ThreadPane({ thread, onOpenProfile }: { thread: ThreadView; onOp
             <ProfileTile profile={profile} size="xs" />
             as {profile?.name ?? 'unknown profile'}
           </p>
-          {profile && !profile.account && <ProfileNote name={profile.name} onOpen={() => onOpenProfile(profile.id)} />}
+          {profile && !claudeAccount(profile) && <ProfileNote name={profile.name} onOpen={() => onOpenProfile(profile.id)} />}
           <Composer disabled={false} placeholder="Ask Claude Code anything" onSend={send} toolbar={harness} />
           <div className="hero-meta">
             <span className="hero-chip" title={checkout?.path}>
@@ -60,7 +60,7 @@ export function ThreadPane({ thread, onOpenProfile }: { thread: ThreadView; onOp
       ) : (
         <div className="empty" />
       )}
-      {!fresh && profile && !profile.account && <ProfileNote name={profile.name} onOpen={() => onOpenProfile(profile.id)} />}
+      {!fresh && profile && !claudeAccount(profile) && <ProfileNote name={profile.name} onOpen={() => onOpenProfile(profile.id)} />}
       {thread.status === 'interrupted' && (
         <div className="resume-bar">
           <span>This turn was interrupted. It continues only when you resume it.</span>

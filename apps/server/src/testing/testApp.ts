@@ -2,7 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import WebSocket from 'ws';
-import type { EventName, Events, MethodName, ParamsOf, ResultOf, ServerEnvelope } from '@accio/protocol';
+import type { AccountView, EventName, Events, MethodName, ParamsOf, ProfileView, ResultOf, ServerEnvelope } from '@accio/protocol';
 import { startApp, type AppDeps } from '../app.js';
 
 /**
@@ -22,6 +22,11 @@ export const fakeClaudeFetch: typeof fetch = async (url, init) => {
 };
 
 export const TEST_TOKEN = 'test-token';
+
+/** The profile's Claude account, or null. */
+export function claudeAccount(profile: ProfileView): AccountView | null {
+  return profile.providers.find((p) => p.id === 'anthropic')?.accounts[0] ?? null;
+}
 
 /** A real server on a random port with a throwaway ACCIO_HOME, plus a client. */
 /** Pass an existing `home` to simulate a restart on the same machine. */
@@ -88,11 +93,9 @@ export class TestClient {
   }
 
   /** Creates a profile (if new) and signs it in as the given Claude login. */
-  async signedIn(name: string, opts: { claudeAccount?: string; folders?: string[] } = {}) {
+  async signedIn(name: string, opts: { claudeAccount?: string } = {}) {
     const profiles = await this.call('profiles.list', {});
-    const profile =
-      profiles.find((a) => a.name === name) ??
-      (await this.call('profiles.save', { name, folders: opts.folders ?? [] }));
+    const profile = profiles.find((a) => a.name === name) ?? (await this.call('profiles.save', { name }));
     const { signInId } = await this.call('profiles.beginSignIn', { profileId: profile.id });
     return this.call('profiles.completeSignIn', { signInId, code: opts.claudeAccount ?? `claude-${profile.id}` });
   }

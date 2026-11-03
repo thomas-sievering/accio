@@ -1,21 +1,25 @@
 import { useEffect, type ReactNode } from 'react';
 import { HubSettings } from '../hub/HubSettings';
 import { MachineSettings } from '../machine/MachineSettings';
+import { HarnessesSettings } from '../harnesses/HarnessesSettings';
 import { ProfilesSettings } from '../profiles/ProfilesSettings';
 import { useProfiles } from '../profiles/profiles';
-import { Close, Hub, Monitor, Users } from './icons';
+import { Close, Hub, Layers, Monitor, Users } from './icons';
 
 /** Where Settings is open. `profileId` opens one profile ('new' to add one). */
-export type SettingsRoute = { section: 'profiles'; profileId?: string } | { section: 'hub' } | { section: 'machine' };
+export type SettingsRoute = { section: 'profiles'; profileId?: string } | { section: 'hub' } | { section: 'harnesses' } | { section: 'machines'; machineId?: string };
 type Section = SettingsRoute['section'];
 
 const GROUPS: { label?: string; items: { id: Section; label: string; icon: ReactNode }[] }[] = [
-  { items: [{ id: 'profiles', label: 'Profiles', icon: <Users /> }] },
+  { label: 'Hub settings', items: [
+    { id: 'profiles', label: 'Profiles', icon: <Users /> },
+    { id: 'harnesses', label: 'Harnesses', icon: <Layers /> },
+    { id: 'machines', label: 'Machines', icon: <Monitor /> },
+  ] },
   {
     label: 'Connections',
     items: [
       { id: 'hub', label: 'Hub', icon: <Hub /> },
-      { id: 'machine', label: 'This machine', icon: <Monitor /> },
     ],
   },
 ];
@@ -89,8 +93,14 @@ export function Settings({ route, onRoute, onClose }: { route: SettingsRoute; on
                 onBack={() => onRoute({ section: 'profiles' })}
               />
             )}
-            {route.section === 'hub' && <HubSettings onOpenProfile={(id) => onRoute({ section: 'profiles', profileId: id })} />}
-            {route.section === 'machine' && <MachineSettings />}
+            {route.section === 'hub' && <HubSettings />}
+            {route.section === 'harnesses' && <HarnessesSettings />}
+            {route.section === 'machines' && (
+              <>
+                {route.machineId && <button className="link" onClick={() => onRoute({ section: 'machines' })}>All machines</button>}
+                <MachineSettings machineId={route.machineId} onOpen={(machineId) => onRoute({ section: 'machines', machineId })} />
+              </>
+            )}
           </div>
         </div>
       </main>

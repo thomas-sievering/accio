@@ -66,7 +66,7 @@ function Shell() {
           <ThreadList />
         </nav>
         <footer className="side-foot">
-          <MachineBadge onOpen={() => setSettings({ section: 'machine' })} />
+          <MachineBadge onOpen={() => setSettings({ section: 'machines' })} />
           <button className="side-icon" title="Settings" aria-label="Settings" onClick={() => setSettings({ section: 'profiles' })}>
             <Gear />
           </button>

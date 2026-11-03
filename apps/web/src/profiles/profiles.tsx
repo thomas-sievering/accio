@@ -30,6 +30,11 @@ export function useProfiles(): ProfilesState {
   return s;
 }
 
+/** The account Claude Code uses for this profile. */
+export function claudeAccount(profile: ProfileView) {
+  return profile.providers.find((p) => p.id === 'anthropic')?.accounts[0] ?? null;
+}
+
 /** A stable hue per profile, so each one is recognisable at a glance. */
 export function profileHue(id: string): number {
   let h = 0;
