@@ -106,6 +106,27 @@ export const Settings = () => (
     <path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1" />
   </svg>
 );
+export const Hub = () => (
+  <svg {...base}>
+    <circle cx="12" cy="12" r="3" />
+    <circle cx="4" cy="5" r="2" />
+    <circle cx="20" cy="5" r="2" />
+    <circle cx="12" cy="21" r="1.5" />
+    <path d="m5.6 6.3 4.2 3.5M18.4 6.3l-4.2 3.5M12 15v4.5" />
+  </svg>
+);
+export const Monitor = () => (
+  <svg {...base}>
+    <rect x="2" y="3" width="20" height="14" rx="2" />
+    <path d="M8 21h8M12 17v4" />
+  </svg>
+);
+export const Refresh = () => (
+  <svg {...base}>
+    <path d="M21 12a9 9 0 1 1-2.64-6.36L21 8" />
+    <path d="M21 3v5h-5" />
+  </svg>
+);
 export const Folder = () => (
   <svg {...base}>
     <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />

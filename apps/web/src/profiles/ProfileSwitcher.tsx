@@ -54,7 +54,7 @@ export function ProfileSwitcher({ onManage }: { onManage: () => void }) {
           <span className="menu-icon">
             <Users />
           </span>
-          <span className="menu-text">Manage profiles…</span>
+          <span className="menu-text">Manage profiles</span>
         </button>
       </div>
     </>

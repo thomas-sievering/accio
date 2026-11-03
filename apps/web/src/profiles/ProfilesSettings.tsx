@@ -1,52 +1,55 @@
 import { useState, type FormEvent } from 'react';
 import type { ProfileView } from '@accio/protocol';
 import { useClient } from '../app/connection';
-import { Sheet } from '../app/Sheet';
-import { Plus } from '../app/icons';
+import { Chevron, Plus } from '../app/icons';
+import { SettingsSection } from '../app/Settings';
 import { ProfileTile, useProfiles } from './profiles';
 import { SignInWithClaude } from './SignInWithClaude';
 
 /** List and edit profiles. Each one signs in to a Claude account, which stays on the hub. */
-export function ProfilesSheet({ onClose, openProfileId }: { onClose: () => void; openProfileId?: string }) {
-  const { profiles = [] } = useProfiles();
-  const [editing, setEditing] = useState<string | 'new' | null>(openProfileId ?? (profiles.length ? null : 'new'));
+export function ProfilesSettings({
+  profileId,
+  onOpen,
+  onBack,
+}: {
+  /** The profile being edited, 'new' to add one, or none for the list. */
+  profileId?: string;
+  onOpen: (id: string) => void;
+  onBack: () => void;
+}) {
+  const { profiles } = useProfiles();
+  if (!profiles) return null;
+  if (profileId === 'new') return <ProfileForm onSaved={(p) => onOpen(p.id)} onDone={onBack} />;
   // Always the latest view, so sign-in changes show up while the form is open.
-  const current = editing && editing !== 'new' ? profiles.find((a) => a.id === editing) : undefined;
+  const current = profileId ? profiles.find((p) => p.id === profileId) : undefined;
+  if (current) return <ProfileForm key={current.id} profile={current} onSaved={onBack} onDone={onBack} />;
 
   return (
-    <Sheet title="Profiles" onClose={onClose}>
-      {editing === 'new' ? (
-        <ProfileForm onSaved={(a) => setEditing(a.id)} onCancel={() => setEditing(null)} />
-      ) : current ? (
-        <ProfileForm profile={current} onSaved={() => setEditing(null)} onCancel={() => setEditing(null)} />
-      ) : (
-        <div className="sheet-body">
-          <div className="list">
-            {profiles.map((a) => (
-              <button key={a.id} className="list-row" onClick={() => setEditing(a.id)}>
-                <ProfileTile profile={a} size="md" />
-                <span className="menu-text">
-                  <b>{a.name}</b>
-                  <small className={a.account ? undefined : 'warn'}>
-                    {a.account ? (a.account.email ?? 'Signed in') : 'Not signed in'}
-                  </small>
-                </span>
-              </button>
-            ))}
-            <button className="list-row add" onClick={() => setEditing('new')}>
-              <span className="menu-icon">
-                <Plus />
-              </span>
-              <span>Add profile</span>
-            </button>
-          </div>
-        </div>
-      )}
-    </Sheet>
+    <SettingsSection title="Profiles">
+      {profiles.map((p) => (
+        <button key={p.id} className="setting setting-link" onClick={() => onOpen(p.id)}>
+          <ProfileTile profile={p} size="md" />
+          <span className="setting-text">
+            <b>{p.name}</b>
+            <small className={p.account ? undefined : 'warn'}>{p.account ? (p.account.email ?? 'Signed in') : 'Not signed in'}</small>
+          </span>
+          <Chevron />
+        </button>
+      ))}
+      <button className="setting setting-link" onClick={() => onOpen('new')}>
+        <span className="menu-icon">
+          <Plus />
+        </span>
+        <span className="setting-text">
+          <b>Add profile</b>
+          <small>A side of your life threads run under, such as personal or work.</small>
+        </span>
+      </button>
+    </SettingsSection>
   );
 }
 
-function ProfileForm({ profile, onSaved, onCancel }: { profile?: ProfileView; onSaved: (a: ProfileView) => void; onCancel: () => void }) {
+function ProfileForm({ profile, onSaved, onDone }: { profile?: ProfileView; onSaved: (p: ProfileView) => void; onDone: () => void }) {
   const client = useClient();
   const [name, setName] = useState(profile?.name ?? '');
   const [folderText, setFolderText] = useState((profile?.folders ?? []).join('\n'));
@@ -59,7 +62,7 @@ function ProfileForm({ profile, onSaved, onCancel }: { profile?: ProfileView; on
     try {
       const result = await action();
       if (result) onSaved(result);
-      else onCancel();
+      else onDone();
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -77,9 +80,9 @@ function ProfileForm({ profile, onSaved, onCancel }: { profile?: ProfileView; on
   };
 
   return (
-    <>
-      <form onSubmit={submit} id="profile-form">
-        <div className="sheet-body">
+    <form onSubmit={submit}>
+      <SettingsSection title={profile ? profile.name : 'New profile'}>
+        <div className="setting-form">
           <label className="field">
             <span>Name</span>
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="personal, work…" autoFocus={!profile} required />
@@ -97,8 +100,8 @@ function ProfileForm({ profile, onSaved, onCancel }: { profile?: ProfileView; on
           )}
           {error && <p className="error">{error}</p>}
         </div>
-      </form>
-      <footer className="sheet-foot">
+      </SettingsSection>
+      <footer className="settings-actions">
         {profile && (
           <button
             type="button"
@@ -110,13 +113,13 @@ function ProfileForm({ profile, onSaved, onCancel }: { profile?: ProfileView; on
           </button>
         )}
         <span className="spacer" />
-        <button type="button" className="ghost" onClick={onCancel}>
+        <button type="button" className="ghost" onClick={onDone}>
           {profile ? 'Done' : 'Cancel'}
         </button>
-        <button type="submit" form="profile-form" className="ghost primary" disabled={busy}>
+        <button type="submit" className="ghost primary" disabled={busy}>
           {profile ? 'Save' : 'Add profile'}
         </button>
       </footer>
-    </>
+    </form>
   );
 }

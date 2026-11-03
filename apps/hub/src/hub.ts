@@ -49,6 +49,11 @@ export class Hub {
     this.file = new SecretFile(join(home, 'hub', 'profiles.json'), () => []);
   }
 
+  /** The file that holds the hub's profiles and accounts. */
+  get storePath(): string {
+    return this.file.path;
+  }
+
   async load() {
     // Before the Account → Profile rename this file was hub/accounts.json.
     const old = join(dirname(this.file.path), 'accounts.json');
