@@ -1,8 +1,70 @@
 import { expect, test, _electron } from '@playwright/test';
 import { createRequire } from 'node:module';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { promisify } from 'node:util';
+import { TestClient } from '../apps/server/src/testing/testApp.js';
+
+test('new thread starts at the latest remote default branch while its source checkout stays stale', async ({ page, baseURL }, info) => {
+  const exec = promisify(execFile);
+  const git = async (cwd: string, ...args: string[]) => (await exec('git', ['-C', cwd, ...args], { windowsHide: true })).stdout.trim();
+  const { deliveryFolder, deliveryOrigin } = JSON.parse(await readFile(resolve('out', `chat-test-${new URL(baseURL!).port}.json`), 'utf8'));
+  const sourceRevision = await git(deliveryFolder, 'rev-parse', 'HEAD');
+  const writer = join(dirname(deliveryFolder), 'fresh-base-writer');
+  await git(dirname(deliveryFolder), 'clone', '--quiet', deliveryOrigin, writer);
+  await git(writer, 'config', 'user.name', 'Accio Browser Test');
+  await git(writer, 'config', 'user.email', 'browser@example.test');
+  await writeFile(join(writer, 'remote-base.txt'), 'Fresh remote base\n');
+  await git(writer, 'add', '.');
+  await git(writer, 'commit', '--quiet', '-m', 'advance remote before thread creation');
+  await git(writer, 'push', '--quiet', 'origin', 'main');
+  const remoteRevision = await git(writer, 'rev-parse', 'HEAD');
+  expect(await git(deliveryFolder, 'rev-parse', 'origin/main')).toBe(sourceRevision);
+
+  await page.goto(`${baseURL}/#token=isolated-chat-test-token`);
+  await page.getByRole('button', { name: 'New thread', exact: true }).first().click();
+  await page.getByRole('option', { name: /delivery-project/ }).click();
+  await page.locator('.composer textarea').fill('Delivery follow-up');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect(page.getByText('Fresh workspace ready.', { exact: true })).toBeVisible();
+
+  const client = await TestClient.open(`${baseURL!.replace('http:', 'ws:')}/ws?token=isolated-chat-test-token`);
+  try {
+    const thread = (await client.call('threads.list', {})).find(entry => entry.workspace?.sourcePath === deliveryFolder && entry.workspace.startRevision === remoteRevision);
+    expect(thread).toBeDefined();
+    expect(await git(thread!.workspace!.path, 'rev-parse', 'HEAD')).toBe(remoteRevision);
+    expect(await readFile(join(thread!.workspace!.path, 'remote-base.txt'), 'utf8')).toBe('Fresh remote base\n');
+    expect(await git(deliveryFolder, 'rev-parse', 'HEAD')).toBe(sourceRevision);
+    expect(await git(deliveryFolder, 'status', '--porcelain')).toBe('');
+    await writeFile(info.outputPath('fresh-base.json'), JSON.stringify({ sourceRevision, remoteRevision, thread }, null, 2));
+  } finally { client.close(); }
+  await page.screenshot({ path: info.outputPath('new-thread-fresh-base.png') });
+});
+
+test('an unavailable origin keeps the new-thread draft and reports the fetch failure', async ({ page, baseURL }) => {
+  const exec = promisify(execFile);
+  const git = async (...args: string[]) => exec('git', args, { windowsHide: true });
+  const { deliveryFolder, deliveryOrigin } = JSON.parse(await readFile(resolve('out', `chat-test-${new URL(baseURL!).port}.json`), 'utf8'));
+  const client = await TestClient.open(`${baseURL!.replace('http:', 'ws:')}/ws?token=isolated-chat-test-token`);
+  const before = (await client.call('threads.list', {})).map(thread => thread.id).sort();
+  try {
+    await git('-C', deliveryFolder, 'remote', 'set-url', 'origin', join(dirname(deliveryFolder), 'unavailable.git'));
+    await page.goto(`${baseURL}/#token=isolated-chat-test-token`);
+    await page.getByRole('button', { name: 'New thread', exact: true }).first().click();
+    await page.getByRole('option', { name: /delivery-project/ }).click();
+    const input = page.locator('.composer textarea');
+    await input.fill('Keep this draft after a failed fetch');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.locator('.composer-error')).toContainText('Could not fetch origin’s latest default branch');
+    await expect(input).toHaveValue('Keep this draft after a failed fetch');
+    expect((await client.call('threads.list', {})).map(thread => thread.id).sort()).toEqual(before);
+  } finally {
+    client.close();
+    await git('-C', deliveryFolder, 'remote', 'set-url', 'origin', deliveryOrigin);
+  }
+});
 
 test('CI wait shows current job and step, refreshes, survives reload and clears on delivery', async ({ page, baseURL }, testInfo) => {
   await page.goto(`${baseURL}/#token=isolated-chat-test-token`);

@@ -44,6 +44,115 @@ async function publish(cwd: string) {
   await git(cwd, 'push', '--quiet', 'origin', 'HEAD:refs/heads/main');
 }
 
+async function advanceOrigin(origin: string, branch = 'main') {
+  const writer = join(t.home, 'remote-writer');
+  await git(t.home, 'clone', '--quiet', origin, writer);
+  await git(writer, 'config', 'user.name', 'Accio Test');
+  await git(writer, 'config', 'user.email', 'accio@example.test');
+  if (branch !== 'main') await git(writer, 'checkout', '--quiet', '-b', branch);
+  await writeFile(join(writer, 'remote-only.txt'), 'latest remote work\n');
+  await git(writer, 'add', '.');
+  await git(writer, 'commit', '--quiet', '-m', 'advance remote');
+  await git(writer, 'push', '--quiet', 'origin', `HEAD:refs/heads/${branch}`);
+  return { writer, revision: await git(writer, 'rev-parse', 'HEAD') };
+}
+
+it.each([false, true])('starts concurrent threads from fresh origin without changing the source (local feature: %s)', async (localFeature) => {
+  const { c, source, origin, checkout } = await setup();
+  const oldBase = await git(source, 'rev-parse', 'HEAD');
+  const { writer, revision } = await advanceOrigin(origin);
+  expect(await git(source, 'rev-parse', 'origin/main')).toBe(oldBase);
+  if (localFeature) {
+    await git(source, 'checkout', '--quiet', '-b', 'local-feature');
+    await writeFile(join(source, 'local-only.txt'), 'unpublished local commit\n');
+    await git(source, 'add', '.');
+    await git(source, 'commit', '--quiet', '-m', 'local feature');
+  }
+  const localHead = await git(source, 'rev-parse', 'HEAD');
+  const localBranch = await git(source, 'branch', '--show-current');
+  let secondCheckout = checkout;
+  if (localFeature) {
+    const sibling = join(t.home, 'sibling-checkout');
+    await git(source, 'worktree', 'add', '--quiet', '--detach', sibling, localHead);
+    secondCheckout = await c.call('checkouts.add', { path: sibling, profileId: 'personal' });
+  }
+  await writeFile(join(source, 'seed.txt'), 'dirty source edit\n');
+  await writeFile(join(source, 'private.txt'), 'untracked source work\n');
+  const localStatus = await git(source, 'status', '--porcelain');
+  const threads = await Promise.all([checkout, secondCheckout].map((entry, index) => c.call('threads.start', { checkoutId: entry.id, text: `thread ${index}` })));
+  for (const thread of threads) {
+    await wait(c, thread.id);
+    expect(thread.workspace!.startRevision).toBe(revision);
+    expect(await git(thread.workspace!.path, 'rev-parse', 'HEAD')).toBe(revision);
+    expect(await readFile(join(thread.workspace!.path, 'remote-only.txt'), 'utf8')).toBe('latest remote work\n');
+    expect(await readFile(join(thread.workspace!.path, 'seed.txt'), 'utf8')).toBe('base\n');
+    await expect(stat(join(thread.workspace!.path, 'private.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(stat(join(thread.workspace!.path, 'local-only.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
+  }
+  expect(await git(source, 'rev-parse', 'HEAD')).toBe(localHead);
+  expect(await git(source, 'branch', '--show-current')).toBe(localBranch);
+  expect(await git(source, 'status', '--porcelain')).toBe(localStatus);
+  if (localFeature) expect(await readFile(join(source, 'local-only.txt'), 'utf8')).toBe('unpublished local commit\n');
+
+  // A subsequent start fetches again instead of reusing the concurrent starts' snapshot.
+  await writeFile(join(writer, 'remote-only.txt'), 'newer remote work\n');
+  await publish(writer);
+  const next = await c.call('threads.start', { checkoutId: checkout.id, text: 'third' });
+  await wait(c, next.id);
+  expect(next.workspace!.startRevision).toBe(await git(writer, 'rev-parse', 'HEAD'));
+  expect(next.workspace!.startRevision).not.toBe(revision);
+});
+
+it('discovers a changed remote default branch even with a stale origin/HEAD and narrow fetch refspec', async () => {
+  const { c, source, origin, checkout } = await setup();
+  const { revision } = await advanceOrigin(origin, 'release/next');
+  await git(origin, 'symbolic-ref', 'HEAD', 'refs/heads/release/next');
+  await git(source, 'config', 'remote.origin.fetch', '+refs/heads/main:refs/remotes/origin/main');
+  expect(await git(source, 'symbolic-ref', 'refs/remotes/origin/HEAD')).toBe('refs/remotes/origin/main');
+  const thread = await c.call('threads.start', { checkoutId: checkout.id, text: 'fresh default' });
+  await wait(c, thread.id);
+  expect(thread.workspace!.startRevision).toBe(revision);
+  expect(await new DeliveryGit(t.home).target(thread.workspace!)).toBe('release/next');
+  expect(await git(source, 'branch', '--show-current')).toBe('main');
+});
+
+it('refuses to start from a cached base when origin cannot be fetched', async () => {
+  const harness = new FakeHarness();
+  const { c, source, checkout } = await setup(harness);
+  await git(source, 'remote', 'set-url', 'origin', join(t.home, 'unavailable.git'));
+  await expect(c.call('threads.start', { checkoutId: checkout.id, text: 'stale work' })).rejects.toThrow('Could not fetch origin’s latest default branch');
+  expect(await c.call('threads.list', {})).toEqual([]);
+  expect(harness.runs).toHaveLength(0);
+  expect(await git(source, 'for-each-ref', '--format=%(refname)', 'refs/heads/accio/')).toBe('');
+});
+
+it('uses local HEAD without origin and keeps empty repositories and plain folders usable', async () => {
+  const { c, source, checkout } = await setup();
+  await git(source, 'remote', 'remove', 'origin');
+  const localHead = await git(source, 'rev-parse', 'HEAD');
+  const thread = await c.call('threads.start', { checkoutId: checkout.id, text: 'local work' });
+  await wait(c, thread.id);
+  expect(thread.workspace!.startRevision).toBe(localHead);
+  const empty = join(t.home, 'empty');
+  const plain = join(t.home, 'plain');
+  await mkdir(empty); await mkdir(plain);
+  await git(empty, 'init', '--quiet');
+  const manager = new DeliveryGit(t.home);
+  expect(await manager.allocate('empty', empty)).toBeUndefined();
+  expect(await manager.allocate('plain', plain)).toBeUndefined();
+});
+
+it('restores an explicit archived revision while origin is unavailable', async () => {
+  const { source, origin } = await setup();
+  const savedRevision = await git(source, 'rev-parse', 'HEAD');
+  await advanceOrigin(origin);
+  await git(source, 'remote', 'set-url', 'origin', join(t.home, 'unavailable.git'));
+  const restored = await new DeliveryGit(t.home).allocate('restored', source, savedRevision);
+  expect(restored!.startRevision).toBe(savedRevision);
+  expect(await git(restored!.path, 'rev-parse', 'HEAD')).toBe(savedRevision);
+  await expect(stat(join(restored!.path, 'remote-only.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
+});
+
 it('isolates concurrent threads without copying dirty source changes or sharing a branch', async () => {
   const harness = new FakeHarness();
   const { c, checkout, source } = await setup(harness);
