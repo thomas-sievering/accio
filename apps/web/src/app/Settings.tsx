@@ -5,16 +5,18 @@ import { HarnessesSettings } from '../harnesses/HarnessesSettings';
 import { AccountsSettings } from '../profiles/AccountsSettings';
 import { ProfilesSettings } from '../profiles/ProfilesSettings';
 import { useProfiles } from '../profiles/profiles';
-import { ArrowLeft, Hub, Layers, Monitor, Users } from './icons';
+import { SecretsSettings, type SecretsRoute } from '../secrets/SecretsSettings';
+import { ArrowLeft, Hub, Key, Layers, Monitor, Users } from './icons';
 import { SidebarResizer } from './SidebarResizer';
 
 /** Where Settings is open. `profileId` opens one profile ('new' to add one). */
-export type SettingsRoute = { section: 'profiles'; profileId?: string } | { section: 'accounts'; accountId?: string } | { section: 'hub' } | { section: 'harnesses' } | { section: 'machines'; machineId?: string };
+export type SettingsRoute = { section: 'profiles'; profileId?: string } | { section: 'accounts'; accountId?: string } | ({ section: 'secrets' } & SecretsRoute) | { section: 'hub' } | { section: 'harnesses' } | { section: 'machines'; machineId?: string };
 type Section = SettingsRoute['section'];
 
 const GROUPS: { label?: string; items: { id: Section; label: string; icon: ReactNode }[] }[] = [
   { label: 'Hub settings', items: [
     { id: 'accounts', label: 'Accounts', icon: <Users /> },
+    { id: 'secrets', label: 'Secrets', icon: <Key /> },
     { id: 'profiles', label: 'Profiles', icon: <Users /> },
     { id: 'harnesses', label: 'Harnesses', icon: <Layers /> },
     { id: 'machines', label: 'Machines', icon: <Monitor /> },
@@ -35,6 +37,8 @@ export function Settings({ route, onRoute, onClose }: { route: SettingsRoute; on
   const accountId = route.section === 'accounts' ? route.accountId : undefined;
   const accountLabel = accountId === 'new' || accountId === 'new-openai' ? 'New account' : accounts?.find((a) => a.id === accountId)?.name;
   const profileLabel = profileId === 'new' ? 'New profile' : profiles?.find((p) => p.id === profileId)?.name;
+  const secretLabel = route.section === 'secrets' && route.secretId ? route.secretId === 'new' ? 'New secret' : route.replace ? 'Replace value' : 'Edit secret' : undefined;
+  const backTo: SettingsRoute = route.section === 'secrets' ? { section: 'secrets', profileId: route.profileId } : { section: route.section };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -80,11 +84,11 @@ export function Settings({ route, onRoute, onClose }: { route: SettingsRoute; on
           <nav className="crumbs">
             <span>Settings</span>
             <span className="sep">/</span>
-            {(profileLabel || accountLabel) ? (
+            {(profileLabel || accountLabel || secretLabel) ? (
               <>
-                <button onClick={() => onRoute({ section: route.section })}>{LABEL[route.section]}</button>
+                <button onClick={() => onRoute(backTo)}>{LABEL[route.section]}</button>
                 <span className="sep">/</span>
-                <b>{profileLabel || accountLabel}</b>
+                <b>{profileLabel || accountLabel || secretLabel}</b>
               </>
             ) : (
               <b>{LABEL[route.section]}</b>
@@ -98,9 +102,11 @@ export function Settings({ route, onRoute, onClose }: { route: SettingsRoute; on
                 profileId={profileId}
                 onOpen={(id) => onRoute({ section: 'profiles', profileId: id })}
                 onBack={() => onRoute({ section: 'profiles' })}
+                onOpenSecrets={(id) => onRoute({ section: 'secrets', profileId: id })}
               />
             )}
             {route.section === 'accounts' && <AccountsSettings accountId={accountId} onOpen={(id) => onRoute({ section: 'accounts', accountId: id })} onBack={() => onRoute({ section: 'accounts' })} />}
+            {route.section === 'secrets' && <SecretsSettings route={route} onRoute={(r) => onRoute({ section: 'secrets', ...r })} />}
             {route.section === 'hub' && <HubSettings />}
             {route.section === 'harnesses' && <HarnessesSettings />}
             {route.section === 'machines' && (

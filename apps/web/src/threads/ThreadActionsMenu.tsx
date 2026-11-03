@@ -17,6 +17,8 @@ export function ThreadActionsMenu({ thread, items }: { thread: ThreadView; items
         case 'user': return `## User\n\n${item.resume ? 'Resume' : item.text}`;
         case 'assistant': return `## Assistant\n\n${item.text}`;
         case 'notice': return `## Notice (${item.tone})\n\n${item.text}`;
+        // Metadata only: a secret request never carries its value.
+        case 'secret': return `## Secret request: ${item.label} (${item.status}${item.source ? `, ${item.source}` : ''})`;
         case 'tool': {
           const detail = item.detailRevision === undefined ? undefined : await client.call('threads.toolDetails', { threadId: thread.id, itemId: item.id });
           return [`## Tool: ${item.name} (${item.status})`, item.summary, detail ? formatDetails(detail) : item.output].filter((text) => text !== undefined && text !== '').join('\n\n');

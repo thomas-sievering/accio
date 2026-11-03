@@ -2,6 +2,7 @@ import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { dirname } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
+export { privateDirectory, privateFile, privatePowerShell } from './privateFiles.js';
 
 /**
  * One JSON document on disk. Writes go to a temp file first and are renamed

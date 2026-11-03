@@ -2,10 +2,11 @@ import { memo, useLayoutEffect, useRef, useState } from 'react';
 import type { TranscriptItem } from '@accio/protocol';
 import { AssistantMarkdown } from './AssistantMarkdown';
 import { ToolCallRow } from './ToolCallRow';
+import { SecretRequestCard } from '../secrets/SecretRequestCard';
 import './transcript-media.css';
 
 /** Follow late media/layout changes only while the reader is already at the bottom. */
-export function Transcript({ threadId, items, working }: { threadId: string; items: TranscriptItem[]; working: boolean }) {
+export function Transcript({ threadId, items, working, onOpenSecrets }: { threadId: string; items: TranscriptItem[]; working: boolean; onOpenSecrets?: (profileId: string) => void }) {
   const scroller = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
@@ -53,12 +54,12 @@ export function Transcript({ threadId, items, working }: { threadId: string; ite
         pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
         setAway(!pinned.current);
         const top = el.getBoundingClientRect().top;
-        const visible = [...(content.current?.querySelectorAll<HTMLElement>(':scope > .msg:not(.assistant), :scope > .tool, :scope > .notice, :scope > .turn-finished, :scope > .msg.assistant > *') ?? [])]
+        const visible = [...(content.current?.querySelectorAll<HTMLElement>(':scope > .msg:not(.assistant), :scope > .tool, :scope > .secret, :scope > .notice, :scope > .turn-finished, :scope > .msg.assistant > *') ?? [])]
           .find((node) => node.getBoundingClientRect().bottom > top);
         anchor.current = visible ? { element: visible, offset: visible.getBoundingClientRect().top - top } : undefined;
       }}>
         <div className="thread" ref={content}>
-          {items.map((item) => <Item key={`${threadId}:${item.id}`} threadId={threadId} item={item} preparing={working && item.turnId === lastTurn} />)}
+          {items.map((item) => <Item key={`${threadId}:${item.id}`} threadId={threadId} item={item} preparing={working && item.turnId === lastTurn} onOpenSecrets={onOpenSecrets} />)}
           {working && <div className="typing" aria-label="Working"><i /><i /><i /></div>}
         </div>
       </div>
@@ -72,7 +73,7 @@ export function Transcript({ threadId, items, working }: { threadId: string; ite
   );
 }
 
-const Item = memo(function Item({ threadId, item, preparing }: { threadId: string; item: TranscriptItem; preparing: boolean }) {
+const Item = memo(function Item({ threadId, item, preparing, onOpenSecrets }: { threadId: string; item: TranscriptItem; preparing: boolean; onOpenSecrets?: (profileId: string) => void }) {
   switch (item.kind) {
     case 'user':
       return <div className={`msg user${item.resume ? ' resume' : ''}`}>{item.resume ? 'Resume' : item.text}</div>;
@@ -83,6 +84,8 @@ const Item = memo(function Item({ threadId, item, preparing }: { threadId: strin
       return <ToolCallRow threadId={threadId} item={item} />;
     case 'notice':
       return <div className={`notice ${item.tone}`}>{item.text}</div>;
+    case 'secret':
+      return <SecretRequestCard threadId={threadId} item={item} onOpenSecrets={onOpenSecrets} />;
     case 'finished':
       return <div className="turn-finished">Worked for {formatDuration(item.ms)}</div>;
   }

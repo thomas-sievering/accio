@@ -14,7 +14,7 @@ import type { Harness } from './threads/harness.js';
 import { claudeCode, claudeCodeInstall } from './threads/claudeCode.js';
 import { codexHarness } from './threads/codex.js';
 import { codexInstall, type CodexFactory } from '@accio/codex';
-import { OpenAIAuth } from '@accio/hub';
+import { OpenAIAuth, SecretsVault } from '@accio/hub';
 
 export type AppOptions = {
   home: string;
@@ -81,7 +81,9 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
   await projects.load();
   projects.register(router);
 
-  const threads = new Threads(opts.home, profiles, projects, { claudeCode: deps.harness ?? claudeCode, codex: deps.codexHarness ?? codexHarness(deps.codexFactory) }, broadcast, models, machines);
+  const secrets = new SecretsVault(opts.home);
+  await secrets.load();
+  const threads = new Threads(opts.home, profiles, projects, { claudeCode: deps.harness ?? claudeCode, codex: deps.codexHarness ?? codexHarness(deps.codexFactory) }, broadcast, models, machines, secrets);
   await threads.load();
   threads.register(router);
 
@@ -95,6 +97,7 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
     projects,
     threads,
     hub,
+    secrets,
     settings,
     machines,
     hubUrl: hubProxy.url,
@@ -103,6 +106,7 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
       const profilesClosed = profiles.close();
       await transport.close();
       await turnsClosed;
+      await secrets.close();
       await profilesClosed;
       await projects.close();
       await machines.disconnect();

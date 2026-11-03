@@ -24,3 +24,4 @@ Record feature IDs and entry points in `actions.json`. Pair the action trace wit
 - [Projects](projects.md): add folders through onboarding or toolbar, inspect duplicates, remote grouping, settings and removal.
 - [Machines](machines.md): status, harness versions, machine names and profile folder defaults.
 - [Threads](threads.md): project/profile picker, models, messages, stop/resume, search/filter, shelves and deletion.
+- [Secrets](secrets.md): private entry, automatic saved reuse, one-time delivery, project access, replacement and deletion; includes the isolated scripted-harness journey.

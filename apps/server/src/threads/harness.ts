@@ -51,6 +51,10 @@ export type HarnessTurn = {
   model?: string;
   env: Record<string, string>;
   signal: AbortSignal;
+  /** Bound by the machine to this turn, project and profile; never accepts identity arguments. */
+  requestSecret?: (input: import('../secrets/secrets.js').SecretToolArgs) => Promise<import('../secrets/secrets.js').SecretDelivery>;
+  /** Authorized saved-purpose metadata lets a fresh harness reuse the exact stable key. */
+  secretPurposes?: { slot: string; name: string }[];
 };
 
 export interface Harness {

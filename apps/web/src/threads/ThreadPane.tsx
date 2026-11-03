@@ -12,6 +12,7 @@ import { ModelPicker } from './ModelPicker';
 import { ThreadNotice } from './ThreadNotice';
 import { ThreadActionsMenu } from './ThreadActionsMenu';
 import { Transcript } from './Transcript';
+import { useReportPendingSecrets } from '../secrets/pendingSecrets';
 import { useThreads, useTranscript } from './threads';
 
 /** Where a thread runs, looked up once for the header, the notice and the composer. */
@@ -24,10 +25,11 @@ function usePlace(checkoutId: string, profileId?: string) {
   return { checkout, project, profile };
 }
 
-export function ThreadPane({ thread, onOpenProfile }: { thread: ThreadView; onOpenProfile: (profileId: string) => void }) {
+export function ThreadPane({ thread, onOpenProfile, onOpenSecrets }: { thread: ThreadView; onOpenProfile: (profileId: string) => void; onOpenSecrets?: (profileId: string) => void }) {
   const client = useClient();
   const place = usePlace(thread.checkoutId, thread.profileId);
   const { items, error, retry } = useTranscript(thread.id);
+  useReportPendingSecrets(thread.id, items);
   const running = thread.status === 'running';
   const [savingModel, setSavingModel] = useState(false);
   const lastTurn = items?.findLast((item) => item.kind === 'user')?.turnId;
@@ -39,7 +41,7 @@ export function ThreadPane({ thread, onOpenProfile }: { thread: ThreadView; onOp
   return (
     <>
       <PaneHeader title={thread.title} {...place} actions={<ThreadActionsMenu key={thread.id} thread={thread} items={items} />} />
-      {visibleItems ? <Transcript threadId={thread.id} items={visibleItems} working={running} /> : (
+      {visibleItems ? <Transcript threadId={thread.id} items={visibleItems} working={running} onOpenSecrets={onOpenSecrets} /> : (
         <div className="empty">
           {error && <>
             <p className="error" role="alert">Could not load transcript: {error}</p>

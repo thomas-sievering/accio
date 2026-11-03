@@ -3,6 +3,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import type { Harness, HarnessMessage, HarnessTurn } from './harness.js';
+import { secretMcpServer } from '../secrets/claudeTool.js';
+import { savedPurposeInstructions } from '../secrets/secrets.js';
 
 /** How long a stopped turn gets to wind down gracefully before its process is killed. */
 const HARD_STOP_AFTER_MS = 3000;
@@ -14,7 +16,7 @@ const HARD_STOP_AFTER_MS = 3000;
  * the checkout's own .claude folder and CLAUDE.md.
  */
 export const claudeCode: Harness = {
-  async *run({ cwd, prompt, sessionId, model, env, signal }: HarnessTurn) {
+  async *run({ cwd, prompt, sessionId, model, env, signal, requestSecret, secretPurposes }: HarnessTurn) {
     if (signal.aborted) return;
     const abortController = new AbortController();
     const stderr: string[] = [];
@@ -30,7 +32,8 @@ export const claudeCode: Harness = {
         permissionMode: 'bypassPermissions',
         allowDangerouslySkipPermissions: true,
         settingSources: ['user', 'project', 'local'],
-        systemPrompt: { type: 'preset', preset: 'claude_code' },
+        systemPrompt: { type: 'preset', preset: 'claude_code', ...(requestSecret ? { append: 'When a task needs a token, call mcp__accio__request_secret with a stable service/operation/target slot. Accio reuses permitted saved credentials automatically. Never ask for secrets in conversation or print, copy, or link secret files.' + savedPurposeInstructions(secretPurposes) } : {}) },
+        ...(requestSecret ? { mcpServers: { accio: secretMcpServer(requestSecret) } } : {}),
         stderr: (data) => {
           stderr.push(data);
           if (stderr.length > 50) stderr.shift();

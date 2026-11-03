@@ -5,6 +5,7 @@ import { ProjectsProvider, useProjects } from '../projects/projects';
 import { AddProjectSheet } from '../projects/AddProjectSheet';
 import { ProjectSheet } from '../projects/ProjectSheet';
 import { ThreadsProvider, useThreads } from '../threads/threads';
+import { PendingSecretsProvider } from '../secrets/pendingSecrets';
 import { NewThreadButton } from '../threads/NewThreadButton';
 import { ThreadList } from '../threads/ThreadList';
 import { DraftPane, ThreadPane } from '../threads/ThreadPane';
@@ -22,7 +23,9 @@ export function App() {
     <ProfilesProvider>
       <ProjectsProvider>
         <ThreadsProvider>
-          <Shell />
+          <PendingSecretsProvider>
+            <Shell />
+          </PendingSecretsProvider>
         </ThreadsProvider>
       </ProjectsProvider>
     </ProfilesProvider>
@@ -47,6 +50,7 @@ function Shell() {
   const close = () => setSheet(null);
   const openProject = sheet?.kind === 'project' ? state?.projects.find((p) => p.id === sheet.id) : undefined;
   const openProfile = (profileId: string) => setSettings({ section: 'profiles', profileId });
+  const openSecrets = useCallback((profileId: string) => setSettings({ section: 'secrets', profileId }), []);
   const setUp = profiles && state && profiles.length > 0 && profiles.some(hasSignedInAccount) && state.projects.length > 0;
 
   if (settings) return <Settings route={settings} onRoute={setSettings} onClose={closeSettings} />;
@@ -89,7 +93,7 @@ function Shell() {
         {draft ? (
           <DraftPane key={`${draft.checkoutId}:${draft.profileId}`} {...draft} onOpenProfile={openProfile} />
         ) : thread ? (
-          <ThreadPane key={thread.id} thread={thread} onOpenProfile={openProfile} />
+          <ThreadPane key={thread.id} thread={thread} onOpenProfile={openProfile} onOpenSecrets={openSecrets} />
         ) : (
           <>
             <header className="main-top drag" />

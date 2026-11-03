@@ -1,4 +1,5 @@
 export { Hub, type AccountSummary } from './hub.js';
+export { SecretsVault, SecretStoreError, checkValue, type SecretScope } from './secrets.js';
 export { startHubProxy } from './proxy.js';
 export { SignInError, type Fetch } from './claudeOAuth.js';
 export { OpenAIAuth, type OpenAIAccount, type CodexModel } from './openaiAuth.js';

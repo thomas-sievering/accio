@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { method } from './rpc.js';
 import { ModelSelection } from './models.js';
 import type { AssetUrl, MediaBinding, ToolDetails } from './media.js';
+import type { SecretRequestItem } from './secrets.js';
 
 /**
  * GLOSSARY: Thread. A durable conversation with a harness inside one checkout.
@@ -17,6 +18,8 @@ export type ThreadView = {
   model: ModelSelection;
   title: string;
   status: ThreadStatus;
+  /** Live metadata only; the turn remains running while waiting for private input. */
+  needsSecret?: boolean;
   createdAt: string;
   updatedAt: string;
   /** GLOSSARY: Snooze. Hidden until this time; null when not snoozed. */
@@ -34,6 +37,7 @@ export type ThreadStatus = 'idle' | 'running' | 'interrupted' | 'failed';
 
 /** One entry of a thread's transcript. */
 export type TranscriptItem =
+  | SecretRequestItem
   | { kind: 'user'; id: string; turnId: string; text: string; at: string; resume?: boolean }
   | { kind: 'assistant'; id: string; turnId: string; text: string; media?: MediaBinding[] }
   | { kind: 'tool'; id: string; turnId: string; name: string; summary: string; status: 'running' | 'done' | 'error' | 'interrupted'; output?: string; detailRevision?: number }
