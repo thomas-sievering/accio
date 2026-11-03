@@ -1,5 +1,5 @@
 /** Isolated real server + deterministic harness for the committed chat browser checks. */
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
@@ -7,12 +7,31 @@ import { startApp } from '../apps/server/src/app.js';
 import { FakeHarness, SESSION, replyWith } from '../apps/server/src/testing/fakeHarness.js';
 import { fakeClaudeFetch, TestClient } from '../apps/server/src/testing/testApp.js';
 import type { HarnessMessage } from '../apps/server/src/threads/harness.js';
+import { git } from '../apps/server/src/threads/delivery.js';
 
 const home = await mkdtemp(join(tmpdir(), 'accio-chat-browser-'));
 const fixture = (name: string) => readFile(resolve('tests/fixtures', name));
 const token = 'isolated-chat-test-token';
 const image = await fixture('chat.png');
 const harness = new FakeHarness(async function* (run) {
+  if (run.prompt === 'Build delivery fixture') {
+    await writeFile(join(run.cwd, 'feature.txt'), 'A change owned by this thread.\n');
+    yield { type: 'harness_event', event: { kind: 'text', id: 'delivery-progress', text: 'Feature implemented. Running checks…' } };
+    await setTimeout(8000, undefined, { signal: run.signal }).catch(() => {});
+    if (!run.signal.aborted) yield { type: 'harness_event', event: { kind: 'end' } };
+    return;
+  }
+  if (run.prompt.startsWith('Deliver the current task')) {
+    await git(run.cwd, 'add', '.');
+    if (await git(run.cwd, 'status', '--porcelain')) await git(run.cwd, 'commit', '--quiet', '-m', 'delivery fixture');
+    await git(run.cwd, 'fetch', '--quiet', 'origin');
+    await git(run.cwd, 'rebase', 'origin/main');
+    if (run.prompt.includes('NEVER merge')) await git(run.cwd, 'push', '--quiet', 'origin', 'HEAD');
+    else await git(run.cwd, 'push', '--quiet', 'origin', 'HEAD:refs/heads/main');
+    yield* replyWith('Verification complete. Published the committed change.');
+    return;
+  }
+  if (run.prompt === 'Delivery follow-up') { yield* replyWith('Fresh workspace ready.'); return; }
   if (run.prompt === 'append update') {
     yield* replyWith('Update complete');
     return;
@@ -73,6 +92,22 @@ const harness = new FakeHarness(async function* (run) {
 const app = await startApp({ home, host: '127.0.0.1', port: Number(process.env.ACCIO_CHAT_TEST_PORT ?? 47481), hubPort: 0, token, webRoot: resolve('apps/web/dist') }, { harness, claudeFetch: fakeClaudeFetch });
 const client = await TestClient.open(`ws://127.0.0.1:${app.port}/ws?token=${token}`);
 await client.signedIn('Personal');
+const deliveryFolder = join(home, 'delivery-project');
+const deliveryOrigin = join(home, 'delivery-origin.git');
+await mkdir(deliveryFolder);
+await git(deliveryFolder, 'init', '--quiet', '-b', 'main');
+await git(deliveryFolder, 'config', 'user.name', 'Accio Browser Test');
+await git(deliveryFolder, 'config', 'user.email', 'browser@example.test');
+await git(deliveryFolder, 'config', 'core.autocrlf', 'false');
+await writeFile(join(deliveryFolder, 'preview.cjs'), `require('http').createServer((req,res)=>res.end('Accio delivery preview')).listen(Number(process.env.PORT),'127.0.0.1');`);
+await git(deliveryFolder, 'add', '.');
+await git(deliveryFolder, 'commit', '--quiet', '-m', 'preview fixture');
+await git(home, 'init', '--quiet', '--bare', '-b', 'main', deliveryOrigin);
+await git(deliveryFolder, 'remote', 'add', 'origin', deliveryOrigin);
+await git(deliveryFolder, 'push', '--quiet', '-u', 'origin', 'main');
+await git(deliveryFolder, 'remote', 'set-head', 'origin', '-a');
+const deliveryCheckout = await client.call('checkouts.add', { path: deliveryFolder, profileId: 'personal' });
+await client.call('projects.setDelivery', { projectId: deliveryCheckout.projectId, deliveryPolicy: 'direct', previewCommand: 'node preview.cjs' });
 const thread = await client.call('threads.start', { profileId: 'personal', text: 'Inline chat fixture' });
 await client.waitFor('threads.changed', (threads) => threads.some((entry) => entry.id === thread.id && entry.status === 'idle'));
 console.log(`Chat fixture ready: http://127.0.0.1:${app.port}`);
