@@ -10,9 +10,10 @@ const base = {
   'aria-hidden': true,
 };
 
-export const UpDown = () => (
+export const User = () => (
   <svg {...base}>
-    <path d="m7 15 5 5 5-5M7 9l5-5 5 5" />
+    <circle cx="12" cy="8" r="4" />
+    <path d="M5 21v-2a7 7 0 0 1 14 0v2" />
   </svg>
 );
 export const Check = () => (

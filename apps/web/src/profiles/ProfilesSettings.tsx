@@ -1,10 +1,10 @@
 import { useState, type FormEvent } from 'react';
 import type { ProfileView } from '@accio/protocol';
 import { useClient } from '../app/connection';
-import { Chevron, Plus } from '../app/icons';
+import { Chevron, Plus, User } from '../app/icons';
 import { SettingsSection } from '../app/Settings';
 import { useAction } from '../app/useAction';
-import { claudeAccount, ProfileTile, useProfiles } from './profiles';
+import { claudeAccount, useProfiles } from './profiles';
 
 /** Profiles select accounts configured in Accounts settings. */
 export function ProfilesSettings({
@@ -28,7 +28,7 @@ export function ProfilesSettings({
     <SettingsSection title="Profiles">
       {profiles.map((p) => (
         <button key={p.id} className="setting setting-link" onClick={() => onOpen(p.id)}>
-          <ProfileTile profile={p} size="md" />
+          <span className="menu-icon"><User /></span>
           <span className="setting-text">
             <b>{p.name}</b>
             <small className={claudeAccount(p)?.signedIn ? undefined : 'warn'}>{claudeAccount(p)?.name ?? 'No account selected'}{claudeAccount(p) && !claudeAccount(p)?.signedIn ? ' · Signed out' : ''}</small>

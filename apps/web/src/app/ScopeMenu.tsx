@@ -1,70 +1,54 @@
 import { useRef } from 'react';
 import type { ProjectView } from '@accio/protocol';
-import { claudeAccount, ProfileTile, useProfiles } from '../profiles/profiles';
+import { useProfiles } from '../profiles/profiles';
 import { ProjectMark } from '../projects/ProjectMark';
 import { useProjects } from '../projects/projects';
 import { useThreads } from '../threads/threads';
-import { Check, FolderPlus, Settings, UpDown } from './icons';
+import { Check, Layers, ListFilter, Settings, User } from './icons';
 
 /**
- * The top of the sidebar: one answer to "what am I looking at". Pick everything,
- * one profile, or one project (which also picks its profile). Projects sit under
- * their profile, each with its settings, and new projects are added here too.
+ * Filter the thread list by profile or project without changing the open thread.
+ * Projects sit under their profile, with a shortcut to each project's settings.
  */
-export function ScopeMenu({ onOpenProject, onAddProject }: { onOpenProject: (p: ProjectView) => void; onAddProject: () => void }) {
+export function ScopeMenu({ onOpenProject }: { onOpenProject: (p: ProjectView) => void }) {
   const { profiles = [], filter, setFilter } = useProfiles();
   const { state } = useProjects();
   const { projectScope, setProjectScope } = useThreads();
   const menu = useRef<HTMLDivElement>(null);
   const projects = [...(state?.projects ?? [])].sort((a, b) => a.name.localeCompare(b.name));
-  const scopedProject = projects.find((p) => p.id === projectScope);
-  // With one profile, "all" and "that profile" are the same choice: show it as the profile.
-  const single = profiles.length === 1 ? profiles[0] : undefined;
-  const scopedProfile = profiles.find((p) => p.id === filter) ?? single;
+  const active = filter !== 'all' || projectScope !== '';
 
   const pick = (profileId: string, projectId = '') => {
-    setFilter(single ? 'all' : profileId);
+    setFilter(profileId);
     setProjectScope(projectId);
     menu.current?.hidePopover();
   };
   const checked = (profileId: string, projectId = '') =>
-    projectScope === projectId && (projectId !== '' || filter === profileId || (single !== undefined && profileId === single.id));
+    projectScope === projectId && filter === profileId;
 
   return (
     <>
-      <button className="switcher" popoverTarget="scope-menu" title="Choose what the sidebar shows">
-        {scopedProject ? (
-          <span className="switcher-mark">
-            <ProjectMark id={scopedProject.id} size={14} />
-          </span>
-        ) : (
-          <ProfileTile profile={scopedProfile} />
-        )}
-        <span className="switcher-name">{scopedProject?.name ?? scopedProfile?.name ?? 'Everything'}</span>
-        <span className="switcher-updown">
-          <UpDown />
-        </span>
+      <button className={`side-icon thread-filter${active ? ' on' : ''}`} popoverTarget="scope-menu" title="Filter threads" aria-label="Filter threads" aria-haspopup="menu">
+        <ListFilter />
+        {active && <span className="filter-dot" />}
       </button>
       <div className="menu scope-menu" id="scope-menu" popover="auto" ref={menu} role="menu">
-        {!single && profiles.length > 0 && (
-          <button className="menu-item" role="menuitemradio" aria-checked={checked('all')} onClick={() => pick('all')}>
-            <ProfileTile size="md" />
-            <span className="menu-text">
-              <b>Everything</b>
-              <small>All profiles and projects</small>
-            </span>
-            {checked('all') && <Check />}
-          </button>
-        )}
+        <div className="menu-label">Filter threads</div>
+        <button className="menu-item" role="menuitemradio" aria-checked={checked('all')} onClick={() => pick('all')}>
+          <span className="menu-icon"><Layers /></span>
+          <span className="menu-text">
+            <b>All threads</b>
+            <small>All profiles and projects</small>
+          </span>
+          {checked('all') && <Check />}
+        </button>
+        <hr />
         {profiles.map((profile) => (
           <div key={profile.id} className="scope-group">
             <button className="menu-item" role="menuitemradio" aria-checked={checked(profile.id)} onClick={() => pick(profile.id)}>
-              <ProfileTile profile={profile} size="md" />
+              <span className="menu-icon"><User /></span>
               <span className="menu-text">
                 <b>{profile.name}</b>
-                <small className={claudeAccount(profile)?.signedIn ? undefined : 'warn'}>
-                  {claudeAccount(profile)?.name ?? 'No account selected'}{claudeAccount(profile) && !claudeAccount(profile)?.signedIn ? ' (signed out)' : ''}
-                </small>
               </span>
               {checked(profile.id) && <Check />}
             </button>
@@ -98,21 +82,6 @@ export function ScopeMenu({ onOpenProject, onAddProject }: { onOpenProject: (p: 
               ))}
           </div>
         ))}
-        {profiles.length > 0 && <hr />}
-        <button
-          className="menu-item"
-          role="menuitem"
-          disabled={profiles.length === 0}
-          onClick={() => {
-            menu.current?.hidePopover();
-            onAddProject();
-          }}
-        >
-          <span className="menu-icon">
-            <FolderPlus />
-          </span>
-          <span className="menu-text">Add project…</span>
-        </button>
       </div>
     </>
   );
