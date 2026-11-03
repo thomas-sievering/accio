@@ -4,6 +4,10 @@ on:
     paths:
       - apps/**
       - packages/**
+      - tests/**
+      - scripts/**
+      - playwright*.config.ts
+      - .agents/skills/3-verify/**
       - package.json
       - pnpm-lock.yaml
       - pnpm-workspace.yaml
@@ -37,8 +41,34 @@ jobs:
         env:
           # Disposable encryption backend for isolated Linux test homes.
           ACCIO_SECRET_KEY: KioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKio=
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.16.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm --config.minimumReleaseAge=0 install --frozen-lockfile --ignore-scripts
+      - run: node scripts/ensure-electron.mjs
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm build
+      - run: xvfb-run --auto-servernum pnpm exec playwright test
+      - run: pnpm exec playwright test --config playwright.secrets.config.ts
+      - run: pnpm exec playwright test --config playwright.limits.config.ts
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-results
+          path: |
+            test-results/
+            out/limits-browser/
+          retention-days: 7
   image:
-    needs: verify
+    needs: [verify, browser]
     runs-on: ubuntu-latest
     permissions:
       contents: read
