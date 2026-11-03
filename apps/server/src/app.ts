@@ -39,7 +39,7 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
 
   await renameAccountsToProfiles(opts.home);
 
-  // This machine is the home machine in v0.1, so it runs the hub in-process.
+  // In v0.1 this machine runs the hub in-process.
   const hub = new Hub(opts.home, deps.claudeFetch ?? fetch);
   await hub.load();
   const hubProxy = await startHubProxy({
