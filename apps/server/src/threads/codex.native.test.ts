@@ -7,7 +7,7 @@ let app: Awaited<ReturnType<typeof startTestApp>>;
 afterEach(() => app?.stop());
 
 /** Exercises the pinned native binary and its actual wire protocol; inference stays local and scripted. */
-it.each([false, true])('runs the bundled Codex through the hub proxy and restores its native session (MCP: %s)', async (withMcp) => {
+it.each([[false, false], [true, false], [false, true]])('runs the bundled Codex through the hub proxy and restores its native session (MCP: %s, shell: %s)', async (withMcp, withShell) => {
   const login = new FakeCodex();
   const mcpRequests: string[] = [];
   const requests: { headers: Headers; body: any }[] = [];
@@ -20,9 +20,17 @@ it.each([false, true])('runs the bundled Codex through the hub proxy and restore
   }, openaiFetch: async (_url, init) => {
     requests.push({ headers: new Headers(init?.headers), body: JSON.parse(new TextDecoder().decode(init?.body as Uint8Array)) });
     const id = `resp_${requests.length}`;
-    const message = { id: `msg_${requests.length}`, type: 'message', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: 'Native Codex reply.', annotations: [] }] };
+    const shell = withShell && requests.length === 1;
+    const message = shell
+      ? { id: 'shell-call', type: 'function_call', call_id: 'shell-call', name: 'exec_command', arguments: JSON.stringify({ cmd: 'node -e "setInterval(() => {}, 1000)"', yield_time_ms: 1000, max_output_tokens: 100 }) }
+      : { id: `msg_${requests.length}`, type: 'message', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: 'Native Codex reply.', annotations: [] }] };
     const response = { id, object: 'response', created_at: 1, status: 'completed', model: 'test-codex', output: [message], usage: { input_tokens: 10, output_tokens: 4, total_tokens: 14 } };
-    const events = [
+    const events = shell ? [
+      { type: 'response.created', response: { ...response, status: 'in_progress', output: [] } },
+      { type: 'response.output_item.added', output_index: 0, item: message },
+      { type: 'response.output_item.done', output_index: 0, item: message },
+      { type: 'response.completed', response },
+    ] : [
       { type: 'response.created', response: { ...response, status: 'in_progress', output: [] } },
       { type: 'response.output_item.added', output_index: 0, item: { ...message, status: 'in_progress', content: [] } },
       { type: 'response.content_part.added', item_id: message.id, output_index: 0, content_index: 0, part: { type: 'output_text', text: '', annotations: [] } },
@@ -47,6 +55,10 @@ it.each([false, true])('runs the bundled Codex through the hub proxy and restore
   expect(transcript.filter((i) => i.kind === 'notice')).toHaveLength(withMcp ? 1 : 0);
   if (withMcp) expect(mcpRequests).toEqual(expect.arrayContaining(['initialize', 'tools/list']));
   expect(first?.status).toBe('idle');
+  if (withShell) {
+    expect(transcript).toContainEqual(expect.objectContaining({ kind: 'tool', name: 'Shell' }));
+    expect(transcript.some(item => item.kind === 'tool' && item.status === 'running')).toBe(false);
+  }
   expect(transcript).toEqual(expect.arrayContaining([expect.objectContaining({ kind: 'assistant', text: 'Native Codex reply.' })]));
   expect(requests[0]?.body).toMatchObject({ model: 'test-codex', stream: true, store: false });
   expect(requests[0]?.headers.get('chatgpt-account-id')).toBe('native');
@@ -57,5 +69,5 @@ it.each([false, true])('runs the bundled Codex through the hub proxy and restore
   const after = await client.call('threads.transcript', { threadId: thread.id });
   expect(after.filter((i) => i.kind === 'notice')).toHaveLength(withMcp ? 2 : 0);
   expect(after.filter((i) => i.kind === 'assistant')).toHaveLength(2);
-  expect(requests).toHaveLength(2);
+  expect(requests).toHaveLength(withShell ? 3 : 2);
 }, 40_000);

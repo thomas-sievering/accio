@@ -90,6 +90,8 @@ class StdioCodex implements CodexClient {
     child.stderr.resume();
     child.stdin.on('error', () => this.fail(new Error('Codex app-server connection closed')));
     child.once('error', () => this.fail(new Error('Could not start the bundled Codex app-server')));
+    // Process exit is authoritative even if descendants keep its pipes open.
+    child.once('exit', (code) => this.fail(new Error(`Codex app-server exited (${code ?? 'signal'})`)));
     this.closed = new Promise((resolve) => child.once('close', (code) => {
       lines.close(); this.fail(new Error(`Codex app-server exited (${code ?? 'signal'})`)); resolve();
     }));
@@ -125,9 +127,22 @@ class StdioCodex implements CodexClient {
   }
   close(): Promise<void> {
     return this.closing ??= (async () => {
+      // `close` waits for stdio too: descendants can hold those handles open
+      // after the app-server exits, even after kill(). Never pin a turn on them.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const deadline = new Promise<void>((resolve) => {
+        timer = setTimeout(() => {
+          this.fail(new Error('Codex app-server connection closed'));
+          try { this.child.kill(); } catch { /* The child may have already exited. */ } finally {
+            this.child.stdin.destroy();
+            this.child.stdout.destroy();
+            this.child.stderr.destroy();
+            resolve();
+          }
+        }, 3000);
+      });
       this.child.stdin.end();
-      const timer = setTimeout(() => this.child.kill(), 3000);
-      try { await this.closed; } finally { clearTimeout(timer); }
+      try { await Promise.race([this.closed, deadline]); } finally { clearTimeout(timer); }
     })();
   }
 }
