@@ -1,12 +1,18 @@
 import { identityColorOf } from '../app/identityColor';
+import { useProjects } from './projects';
 
-/** A project's mark: a square in the project's own colour. */
-export function ProjectMark({ id, size = 12 }: { id: string; size?: number }) {
+/** A project's mark: its initial on a tile tinted with the project's own colour. */
+export function ProjectMark({ id, size = 18 }: { id: string; size?: number }) {
+  const { state } = useProjects();
+  const name = state?.projects.find((p) => p.id === id)?.name ?? '';
+  const initial = name.match(/[\p{L}\p{N}]/u)?.[0]?.toUpperCase() ?? '';
   return (
     <span
       className="project-mark"
       aria-hidden="true"
-      style={{ inlineSize: size, blockSize: size, background: identityColorOf(id) }}
-    />
+      style={{ inlineSize: size, blockSize: size, fontSize: Math.round(size * 0.58), '--mark': identityColorOf(id) } as React.CSSProperties}
+    >
+      {initial}
+    </span>
   );
 }

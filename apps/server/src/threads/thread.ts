@@ -106,7 +106,7 @@ export function recoverAfterRestart(threads: readonly Thread[]): { threads: Thre
 
 /** Tool calls that were in flight when a turn died did not report back. */
 export function closeOpenTools(items: readonly TranscriptItem[]): TranscriptItem[] {
-  return items.map((i) => (i.kind === 'tool' && i.status === 'running' ? { ...i, status: 'error' as const } : i));
+  return items.map((i) => (i.kind === 'tool' && i.status === 'running' ? { ...i, status: 'interrupted' as const } : i));
 }
 
 /**

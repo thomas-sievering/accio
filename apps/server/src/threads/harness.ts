@@ -13,8 +13,9 @@ export type ContentBlock =
 
 export type StreamEvent =
   | { type: 'message_start'; message: { id: string } }
-  | { type: 'content_block_start'; index: number; content_block: { type: string } }
-  | { type: 'content_block_delta'; index: number; delta: { type: string; text?: string } }
+  | { type: 'content_block_start'; index: number; content_block: ContentBlock }
+  | { type: 'content_block_delta'; index: number; delta: { type: string; text?: string; partial_json?: string } }
+  | { type: 'content_block_stop'; index: number }
   | { type: string; [k: string]: unknown };
 
 /** Harness-neutral events used by adapters that do not emit Claude SDK messages. */
@@ -30,6 +31,8 @@ export type HarnessMessage =
   | { type: 'stream_event'; event: StreamEvent; parent_tool_use_id: string | null; session_id: string }
   | {
       type: 'assistant';
+      /** Envelope identity; message.id is shared by completed content-block fragments. */
+      uuid?: string;
       message: { id: string; content: ContentBlock[] };
       parent_tool_use_id: string | null;
       session_id: string;

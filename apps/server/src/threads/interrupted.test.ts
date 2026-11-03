@@ -47,7 +47,7 @@ describe('interrupted turns', () => {
     await c.call('threads.stop', { threadId: thread.id });
     await statusIs(c, thread.id, 'interrupted');
     const afterStop = await c.call('threads.transcript', { threadId: thread.id });
-    expect(afterStop.find((i) => i.kind === 'tool')).toMatchObject({ status: 'error' });
+    expect(afterStop.find((i) => i.kind === 'tool')).toMatchObject({ status: 'interrupted' });
     expect(afterStop.at(-1)).toMatchObject({ kind: 'notice', text: 'Stopped.' });
 
     c.events.length = 0;
@@ -56,7 +56,8 @@ describe('interrupted turns', () => {
     expect(harness.runs[1]).toMatchObject({ prompt: RESUME_PROMPT, sessionId: SESSION });
     const items = await c.call('threads.transcript', { threadId: thread.id });
     expect(items.filter((i) => i.kind === 'user').at(-1)).toMatchObject({ resume: true });
-    expect(items.at(-1)).toMatchObject({ kind: 'assistant', text: 'picked up' });
+    expect(items.at(-2)).toMatchObject({ kind: 'assistant', text: 'picked up' });
+    expect(items.at(-1)).toMatchObject({ kind: 'finished' });
   });
 
   it('marks a turn that was running when accio stopped as interrupted on the next start', async () => {
@@ -91,7 +92,7 @@ describe('interrupted turns', () => {
     const [after] = await second.c.call('threads.list', {});
     expect(after?.status).toBe('interrupted');
     const items = await second.c.call('threads.transcript', { threadId: thread.id });
-    expect(items[1]).toMatchObject({ kind: 'tool', status: 'error' });
+    expect(items[1]).toMatchObject({ kind: 'tool', status: 'interrupted' });
     expect(items[2]).toMatchObject({ kind: 'notice', text: expect.stringMatching(/accio stopped/) });
     // Nothing continues on its own.
     expect(harness.runs).toHaveLength(0);

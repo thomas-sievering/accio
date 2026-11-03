@@ -80,7 +80,7 @@ export function NewThreadButton({ className = 'side-icon', label }: { className?
               aria-selected={index === selected} disabled={c.disabled} tabIndex={-1}
               ref={(node) => { if (index === selected) node?.scrollIntoView({ block: 'nearest' }); }}
               onMouseMove={() => setActive(index)} onClick={c.pick}>
-              {c.projectId ? <ProjectMark id={c.projectId} size={14} /> : <span className="no-project-mark" />}
+              {c.projectId ? <ProjectMark id={c.projectId} size={16} /> : <span className="no-project-mark" />}
               <span className="menu-text"><b>{c.name}</b>{c.detail && <small>{c.detail}</small>}</span>
               {c.next && <Chevron />}
             </button>
