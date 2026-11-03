@@ -20,6 +20,7 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
   const [position, setPosition] = useState<CSSProperties>({});
   const delivery = thread.delivery;
   const queued = delivery?.status === 'queued';
+  const shipWhenDone = queued && thread.status === 'running';
   const shipping = delivery?.status === 'running';
   const waiting = delivery?.status === 'waiting';
   const delivered = delivery?.status === 'delivered';
@@ -77,7 +78,8 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
         {summary && <span className="delivery-pill delivery-diff" title={`${summary.files} changed ${summary.files === 1 ? 'file' : 'files'}`} aria-label={`${summary.added} lines added, ${summary.removed} lines removed`}>
           <span className="delivery-added">+{summary.added}</span><span className="delivery-removed">−{summary.removed}</span>
         </span>}
-        {queued || waiting ? <span className="delivery-split delivery-queued">
+        {queued || waiting ? <span className={`delivery-split delivery-queued${shipWhenDone ? ' delivery-armed' : ''}`}>
+          {shipWhenDone && <span className="delivery-sparkles" aria-hidden="true"><i /><i /><i /><i /><i /></span>}
           <span role="status"><span className="row-working" />{waiting ? delivery.waitingOn === 'review' ? 'Waiting for review' : delivery.waitingOn === 'agent' ? 'Continuing delivery…' : ciSummary(delivery.ci) ?? 'Waiting for checks' : thread.status === 'running' ? 'Ships when done' : 'Ship paused'}</span>
           <button disabled={busy} aria-label="Cancel queued delivery" title="Cancel queued delivery" onClick={() => void run(async () => { await client.call('threads.cancelDelivery', { threadId: thread.id }); })}><Close /></button>
         </span> : shipping ? <span className="delivery-pill" role="status"><span className="row-working" />{delivery.mode === 'review' ? 'Preparing review…' : 'Shipping…'}</span> : <span className="delivery-split">
