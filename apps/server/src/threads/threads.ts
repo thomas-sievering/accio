@@ -316,6 +316,7 @@ export class Threads {
     run: { cwd: string; prompt: string; env: Record<string, string>; signal: AbortSignal },
   ) {
     const transcript = new TurnTranscript(turnId);
+    const startedAt = Date.now();
     let outcome: TurnOutcome | null = null;
     try {
       if (run.signal.aborted) {
@@ -354,6 +355,7 @@ export class Threads {
           await this.addItem(thread.id, { kind: 'notice', id: `${turnId}:stop`, turnId, tone: 'info', text: 'Stopped.' });
         }
         for (const item of transcript.unfinishedTools(outcome === 'interrupted' ? 'interrupted' : 'error')) await this.addItem(thread.id, item);
+        if (outcome === 'completed') await this.addItem(thread.id, { kind: 'finished', id: `${turnId}:finished`, turnId, ms: Date.now() - startedAt });
         await this.flush(thread.id);
       } catch (error) {
         if (outcome !== 'interrupted') outcome = 'failed';

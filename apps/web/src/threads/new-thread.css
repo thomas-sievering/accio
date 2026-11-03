@@ -76,10 +76,10 @@
 .no-project-mark {
   display: block;
   flex: none;
-  width: 14px;
-  height: 14px;
-  border: 1px dashed var(--muted);
-  border-radius: 3px;
+  width: 16px;
+  height: 16px;
+  border: 1px dashed var(--dim);
+  border-radius: 5px;
 }
 .picker-footer {
   display: flex;

@@ -37,7 +37,9 @@ export type TranscriptItem =
   | { kind: 'user'; id: string; turnId: string; text: string; at: string; resume?: boolean }
   | { kind: 'assistant'; id: string; turnId: string; text: string; media?: MediaBinding[] }
   | { kind: 'tool'; id: string; turnId: string; name: string; summary: string; status: 'running' | 'done' | 'error' | 'interrupted'; output?: string; detailRevision?: number }
-  | { kind: 'notice'; id: string; turnId: string; tone: 'info' | 'error'; text: string };
+  | { kind: 'notice'; id: string; turnId: string; tone: 'info' | 'error'; text: string }
+  /** Closes a completed turn; `ms` is how long the harness worked on it. */
+  | { kind: 'finished'; id: string; turnId: string; ms: number };
 
 /**
  * Cursor increases per thread within one machine process. Start a fresh

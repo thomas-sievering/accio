@@ -120,7 +120,7 @@ function PaneHeader(props: {
     <header className="main-top drag">
       <div className="thread-title">
         <span className="thread-where" title={checkout?.path}>
-          {project && <ProjectMark id={project.id} size={14} />}
+          {project && <ProjectMark id={project.id} size={16} />}
           <span className="thread-project-name">
             {checkout ? <FolderLink path={checkout.path}>{project?.name ?? 'unknown project'}</FolderLink> : project?.name ?? 'No project'}
           </span>

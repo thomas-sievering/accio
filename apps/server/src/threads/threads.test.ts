@@ -95,7 +95,10 @@ describe('threads slice', () => {
     expect(items.map((i) => [i.kind, 'text' in i ? i.text : ''])).toEqual([
       ['user', 'Fix the login bug\nmore detail'],
       ['assistant', 'reply 1'],
+      ['finished', ''],
     ]);
+    // A completed turn closes with how long the harness worked on it.
+    expect(items.at(-1)).toMatchObject({ kind: 'finished', ms: expect.any(Number) });
 
     // The next turn continues the same Claude session.
     await sendAndSettle(c, thread.id, 'and now?');

@@ -1,6 +1,11 @@
 
 .project-mark {
   flex: none;
-  display: block;
-  border-radius: 3px;
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--mark) 26%, var(--side));
+  color: color-mix(in srgb, var(--mark) 70%, white);
+  font-weight: 600;
+  line-height: 1;
 }
