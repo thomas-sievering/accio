@@ -6,8 +6,8 @@ import type { LoadedSkill } from './workspaceSkills.js';
 import type { SecretRequestItem } from './secrets.js';
 
 /**
- * GLOSSARY: Thread. A durable conversation with a harness inside one checkout.
- * It keeps the profile it started with for its whole life.
+ * GLOSSARY: Thread. A durable conversation, optionally attached to a checkout
+ * and owned worktree. Its starting hub, profile and harness stay fixed.
  */
 export type ThreadView = {
   repairToolId?: string;

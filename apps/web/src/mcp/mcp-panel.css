@@ -1,0 +1,21 @@
+/* MCP tab of the side panel: shares the Skills tab's rows. */
+.mcp-section {
+  margin-top: 4px;
+}
+.mcp-where {
+  font: 11px/1.4 'Cascadia Code', Consolas, monospace;
+  word-break: break-all;
+}
+.mcp-status {
+  color: var(--muted);
+}
+.mcp-signin {
+  flex: none;
+  background: none;
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.mcp-signin:hover {
+  border-color: var(--red);
+}

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import type { SettingsRoute } from './Settings';
 
 /**
  * Requests between panes that don't share a parent worth threading props
@@ -10,6 +11,8 @@ export type AppEvents = {
   'composer.insert': { target: string; text: string };
   /** Scroll a thread's transcript to an item, opening any fold it sits in. */
   'transcript.reveal': { threadId: string; itemId: string };
+  /** Open settings at a section, such as one MCP server from the side panel. */
+  'settings.open': SettingsRoute;
 };
 
 const prefix = 'accio:';

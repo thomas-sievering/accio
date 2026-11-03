@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { SkillContext, WorkspaceSkill } from '@accio/protocol';
 import { emitAppEvent } from '../app/appEvents';
 import { useClient } from '../app/connection';
@@ -40,39 +40,38 @@ export function SkillsPanel({ context, composer }: { context: SkillContext; comp
     <div className="skills-panel" aria-busy={loading}>
       <div className="skills-head">
         <p className="note grow">{project ? <>For <b>{project.name}</b></> : value.projectId ? 'For this project' : 'No project'}</p>
-        <button type="button" className="side-icon" title="Refresh skills" aria-label="Refresh skills" disabled={loading} onClick={reload}><Refresh /></button>
+        <button type="button" className="side-icon" title="Refresh skills. Changes apply from the next turn." aria-label="Refresh skills" disabled={loading} onClick={reload}><Refresh /></button>
       </div>
       {error && <p className="error skills-message" role="alert">Could not refresh skills: {error} <button type="button" className="link" onClick={reload}>Retry</button></p>}
       {value.unavailable && <p className="note skills-message" role="status">{value.unavailable}</p>}
       <p className="skills-live" role="status" aria-live="polite">{announce}</p>
 
       <section className="skills-section" aria-labelledby={`${inheritedId}-project`}>
-        <h3 id={`${inheritedId}-project`} className="skills-title">Project skills <span className="skills-count">{own.length}</span></h3>
         {value.projectId
-          ? <AddSkill candidates={addable} context={context} onChanged={reload} onAnnounce={setAnnounce} />
-          : <p className="hint skills-message">Project skills need a project. Start the thread in a project to add any.</p>}
+          ? <AddSkill candidates={addable} context={context} onChanged={reload} onAnnounce={setAnnounce}
+            title={<h3 id={`${inheritedId}-project`} className="skills-title">Project <span className="skills-count">{own.length}</span></h3>} />
+          : <>
+            <div className="skills-title-row"><h3 id={`${inheritedId}-project`} className="skills-title">Project</h3></div>
+            <p className="hint skills-message">Project skills need a project. Start the thread in a project to add any.</p>
+          </>}
         {value.projectId && own.length === 0 && <p className="hint skills-message">No skills in this repository’s <code>.agents/skills</code> or <code>.claude/skills</code> and none added from the library.</p>}
         <ul className="skill-list">{own.map((s) => <SkillItem key={s.id} skill={s} {...row} />)}</ul>
       </section>
 
       <section className="skills-section">
         <h3 className="skills-title">
-          <button type="button" className="skills-fold" aria-expanded={inheritedOpen} aria-controls={inheritedId} onClick={() => setInheritedOpen(!inheritedOpen)}>
+          <button type="button" className="skills-fold" aria-expanded={inheritedOpen} aria-controls={inheritedId} onClick={() => setInheritedOpen(!inheritedOpen)}
+            title={`${inherited.length} available${context.threadId ? ` · ${loadedInherited} loaded` : ''}. From the profile or everywhere; change these in Settings → Skills.`}>
+            <span>Inherited</span>
+            <span className="skills-count">{inherited.length}{loadedInherited > 0 && ` · ${loadedInherited} loaded`}</span>
             <Chevron />
-            <span className="grow">Inherited</span>
-            <span className="skills-count">{inherited.length} available{context.threadId && ` · ${loadedInherited} loaded`}</span>
           </button>
         </h3>
         {inheritedOpen && <div id={inheritedId}>
           {inherited.length === 0 && <p className="hint skills-message">Nothing is turned on for this profile or everywhere.</p>}
           <ul className="skill-list">{inherited.map((s) => <SkillItem key={s.id} skill={s} {...row} />)}</ul>
-          {inherited.length > 0 && <p className="hint skills-message">Change these in Settings → Skills, or on the profile.</p>}
         </div>}
       </section>
-
-      <p className="hint skills-foot">
-        Changes apply from the next turn.{context.threadId && ' Loaded marks a skill this thread was seen reading or invoking; no mark doesn’t mean it went unused.'}
-      </p>
     </div>
   );
 }
@@ -91,13 +90,12 @@ function SkillItem({ skill, context, composer, onChanged, onAnnounce }: RowProps
     <li className={`skill-item${open ? ' open' : ''}`}>
       <div className="skill-line">
         <button type="button" className="skill-toggle" aria-expanded={open} aria-controls={bodyId} onClick={() => setOpen(!open)}>
-          <Chevron />
           <span className="skill-name">{skill.name}</span>
           <span className="skill-origin">{originLabel(skill)}</span>
         </button>
         {skill.conflict && <span className="tag bad" title={skill.conflict}>Conflict</span>}
         {threadId && skill.loaded && (
-          <button type="button" className="tag ok skill-loaded" title="Loaded this thread. Show it in the transcript."
+          <button type="button" className="tag ok skill-loaded" title="Seen reading or invoking it this thread (no mark doesn’t mean unused). Show it in the transcript."
             aria-label={`${skill.name}: loaded this thread. Show in transcript`}
             onClick={() => emitAppEvent('transcript.reveal', { threadId, itemId: skill.loaded!.itemId })}>
             Loaded
@@ -193,7 +191,7 @@ function Instructions({ skill, context, onAnnounce }: { skill: WorkspaceSkill; c
 }
 
 /** Search every library skill not yet on here and turn one on for this project. */
-function AddSkill({ candidates, context, onChanged, onAnnounce }: { candidates: WorkspaceSkill[]; context: SkillContext; onChanged: () => void; onAnnounce: (text: string) => void }) {
+function AddSkill({ candidates, context, onChanged, onAnnounce, title }: { candidates: WorkspaceSkill[]; context: SkillContext; onChanged: () => void; onAnnounce: (text: string) => void; title: ReactNode }) {
   const client = useClient();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -219,10 +217,16 @@ function AddSkill({ candidates, context, onChanged, onAnnounce }: { candidates: 
     close();
   };
 
-  if (!open) {
-    return <button ref={opener} type="button" className="skills-add" onClick={() => setOpen(true)}><Plus />Add skill</button>;
-  }
-  return (
+  const head = (
+    <div className="skills-title-row">
+      {title}
+      <button ref={opener} type="button" className="side-icon" title="Add skill" aria-label="Add skill" aria-pressed={open}
+        onMouseDown={(e) => { if (open) e.preventDefault(); }} onClick={() => (open ? close() : setOpen(true))}><Plus /></button>
+    </div>
+  );
+  if (!open) return head;
+  return (<>
+    {head}
     <div className="skills-picker">
       <input
         type="text" role="combobox" autoFocus spellCheck={false} placeholder="Search library skills…"
@@ -254,5 +258,5 @@ function AddSkill({ candidates, context, onChanged, onAnnounce }: { candidates: 
       {busy && <p className="note skills-message" role="status">Adding…</p>}
       {error && <p className="error skills-message" role="alert">{error}</p>}
     </div>
-  );
+  </>);
 }

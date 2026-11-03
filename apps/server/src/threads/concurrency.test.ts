@@ -111,7 +111,7 @@ it('coordinates new thread creation with removal and rejects starts after remova
   expect(await removing).toMatchObject({ ok: true });
 });
 
-it('quitting aborts an active harness, flushes interrupted state, and preserves resume after restart', async () => {
+it('quitting aborts an active harness, flushes restart intent, and automatically resumes the same session', async () => {
   const harness = new FakeHarness(async function* (run) {
     yield { type: 'system', subtype: 'init', session_id: SESSION };
     await new Promise<void>((resolve) => {
@@ -129,8 +129,10 @@ it('quitting aborts an active harness, flushes interrupted state, and preserves 
   const home = t.home;
   const resumed = new FakeHarness();
   t = await startTestApp({ harness: resumed }, home);
-  expect(await rpc('threads.resume', { threadId: thread.id })).toMatchObject({ ok: true });
+  await expect.poll(() => resumed.runs.length).toBe(1);
   expect(resumed.runs[0]).toMatchObject({ sessionId: SESSION });
+  await t.app.threads.continueAfterRestart();
+  expect(resumed.runs).toHaveLength(1);
 });
 
 it.each(['threads.retry', 'threads.resume'])('reserves %s against a simultaneous send and duplicate intent', async (method) => {
@@ -144,11 +146,11 @@ it.each(['threads.retry', 'threads.resume'])('reserves %s against a simultaneous
   const thread = await c.call('threads.start', { profileId: 'personal', text: 'retry this' });
   await c.waitFor('threads.changed', (ts) => ts.some((x) => x.id === thread.id && x.status === 'failed'));
   if (method === 'threads.resume') {
-    // Restart recovery is the other source of resumable interrupted threads.
+    // An explicitly interrupted thread remains available for manual Resume after restart.
     await t.stop({ keepHome: true });
     const path = join(t.home, 'threads.json');
     const threads = JSON.parse(await readFile(path, 'utf8'));
-    threads[0].status = 'running';
+    threads[0].status = 'interrupted';
     await writeFile(path, JSON.stringify(threads));
     t = await startTestApp({ harness }, t.home);
   }

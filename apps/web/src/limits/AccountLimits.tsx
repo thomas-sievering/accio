@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { ProviderLogo, Refresh, Settings } from '../app/icons';
 import { useLimits } from './limits';
 import {
-  absoluteTime, allowancePace, blockingWindow, formatRemaining, fullTime, level, relativeTime, remainingPercent, resetDue, retryBlockedUntil, splitWindows,
+  allowancePace, blockingWindow, formatRemaining, fullTime, level, relativeTime, remainingPercent, resetDue, retryBlockedUntil, splitWindows,
 } from './limitsModel';
 
 type Named = { id: string; name: string };
@@ -65,28 +65,19 @@ export function AccountLimits({ account, onSignIn }: {
 function SnapshotMeters({ snapshot, refreshing, now }: { snapshot: LimitsSnapshot; refreshing: boolean; now: number }) {
   const { general, scoped } = splitWindows(snapshot.windows);
   const blocking = blockingWindow(snapshot, now);
-  if (!snapshot.windows.length) return <p className="limits-message muted">No limits were reported for this account.</p>;
-  const scopedCount = scoped.reduce((n, s) => n + s.windows.length, 0);
+  if (!general.length && !scoped.length) return <p className="limits-message muted">No limits were reported for this account.</p>;
   return <>
     {blocking && (
       <p className="limits-message warn">
         <b>{blocking.label} limit reached.</b>{' '}
-        {blocking.resetsAt ? <>It resets {relativeTime(Date.parse(blocking.resetsAt), now)} (<time dateTime={blocking.resetsAt} title={fullTime(Date.parse(blocking.resetsAt))}>{absoluteTime(Date.parse(blocking.resetsAt), now)}</time>); </> : 'Its reset time wasn’t reported; '}
+        {blocking.resetsAt ? <>It resets {relativeTime(Date.parse(blocking.resetsAt), now)}; </> : 'Its reset time wasn’t reported; '}
         shorter windows are shown as reported but may not be usable until then.
       </p>
     )}
-    {general.length > 0 && <ul className="limits-meters">{general.map((w) => <Meter key={w.id} window={w} refreshing={refreshing} now={now} />)}</ul>}
-    {scoped.length > 0 && (
-      <details className="limits-scoped" open={general.length === 0}>
-        <summary>Model-specific limits <span className="faint">· {scopedCount}</span></summary>
-        {scoped.map((s) => (
-          <section key={s.scope} aria-label={s.scope}>
-            <h4>{capitalize(s.scope)}</h4>
-            <ul className="limits-meters">{s.windows.map((w) => <Meter key={w.id} window={w} refreshing={refreshing} now={now} scope={s.scope} />)}</ul>
-          </section>
-        ))}
-      </details>
-    )}
+    <ul className="limits-meters">
+      {general.map((w) => <Meter key={w.id} window={w} refreshing={refreshing} now={now} />)}
+      {scoped.flatMap((s) => s.windows.map((w) => <Meter key={w.id} window={w} refreshing={refreshing} now={now} scope={s.scope} />))}
+    </ul>
   </>;
 }
 
@@ -108,12 +99,11 @@ function Meter({ window: w, refreshing, now, scope }: { window: LimitWindow; ref
   return (
     <li className={`limit-meter ${state === 'empty' ? 'exhausted' : state}${passed ? ' pending' : ''}`}>
       <div className="limit-name">
-        <b>{w.label}</b>
-        <small>
-          {resetText}
-          {reset !== null && !passed && <> · <time dateTime={w.resetsAt!} title={fullTime(reset)}>{absoluteTime(reset, now)}</time></>}
+        <b>{name}</b>
+        <small className="limit-meta">
+          <span title={reset !== null ? fullTime(reset) : undefined}>{resetText}</span>
+          {pace && <span className={`limit-pace ${paceState}`} title={paceDescription || undefined}>{paceText}</span>}
         </small>
-        {pace && <small className={`limit-pace ${paceState}`} title={paceDescription || undefined}>{paceText}</small>}
       </div>
       <div className="limit-track" role={remaining === null ? 'img' : 'meter'} aria-label={`${name} allowance remaining${remaining === null ? ': usage not reported' : ''}`} aria-valuemin={remaining === null ? undefined : 0} aria-valuemax={remaining === null ? undefined : 100}
         aria-valuenow={remaining ?? undefined}
@@ -132,14 +122,14 @@ function Freshness({ view, snapshot, lastKnown, now, onRefresh, busy }: {
   const observed = Date.parse(snapshot.observedAt);
   const refreshing = view.status === 'refreshing' || busy;
   return (
-    <footer className="limits-freshness">
+    <footer className="limits-freshness" title={`Updated ${fullTime(observed)}`}>
       <span>
         {/* Only state changes are announced, not the ticking age. */}
         <span role="status" className="limits-freshness-state">
           {lastKnown && <span className="limits-tag warn">Last known</span>}
           {refreshing && 'Updating…'}
         </span>
-        {!refreshing && <span>Updated <time dateTime={snapshot.observedAt} title={fullTime(observed)}>{relativeTime(observed, now)}</time></span>}
+        {!refreshing && <span>Updated <time dateTime={snapshot.observedAt}>{relativeTime(observed, now)}</time></span>}
       </span>
       {onRefresh && !refreshing && (
         <button type="button" className="limits-refresh" onClick={onRefresh} title="Refresh this account’s limits" aria-label="Refresh this account’s limits">
@@ -190,9 +180,8 @@ export function AccountLimitsCard({ account, providerLabel, sharedWith, onOpenAc
   return (
     <article className="limits-card" id={limitsCardId(account.id)} tabIndex={-1} aria-label={`${account.name}, ${providerLabel}`}>
       <header className="limits-card-top">
-        <span className="limits-provider-mark"><ProviderLogo providerId={account.providerId} /></span>
+        <span className="limits-provider-mark" title={providerLabel}><ProviderLogo providerId={account.providerId} /></span>
         <div className="limits-identity">
-          <small>{providerLabel}</small>
           <b>{account.name}</b>
           {account.email && <small className="faint">{account.email}</small>}
         </div>

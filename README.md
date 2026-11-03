@@ -2,7 +2,7 @@
 
 Runs coding threads in Claude Code and Codex on your own machines, keeping each profile, such as work and personal, apart. Terms are in [GLOSSARY.md](GLOSSARY.md), decisions in [docs/adr](docs/adr).
 
-For the delivery model, workspace ownership and optional pull requests, see [ADR 0011](docs/adr/0011-threads-own-delivery-with-optional-pull-requests.md) and the [delivery feature notes](docs/plans/thread-delivery.md).
+For the delivery model, workspace ownership and optional pull requests, see [ADR 0015](docs/adr/0015-threads-own-delivery-with-optional-pull-requests.md) and the [delivery feature notes](docs/plans/thread-delivery.md).
 
 ## Hubs and machines
 
@@ -12,7 +12,7 @@ Run coding threads on your PC with the Claude Agent SDK and a bundled Codex app-
 - **Accounts** are named and signed in separately under Settings / Accounts. For Claude and ChatGPT, press Sign in, approve in the system browser, and return to Accio. Sign-in finishes automatically. Credentials stay on the selected **hub**; the browser's PC relays only the short-lived callback. New sign-ins require Accio running on the browser's PC. See [ADR 0014](docs/adr/0014-independent-hubs-and-browser-sign-in.md).
 - **Profiles** (personal, work, any you add) select one named Claude account and one named ChatGPT account independently. Multiple profiles can select the same account. Each profile has its own Claude config folder at `~/.accio/profiles/<id>/claude` and Codex home at `~/.accio/profiles/<id>/codex`; accio never configures your regular `~/.claude` or `~/.codex`. These are configuration and credential-routing boundaries, not OS sandboxes: harnesses have full permissions.
 - **Projects** are folders on this machine, matched by git remote. Each belongs to one profile; the profile folders suggest it.
-- **Threads** stream the harness's reply and keep their hub and profile for life. **Stop** interrupts a turn; a turn cut off by Stop or by accio restarting waits for **Resume**.
+- **Threads** stream the harness's reply and keep their hub and profile for life. After accio restarts, unfinished turns automatically continue on their saved provider sessions. **Stop** keeps a turn paused until **Resume**; delivery jobs also require explicit resumption.
 - **Models** come from the selected profile's signed-in providers. Codex's available models are discovered at ChatGPT sign-in; its default follows that account's reported default. A profile with only ChatGPT signed in starts Codex threads automatically. An existing thread can change models within its harness; changing harnesses requires a new thread.
 - **Limits** opens from the sidebar or the selected account's composer indicator. It follows profile → provider → account and shows each account's reported allowance windows and reset times. Profiles sharing an account share one allowance. The hub reads limits using its own credentials, caches each account for a minute, and keeps the last successful values with their timestamp when a refresh fails. Account settings show the same limits, including for accounts no profile selects. Usage outside accio counts too; a passed reset awaits provider confirmation.
 

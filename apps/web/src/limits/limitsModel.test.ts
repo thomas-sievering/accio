@@ -92,7 +92,7 @@ describe('windows', () => {
     expect(formatRemaining(0)).toBe('0%');
   });
 
-  it('orders general windows by length and groups model scopes for disclosure', () => {
+  it('orders general windows by length and groups model scopes', () => {
     const { general, scoped } = splitWindows([
       win({ id: 'week', kind: 'weekly', label: 'Weekly', durationMinutes: 10080 }),
       win({ id: 'opus', kind: 'weekly', label: 'Weekly', scope: 'opus' }),
@@ -100,6 +100,17 @@ describe('windows', () => {
     ]);
     expect(general.map((w) => w.id)).toEqual(['five', 'week']);
     expect(scoped).toEqual([{ scope: 'opus', windows: [expect.objectContaining({ id: 'opus' })] }]);
+  });
+
+  it('hides empty scoped placeholders while keeping reported limits and unknown general usage', () => {
+    const { general, scoped } = splitWindows([
+      win({ id: 'unknown', usedPercent: null }),
+      win({ id: 'breakdown', kind: 'weekly', scope: 'breakdown', usedPercent: null }),
+      win({ id: 'fable', kind: 'weekly', scope: 'Fable', usedPercent: 1 }),
+      win({ id: 'reset-only', scope: 'Opus', usedPercent: null, resetsAt: iso(60_000) }),
+    ]);
+    expect(general.map((w) => w.id)).toEqual(['unknown']);
+    expect(scoped.map((s) => s.windows.map((w) => w.id))).toEqual([['fable'], ['reset-only']]);
   });
 
   it('preserves the reported session value when the weekly window is used up', () => {

@@ -100,6 +100,26 @@ describe('Codex and ChatGPT accounts', () => {
     await expect.poll(async () => (await next.call('models.list', { profileId: profile.id })).models[0]?.efforts.map((e) => e.id)).toEqual(['low', 'medium', 'high']);
   });
 
+  it('automatically resumes an interrupted Codex session after desktop shutdown', async () => {
+    const fake = new FakeCodex();
+    t = await startTestApp({ codexFactory: fake.factory });
+    const c = await t.connect();
+    const { profile } = await signIn(c, fake);
+    fake.holdTurns = true;
+    const thread = await c.call('threads.start', { profileId: profile.id, text: 'work' });
+    await expect.poll(() => fake.latest.requests.some(r => r.method === 'turn/start')).toBe(true);
+    await t.stop({ keepHome: true });
+    fake.holdTurns = false;
+    const previous = fake.clients.length;
+    t = await startTestApp({ codexFactory: fake.factory }, t.home);
+    await expect.poll(() => fake.clients.slice(previous).some(client => client.requests.some(r => r.method === 'thread/resume'))).toBe(true);
+    const next = await t.connect();
+    await expect.poll(async () => (await next.call('threads.list', {})).find(x => x.id === thread.id)?.status).toBe('idle');
+    const runner = fake.clients.slice(previous).find(client => client.requests.some(r => r.method === 'thread/resume'))!;
+    expect(runner.requests.find(r => r.method === 'thread/resume')?.params.threadId).toBe('codex-session');
+    expect(runner.requests.filter(r => r.method === 'turn/start')).toHaveLength(1);
+  });
+
   it('keeps Claude and ChatGPT selections independent and rejects accounts from the wrong provider', async () => {
     const fake = new FakeCodex(); t = await startTestApp({ codexFactory: fake.factory });
     const c = await t.connect();

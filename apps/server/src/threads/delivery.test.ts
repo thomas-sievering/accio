@@ -240,6 +240,36 @@ it('enforces review-only instructions and verifies PR/check state rather than tr
   expect(await stat(workspace.path)).toBeDefined();
 });
 
+it.each(['registering', 'missing', 'no workflows', 'passed'] as const)('handles GitHub checks that are %s without accepting missing proof', async (scenario) => {
+  const { c, checkout, source, origin } = await setup();
+  const thread = await c.call('threads.start', { checkoutId: checkout.id, text: 'work' });
+  await wait(c, thread.id);
+  const workspace = thread.workspace!;
+  await git(source, 'config', `url.${origin.replaceAll('\\', '/')}.insteadOf`, 'https://github.com/test/fixture.git');
+  await git(source, 'remote', 'set-url', 'origin', 'https://github.com/test/fixture.git');
+  const revision = await git(workspace.path, 'rev-parse', 'HEAD');
+  const hosting = vi.fn(async (_cwd: string, args: string[]) => {
+    if (args[0] === 'pr') return [{ url: 'https://github.com/test/fixture/pull/1', state: 'OPEN', headRefOid: revision, baseRefName: 'main', statusCheckRollup: [], isDraft: false }];
+    if (args[1]!.includes('check-runs')) return scenario === 'passed' ? { total_count: 1, check_runs: [{ conclusion: 'success' }] } : { total_count: 0, check_runs: [] };
+    if (args[1]!.includes('/actions/workflows')) return { workflows: scenario === 'no workflows' ? [] : [{ state: 'active' }] };
+    return { total_count: 0, statuses: [] };
+  });
+  const manager = new DeliveryGit(t.home, hosting);
+  const requestedAt = new Date(Date.now() - (scenario === 'registering' ? 0 : 3 * 60_000)).toISOString();
+  const intent: ThreadDelivery = { mode: 'review', policy: 'direct', status: 'running', requestedAt, baseBranch: 'main' };
+  if (scenario === 'registering') {
+    await expect(manager.verify(workspace, intent)).rejects.toBeInstanceOf(DeliveryPending);
+  } else if (scenario === 'missing') {
+    const error = await manager.verify(workspace, intent).catch(error => error);
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(DeliveryPending);
+    expect(error.message).toContain('GitHub reported no checks');
+  } else {
+    expect(await manager.verify(workspace, intent)).toMatchObject({ status: 'ready', revision });
+  }
+  expect(await stat(workspace.path)).toBeDefined();
+});
+
 it('runs previews with independent ports/state and stops only the archived thread’s owned process tree', async () => {
   vi.stubEnv('OPENAI_API_KEY', 'another-profile-secret');
   const harness = new FakeHarness(async function* (run) {
