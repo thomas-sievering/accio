@@ -143,13 +143,13 @@
   border: 0;
 }
 
-/* Sign-in step: the two providers as cards rather than a select */
-.provider-choice {
+/* Hub and sign-in steps: choices as cards rather than selects */
+.choice-cards {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
-.provider-card {
+.choice-card {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -162,28 +162,71 @@
     border-color 0.15s,
     background 0.15s;
 }
-.provider-card:hover {
+.choice-card:hover {
   background: var(--hover);
 }
-.provider-card.on {
+.choice-card.on {
   border-color: var(--muted);
   background: var(--raised);
 }
-.provider-card svg {
+.choice-card svg {
   flex: none;
   width: 20px;
   height: 20px;
 }
-.provider-card > span {
+.choice-card > span {
   display: flex;
   flex-direction: column;
   line-height: 1.25;
 }
-.provider-card b {
+.choice-card b {
   font-weight: 600;
   color: var(--ink-strong);
 }
-.provider-card small {
+.choice-card small {
   font-size: 11.5px;
   color: var(--dim);
+}
+.hub-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.hub-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin: 0 6px;
+  border-radius: 50%;
+  background: var(--dim);
+}
+.hub-dot.connected {
+  background: var(--green);
+  box-shadow: 0 0 0 3px rgb(107 198 148 / 0.15);
+}
+.hub-dot.connecting {
+  background: var(--amber);
+}
+.hub-dot.offline {
+  background: var(--red);
+}
+.hub-choice + .link {
+  align-self: flex-start;
+}
+.pair-hub {
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.step-change {
+  flex: none;
+  align-self: flex-start;
+  padding: 3px 9px;
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.step-change:hover {
+  background: var(--hover);
+  color: var(--ink);
 }

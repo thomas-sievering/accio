@@ -1,6 +1,6 @@
-import type { ProfileView } from '@accio/protocol';
+import type { HubConnectionView, ProfileView } from '@accio/protocol';
 import { useState, type FormEvent, type ReactNode } from 'react';
-import { useClient } from './connection';
+import { useClient, useHubs } from './connection';
 import { Check, ProviderLogo } from './icons';
 import { useAction } from './useAction';
 import { hasSignedInAccount, useProfiles } from '../profiles/profiles';
@@ -8,19 +8,32 @@ import { SignInWithClaude } from '../profiles/SignInWithClaude';
 import { SignInWithOpenAI } from '../profiles/SignInWithOpenAI';
 import { AddProjectForm } from '../projects/AddProjectSheet';
 import { useProjects } from '../projects/projects';
+import { PairHubForm } from '../hub/PairHubForm';
 
 /**
- * What a thread needs, in order, done right here rather than in sheets: a
- * profile, a provider account signed in to it, and a project. Steps tick off as
- * the server reports them; the new-thread draft follows on its own.
+ * What a thread needs, in order, done right here rather than in sheets: a hub,
+ * a profile, a provider account signed in to it, and a checkout on this
+ * machine. Steps tick off as the server reports them, so a hub that is already
+ * set up skips straight to the project; the new-thread draft follows on its own.
  */
 export function FirstRun() {
   const { profiles = [] } = useProfiles();
   const { state } = useProjects();
   const unsigned = profiles.find((p) => !hasSignedInAccount(p));
   const signedIn = profiles.find(hasSignedInAccount);
-  const projects = state?.projects ?? [];
+  const { hubs, selectedId } = useHubs();
+  const hub = hubs.find((h) => h.id === selectedId);
+  const here = new Set(state?.checkouts.map((c) => c.projectId));
+  const projects = (state?.projects ?? []).filter((p) => here.has(p.id));
   const steps = [
+    {
+      done: hub?.status === 'connected',
+      title: 'Choose a hub',
+      about: 'Where your profiles and accounts live. Use this PC, or join a hub you already run.',
+      summary: hub ? hubLabel(hub) : '',
+      body: <ChooseHub />,
+      change: 'Change hub',
+    },
     {
       done: profiles.length > 0,
       title: 'Add a profile',
@@ -50,7 +63,7 @@ export function FirstRun() {
     <div className="first-run">
       <header className="first-run-head">
         <h1>Set up accio</h1>
-        <p className="first-run-sub">Three quick steps, then you're coding with Claude or ChatGPT.</p>
+        <p className="first-run-sub">A few quick steps, then you're coding with Claude or ChatGPT.</p>
         <div className="first-run-progress" role="progressbar" aria-label="Setup progress" aria-valuemin={0} aria-valuemax={steps.length} aria-valuenow={doneCount}>
           <span className="first-run-bar"><span style={{ width: `${(doneCount / steps.length) * 100}%` }} /></span>
           <small>{doneCount} of {steps.length} done</small>
@@ -58,7 +71,7 @@ export function FirstRun() {
       </header>
       <ol className="steps">
         {steps.map((s, i) => (
-          <Step key={i} n={i + 1} title={s.title} about={s.done && s.summary ? s.summary : s.about} state={s.done ? 'done' : i === current ? 'current' : 'later'}>
+          <Step key={i} n={i + 1} title={s.title} about={s.done && s.summary ? s.summary : s.about} change={s.change} state={s.done ? 'done' : i === current ? 'current' : 'later'}>
             {s.body}
           </Step>
         ))}
@@ -67,16 +80,46 @@ export function FirstRun() {
   );
 }
 
-function Step(props: { n: number; title: string; about: string; state: 'done' | 'current' | 'later'; children: ReactNode }) {
+function Step(props: { n: number; title: string; about: string; change?: string; state: 'done' | 'current' | 'later'; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const showBody = props.state === 'current' || (props.state === 'done' && open);
   return (
     <li className={`step ${props.state}`} aria-current={props.state === 'current' ? 'step' : undefined}>
       <span className="step-n">{props.state === 'done' ? <Check /> : props.n}</span>
       <div className="step-main">
         <b className="step-title">{props.title}</b>
         <small className="step-about">{props.about}</small>
-        {props.state === 'current' && <div className="step-body">{props.children}</div>}
+        {showBody && <div className="step-body">{props.children}</div>}
       </div>
+      {props.state === 'done' && props.change && (
+        <button type="button" className="step-change" aria-expanded={open} onClick={() => setOpen(!open)}>
+          {open ? 'Done' : props.change}
+        </button>
+      )}
     </li>
+  );
+}
+
+const hubLabel = (hub: HubConnectionView) => (hub.local ? `${hub.name} · on this PC` : `${hub.name} · ${new URL(hub.url).host}`);
+
+/** Saved hubs as cards, plus pairing with another one by address and code. */
+function ChooseHub() {
+  const { hubs, selectedId, select } = useHubs();
+  const [pairing, setPairing] = useState(false);
+  return (
+    <div className="field">
+      <div className="hub-choice" role="radiogroup" aria-label="Hub">
+        {hubs.map((h) => (
+          <button type="button" role="radio" aria-checked={h.id === selectedId} key={h.id} className={`choice-card${h.id === selectedId ? ' on' : ''}`} onClick={() => select(h.id)}>
+            <span className={`hub-dot ${h.status}`} aria-hidden />
+            <span><b>{h.name}</b><small>{h.local ? 'On this PC' : new URL(h.url).host}{h.status === 'connected' ? '' : h.status === 'connecting' ? ' · Connecting' : ' · Offline'}</small></span>
+          </button>
+        ))}
+      </div>
+      {pairing ? <PairHubForm className="field pair-hub" /> : (
+        <button type="button" className="link" onClick={() => setPairing(true)}>Join another hub with a pairing code</button>
+      )}
+    </div>
   );
 }
 
@@ -124,9 +167,9 @@ function SetUpAccount({ profile }: { profile: ProfileView }) {
     });
   };
   return <form className="field" onSubmit={submit}>
-    <div className="provider-choice" role="radiogroup" aria-label="Provider">
+    <div className="choice-cards" role="radiogroup" aria-label="Provider">
       {providers.map((p) => (
-        <button type="button" role="radio" aria-checked={providerId === p.id} key={p.id} className={`provider-card${providerId === p.id ? ' on' : ''}`} onClick={() => { setProviderId(p.id); setSelected(''); }}>
+        <button type="button" role="radio" aria-checked={providerId === p.id} key={p.id} className={`choice-card${providerId === p.id ? ' on' : ''}`} onClick={() => { setProviderId(p.id); setSelected(''); }}>
           <ProviderLogo providerId={p.id} />
           <span><b>{p.name}</b><small>{p.company}</small></span>
         </button>

@@ -85,7 +85,7 @@ function Shell() {
   };
   const draftProfileId = draft && (draft.profileId ?? state?.projects.find((p) => p.id === state.checkouts.find((c) => c.id === draft.checkoutId)?.projectId)?.profileId);
   const currentProfileId = draft ? draftProfileId ?? undefined : thread?.profileId;
-  const setUp = profiles && state && profiles.length > 0 && profiles.some(hasSignedInAccount) && state.projects.length > 0;
+  const setUp = profiles && state && profiles.length > 0 && profiles.some(hasSignedInAccount) && state.checkouts.length > 0;
 
   return (
     <>
