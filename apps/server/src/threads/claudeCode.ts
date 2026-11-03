@@ -1,3 +1,6 @@
+import { readFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import type { Harness, HarnessMessage, HarnessTurn } from './harness.js';
 
@@ -61,3 +64,14 @@ export const claudeCode: Harness = {
     }
   },
 };
+
+/** What this machine reports about Claude Code: the Agent SDK accio bundles. */
+export async function claudeCodeInstall(): Promise<{ harnessId: 'claudeCode'; version: string | null }> {
+  try {
+    const entry = fileURLToPath(import.meta.resolve('@anthropic-ai/claude-agent-sdk'));
+    const pkg = JSON.parse(await readFile(join(dirname(entry), 'package.json'), 'utf8'));
+    return { harnessId: 'claudeCode', version: typeof pkg.version === 'string' ? pkg.version : null };
+  } catch {
+    return { harnessId: 'claudeCode', version: null };
+  }
+}

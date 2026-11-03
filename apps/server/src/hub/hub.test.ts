@@ -5,20 +5,15 @@ describe('hub', () => {
   let t: Awaited<ReturnType<typeof startTestApp>>;
   afterEach(() => t?.stop());
 
-  it('shows where the hub is, that it answers, and which profiles it holds an account for', async () => {
+  it('shows where the hub is, that it answers, and where it keeps accounts and shared settings', async () => {
     t = await startTestApp();
     const client = await t.connect();
-    await client.signedIn('personal', { claudeAccount: 'claude-me' });
-    await client.call('profiles.save', { name: 'work', folders: [] });
 
     const info = await client.call('hub.get', {});
 
     expect(info).toMatchObject({ runs: 'inThisServer', url: t.app.hubUrl, reachable: true });
     expect(info.store).toContain(t.home);
-    expect(info.profiles).toEqual([
-      { profileId: expect.any(String), name: 'personal', account: { email: 'claude-me@example.com', organization: null } },
-      { profileId: expect.any(String), name: 'work', account: null },
-    ]);
+    expect(info.settingsStore).toContain(t.home);
   });
 
   it('never hands a client the hub’s keys or tokens', async () => {

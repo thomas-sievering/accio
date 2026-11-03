@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import type { ProjectView } from '@accio/protocol';
-import { ProfileTile, useProfiles } from '../profiles/profiles';
+import { claudeAccount, ProfileTile, useProfiles } from '../profiles/profiles';
 import { ProjectMark } from '../projects/ProjectMark';
 import { useProjects } from '../projects/projects';
 import { useThreads } from '../threads/threads';
@@ -62,8 +62,8 @@ export function ScopeMenu({ onOpenProject, onAddProject }: { onOpenProject: (p: 
               <ProfileTile profile={profile} size="md" />
               <span className="menu-text">
                 <b>{profile.name}</b>
-                <small className={profile.account ? undefined : 'warn'}>
-                  {profile.account ? (profile.account.email ?? 'Signed in') : 'Not signed in'}
+                <small className={claudeAccount(profile) ? undefined : 'warn'}>
+                  {claudeAccount(profile)?.email ?? (claudeAccount(profile) ? 'Signed in' : 'Not signed in')}
                 </small>
               </span>
               {checked(profile.id) && <Check />}

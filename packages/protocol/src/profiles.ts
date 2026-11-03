@@ -1,21 +1,38 @@
 import { z } from 'zod';
 import { method } from './rpc.js';
 
-/** GLOSSARY: Profile, as clients see it. Its accounts live on the hub; clients only learn which account is signed in. */
+/** GLOSSARY: Provider. */
+export type ProviderId = 'anthropic' | 'openai';
+
+/** GLOSSARY: Account. Who it is; its tokens never leave the hub. */
+export type AccountView = { email: string | null; organization: string | null };
+
+/** One provider as a profile uses it, with the profile's accounts there. */
+export type ProfileProviderView = {
+  id: ProviderId;
+  name: string;
+  /** What an account there is called, such as "Claude account". */
+  accountName: string;
+  /** Whether accio can sign in to it yet. */
+  available: boolean;
+  accounts: AccountView[];
+};
+
+/**
+ * GLOSSARY: Profile, as clients see it: profile → providers → accounts. It lives
+ * on the hub; clients only learn who each account is. Profile folders are per
+ * machine, so they are on MachineView.
+ */
 export type ProfileView = {
   id: string;
   name: string;
-  /** Folders whose new projects default to this profile (GLOSSARY: Profile folder). */
-  folders: string[];
-  /** The Claude account signed in to this profile; null until there is one. */
-  account: { email: string | null; organization: string | null } | null;
+  providers: ProfileProviderView[];
 };
 
 export const SaveProfileParams = z.object({
   /** Omit to create. */
   id: z.string().optional(),
   name: z.string().trim().min(1, 'Name is required').max(40),
-  folders: z.array(z.string().trim().min(1)).default([]),
 });
 export type SaveProfileParams = z.output<typeof SaveProfileParams>;
 

@@ -1,6 +1,7 @@
 import type { ProfileView, ThreadView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { useAction } from '../app/useAction';
+import { claudeAccount } from '../profiles/profiles';
 
 /**
  * The one slot above the composer for "this thread can't go on by itself right
@@ -28,7 +29,7 @@ export function ThreadNotice({
   if (!profile) {
     text = 'The profile this thread started with no longer exists.';
     tone = 'error';
-  } else if (!profile.account) {
+  } else if (!claudeAccount(profile)) {
     text = (
       <>
         <b>{profile.name}</b> isn’t signed in with Claude, so this thread can’t run yet.

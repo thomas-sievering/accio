@@ -2,7 +2,7 @@ import { useState, type FormEvent, type ReactNode } from 'react';
 import { useClient } from './connection';
 import { Check } from './icons';
 import { useAction } from './useAction';
-import { useProfiles } from '../profiles/profiles';
+import { claudeAccount, useProfiles } from '../profiles/profiles';
 import { SignInWithClaude } from '../profiles/SignInWithClaude';
 import { AddProjectForm } from '../projects/AddProjectSheet';
 import { useProjects } from '../projects/projects';
@@ -15,11 +15,11 @@ import { useProjects } from '../projects/projects';
 export function FirstRun() {
   const { profiles = [] } = useProfiles();
   const { state } = useProjects();
-  const unsigned = profiles.find((p) => !p.account);
+  const unsigned = profiles.find((p) => !claudeAccount(p));
   const steps = [
     { done: profiles.length > 0, title: 'Add a profile', body: <AddProfile /> },
     {
-      done: profiles.some((p) => p.account),
+      done: profiles.some((p) => claudeAccount(p)),
       title: unsigned ? `Sign ${unsigned.name} in with Claude` : 'Sign in with Claude',
       body: unsigned && <SignInWithClaude key={unsigned.id} profile={unsigned} />,
     },
@@ -60,7 +60,7 @@ function AddProfile() {
   const { busy, error, run } = useAction();
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    void run(() => client.call('profiles.save', { name, folders: [] }));
+    void run(() => client.call('profiles.save', { name }));
   };
   return (
     <form onSubmit={submit} className="field">

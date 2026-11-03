@@ -23,8 +23,11 @@ describe('projects slice', () => {
     gitRepo(join(repos, 'accio'), 'git@github.com:me/accio.git');
     gitRepo(join(work, 'accio-copy'), 'https://github.com/me/accio');
 
-    await c.call('profiles.save', { name: 'Personal', folders: [repos] });
-    await c.call('profiles.save', { name: 'Work', folders: [work] });
+    await c.call('profiles.save', { name: 'Personal' });
+    await c.call('profiles.save', { name: 'Work' });
+    const { id: machineId } = await c.call('machine.get', {});
+    await c.call('machines.setProfileFolders', { machineId, profileId: 'personal', folders: [repos] });
+    await c.call('machines.setProfileFolders', { machineId, profileId: 'work', folders: [work] });
 
     // Inspecting a subfolder resolves to the repository root.
     const seen = await c.call('checkouts.inspect', { path: join(repos, 'accio', 'src') });

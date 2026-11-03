@@ -31,6 +31,11 @@ export function useProfiles(): ProfilesState {
   return s;
 }
 
+/** The account Claude Code uses for this profile. */
+export function claudeAccount(profile: ProfileView) {
+  return profile.providers.find((p) => p.id === 'anthropic')?.accounts[0] ?? null;
+}
+
 export function ProfileTile({ profile, size = 'sm' }: { profile?: ProfileView; size?: 'sm' | 'md' }) {
   if (!profile) {
     // Flat line mark: "all" has no colour of its own, so it gets no tile.

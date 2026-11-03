@@ -1,13 +1,13 @@
 import { useState, type FormEvent } from 'react';
 import type { ProfileView } from '@accio/protocol';
 import { useClient } from '../app/connection';
-import { Chevron, Close, Plus } from '../app/icons';
+import { Chevron, Plus } from '../app/icons';
 import { SettingsSection } from '../app/Settings';
 import { useAction } from '../app/useAction';
-import { ProfileTile, useProfiles } from './profiles';
+import { claudeAccount, ProfileTile, useProfiles } from './profiles';
 import { SignInWithClaude } from './SignInWithClaude';
 
-/** List and edit profiles. Each one signs in to a Claude account, which stays on the hub. */
+/** Profiles and their providers and accounts, shared through the hub. */
 export function ProfilesSettings({
   profileId,
   onOpen,
@@ -32,7 +32,7 @@ export function ProfilesSettings({
           <ProfileTile profile={p} size="md" />
           <span className="setting-text">
             <b>{p.name}</b>
-            <small className={p.account ? undefined : 'warn'}>{p.account ? (p.account.email ?? 'Signed in') : 'Not signed in'}</small>
+            <small className={claudeAccount(p) ? undefined : 'warn'}>{claudeAccount(p)?.email ?? (claudeAccount(p) ? 'Signed in' : 'Not signed in')}</small>
           </span>
           <Chevron />
         </button>
@@ -53,12 +53,11 @@ export function ProfilesSettings({
 function ProfileForm({ profile, onSaved, onDone }: { profile?: ProfileView; onSaved: (p: ProfileView) => void; onDone: () => void }) {
   const client = useClient();
   const [name, setName] = useState(profile?.name ?? '');
-  const [folders, setFolders] = useState(profile?.folders ?? []);
   const { busy, error, run } = useAction();
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const saved = await run(() => client.call('profiles.save', { id: profile?.id, name, folders }));
+    const saved = await run(() => client.call('profiles.save', { id: profile?.id, name }));
     if (saved) onSaved(saved);
   };
   const remove = async () => {
@@ -66,30 +65,42 @@ function ProfileForm({ profile, onSaved, onDone }: { profile?: ProfileView; onSa
   };
 
   return (
-    <form onSubmit={submit}>
+    <form className="settings-profile-form" onSubmit={submit}>
       <SettingsSection title={profile ? profile.name : 'New profile'}>
         <div className="setting-form">
           <label className="field">
             <span>Name</span>
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="personal, work…" autoFocus={!profile} required />
           </label>
-          <div className="field">
-            <span>Folders</span>
-            <FolderList folders={folders} onChange={setFolders} />
-            <small className="hint">New projects inside these folders default to this profile.</small>
-          </div>
-          {profile && (
-            <div className="field">
-              <span>Claude</span>
-              <SignInWithClaude profile={profile} />
-            </div>
-          )}
+          <small className="hint">Shared on the hub. Set profile folders under Machines.</small>
           {error && <p className="error">{error}</p>}
         </div>
       </SettingsSection>
+      {profile && (
+        <SettingsSection title="Providers">
+          {profile.providers.map((provider) => (
+            <div className="setting-form" key={provider.id}>
+              <div className="field">
+                <b>{provider.name}</b>
+                <span>{provider.accountName}{provider.accounts.length === 1 ? '' : 's'}</span>
+                {provider.available && provider.id === 'anthropic' ? (
+                  <SignInWithClaude profile={profile} />
+                ) : (
+                  <small className="hint">Not available yet.</small>
+                )}
+              </div>
+            </div>
+          ))}
+        </SettingsSection>
+      )}
       <footer className="settings-actions">
         {profile && (
-          <button type="button" className="ghost danger" disabled={busy} onClick={remove}>
+          <button
+            type="button"
+            className="ghost danger"
+            disabled={busy}
+            onClick={remove}
+          >
             Delete
           </button>
         )}
@@ -102,51 +113,5 @@ function ProfileForm({ profile, onSaved, onDone }: { profile?: ProfileView; onSa
         </button>
       </footer>
     </form>
-  );
-}
-
-/** Profile folders as a list: type a path or browse for one, the same picker as Add project. */
-function FolderList({ folders, onChange }: { folders: string[]; onChange: (f: string[]) => void }) {
-  const [draft, setDraft] = useState('');
-  const add = (path: string) => {
-    const p = path.trim();
-    if (p && !folders.includes(p)) onChange([...folders, p]);
-    setDraft('');
-  };
-  const browse = async () => {
-    const picked = await window.accioDesktop?.pickFolder();
-    if (picked) add(picked);
-  };
-  return (
-    <div className="folder-list">
-      {folders.map((f) => (
-        <div key={f} className="folder-row">
-          <code className="grow">{f}</code>
-          <button type="button" className="row-action" aria-label={`Remove ${f}`} title="Remove" onClick={() => onChange(folders.filter((x) => x !== f))}>
-            <Close />
-          </button>
-        </div>
-      ))}
-      <span className="row-input">
-        <input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder="S:\hrc"
-          spellCheck={false}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              add(draft);
-            }
-          }}
-          onBlur={() => add(draft)}
-        />
-        {window.accioDesktop && (
-          <button type="button" className="ghost" onClick={browse}>
-            Browse…
-          </button>
-        )}
-      </span>
-    </div>
   );
 }

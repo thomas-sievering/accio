@@ -3,13 +3,11 @@ import type { HubInfo } from '@accio/protocol';
 import { useClient, useConnectionStatus } from '../app/connection';
 import { Refresh } from '../app/icons';
 import { SettingRow, SettingsSection } from '../app/Settings';
-import { useProfiles } from '../profiles/profiles';
 
-/** GLOSSARY: Hub. Read-only for now: where it runs, whether it answers, and the accounts it holds. */
-export function HubSettings({ onOpenProfile }: { onOpenProfile: (profileId: string) => void }) {
+/** GLOSSARY: Hub. Where it runs and whether it answers. Accounts live under profiles. */
+export function HubSettings() {
   const client = useClient();
   const status = useConnectionStatus();
-  const { profiles } = useProfiles();
   const [hub, setHub] = useState<HubInfo>();
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string>();
@@ -28,10 +26,9 @@ export function HubSettings({ onOpenProfile }: { onOpenProfile: (profileId: stri
       .finally(() => setChecking(false));
   }, [client]);
 
-  // Reload when a profile or its sign-in changes, so the accounts stay current.
   useEffect(() => {
     if (status === 'open') load();
-  }, [status, load, profiles]);
+  }, [status, load]);
 
   if (!hub) return error ? <p className="error">{error}</p> : null;
 
@@ -56,31 +53,9 @@ export function HubSettings({ onOpenProfile }: { onOpenProfile: (profileId: stri
         <SettingRow title="Accounts stored in" description="Readable by your user only. The tokens never leave the hub.">
           <code>{hub.store}</code>
         </SettingRow>
-      </SettingsSection>
-      <SettingsSection title="Accounts">
-        {hub.profiles.length === 0 && <SettingRow title="No profiles yet" description="Add a profile, then sign it in with Claude." />}
-        {hub.profiles.map((p) => (
-          <SettingRow
-            key={p.profileId}
-            title={p.name}
-            description={
-              p.account
-                ? `Claude · ${p.account.email ?? 'signed in'}${p.account.organization ? ` · ${p.account.organization}` : ''}`
-                : 'No account yet, so its threads cannot run.'
-            }
-          >
-            {p.account ? (
-              <span className="pill ok">
-                <span className="dot" />
-                Signed in
-              </span>
-            ) : (
-              <button className="ghost" onClick={() => onOpenProfile(p.profileId)}>
-                Sign in…
-              </button>
-            )}
-          </SettingRow>
-        ))}
+        <SettingRow title="Shared settings stored in" description="Profiles and settings for each machine live here.">
+          <code>{hub.settingsStore}</code>
+        </SettingRow>
       </SettingsSection>
       {error && <p className="error">{error}</p>}
     </>

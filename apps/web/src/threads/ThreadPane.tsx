@@ -1,7 +1,7 @@
 import type { CheckoutView, ProfileView, ProjectView, ThreadView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { ShieldOff } from '../app/icons';
-import { useProfiles } from '../profiles/profiles';
+import { claudeAccount, useProfiles } from '../profiles/profiles';
 import { folderName } from '../projects/folderName';
 import { ProjectMark } from '../projects/ProjectMark';
 import { useProjects } from '../projects/projects';
@@ -39,7 +39,7 @@ export function ThreadPane({ thread, onOpenProfile }: { thread: ThreadView; onOp
       {visibleItems ? <Transcript items={visibleItems} working={running} /> : <div className="empty" />}
       <ThreadNotice thread={thread} profile={place.profile} detail={detail} onOpenProfile={onOpenProfile} />
       <Composer
-        disabled={running || !place.profile?.account}
+        disabled={running || !place.profile || !claudeAccount(place.profile)}
         onStop={running ? async () => void (await client.call('threads.stop', { threadId: thread.id })) : undefined}
         placeholder={running ? 'Working…' : 'Ask Claude Code anything'}
         onSend={async (text) => void (await client.call('threads.send', { threadId: thread.id, text }))}
@@ -65,7 +65,7 @@ export function DraftPane({ checkoutId, onOpenProfile }: { checkoutId: string; o
         <h1>What should we build in {place.project?.name ?? 'this checkout'}?</h1>
         <ThreadNotice profile={place.profile} onOpenProfile={onOpenProfile} />
         <Composer
-          disabled={!place.profile?.account}
+          disabled={!place.profile || !claudeAccount(place.profile)}
           placeholder="Ask Claude Code anything"
           onSend={async (text) => select((await client.call('threads.start', { checkoutId, text })).id)}
           toolbar={harness}

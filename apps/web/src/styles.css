@@ -1423,6 +1423,17 @@ button.row {
   gap: 16px;
   padding: 16px;
 }
+.setting-form + .setting-form {
+  border-top: 1px solid var(--line);
+}
+.setting-form > button {
+  align-self: flex-end;
+}
+.settings-profile-form {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
 .settings-actions {
   display: flex;
   align-items: center;

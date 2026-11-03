@@ -1,20 +1,25 @@
 import type { ProfileView, SaveProfileParams } from '@accio/protocol';
+import { PROVIDERS } from '@accio/hub';
 import { UserError } from '../rpc/router.js';
 
-/** GLOSSARY: Profile. Its accounts live on the hub (ADR 0002, ADR 0007). */
+/** GLOSSARY: Profile. It and its accounts live on the hub (ADR 0002, ADR 0004). */
 export type Profile = {
   id: string;
   name: string;
-  folders: string[];
 };
 
 /** Who a profile is signed in as, as the hub reports it. */
 export type AccountSummary = { signedIn: boolean; email: string | null; organization: string | null; claudeAccountId: string | null };
 
-export function toView(profile: Profile, account: AccountSummary): ProfileView {
+/** Profile → providers → accounts. For now only Anthropic, with at most one account. */
+export function toView(profile: Profile, claude: AccountSummary): ProfileView {
   return {
-    ...profile,
-    account: account.signedIn ? { email: account.email, organization: account.organization } : null,
+    id: profile.id,
+    name: profile.name,
+    providers: PROVIDERS.map((p) => ({
+      ...p,
+      accounts: p.id === 'anthropic' && claude.signedIn ? [{ email: claude.email, organization: claude.organization }] : [],
+    })),
   };
 }
 
@@ -36,7 +41,6 @@ export function saveProfile(profiles: readonly Profile[], req: SaveProfileParams
   const saved: Profile = {
     id: existing?.id ?? uniqueId(profiles, slugify(req.name)),
     name: req.name,
-    folders: [...new Set(req.folders ?? [])],
   };
   if (profiles.some((a) => a.id !== saved.id && a.name.toLowerCase() === saved.name.toLowerCase())) {
     throw new UserError(`A profile named ${saved.name} already exists`);

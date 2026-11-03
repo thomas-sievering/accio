@@ -1,37 +1,32 @@
-import { join } from 'node:path';
 import type { ProfileView } from '@accio/protocol';
-import { SignInError, type Hub } from '@accio/hub';
+import { SignInError, type Hub, type SharedSettings } from '@accio/hub';
 import type { Broadcast, Router } from '../rpc/router.js';
 import { UserError } from '../rpc/router.js';
-import { JsonFile } from '../store/jsonFile.js';
 import { assertAccountInOneProfile, saveProfile, toView, type Profile } from './profile.js';
 import { writeConfigFolder, type HubAccess } from './claudeConfigFolder.js';
 
 /** Other slices that hold on to a profile (projects, threads) veto its deletion here. */
 export type ProfileInUse = (profileId: string) => string | undefined;
 
-/** The profiles on this machine: persistence, the rules in profile.ts, and their sign-in on the hub. */
+/** The profiles, stored on the hub (ADR 0004): the rules in profile.ts, and their sign-in there. */
 export class Profiles {
-  private file: JsonFile<Profile[]>;
-  private list: Profile[] = [];
   private inUseChecks: ProfileInUse[] = [];
 
   constructor(
     private home: string,
     private hub: Hub,
+    private settings: SharedSettings,
     private hubUrl: string,
     private broadcast: Broadcast,
-  ) {
-    this.file = new JsonFile(join(home, 'profiles.json'), () => []);
-  }
+  ) {}
 
   async load() {
-    // Keep only today's fields (v0.1 profiles also had a hand-typed hub URL and key).
-    // Profile folders were stored as `roots` before the glossary named them.
-    type Stored = Profile & { roots?: string[] };
-    this.list = ((await this.file.read()) as Stored[]).map(({ id, name, folders, roots }) => ({ id, name, folders: folders ?? roots ?? [] }));
     // ADR 0003: rewrite every profile's config folder on start.
     for (const a of this.list) await this.connect(a.id);
+  }
+
+  private get list(): readonly Profile[] {
+    return this.settings.profiles();
   }
 
   all(): readonly Profile[] {
@@ -119,9 +114,8 @@ export class Profiles {
   }
 
   private async commit(next: Profile[]) {
-    this.list = next;
+    await this.settings.setProfiles(next);
     this.announce();
-    await this.file.write(next);
   }
 }
 

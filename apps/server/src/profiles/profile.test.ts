@@ -1,23 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import { assertAccountInOneProfile, saveProfile, slugify, toView, type Profile, type AccountSummary } from './profile.js';
 
-const personal: Profile = { id: 'personal', name: 'Personal', folders: [] };
-const hrc: Profile = { id: 'hrc', name: 'HRC', folders: [] };
+const personal: Profile = { id: 'personal', name: 'Personal' };
+const hrc: Profile = { id: 'hrc', name: 'HRC' };
 const signedInAs =
   (logins: Record<string, string>) =>
   (id: string): AccountSummary => ({ signedIn: id in logins, email: null, organization: null, claudeAccountId: logins[id] ?? null });
 
 describe('saveProfile', () => {
   it('creates a profile with a slug id and keeps it on edit', () => {
-    const { saved } = saveProfile([], { name: 'HRC Work', folders: ['S:\\hrc', 'S:\\hrc'] });
-    expect(saved).toEqual({ id: 'hrc-work', name: 'HRC Work', folders: ['S:\\hrc'] });
-    const edited = saveProfile([saved], { id: 'hrc-work', name: 'HRC', folders: [] }).saved;
+    const { saved } = saveProfile([], { name: 'HRC Work' });
+    expect(saved).toEqual({ id: 'hrc-work', name: 'HRC Work' });
+    const edited = saveProfile([saved], { id: 'hrc-work', name: 'HRC' }).saved;
     expect(edited.id).toBe('hrc-work');
   });
 
   it('refuses duplicate names and suffixes clashing ids', () => {
-    expect(() => saveProfile([personal], { name: 'personal', folders: [] })).toThrow(/already exists/);
-    expect(saveProfile([personal], { name: 'Personal!', folders: [] }).saved.id).toBe('personal-2');
+    expect(() => saveProfile([personal], { name: 'personal' })).toThrow(/already exists/);
+    expect(saveProfile([personal], { name: 'Personal!' }).saved.id).toBe('personal-2');
   });
 });
 
@@ -38,10 +38,22 @@ describe('assertAccountInOneProfile', () => {
 });
 
 describe('profile helpers', () => {
-  it('shows who is signed in, and nothing else of the login', () => {
+  it('shows the profile as providers and their accounts, with who is signed in and nothing else of the login', () => {
     const view = toView(hrc, { signedIn: true, email: 'me@hrc.example', organization: 'HRC', claudeAccountId: 'x' });
-    expect(view).toEqual({ ...hrc, account: { email: 'me@hrc.example', organization: 'HRC' } });
-    expect(toView(hrc, signedInAs({})('hrc')).account).toBeNull();
+    expect(view).toEqual({
+      ...hrc,
+      providers: [
+        {
+          id: 'anthropic',
+          name: 'Anthropic',
+          accountName: 'Claude account',
+          available: true,
+          accounts: [{ email: 'me@hrc.example', organization: 'HRC' }],
+        },
+        { id: 'openai', name: 'OpenAI', accountName: 'ChatGPT account', available: false, accounts: [] },
+      ],
+    });
+    expect(toView(hrc, signedInAs({})('hrc')).providers[0]?.accounts).toEqual([]);
   });
 
   it('slugifies names', () => {

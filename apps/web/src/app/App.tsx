@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { MachineBadge } from '../machine/MachineBadge';
-import { ProfilesProvider, useProfiles } from '../profiles/profiles';
+import { claudeAccount, ProfilesProvider, useProfiles } from '../profiles/profiles';
 import { ProjectsProvider, useProjects } from '../projects/projects';
 import { AddProjectSheet } from '../projects/AddProjectSheet';
 import { ProjectSheet } from '../projects/ProjectSheet';
@@ -44,7 +44,7 @@ function Shell() {
   const close = () => setSheet(null);
   const openProject = sheet?.kind === 'project' ? state?.projects.find((p) => p.id === sheet.id) : undefined;
   const openProfile = (profileId: string) => setSettings({ section: 'profiles', profileId });
-  const setUp = profiles && state && profiles.length > 0 && profiles.some((p) => p.account) && state.projects.length > 0;
+  const setUp = profiles && state && profiles.length > 0 && profiles.some((p) => claudeAccount(p)) && state.projects.length > 0;
 
   if (settings) return <Settings route={settings} onRoute={setSettings} onClose={closeSettings} />;
 
@@ -62,7 +62,7 @@ function Shell() {
           <ThreadList />
         </nav>
         <footer className="side-foot">
-          <MachineBadge onOpen={() => setSettings({ section: 'machine' })} />
+          <MachineBadge onOpen={() => setSettings({ section: 'machines' })} />
           <button className="side-icon" title="Settings" aria-label="Settings" onClick={() => setSettings({ section: 'profiles' })}>
             <Gear />
           </button>
