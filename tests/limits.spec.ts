@@ -72,6 +72,11 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
   await button('Show limits').click();
   await expect(card('Shared ChatGPT')).toBeFocused();
   await expect(card('Shared Claude').getByRole('meter', { name: '5-hour allowance remaining' })).toHaveAttribute('aria-valuenow', '52');
+  await expect(card('Shared Claude').locator('.limits-meters').first().getByRole('meter')).toHaveCount(2);
+  await expect(card('Shared Claude').getByRole('meter', { name: 'Weekly allowance remaining', exact: true })).toHaveCount(1);
+  await expect(card('Shared Claude').locator('.limit-pace.ahead')).toHaveCount(2);
+  await expect(card('Shared Claude').locator('.limit-time-marker')).toHaveCount(2);
+  await expect(card('Team Claude').locator('.limit-pace.behind')).toContainText('behind pace');
   await expect(card('Team Claude')).toContainText('Weekly limit reached.');
   await expect(card('Team Claude').getByRole('meter', { name: '5-hour allowance remaining' })).toHaveAttribute('aria-valuenow', '67');
   await expect(card('Team Claude').locator('.limit-meter.exhausted')).toHaveCSS('display', 'grid');
@@ -118,6 +123,7 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
   await card('Team Claude').getByRole('button', { name: 'Team Claude settings' }).click();
   await expect(page.getByRole('textbox', { name: 'Account name' })).toHaveValue('Team Claude');
   await expect(page.locator('.account-limits').getByRole('meter')).toHaveCount(2);
+  await expect(page.locator('.account-limits .limit-pace')).toHaveCount(2);
   await button('Sign out').click();
   await expect(page.locator('.account-limits')).toContainText('Signed out.');
   await button('Back').click();
@@ -131,11 +137,13 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
   await createAccount('Unused Claude', 'unknown');
   await page.getByRole('button', { name: /^Unused Claude / }).click();
   await expect(page.locator('.account-limits')).toContainText('Unknown');
+  await expect(page.locator('.account-limits .limit-pace')).toHaveCount(1);
   await signIn('empty');
   await expect(page.locator('.account-limits')).toContainText('No limits were reported');
   await signIn('expired');
   await expect(page.locator('.account-limits')).toContainText('Reset time passed · awaiting confirmation');
   await expect(page.locator('.account-limits').getByRole('meter', { name: '5-hour allowance remaining' })).toHaveAttribute('aria-valuenow', '0');
+  await expect(page.locator('.account-limits .limit-pace')).toHaveCount(1);
   await button('Back').click();
 
   // The active draft, not the previous Limits selection, determines default scope.

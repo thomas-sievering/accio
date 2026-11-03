@@ -2,6 +2,28 @@ import { describe, expect, it } from 'vitest';
 import { anthropicLimits, openaiLimits, retryAfterMs } from './providerLimits.js';
 
 describe('provider allowance normalization', () => {
+  it('merges legacy Claude windows with their newer aliases and prefers newer values', () => {
+    const result = anthropicLimits({
+      five_hour: { utilization: 82 }, seven_day: { utilization: 28 }, seven_day_sonnet: { utilization: 28 },
+      limits: [
+        { id: 'session-v2', kind: 'session', percent: 83 },
+        { id: 'weekly-v2', kind: 'weekly', percent: 29 },
+        { id: 'sonnet-v2', kind: 'weekly_scoped', percent: 29, scope: { model: { display_name: 'Sonnet' } } },
+        { id: 'opus', kind: 'weekly_scoped', percent: 29, scope: { model: { display_name: 'Opus' } } },
+        { id: 'short', kind: 'session', window_duration_minutes: 60, percent: 83 },
+      ],
+    });
+    expect(result.windows).toMatchObject([
+      { id: 'session-v2', kind: 'session', label: '5-hour', durationMinutes: 300, usedPercent: 83 },
+      { id: 'weekly-v2', kind: 'weekly', usedPercent: 29, scope: null },
+      { id: 'sonnet-v2', scope: 'Sonnet' }, { id: 'opus', scope: 'Opus' },
+      { id: 'short', label: '1-hour', durationMinutes: 60 },
+    ]);
+    expect(result.windows).toHaveLength(5);
+    expect(anthropicLimits({ limits: [{ kind: 'session', percent: 83 }] }).windows)
+      .toMatchObject([{ label: '5-hour', kind: 'session', durationMinutes: 300 }]);
+  });
+
   it('keeps Claude general and model-scoped windows separate', () => {
     const result = anthropicLimits({ five_hour: { utilization: 48, resets_at: '2026-11-03T12:00:00Z' },
       seven_day: { utilization: 100, resets_at: null }, seven_day_sonnet: { utilization: 2 },
