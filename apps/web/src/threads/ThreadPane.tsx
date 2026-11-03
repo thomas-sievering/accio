@@ -66,7 +66,7 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
         disabled={running || savingModel || thread.delivery?.status === 'queued' || !place.profile || !accountForModel(place.profile, thread.model)?.signedIn}
         actions={<DeliveryActions key={thread.id} thread={thread} project={place.project} canRun={!!place.profile && !!accountForModel(place.profile, thread.model)?.signedIn} />}
         onStop={running ? async () => void (await client.call('threads.stop', { threadId: thread.id })) : undefined}
-        placeholder={running ? 'Working…' : `Ask ${thread.model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}
+        placeholder={running ? 'Working…' : thread.settledAt ? 'Send a message to reopen this thread…' : `Ask ${thread.model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}
         attachment={pick && pickLabel ? { label: pickLabel, onRemove: () => setPick(undefined) } : undefined}
         onSend={async (text) => {
           await client.call('threads.send', { threadId: thread.id, text, ...(pick ? { pick } : {}) });

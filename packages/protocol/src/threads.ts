@@ -32,6 +32,8 @@ export type ThreadView = {
   /** Absent on older threads that still use their original, shared checkout. */
   workspace?: ThreadWorkspace;
   delivery?: ThreadDelivery;
+  /** Increases for new user work, never for an automatic delivery continuation. */
+  workVersion?: number;
 };
 
 export type ThreadWorkspace = {
@@ -45,7 +47,21 @@ export type ThreadWorkspace = {
 };
 
 export type DeliveryMode = 'ship' | 'review';
+export type DeliveryPullRequest = {
+  host: 'github.com';
+  repository: string;
+  number: number;
+  url: string;
+  state: 'open' | 'closed' | 'merged';
+  headRevision: string;
+  baseBranch: string;
+  mergeRevision?: string;
+  mergedAt?: string;
+};
 export type ThreadDelivery = {
+  /** Stable identity for this publication grant and its completion receipt. */
+  id?: string;
+  workVersion?: number;
   mode: DeliveryMode;
   policy: 'direct' | 'pull-request';
   status: 'queued' | 'running' | 'waiting' | 'blocked' | 'ready' | 'delivered';
@@ -54,9 +70,20 @@ export type ThreadDelivery = {
   revision?: string;
   publishedRevision?: string;
   pullRequestUrl?: string;
+  pullRequest?: DeliveryPullRequest;
   detail?: string;
   continuationAttempts?: number;
-  waitingOn?: 'checks' | 'review' | 'agent';
+  waitingOn?: 'checks' | 'review' | 'agent' | 'merge';
+  checkedAt?: string;
+  observationError?: string;
+  observationFailures?: number;
+  /** Publication is recorded even while checks on the target are pending. */
+  integratedAt?: string;
+  completedAt?: string;
+  autoSettle?: boolean;
+  /** Manual Reopen or stopping follow-ups wins over automatic settlement. */
+  keepOpen?: boolean;
+  followUpsStoppedAt?: string;
 };
 
 export type DeliverySummary = {

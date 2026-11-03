@@ -10,9 +10,10 @@ import { codexHarness } from './threads/codex.js';
 import { codexInstall, type CodexFactory } from '@accio/codex';
 import { HubConnections } from './hub/connections.js';
 import type { CommandRunner } from './resources/process.js';
+import type { DeliveryHosting } from './threads/delivery.js';
 
 export type AppOptions = { home: string; host: string; port: number; token: string; hubPort: number; webRoot?: string };
-export type AppDeps = { resourceCommand: CommandRunner; mcpFetch: Fetch; harness: Harness; claudeFetch: Fetch; anthropicUrl: string; codexHarness: Harness; codexFactory: CodexFactory; openaiUrl: string; openaiFetch: Fetch };
+export type AppDeps = { resourceCommand: CommandRunner; mcpFetch: Fetch; harness: Harness; claudeFetch: Fetch; anthropicUrl: string; codexHarness: Harness; codexFactory: CodexFactory; openaiUrl: string; openaiFetch: Fetch; deliveryHosting: DeliveryHosting };
 
 /** The local machine hosts clients and work; all hubs use the standalone service protocol. */
 export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
@@ -21,7 +22,7 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
   const here = machineInfo(await loadMachineId(opts.home));
   const codex = await codexInstall();
   const harnesses = [await claudeCodeInstall(), ...(codex.version ? [codex] : [])];
-  const connections = new HubConnections(opts.home, here, harnesses, { claudeCode: deps.harness ?? claudeCode, codex: deps.codexHarness ?? codexHarness(deps.codexFactory) }, (...args) => send(...args), deps.resourceCommand);
+  const connections = new HubConnections(opts.home, here, harnesses, { claudeCode: deps.harness ?? claudeCode, codex: deps.codexHarness ?? codexHarness(deps.codexFactory) }, (...args) => send(...args), deps.resourceCommand, deps.deliveryHosting);
   await connections.load();
   const shouldStartLocal = !connections.initialized || connections.saved.some((s) => s.managed);
   let local: Awaited<ReturnType<typeof startHubService>> | undefined;

@@ -3,6 +3,8 @@ import { Check, Clock, StopSquare, Undo } from '../app/icons';
 import { ProjectMark } from '../projects/ProjectMark';
 import { useProjects } from '../projects/projects';
 import { useNeedsSecret } from '../secrets/pendingSecrets';
+import { StatusGlyphIcon } from './StatusMark';
+import { statusText, threadStatus } from './status';
 import { useThreadMenu } from './ThreadMenu';
 import type { ShelfPlace } from './shelves';
 import { useThreads, type ThreadActions } from './threads';
@@ -40,17 +42,35 @@ export function ThreadRow({ thread: t, place }: { thread: ThreadView; place: She
       ))}
     </span>
   );
+  const status = threadStatus(t, { needsSecret });
+  const statusLine = statusText(status.label, status.delivery?.pullRequest);
+  const delivery = status.delivery;
+  // Shelved rows are one line: a delivery outcome stays visible as a badge, also on hover.
+  const badge = !open && delivery && <span className={`row-badge tone-${delivery.tone}`} title={statusText(delivery.label, delivery.pullRequest)}>
+    <StatusGlyphIcon glyph={delivery.glyph} tone={delivery.tone} />{delivery.badge}
+  </span>;
   const className = `row${open ? ' open' : ''}${t.id === selectedId ? ' active' : ''}${place === 'settled' ? ' settled' : ''}`;
   return (
     <div className={className} onContextMenu={onContextMenu}>
-      <button className="row-main" onClick={() => select(t.id)} title={`${t.title} · ${project ?? 'No project'}`} aria-current={t.id === selectedId ? 'page' : undefined}>
+      <button className="row-main" onClick={() => select(t.id)} title={`${t.title} · ${project ?? 'No project'}${status.showLabel ? ` · ${statusLine}` : ''}`} aria-current={t.id === selectedId ? 'page' : undefined}>
         {open && (t.projectId ? <ProjectMark id={t.projectId} /> : <span className="no-project-mark" />)}
         <span className="row-name">
           <span className="row-title">{t.title}</span>
-          {needsSecret ? <span className="row-project needs-secret">Needs a secret</span>
-            : (open || project) && <span className="row-project">{project ?? 'No project'}</span>}
+          {open ? <span className={`row-project${status.showLabel ? ' with-state' : ''}`}>
+            <span className="row-project-name">{project ?? 'No project'}</span>
+            {status.showLabel && <span className={`row-state tone-${status.tone}`}>
+              <span className="row-state-label">{status.label}</span>
+              {delivery?.pullRequest && <span className="row-state-pr">&nbsp;· #{delivery.pullRequest.number}</span>}
+            </span>}
+          </span> : project && <span className="row-project">{project}</span>}
         </span>
-        {open && <RowStatus thread={t} now={now} needsSecret={needsSecret} />}
+        {badge}
+        {open && <span className="row-status">
+          <span className="row-meta">{timeAgo(t.updatedAt, now)}</span>
+          <span className={`row-mark tone-${status.tone}`} role="img" aria-label={statusLine}>
+            <StatusGlyphIcon glyph={status.glyph} tone={status.tone} />
+          </span>
+        </span>}
         {place === 'snoozed' && t.snoozedUntil && <span className="row-meta">{wakeLabel(t.snoozedUntil, now)}</span>}
         {place === 'settled' && t.settledAt && <span className="row-meta">{timeAgo(t.settledAt, now)}</span>}
       </button>
@@ -70,18 +90,6 @@ function hoverActions(t: ThreadView, place: ShelfPlace): HoverAction[] {
     { label: 'Snooze', title: 'Snooze until morning', icon: <Clock />, run: 'snooze' },
     { label: 'Settle', title: 'Settle', icon: <Check />, run: 'settle' },
   ];
-}
-
-function RowStatus({ thread: t, now, needsSecret }: { thread: ThreadView; now: Date; needsSecret?: boolean }) {
-  const label = needsSecret ? 'Needs a secret' : { running: 'Working', interrupted: 'Interrupted', failed: 'Failed', idle: 'Done' }[t.status];
-  return (
-    <span className="row-status" title={label}>
-      <span className="row-meta">{timeAgo(t.updatedAt, now)}</span>
-      <span className="row-mark" role="img" aria-label={label}>
-        {needsSecret ? <span className="row-flag needs-secret" /> : t.status === 'running' ? <span className="row-working" /> : <span className={`row-flag ${t.status}`} />}
-      </span>
-    </span>
-  );
 }
 
 export function timeAgo(iso: string, now: Date): string {

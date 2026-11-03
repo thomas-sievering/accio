@@ -13,6 +13,8 @@ const home = await mkdtemp(join(tmpdir(), 'accio-chat-browser-'));
 const fixture = (name: string) => readFile(resolve('tests/fixtures', name));
 const token = 'isolated-chat-test-token';
 const image = await fixture('chat.png');
+const reviewHostFile = join(home, 'review-host.json');
+let reviewFeature = 0;
 const harness = new FakeHarness(async function* (run) {
   if (run.prompt === 'Choice fixture') {
     const options = [['choice-list.png', 'List rows'], ['choice-cards.png', 'Cards'], ['choice-grouped.png', 'Grouped by provider']];
@@ -34,12 +36,20 @@ const harness = new FakeHarness(async function* (run) {
     if (!run.signal.aborted) yield { type: 'harness_event', event: { kind: 'end' } };
     return;
   }
+  if (run.prompt === 'Build review fixture') {
+    await writeFile(join(run.cwd, 'review-feature.txt'), `A feature prepared for human review: ${++reviewFeature}.\n`);
+    yield* replyWith('Review feature implemented.');
+    return;
+  }
   if (run.prompt.startsWith('Deliver the current task')) {
     await git(run.cwd, 'add', '.');
     if (await git(run.cwd, 'status', '--porcelain')) await git(run.cwd, 'commit', '--quiet', '-m', 'delivery fixture');
     await git(run.cwd, 'fetch', '--quiet', 'origin');
     await git(run.cwd, 'rebase', 'origin/main');
-    if (run.prompt.includes('NEVER merge')) await git(run.cwd, 'push', '--quiet', 'origin', 'HEAD');
+    if (run.prompt.includes('NEVER merge')) {
+      await git(run.cwd, 'push', '--quiet', 'origin', 'HEAD');
+      await writeFile(reviewHostFile, JSON.stringify({ state: 'OPEN', checks: 'SUCCESS', head: await git(run.cwd, 'rev-parse', 'HEAD'), branch: await git(run.cwd, 'branch', '--show-current') }));
+    }
     else await git(run.cwd, 'push', '--quiet', 'origin', 'HEAD:refs/heads/main');
     yield* replyWith('Verification complete. Published the committed change.');
     return;
@@ -104,6 +114,17 @@ const harness = new FakeHarness(async function* (run) {
 });
 const app = await startApp({ home, host: '127.0.0.1', port: Number(process.env.ACCIO_CHAT_TEST_PORT ?? 47481), hubPort: 0, token, webRoot: resolve('apps/web/dist') }, {
   harness,
+  // Hosting is the external boundary under test. Git publication and thread state stay real.
+  deliveryHosting: async (_cwd, args) => {
+    const host = JSON.parse(await readFile(reviewHostFile, 'utf8'));
+    if (args[0] === 'pr') {
+      const pr = { number: 123, url: 'https://github.com/test/accio-review/pull/123', state: host.state, headRefOid: host.head,
+        baseRefName: 'main', isDraft: false, reviewDecision: '', statusCheckRollup: [{ conclusion: 'SUCCESS' }],
+        mergeCommit: host.mergeRevision ? { oid: host.mergeRevision } : null, mergedAt: host.mergedAt };
+      return args[1] === 'view' ? pr : [pr];
+    }
+    return args[1]!.includes('check-runs') ? { total_count: 1, check_runs: [{ conclusion: host.checks === 'PENDING' ? null : host.checks }] } : { total_count: 0, statuses: [] };
+  },
   claudeFetch: (url, init) => String(url).endsWith('/api/oauth/usage')
     ? Promise.resolve(Response.json({ rate_limits_available: false })) : fakeClaudeFetch(url, init),
 });
@@ -125,6 +146,25 @@ await git(deliveryFolder, 'push', '--quiet', '-u', 'origin', 'main');
 await git(deliveryFolder, 'remote', 'set-head', 'origin', '-a');
 const deliveryCheckout = await client.call('checkouts.add', { path: deliveryFolder, profileId: 'personal' });
 await client.call('projects.setDelivery', { projectId: deliveryCheckout.projectId, deliveryPolicy: 'direct', previewCommand: 'node preview.cjs' });
+const reviewFolder = join(home, 'review-project');
+const reviewOrigin = join(home, 'review-origin.git');
+await mkdir(reviewFolder);
+await git(reviewFolder, 'init', '--quiet', '-b', 'main');
+await git(reviewFolder, 'config', 'user.name', 'Accio Browser Test');
+await git(reviewFolder, 'config', 'user.email', 'browser@example.test');
+await writeFile(join(reviewFolder, 'seed.txt'), 'review base\n');
+await git(reviewFolder, 'add', '.');
+await git(reviewFolder, 'commit', '--quiet', '-m', 'review base');
+await git(home, 'init', '--quiet', '--bare', '-b', 'main', reviewOrigin);
+await git(reviewFolder, 'remote', 'add', 'origin', reviewOrigin);
+await git(reviewFolder, 'push', '--quiet', '-u', 'origin', 'main');
+await git(reviewFolder, 'remote', 'set-head', 'origin', '-a');
+await git(reviewFolder, 'config', `url.${reviewOrigin.replaceAll('\\', '/')}.insteadOf`, 'https://github.com/test/accio-review.git');
+await git(reviewFolder, 'remote', 'set-url', 'origin', 'https://github.com/test/accio-review.git');
+await client.call('checkouts.add', { path: reviewFolder, profileId: 'personal' });
+await mkdir(resolve('out'), { recursive: true });
+const fixtureMetadata = resolve('out', `chat-test-${app.port}.json`);
+await writeFile(fixtureMetadata, JSON.stringify({ reviewFolder, reviewOrigin, reviewHostFile }));
 const thread = await client.call('threads.start', { profileId: 'personal', text: 'Inline chat fixture' });
 await client.waitFor('threads.changed', (threads) => threads.some((entry) => entry.id === thread.id && entry.status === 'idle'));
 const choice = await client.call('threads.start', { profileId: 'personal', text: 'Choice fixture' });
@@ -136,6 +176,7 @@ const close = async () => {
   closing = true;
   client.close();
   await app.close();
+  await rm(fixtureMetadata, { force: true });
   await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
   process.exit();
 };

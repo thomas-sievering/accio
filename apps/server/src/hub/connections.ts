@@ -15,6 +15,7 @@ import { AccioTools } from '../tools/tools.js';
 import { offerChoice } from '../threads/choice.js';
 import { ResourceManager } from '../resources/resources.js';
 import type { CommandRunner } from '../resources/process.js';
+import type { DeliveryHosting } from '../threads/delivery.js';
 
 export type SavedHub = { id: string; name: string; url: string; token: string; home: string; local: boolean; managed?: boolean; snapshot?: HubSnapshot };
 export type HubWorkspace = { client: HubClient; router: Router; profiles: Profiles; machines: Machines; models: Models; projects: Projects; threads: Threads; tools: AccioTools; resources: ResourceManager; secrets: SecretsAccess; home: string; initialize(origin: string): void; close(): Promise<void> };
@@ -30,7 +31,7 @@ export class HubConnections {
   private closing = false;
   private origin?: string;
   initialized = false;
-  constructor(private home: string, private here: MachineInfo, private harnesses: HarnessInstall[], private runners: Record<string, Harness>, private send: (event: any, data: any, hubId?: string) => void, private resourceCommand?: CommandRunner) {
+  constructor(private home: string, private here: MachineInfo, private harnesses: HarnessInstall[], private runners: Record<string, Harness>, private send: (event: any, data: any, hubId?: string) => void, private resourceCommand?: CommandRunner, private deliveryHosting?: DeliveryHosting) {
     this.file = new JsonFile(join(home, 'hub-connections.json'), () => []);
     this.register();
   }
@@ -65,7 +66,7 @@ export class HubConnections {
     const projects = new Projects(record.home, profiles, machines, broadcast); await projects.load(); projects.register(router);
     const tools = new AccioTools([offerChoice]);
     const secrets = remoteSecrets(client);
-    const threads = new Threads(record.home, profiles, projects, this.runners, broadcast, models, machines, secrets, tools); await threads.load(); threads.register(router);
+    const threads = new Threads(record.home, profiles, projects, this.runners, broadcast, models, machines, secrets, tools, this.deliveryHosting); await threads.load(); threads.register(router);
     const resources = new ResourceManager(record.home, this.here.id, remoteResources(client), remoteMcp(client), profiles, projects, broadcast, async (tool, detail) => {
       const candidates = tool.repairProfileId ? [profiles.require(tool.repairProfileId)] : profiles.all();
       const profile = candidates.find(p => models.list(p.id).models.length > 0);
