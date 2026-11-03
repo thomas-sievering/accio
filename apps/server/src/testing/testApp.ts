@@ -88,13 +88,13 @@ export class TestClient {
   }
 
   /** Creates a profile (if new) and signs it in as the given Claude login. */
-  async signedIn(name: string, opts: { claudeLogin?: string; roots?: string[] } = {}) {
+  async signedIn(name: string, opts: { claudeAccount?: string; folders?: string[] } = {}) {
     const profiles = await this.call('profiles.list', {});
     const profile =
       profiles.find((a) => a.name === name) ??
-      (await this.call('profiles.save', { name, roots: opts.roots ?? [] }));
+      (await this.call('profiles.save', { name, folders: opts.folders ?? [] }));
     const { signInId } = await this.call('profiles.beginSignIn', { profileId: profile.id });
-    return this.call('profiles.completeSignIn', { signInId, code: opts.claudeLogin ?? `claude-${profile.id}` });
+    return this.call('profiles.completeSignIn', { signInId, code: opts.claudeAccount ?? `claude-${profile.id}` });
   }
 
   /** Waits until an event matching `pred` has arrived (including earlier ones). */

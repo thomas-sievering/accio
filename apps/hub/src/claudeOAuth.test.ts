@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { CLAUDE_OAUTH, beginSignIn, exchangeCode, needsRefresh, readPastedCode, refreshLogin, type Fetch } from './claudeOAuth.js';
+import { CLAUDE_OAUTH, beginSignIn, exchangeCode, needsRefresh, readPastedCode, refreshAccount, type Fetch } from './claudeOAuth.js';
 
 const pending = beginSignIn();
 
@@ -53,9 +53,9 @@ describe('token exchange', () => {
         organization: { name: 'HRC' },
       },
     }));
-    const login = await exchangeCode(f, pending, 'the-code', 1000);
+    const account = await exchangeCode(f, pending, 'the-code', 1000);
     expect(calls[0]).toMatchObject({ grant_type: 'authorization_code', code: 'the-code', code_verifier: pending.verifier });
-    expect(login).toEqual({
+    expect(account).toEqual({
       accessToken: 'at',
       refreshToken: 'rt',
       expiresAt: 1000 + 3600_000,
@@ -68,7 +68,7 @@ describe('token exchange', () => {
   it('keeps identity and the old refresh token when a refresh omits them', async () => {
     const { f } = fakeTokenEndpoint(() => ({ status: 200, json: { access_token: 'at2', expires_in: 60 } }));
     const old = { accessToken: 'at', refreshToken: 'rt', expiresAt: 0, email: 'me@x', claudeAccountId: 'a', organization: null };
-    expect(await refreshLogin(f, old, 0)).toMatchObject({ accessToken: 'at2', refreshToken: 'rt', email: 'me@x', expiresAt: 60_000 });
+    expect(await refreshAccount(f, old, 0)).toMatchObject({ accessToken: 'at2', refreshToken: 'rt', email: 'me@x', expiresAt: 60_000 });
   });
 
   it('reports Claude’s reason when it refuses', async () => {
@@ -77,8 +77,8 @@ describe('token exchange', () => {
   });
 
   it('refreshes five minutes before expiry', () => {
-    const login = { accessToken: '', refreshToken: '', expiresAt: 10 * 60_000, email: null, claudeAccountId: null, organization: null };
-    expect(needsRefresh(login, 4 * 60_000)).toBe(false);
-    expect(needsRefresh(login, 6 * 60_000)).toBe(true);
+    const account = { accessToken: '', refreshToken: '', expiresAt: 10 * 60_000, email: null, claudeAccountId: null, organization: null };
+    expect(needsRefresh(account, 4 * 60_000)).toBe(false);
+    expect(needsRefresh(account, 6 * 60_000)).toBe(true);
   });
 });

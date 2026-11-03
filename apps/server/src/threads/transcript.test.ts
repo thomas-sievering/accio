@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { AgentMessage } from './agent.js';
-import { agentEnv } from './agentEnv.js';
+import type { HarnessMessage } from './harness.js';
+import { harnessEnv } from './harnessEnv.js';
 import { summarizeTool, TurnTranscript } from './transcript.js';
 
 const S = 'sess-1';
-const stream = (event: object): AgentMessage => ({ type: 'stream_event', event, parent_tool_use_id: null, session_id: S }) as AgentMessage;
+const stream = (event: object): HarnessMessage => ({ type: 'stream_event', event, parent_tool_use_id: null, session_id: S }) as HarnessMessage;
 
 describe('TurnTranscript', () => {
   it('streams text, then confirms it with the full message under the same id', () => {
@@ -17,7 +17,7 @@ describe('TurnTranscript', () => {
       stream({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'lo' } }),
       { type: 'assistant', message: { id: 'm1', content: [{ type: 'text', text: 'Hello' }] }, parent_tool_use_id: null, session_id: S },
       { type: 'result', subtype: 'success', is_error: false, session_id: S },
-    ].flatMap((m) => t.accept(m as AgentMessage));
+    ].flatMap((m) => t.accept(m as HarnessMessage));
 
     expect(changes[0]).toEqual({ type: 'session', sessionId: S });
     const created = changes[1] as { type: 'item'; item: { id: string } };
@@ -50,7 +50,7 @@ describe('TurnTranscript', () => {
         parent_tool_use_id: null,
         session_id: S,
       },
-    ].flatMap((m) => t.accept(m as AgentMessage));
+    ].flatMap((m) => t.accept(m as HarnessMessage));
 
     expect(changes).toEqual([
       { type: 'item', item: { kind: 'tool', id: 'tu1', turnId: 't1', name: 'Bash', summary: 'ls -la', status: 'running' } },
@@ -69,7 +69,7 @@ describe('TurnTranscript', () => {
       is_error: true,
       session_id: S,
       errors: ['401 from hub'],
-    } as AgentMessage);
+    } as HarnessMessage);
     expect(changes).toEqual([
       { type: 'item', item: { kind: 'notice', id: 't1:n0', turnId: 't1', tone: 'error', text: '401 from hub' } },
       { type: 'end', outcome: 'failed', error: '401 from hub' },
@@ -83,7 +83,7 @@ describe('TurnTranscript', () => {
       message: { id: 'm1', content: [{ type: 'tool_use', id: 'tu1', name: 'Read', input: { file_path: 'a.ts' } }] },
       parent_tool_use_id: null,
       session_id: S,
-    } as AgentMessage);
+    } as HarnessMessage);
     expect(t.unfinishedTools()).toEqual([{ kind: 'tool', id: 'tu1', turnId: 't1', name: 'Read', summary: 'a.ts', status: 'error' }]);
   });
 
@@ -94,11 +94,11 @@ describe('TurnTranscript', () => {
   });
 });
 
-describe('agentEnv', () => {
+describe('harnessEnv', () => {
   const hrc = { baseUrl: 'http://127.0.0.1:47322', accessKey: 'accio-hrc-key' };
 
   it('runs a thread only against its own profile, dropping any inherited login', () => {
-    const env = agentEnv(
+    const env = harnessEnv(
       {
         PATH: '/bin',
         ANTHROPIC_API_KEY: 'personal-api-key',

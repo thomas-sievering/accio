@@ -18,7 +18,7 @@ const INHERITED_BLOCKLIST = [
   /^ELECTRON_RUN_AS_NODE$/,
 ];
 
-export function agentEnv(base: NodeJS.ProcessEnv, access: HubAccess, configDir: string): Record<string, string> {
+export function harnessEnv(base: NodeJS.ProcessEnv, access: HubAccess, configDir: string): Record<string, string> {
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(base)) {
     if (value === undefined) continue;

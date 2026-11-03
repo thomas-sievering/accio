@@ -91,12 +91,12 @@ describe('hub', () => {
     expect(hub.summary('personal')).toEqual({ signedIn: true, email: 'me@example.com', organization: null, claudeAccountId: 'claude-me' });
     await hub.close();
     const stored = JSON.parse(await readFile(join(home, 'hub', 'profiles.json'), 'utf8'));
-    expect(stored[0].login.accessToken).toBe('token-1');
+    expect(stored[0].account.accessToken).toBe('token-1');
     // A sign-in is used once.
     await expect(hub.completeSignIn(signInId, 'good')).rejects.toThrow(/expired/);
   });
 
-  it('lets accio refuse a login before it is stored', async () => {
+  it('lets accio refuse an account before it is stored', async () => {
     const { hub } = await setup();
     await hub.ensureProfile('hrc');
     const { signInId } = hub.beginSignIn('hrc');

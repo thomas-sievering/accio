@@ -1,5 +1,5 @@
 import type { TranscriptItem } from '@accio/protocol';
-import type { AgentMessage, ContentBlock, StreamEvent } from './agent.js';
+import type { HarnessMessage, ContentBlock, StreamEvent } from './harness.js';
 
 export type TranscriptChange =
   | { type: 'item'; item: TranscriptItem }
@@ -10,7 +10,7 @@ export type TranscriptChange =
 const OUTPUT_LIMIT = 4000;
 
 /**
- * Turns one turn's agent messages into transcript changes. Only the main agent
+ * Turns one turn's harness messages into transcript changes. Only the main harness
  * is shown; subagent messages (parent_tool_use_id set) are left out in v0.1.
  *
  * Text streams in as deltas and is then confirmed by the full assistant
@@ -30,7 +30,7 @@ export class TurnTranscript {
     return `${this.turnId}:${prefix}${this.seq++}`;
   }
 
-  accept(msg: AgentMessage): TranscriptChange[] {
+  accept(msg: HarnessMessage): TranscriptChange[] {
     const out: TranscriptChange[] = [];
     if (msg.type === 'system' && msg.subtype === 'init' && typeof msg.session_id === 'string') {
       out.push({ type: 'session', sessionId: msg.session_id });
@@ -39,16 +39,16 @@ export class TurnTranscript {
 
     switch (msg.type) {
       case 'stream_event':
-        this.onStream((msg as Extract<AgentMessage, { type: 'stream_event' }>).event, out);
+        this.onStream((msg as Extract<HarnessMessage, { type: 'stream_event' }>).event, out);
         break;
       case 'assistant':
-        this.onAssistant(msg as Extract<AgentMessage, { type: 'assistant' }>, out);
+        this.onAssistant(msg as Extract<HarnessMessage, { type: 'assistant' }>, out);
         break;
       case 'user':
-        this.onUser(msg as Extract<AgentMessage, { type: 'user' }>, out);
+        this.onUser(msg as Extract<HarnessMessage, { type: 'user' }>, out);
         break;
       case 'result': {
-        const r = msg as Extract<AgentMessage, { type: 'result' }>;
+        const r = msg as Extract<HarnessMessage, { type: 'result' }>;
         if (r.is_error || r.subtype !== 'success') {
           const error = r.errors?.join('\n') || r.result || `Turn ended with ${r.subtype}`;
           out.push({ type: 'item', item: { kind: 'notice', id: this.nextId('n'), turnId: this.turnId, tone: 'error', text: error } });
@@ -89,7 +89,7 @@ export class TurnTranscript {
     }
   }
 
-  private onAssistant(msg: Extract<AgentMessage, { type: 'assistant' }>, out: TranscriptChange[]) {
+  private onAssistant(msg: Extract<HarnessMessage, { type: 'assistant' }>, out: TranscriptChange[]) {
     for (const block of msg.message.content) {
       if (block.type === 'text') {
         const text = (block as { text: string }).text;
@@ -113,7 +113,7 @@ export class TurnTranscript {
     }
   }
 
-  private onUser(msg: Extract<AgentMessage, { type: 'user' }>, out: TranscriptChange[]) {
+  private onUser(msg: Extract<HarnessMessage, { type: 'user' }>, out: TranscriptChange[]) {
     if (typeof msg.message.content === 'string') return;
     for (const block of msg.message.content) {
       if (block.type !== 'tool_result') continue;

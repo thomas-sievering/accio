@@ -1,8 +1,8 @@
 /**
- * The port between threads and whatever runs the agent. The real adapter wraps
- * the Claude Agent SDK (claudeAgent.ts); tests use a scripted fake.
+ * The port between threads and the harness that runs their turns. The real adapter wraps
+ * the Claude Agent SDK (claudeCode.ts); tests use a scripted fake.
  *
- * AgentMessage is the subset of the SDK's message stream that the transcript
+ * HarnessMessage is the subset of the SDK's message stream that the transcript
  * reads, kept structural so the domain does not depend on the SDK's types.
  */
 
@@ -18,7 +18,7 @@ export type StreamEvent =
   | { type: 'content_block_delta'; index: number; delta: { type: string; text?: string } }
   | { type: string; [k: string]: unknown };
 
-export type AgentMessage =
+export type HarnessMessage =
   | { type: 'system'; subtype: string; session_id: string; [k: string]: unknown }
   | { type: 'stream_event'; event: StreamEvent; parent_tool_use_id: string | null; session_id: string }
   | {
@@ -32,7 +32,7 @@ export type AgentMessage =
   | { type: 'result'; subtype: string; is_error: boolean; session_id: string; result?: string; errors?: string[] }
   | { type: string; session_id?: string; [k: string]: unknown };
 
-export type AgentRun = {
+export type HarnessTurn = {
   cwd: string;
   prompt: string;
   /** Claude session to continue; null starts a new one. */
@@ -41,6 +41,6 @@ export type AgentRun = {
   signal: AbortSignal;
 };
 
-export interface Agent {
-  run(run: AgentRun): AsyncIterable<AgentMessage>;
+export interface Harness {
+  run(run: HarnessTurn): AsyncIterable<HarnessMessage>;
 }

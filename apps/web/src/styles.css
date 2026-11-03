@@ -971,51 +971,51 @@ button.row {
   color: var(--muted);
   font-style: italic;
 }
-.msg.agent {
+.msg.assistant {
   align-self: flex-start;
 }
-.msg.agent > :first-child {
+.msg.assistant > :first-child {
   margin-top: 0;
 }
-.msg.agent > :last-child {
+.msg.assistant > :last-child {
   margin-bottom: 0;
 }
-.msg.agent p,
-.msg.agent ul,
-.msg.agent ol {
+.msg.assistant p,
+.msg.assistant ul,
+.msg.assistant ol {
   margin: 0 0 10px;
 }
-.msg.agent ul,
-.msg.agent ol {
+.msg.assistant ul,
+.msg.assistant ol {
   padding-left: 22px;
 }
-.msg.agent h1,
-.msg.agent h2,
-.msg.agent h3 {
+.msg.assistant h1,
+.msg.assistant h2,
+.msg.assistant h3 {
   margin: 14px 0 8px;
   font-size: 15px;
 }
-.msg.agent code {
+.msg.assistant code {
   color: #c4c4c4;
 }
-.msg.agent pre {
+.msg.assistant pre {
   margin: 0 0 10px;
   padding: 10px 12px;
   border-radius: 8px;
   background: oklch(0.15 0 none);
   overflow-x: auto;
 }
-.msg.agent a {
+.msg.assistant a {
   color: inherit;
   text-decoration-color: var(--dim);
   text-underline-offset: 3px;
 }
-.msg.agent table {
+.msg.assistant table {
   border-collapse: collapse;
   margin: 0 0 10px;
 }
-.msg.agent th,
-.msg.agent td {
+.msg.assistant th,
+.msg.assistant td {
   border: 1px solid var(--line-2);
   padding: 4px 8px;
 }

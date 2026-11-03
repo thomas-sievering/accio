@@ -6,25 +6,25 @@ import { Profiles } from './profiles/profiles.js';
 import { renameAccountsToProfiles } from './store/renameAccountsToProfiles.js';
 import { Projects } from './projects/projects.js';
 import { Threads } from './threads/threads.js';
-import type { Agent } from './threads/agent.js';
-import { claudeAgent } from './threads/claudeAgent.js';
+import type { Harness } from './threads/harness.js';
+import { claudeCode } from './threads/claudeCode.js';
 
 export type AppOptions = {
   home: string;
   host: string;
   port: number;
   token: string;
-  /** Port of the hub agents call (ADR 0007). 0 picks a free one. */
+  /** Port of the hub that threads call (ADR 0007). 0 picks a free one. */
   hubPort: number;
   webRoot?: string;
 };
 
 /** Infrastructure a test can swap out. Grows as slices need it. */
 export type AppDeps = {
-  agent: Agent;
+  harness: Harness;
   /** Reaches Anthropic for sign-in and token refresh. */
   claudeFetch: Fetch;
-  /** Where the hub forwards agent requests. */
+  /** Where the hub forwards threads' requests. */
   anthropicUrl: string;
 };
 
@@ -39,7 +39,7 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
 
   await renameAccountsToProfiles(opts.home);
 
-  // This machine is the home machine in v0.1, so it runs the hub in-process.
+  // In v0.1 this machine runs the hub in-process.
   const hub = new Hub(opts.home, deps.claudeFetch ?? fetch);
   await hub.load();
   const hubProxy = await startHubProxy({
@@ -58,7 +58,7 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
   await projects.load();
   projects.register(router);
 
-  const threads = new Threads(opts.home, profiles, projects, deps.agent ?? claudeAgent, broadcast);
+  const threads = new Threads(opts.home, profiles, projects, deps.harness ?? claudeCode, broadcast);
   await threads.load();
   threads.register(router);
 

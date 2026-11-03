@@ -35,8 +35,8 @@ export function ProfileSwitcher({ onManage }: { onManage: () => void }) {
             <ProfileTile profile={a} size="md" />
             <span className="menu-text">
               <b>{a.name}</b>
-              <small className={a.signIn ? undefined : 'warn'}>
-                {a.signIn ? (a.signIn.email ?? 'Signed in') : 'Not signed in'}
+              <small className={a.account ? undefined : 'warn'}>
+                {a.account ? (a.account.email ?? 'Signed in') : 'Not signed in'}
               </small>
             </span>
             {filter === a.id && <Check />}
