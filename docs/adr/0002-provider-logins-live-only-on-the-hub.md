@@ -4,4 +4,4 @@ Agents never use a provider login stored on the machine they run on. Each accoun
 
 ## Consequences
 
-There is no fallback: when the hub is down, no thread can run. Subscription traffic leaves from a datacenter IP rather than a home connection.
+There is no fallback: when the hub is down, no thread can run. If the home machine is the VPS, subscription traffic leaves from a datacenter IP rather than a home connection.

@@ -1,6 +1,6 @@
 # Machines and clients connect outbound to the home machine
 
-Every machine runs its own accio server, and every machine and client connects outbound over HTTPS (port 443) to the home machine, a VPS reachable by domain, which passes traffic between them. Some networks block Tailscale, but almost none block outbound HTTPS, so nothing in accio requires Tailscale.
+Every machine runs its own accio server, and every machine and client connects outbound over HTTPS (port 443) to the home machine, which is reachable by domain and passes traffic between them. Which computer is the home machine is still open: the VPS (already public, isolated from the home network) or the media server (residential IP, but needs a way to be reachable from outside without Tailscale). Some networks block Tailscale, but almost none block outbound HTTPS, so nothing in accio requires Tailscale.
 
 ## Considered Options
 
