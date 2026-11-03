@@ -42,3 +42,6 @@ export class Resources {
   setToolStatus(status: ToolStatus) { return this.save(d => ({ ...d, toolStatuses: [...d.toolStatuses.filter(s => s.toolId !== status.toolId || s.machineId !== status.machineId), status] })); }
   async close() { await this.queue; await this.file.idle(); await this.secretsFile.idle(); }
 }
+
+/** Machine operations exclude reading MCP credentials or owning the persistence files. */
+export type ResourceAccess = Pick<Resources, Exclude<keyof Resources, 'credential' | 'load' | 'close'>>;

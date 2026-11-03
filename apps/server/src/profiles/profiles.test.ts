@@ -119,13 +119,13 @@ describe('profiles slice', () => {
       return write.call(this, value);
     });
     const eventCount = c.events.filter((e) => e.event === 'profiles.changed').length;
-    await expect(c.call('profiles.save', { id: profile.id, name: 'Changed', accountId: second.id })).rejects.toThrow('disk full');
+    await expect(c.call('profiles.save', { id: profile.id, name: 'Changed', accountId: second.id })).rejects.toThrow('Hub request failed');
     expect((await c.call('profiles.list', {}))[0]).toMatchObject({ name: 'Personal' });
     expect(claudeAccount((await c.call('profiles.list', {}))[0]!)?.id).toBe(first.id);
     expect(c.events.filter((e) => e.event === 'profiles.changed')).toHaveLength(eventCount);
     const stored = JSON.parse(await readFile(join(t.home, 'hub', 'profiles.json'), 'utf8'));
     expect(stored.profiles[0].accountId).toBe(first.id);
-    await expect(c.call('profiles.delete', { id: profile.id })).rejects.toThrow('disk full');
+    await expect(c.call('profiles.delete', { id: profile.id })).rejects.toThrow('Hub request failed');
     expect((await c.call('profiles.list', {}))[0]?.name).toBe('Personal');
     vi.restoreAllMocks();
     await c.call('profiles.save', { id: profile.id, name: 'Changed', accountId: second.id });

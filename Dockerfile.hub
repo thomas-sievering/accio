@@ -1,0 +1,18 @@
+FROM node:24-bookworm-slim AS build
+WORKDIR /src
+RUN npm install --global pnpm@12.16.1
+COPY . .
+ARG PNPM_MINIMUM_RELEASE_AGE=1440
+RUN pnpm --config.minimumReleaseAge=${PNPM_MINIMUM_RELEASE_AGE} install --frozen-lockfile --ignore-scripts
+RUN pnpm --config.minimumReleaseAge=${PNPM_MINIMUM_RELEASE_AGE} --filter '@accio/hub...' build
+RUN pnpm --config.minimumReleaseAge=${PNPM_MINIMUM_RELEASE_AGE} --filter @accio/hub deploy --prod --legacy /opt/hub
+
+FROM node:24-bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
+ENV NODE_ENV=production ACCIO_HOST=0.0.0.0 ACCIO_HUB_PORT=47322 ACCIO_HOME=/data
+WORKDIR /app
+COPY --from=build --chown=node:node /opt/hub/ ./
+USER node
+EXPOSE 47322
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s CMD node -e "fetch('http://127.0.0.1:47322/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+CMD ["node", "dist/main.js"]

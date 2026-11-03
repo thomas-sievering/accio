@@ -33,6 +33,8 @@ export function useLiveState<E extends EventName>(load: () => Promise<Events[E]>
 }
 
 export function useLocalState<T extends string>(key: string, initial: T): [T, (v: T) => void] {
+  const client = useClient();
+  key = `accio:${client.hubId}:${key}`;
   const [value, setValue] = useState<T>(() => (localStorage.getItem(key) as T | null) ?? initial);
   return [
     value,

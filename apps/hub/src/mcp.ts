@@ -6,6 +6,9 @@ import { enabled, type McpCredential, type Resources } from './resources.js';
 
 type Pending = { id: string; verifier: string; redirect: string; endpoint: string; clientId: string; clientSecret?: string; expires: number; resource: string; epoch: number };
 type Grant = { id: string; profileId: string; projectKey?: string };
+export type McpAccess = Pick<McpGateway, 'beginSignIn' | 'completeSignIn' | 'signOut'> & {
+  grant: (...args: Parameters<McpGateway['grant']>) => ReturnType<McpGateway['grant']> | Promise<ReturnType<McpGateway['grant']>>;
+};
 /** Remote MCP credentials never enter a machine's harness configuration. */
 export class McpGateway {
   private pending = new Map<string, Pending>();

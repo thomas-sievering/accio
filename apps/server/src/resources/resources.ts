@@ -1,12 +1,12 @@
 import { SECRET_MCP_SERVER } from '../secrets/secrets.js';
 import { join } from 'node:path';
 import { access } from 'node:fs/promises';
-import { enabled, type McpGateway, type Resources } from '@accio/hub';
-import type { McpDefinition, ResourcesState, ToolDefinition } from '@accio/protocol';
+import { enabled, type McpAccess, type ResourceAccess } from '@accio/hub';
+import type { McpDefinition, ResourcesState, ToolDefinition, SkillEntry } from '@accio/protocol';
 import type { Router, Broadcast } from '../rpc/router.js';
 import type { Profiles } from '../profiles/profiles.js';
 import type { Projects } from '../projects/projects.js';
-import { SkillFiles } from './skills.js';
+import { SkillFiles, inside } from './skills.js';
 import { ManagedTools } from './tools.js';
 import type { CommandRunner } from './process.js';
 import type { HarnessMcp, TurnResources } from '../threads/harness.js';
@@ -18,7 +18,8 @@ export class ResourceManager {
   private sourceJobs = new Map<string, Promise<unknown>>();
   private sourceOperations = new Set<Promise<unknown>>();
   private closing = false;
-  constructor(private home: string, private machineId: string, private store: Resources, private gateway: McpGateway,
+  private localSources = new Map<string, Promise<SkillEntry[]>>();
+  constructor(private home: string, private machineId: string, private store: ResourceAccess, private gateway: McpAccess,
     private profiles: Profiles, private projects: Projects, private broadcast: Broadcast,
     repair: (tool: ToolDefinition, detail: string) => Promise<string>, run?: CommandRunner) {
     this.skills = new SkillFiles(home, run);
@@ -60,7 +61,7 @@ export class ResourceManager {
       }))
       .on('skills.deleteSource', ({ id }) => this.sourceOperation(id, async () => { await this.store.deleteSource(id); this.announce(); return null; }))
       .on('skills.setScope', async ({ id, scope }) => { this.checkScope(scope); await this.store.setSkillScope(id, scope); this.announce(); return this.state().skills.find(s => s.id === id)!; })
-      .on('skills.copy', async ({ id, checkoutId }) => { const skill = this.state().skills.find(s => s.id === id); if (!skill) throw new Error('No such skill'); const release = this.projects.useCheckout(checkoutId); try { return await this.skills.copy(skill, this.projects.checkout(checkoutId).path); } finally { release(); } })
+      .on('skills.copy', async ({ id, checkoutId }) => { const skill = this.state().skills.find(s => s.id === id); if (!skill) throw new Error('No such skill'); const release = this.projects.useCheckout(checkoutId); try { return await this.skills.copy(await this.localSkill(skill), this.projects.checkout(checkoutId).path); } finally { release(); } })
       .on('mcp.save', async mcp => { this.checkScope(mcp.scope); this.validateMcp(mcp); const old = this.state().mcps.find(m => m.id === mcp.id); if (old && (old.url !== mcp.url || old.auth !== mcp.auth || old.oauthClientId !== mcp.oauthClientId)) await this.gateway.signOut(mcp.id); await this.store.saveMcp(mcp); this.announce(); return this.state().mcps.find(m => m.id === mcp.id)!; })
       .on('mcp.delete', async ({ id }) => { await this.gateway.signOut(id); await this.store.deleteMcp(id); this.announce(); return null; })
       .on('mcp.setToken', async ({ id, token }) => { if (!this.state().mcps.some(m => m.id === id && m.auth === 'bearer')) throw new Error('Select a server with bearer authentication'); await this.store.setCredential(id, { accessToken: token }); this.announce(); return null; })
@@ -82,6 +83,18 @@ export class ResourceManager {
   async reconcile() {
     for (const tool of this.state().tools) if (enabled(tool.scope) || tool.scope.profileIds.length || tool.scope.projectKeys.length) await this.tools.check(tool);
   }
+  private async localSkill(skill: SkillEntry): Promise<SkillEntry> {
+    try { await this.skills.validate(skill); return skill; }
+    catch (error) { if (inside(join(this.home, 'hub', 'skill-sources'), skill.path) && (error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+    const source = this.state().sources.find(value => value.id === skill.sourceId);
+    if (!source) throw new Error('No such skill source');
+    const key = `${source.id}:${skill.revision}`;
+    let pending = this.localSources.get(key);
+    if (!pending) { pending = this.skills.fetch({ ...source, ref: skill.revision }); this.localSources.set(key, pending); void pending.catch(() => this.localSources.delete(key)); }
+    const local = (await pending).find(value => value.id === skill.id && value.revision === skill.revision);
+    if (!local) throw new Error('The pinned source revision does not contain this skill');
+    await this.skills.validate(local); return { ...skill, path: local.path };
+  }
   async prepare(profileId: string, projectId: string, env: Record<string, string>, options: { repair?: boolean; cwd?: string } = {}): Promise<TurnResources> {
     const project = this.projects.state().projects.find(p => p.id === projectId);
     const key = project ? project.repoKey ?? `local:${project.id}` : undefined;
@@ -92,7 +105,7 @@ export class ResourceManager {
       const status = await this.tools.check(tool);
       if (status.status !== 'ready') throw new Error(`${tool.name} is not ready. ${status.repairThreadId ? 'A repair thread was started.' : status.repairError ?? status.detail}`);
     }
-    const skills = state.skills.filter(s => enabled(s.scope, profileId, key));
+    const skills = await Promise.all(state.skills.filter(s => enabled(s.scope, profileId, key)).map(skill => this.localSkill(skill)));
     const names = new Set<string>();
     for (const skill of skills) {
       if (names.has(skill.name)) throw new Error(`More than one enabled skill is named ${skill.name}; select one source`);
@@ -106,7 +119,7 @@ export class ResourceManager {
     const mcps: Record<string, HarnessMcp> = {};
     for (const mcp of state.mcps.filter(m => enabled(m.scope, profileId, key))) {
       if ([ACCIO_MCP_SERVER, SECRET_MCP_SERVER].includes(mcp.id)) throw new Error('Rename this managed MCP server: that name is reserved for built-in tools');
-      if (mcp.transport === 'http') { const grant = this.gateway.grant(mcp.id, profileId, key); releases.push(grant.release); mcps[mcp.id] = { type: 'http', url: grant.url, headers: { Authorization: `Bearer ${grant.token}` } }; }
+      if (mcp.transport === 'http') { const grant = await this.gateway.grant(mcp.id, profileId, key); releases.push(grant.release); mcps[mcp.id] = { type: 'http', url: grant.url, headers: { Authorization: `Bearer ${grant.token}` } }; }
       else mcps[mcp.id] = { type: 'stdio', command: mcp.command!, args: mcp.args };
     }
     return { env: this.tools.env(tools, env), instructions, mcps, snapshot: { tools: tools.map(t => ({ id: t.id, version: t.version })), skills: skills.map(s => ({ id: s.id, revision: s.revision })), mcps: Object.keys(mcps) }, release: () => { releases.forEach(release => release()); } };

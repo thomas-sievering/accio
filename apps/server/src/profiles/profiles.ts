@@ -1,188 +1,113 @@
+import { mkdir } from 'node:fs/promises';
 import type { ProfileView, ProviderId } from '@accio/protocol';
-import { SignInError, type Hub, type SharedSettings } from '@accio/hub';
+import { HubClient } from '@accio/hub';
 import type { Broadcast, Router } from '../rpc/router.js';
 import { UserError } from '../rpc/router.js';
-import { saveProfile, toView, type Profile } from './profile.js';
-import { writeConfigFolder, type HubAccess } from './claudeConfigFolder.js';
+import { saveProfile, type Profile } from './profile.js';
+import { configFolderOf, writeConfigFolder, type HubAccess } from './claudeConfigFolder.js';
+import { BrowserSignIns } from '../hub/browserSignIns.js';
 
-/** Other slices that hold on to a profile (projects, threads) veto its deletion here. */
 export type ProfileInUse = (profileId: string) => string | undefined;
 
-/** The profiles, stored on the hub (ADR 0004): the rules in profile.ts, coordinated with named accounts and machine config folders here. */
+/** Hub-backed profiles; only configuration and usage reservations live on the machine. */
 export class Profiles {
   private queue: Promise<unknown> = Promise.resolve();
   private inUseChecks: ProfileInUse[] = [];
   private users = new Map<string, number>();
   private removing = new Set<string>();
   private closing = false;
-
-  constructor(
-    private home: string,
-    private hub: Hub,
-    private settings: SharedSettings,
-    private hubUrl: string,
-    private broadcast: Broadcast,
-  ) {}
-
+  private announcedProfiles = '';
+  private announcedAccounts = '';
+  private announcedModels = '';
+  private announcedLimits = '';
+  readonly signIns: BrowserSignIns;
+  private referenceSource = (): string[] => [];
+  private referenceQueue: Promise<unknown> = Promise.resolve();
+  constructor(private home: string, readonly client: HubClient, private broadcast: Broadcast) {
+    this.signIns = new BrowserSignIns(client);
+    client.onChanged(() => this.announce());
+  }
   async load() {
-    // ADR 0003: rewrite every profile's config folder on start.
-    for (const a of this.list) await this.connect(a.id);
+    if (this.client.status !== 'connected') return;
+    for (const profile of this.all()) await this.connect(profile.id);
   }
-
-  private get list(): readonly Profile[] {
-    return this.settings.profiles();
-  }
-
-  all(): readonly Profile[] {
-    return this.list;
-  }
-
-  get(id: string): Profile | undefined {
-    return this.list.find((a) => a.id === id);
-  }
-
-  require(id: string): Profile {
-    const a = this.get(id);
-    if (!a) throw new UserError(`No profile ${id}`);
-    return a;
-  }
-
-  profileView(id: string): ProfileView {
-    return this.view(this.require(id));
-  }
-
-  /** What a thread needs to run under this profile; refuses until it is signed in. */
+  all(): readonly Profile[] { return this.client.snapshot?.profiles ?? []; }
+  get(id: string) { return this.all().find((p) => p.id === id); }
+  require(id: string) { const profile = this.get(id); if (!profile) throw new UserError(`No profile ${id}`); return profile; }
+  profileView(id: string): ProfileView { this.require(id); return this.client.snapshot.profiles.find((p) => p.id === id)!; }
+  codexModels(id: string) { this.require(id); return this.client.snapshot.models[id] ?? []; }
   async hubAccess(id: string, providerId: ProviderId = 'anthropic'): Promise<HubAccess> {
-    const profile = this.require(id);
-    if (!this.hub.selectedAccount(id, providerId)?.signedIn) throw new UserError(`Select a signed-in ${providerId === 'openai' ? 'ChatGPT' : 'Claude'} account for ${profile.name} in Profiles.`);
-    return { baseUrl: this.hubUrl, accessKey: await this.hub.ensureProfile(id) };
+    const profile = this.profileView(id);
+    if (!profile.providers.find((p) => p.id === providerId)?.accounts.some((a) => a.signedIn)) throw new UserError(`Select a signed-in ${providerId === 'openai' ? 'ChatGPT' : 'Claude'} account for ${profile.name} in Profiles.`);
+    await this.syncReferences(); return this.connect(id);
   }
-
-  onCheckInUse(check: ProfileInUse) {
-    this.inUseChecks.push(check);
+  setReferenceSource(source: () => string[]) { this.referenceSource = source; }
+  syncReferences() {
+    const refs = [...new Set([...this.referenceSource(), ...this.users.keys()])];
+    const next = this.referenceQueue.then(() => this.client.call('machine.references', { profiles: refs }));
+    this.referenceQueue = next.catch(() => {}); return next;
   }
-
-  /** Protect a new project or thread before its persistent reference exists. */
-  useProfile(id: string): () => void {
+  onCheckInUse(check: ProfileInUse) { this.inUseChecks.push(check); }
+  useProfile(id: string) {
     this.require(id);
     if (this.closing) throw new UserError('This machine is shutting down');
     if (this.removing.has(id)) throw new UserError('This profile is being removed');
     this.users.set(id, (this.users.get(id) ?? 0) + 1);
     let released = false;
-    return () => {
-      if (released) return;
-      released = true;
-      const count = this.users.get(id)! - 1;
-      if (count) this.users.set(id, count);
-      else this.users.delete(id);
-    };
+    return () => { if (released) return; released = true; const count = this.users.get(id)! - 1; if (count) this.users.set(id, count); else this.users.delete(id); };
   }
-
-  async close() {
-    this.closing = true;
-    await this.queue;
-  }
-
+  async close() { this.closing = true; await this.queue; await this.signIns.close(); }
+  stopAccepting() { this.closing = true; }
   register(router: Router) {
-    this.hub.limits.subscribe((views) => this.broadcast('accounts.limitsChanged', views));
-    router
-      .on('accounts.list', () => this.hub.accountViews())
-      .on('accounts.limits', () => this.hub.limits.views())
-      .on('accounts.refreshLimits', ({ accountIds, force }) => asUserError(() => this.hub.refreshLimits(accountIds, force)))
-      .on('accounts.save', async ({ id, name, providerId }) => {
-        const account = await asUserError(() => this.hub.saveAccount(name, id, providerId));
-        this.announce();
-        return account;
+    router.on('accounts.list', () => this.client.snapshot?.accounts ?? [])
+      .on('accounts.limits', () => this.client.snapshot?.limits ?? [])
+      .on('accounts.refreshLimits', params => this.client.call('accounts.refreshLimits', params))
+      .on('accounts.save', (p) => this.client.call('accounts.save', p))
+      .on('accounts.delete', (p) => this.client.call('accounts.delete', p))
+      .on('accounts.signOut', (p) => this.client.call('accounts.signOut', p))
+      .on('accounts.beginSignIn', ({ id }) => this.signIns.begin(id))
+      .on('accounts.completeSignIn', async (p) => { const result = await this.client.call('accounts.completeSignIn', p); this.signIns.finish(p.signInId); return result; })
+      .on('accounts.signInStatus', async (p) => {
+        try {
+          const result = await this.client.call('accounts.signInStatus', p);
+          if (result.status === 'complete') this.signIns.finish(p.signInId);
+          return result;
+        } catch (error) { this.signIns.finish(p.signInId); throw error; }
       })
-      .on('accounts.delete', async ({ id }) => {
-        await asUserError(() => this.hub.deleteAccount(id));
-        this.announce();
-        return null;
-      })
-      .on('accounts.beginSignIn', ({ id }) => asUserError(async () => this.hub.accountView(id).providerId === 'openai' ? this.hub.beginOpenAISignIn(id) : this.hub.beginAccountSignIn(id)))
-      .on('accounts.signInStatus', async ({ signInId }) => {
-        const result = await asUserError(() => this.hub.openaiSignInStatus(signInId));
-        if (result.status === 'complete') this.announce();
-        return result;
-      })
-      .on('accounts.cancelSignIn', async ({ signInId }) => {
-        await asUserError(() => this.hub.cancelAccountSignIn(signInId));
-        return null;
-      })
-      .on('accounts.completeSignIn', async ({ signInId, code }) => {
-        const account = await asUserError(() => this.hub.completeAccountSignIn(signInId, code));
-        this.announce();
-        return account;
-      })
-      .on('accounts.signOut', async ({ id }) => {
-        const account = await asUserError(() => this.hub.signOutAccount(id));
-        this.announce();
-        return account;
-      })
-      .on('profiles.list', () => this.views())
-      .on('profiles.save', (req) => this.change(async () => {
-        const { profiles, saved } = saveProfile(this.list, req);
-        await asUserError(() => this.hub.configureProfile(saved.id, req.accountId, async (accessKey) => {
-          await writeConfigFolder(this.home, saved.id, { baseUrl: this.hubUrl, accessKey });
-          await this.settings.setProfiles(profiles);
-        }, req.openaiAccountId));
-        this.announce();
-        return this.view(saved);
+      .on('accounts.cancelSignIn', async (p) => { this.signIns.finish(p.signInId); return this.client.call('accounts.cancelSignIn', p); })
+      .on('profiles.list', () => this.client.snapshot?.profiles ?? [])
+      .on('profiles.save', (p) => this.change(async () => {
+        const preview = saveProfile(this.all(), p).saved;
+        await mkdir(configFolderOf(this.home, preview.id), { recursive: true });
+        const saved = await this.client.call<ProfileView>('profiles.save', p);
+        await this.connect(saved.id); return saved;
       }))
       .on('profiles.delete', ({ id }) => this.change(async () => {
         const profile = this.require(id);
         if (this.users.has(id)) throw new UserError(`${profile.name} is being used to start a thread or add a project. Wait for it to finish.`);
         this.removing.add(id);
         try {
-          for (const check of this.inUseChecks) {
-            const reason = check(id);
-            if (reason) throw new UserError(`${profile.name} is still used by ${reason}`);
-          }
-          await this.hub.removeProfile(id, () => this.settings.setProfiles(this.list.filter((a) => a.id !== id)));
-          this.announce();
-          return null;
-        } finally {
-          this.removing.delete(id);
-        }
+          for (const check of this.inUseChecks) { const reason = check(id); if (reason) throw new UserError(`${profile.name} is still used by ${reason}`); }
+          await this.syncReferences();
+          await this.client.call('profiles.delete', { id }); return null;
+        } finally { this.removing.delete(id); }
       }));
   }
-
-  private view(a: Profile): ProfileView {
-    return toView(a, this.hub.selectedAccount(a.id), this.hub.selectedAccount(a.id, 'openai'));
+  private async connect(id: string): Promise<HubAccess> {
+    const { key } = await this.client.call<{ key: string }>('machine.modelKey', { profileId: id });
+    const access = { baseUrl: this.client.url, accessKey: key };
+    await writeConfigFolder(this.home, id, access); return access;
   }
-
-  codexModels(id: string) { this.require(id); return this.hub.codexModels(id); }
-
-  private views(): ProfileView[] {
-    return this.list.map((a) => this.view(a));
-  }
-
-  /** Makes sure the hub knows the profile and its config folder points there. */
-  private async connect(id: string) {
-    const accessKey = await this.hub.ensureProfile(id);
-    await writeConfigFolder(this.home, id, { baseUrl: this.hubUrl, accessKey });
-  }
-
   private announce() {
-    this.broadcast('profiles.changed', this.views());
-    this.broadcast('accounts.changed', this.hub.accountViews());
-    this.broadcast('accounts.limitsChanged', this.hub.limits.views());
-    this.broadcast('models.changed', null);
+    const profiles = this.client.snapshot?.profiles ?? [];
+    const accounts = this.client.snapshot?.accounts ?? [];
+    const profileState = JSON.stringify(profiles), accountState = JSON.stringify(accounts);
+    const modelState = JSON.stringify([profiles, accounts, this.client.snapshot?.models, this.client.snapshot?.favorites]);
+    if (profileState !== this.announcedProfiles) { this.announcedProfiles = profileState; this.broadcast('profiles.changed', profiles); }
+    if (accountState !== this.announcedAccounts) { this.announcedAccounts = accountState; this.broadcast('accounts.changed', accounts); }
+    if (modelState !== this.announcedModels) { this.announcedModels = modelState; this.broadcast('models.changed', null); }
+    const limits = this.client.snapshot?.limits ?? [], limitState = JSON.stringify(limits);
+    if (limitState !== this.announcedLimits) { this.announcedLimits = limitState; this.broadcast('accounts.limitsChanged', limits); }
   }
-
-  private change<T>(run: () => Promise<T>): Promise<T> {
-    if (this.closing) return Promise.reject(new UserError('This machine is shutting down'));
-    const result = this.queue.then(run, run);
-    this.queue = result.catch(() => {});
-    return result;
-  }
-}
-
-async function asUserError<T>(fn: () => Promise<T>): Promise<T> {
-  try {
-    return await fn();
-  } catch (err) {
-    if (err instanceof SignInError) throw new UserError(err.message);
-    throw err;
-  }
+  private change<T>(fn: () => Promise<T>): Promise<T> { if (this.closing) return Promise.reject(new UserError('This machine is shutting down')); const p = this.queue.then(fn); this.queue = p.catch(() => {}); return p; }
 }

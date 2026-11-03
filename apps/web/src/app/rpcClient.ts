@@ -21,6 +21,7 @@ export class RpcClient {
   constructor(private url: string) {
     this.connect();
   }
+  get hubId() { return new URL(this.url).searchParams.get('hub') ?? ''; }
 
   /** Asset grants belong to the machine connection, never the renderer's filesystem. */
   httpUrl(path: string): string {
@@ -28,7 +29,7 @@ export class RpcClient {
     base.protocol = base.protocol === 'wss:' ? 'https:' : 'http:';
     base.pathname = '/';
     base.search = '';
-    return new URL(path, base).href;
+    return new URL(this.hubId && path.startsWith('/thread-assets/') ? `/hubs/${this.hubId}${path}` : path, base).href;
   }
 
   private setStatus(s: ConnectionStatus) {
@@ -112,7 +113,7 @@ export function takeToken(): string | null {
   return sessionStorage.getItem('accio.token');
 }
 
-export function socketUrl(token: string): string {
+export function socketUrl(token: string, hubId?: string): string {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${proto}//${location.host}/ws?token=${encodeURIComponent(token)}`;
+  return `${proto}//${location.host}/ws?token=${encodeURIComponent(token)}${hubId ? `&hub=${encodeURIComponent(hubId)}` : ''}`;
 }

@@ -37,7 +37,7 @@ import { ThreadAssets } from './assets.js';
 import { ThreadContent } from './content.js';
 import { markdownReferences } from './markdown.js';
 import { SecretRequests } from '../secrets/secrets.js';
-import type { SecretsVault } from '@accio/hub';
+import type { SecretsAccess } from '@accio/hub';
 import { isChoiceTool, parseChoice, pickPrompt } from './choice.js';
 import type { AccioTools, ToolAccess } from '../tools/tools.js';
 import { DeliveryGit, DeliveryPending, deliveryPrompt } from './delivery.js';
@@ -49,6 +49,8 @@ type Live = { cursor: number; items: TranscriptItem[]; file: JsonFile<Transcript
 
 /** Threads on this machine, their transcripts, and the turns running in them. */
 export class Threads {
+  get runningCount() { return this.running.size; }
+  profileReferences() { return this.list.map((thread) => thread.profileId); }
   private file: JsonFile<Thread[]>;
   private list: Thread[] = [];
   private transcripts = new Map<string, Live>();
@@ -78,7 +80,7 @@ export class Threads {
     private broadcast: Broadcast,
     private models: Models,
     private machines: Machines,
-    vault: SecretsVault,
+    vault: SecretsAccess,
     private tools?: AccioTools,
   ) {
     this.file = new JsonFile(join(home, 'threads.json'), () => []);
@@ -105,6 +107,11 @@ export class Threads {
     await this.secrets.load();
     await this.previews.load();
     const stored = (await this.file.read()).map(fromStored);
+    let bound = false;
+    for (const thread of stored) {
+      if (thread.hubId && thread.hubId !== this.profiles.client.id) throw new UserError('Thread storage belongs to a different hub');
+      if (!thread.hubId) { thread.hubId = this.profiles.client.id; bound = true; }
+    }
     const candidates = new Set(dropUnstarted(stored).map((t) => t.id));
     const started: Thread[] = [];
     for (const thread of stored) {
@@ -138,7 +145,7 @@ export class Threads {
       });
       await live.file.write(live.items);
     }
-    if (recoveredRelease || interrupted.length || started.length < stored.length || this.list.some(t => t.delivery?.status === 'blocked')) await this.file.write(this.list);
+    if (bound || recoveredRelease || interrupted.length || started.length < stored.length || this.list.some(t => t.delivery?.status === 'blocked')) await this.file.write(this.list);
     for (const thread of this.list) if (thread.delivery?.status === 'waiting') this.scheduleDeliveryCheck(thread.id);
   }
 
@@ -260,6 +267,7 @@ export class Threads {
     return this.trackStart(async () => {
         const { text, model, machineId } = input;
         if (machineId) {
+          await this.machines.refresh();
           const machine = this.machines.views().find((m) => m.id === machineId);
           if (!machine) throw new UserError('No such machine');
           if (!machine.connected) throw new UserError('This machine is offline');
@@ -279,7 +287,7 @@ export class Threads {
           if (this.closing) throw new UserError('This machine is shutting down');
           const selected = this.models.require(profileId, choice);
           // GLOSSARY: a thread keeps the profile it started with for its whole life.
-          const thread = newThread({ checkoutId: checkout?.id ?? '', projectId: project?.id ?? '', profileId, model: selected }, now());
+          const thread = newThread({ checkoutId: checkout?.id ?? '', projectId: project?.id ?? '', profileId, hubId: this.profiles.client.id, model: selected }, now());
           if (options.repairToolId) { thread.repairToolId = options.repairToolId; thread.title = `Repair ${options.repairToolId}`; }
           if (checkout) thread.workspace = await this.deliveryGit.allocate(thread.id, checkout.path);
           if (!checkout) await mkdir(join(this.home, 'workspaces', thread.id), { recursive: true });

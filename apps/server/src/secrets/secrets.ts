@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { lstat, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { SecretsVault, SecretStoreError, checkValue, type SecretScope } from '@accio/hub';
+import { SecretStoreError, checkValue, type SecretScope, type SecretsAccess } from '@accio/hub';
 
 import { privateDirectory, privateFile } from '@accio/persistence';
 import { SecretSlot, type SecretRequestItem, type ParamsOf } from '@accio/protocol';
@@ -36,7 +36,7 @@ export class SecretRequests {
   private activeTurns = new Set<string>();
   private directory: string;
   private secured?: Promise<void>;
-  constructor(home: string, readonly vault: SecretsVault, private publish: (threadId: string, item: SecretRequestItem) => Promise<void>) {
+  constructor(home: string, readonly vault: SecretsAccess, private publish: (threadId: string, item: SecretRequestItem) => Promise<void>) {
     this.directory = join(home, 'secret-delivery');
     vault.onChanged(async () => {
       for (const delivery of this.deliveries.values()) {

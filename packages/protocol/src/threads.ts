@@ -10,6 +10,8 @@ import type { SecretRequestItem } from './secrets.js';
  */
 export type ThreadView = {
   repairToolId?: string;
+  /** The hub that owns this thread's profile; immutable across view switches. */
+  hubId?: string;
   id: string;
   /** Empty for a thread started with No project. */
   checkoutId: string;
