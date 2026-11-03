@@ -41,6 +41,9 @@ export class Threads {
   private list: Thread[] = [];
   private transcripts = new Map<string, Live>();
   private running = new Map<string, AbortController>();
+  private closing = false;
+  private starts = new Set<Promise<unknown>>();
+  private preparing = new Set<Promise<void>>();
   private turns = new Set<Promise<void>>();
 
   constructor(
@@ -53,6 +56,7 @@ export class Threads {
     private machines: Machines,
   ) {
     this.file = new JsonFile(join(home, 'threads.json'), () => []);
+    projects.onRemoveThreads((id) => this.deleteThreads(this.list.filter((t) => t.checkoutId === id)));
     projects.onCheckInUse((checkoutId) => this.countUsing((t) => t.checkoutId === checkoutId));
     projects.onCheckProjectInUse((projectId) => this.countUsing((t) => t.projectId === projectId));
     profiles.onCheckInUse((profileId) => this.countUsing((t) => t.profileId === profileId));
@@ -91,7 +95,7 @@ export class Threads {
   register(router: Router) {
     router
       .on('threads.list', () => this.list.map(toView))
-      .on('threads.start', async (input) => {
+      .on('threads.start', (input) => this.trackStart(async () => {
         const { text, model, machineId } = input;
         if (machineId) {
           const machine = this.machines.views().find((m) => m.id === machineId);
@@ -99,20 +103,33 @@ export class Threads {
           if (!machine.connected) throw new UserError('This machine is offline');
           if (!machine.thisMachine) throw new UserError('Running threads on another machine is not available yet');
         }
+        if (this.closing) throw new UserError('This machine is shutting down');
         const checkout = 'checkoutId' in input ? this.projects.checkout(input.checkoutId) : undefined;
         const project = checkout ? this.projects.projectOf(checkout) : undefined;
         const profileId = project?.profileId ?? ('profileId' in input ? input.profileId : '');
-        // Refuse before anything is stored, so a thread that cannot run never appears.
-        await this.profiles.hubAccess(profileId);
-        const selected = this.models.require(profileId, model);
-        // GLOSSARY: a thread keeps the profile it started with for its whole life.
-        const thread = newThread({ checkoutId: checkout?.id ?? '', projectId: project?.id ?? '', profileId, model: selected }, now());
-        if (!checkout) await mkdir(join(this.home, 'workspaces', thread.id), { recursive: true });
-        // Quiet: clients first see the thread once its turn is running, never as an idle empty thread.
-        await this.commit([...this.list, thread], { quiet: true });
-        await this.beginTurn(thread.id, text);
-        return toView(this.require(thread.id));
-      })
+        const release = checkout ? this.projects.useCheckout(checkout.id) : () => {};
+        try {
+          // Refuse before anything is stored, so a thread that cannot run never appears.
+          await this.profiles.hubAccess(profileId);
+          if (this.closing) throw new UserError('This machine is shutting down');
+          const selected = this.models.require(profileId, model);
+          // GLOSSARY: a thread keeps the profile it started with for its whole life.
+          const thread = newThread({ checkoutId: checkout?.id ?? '', projectId: project?.id ?? '', profileId, model: selected }, now());
+          if (!checkout) await mkdir(join(this.home, 'workspaces', thread.id), { recursive: true });
+          // Quiet: clients first see the thread once its turn is running, never as an idle empty thread.
+          const stored = this.commit([...this.list, thread], { quiet: true });
+          try {
+            // Reserve synchronously with insertion, before persistence yields to another intent.
+            await this.beginTurn(thread.id, text, {}, stored);
+          } catch (err) {
+            await this.deleteThreads([this.require(thread.id)]);
+            throw err;
+          }
+          return toView(this.require(thread.id));
+        } finally {
+          release();
+        }
+      }))
       .on('threads.transcript', async ({ threadId }) => (await this.transcript(this.require(threadId).id)).items)
       .on('threads.send', async ({ threadId, text }) => {
         await this.beginTurn(threadId, text);
@@ -120,7 +137,7 @@ export class Threads {
       })
       .on('threads.setModel', async ({ threadId, model }) => {
         const thread = this.require(threadId);
-        if (thread.status === 'running') throw new UserError('Wait for this turn to finish before changing its model.');
+        if (this.running.has(threadId) || thread.status === 'running') throw new UserError('Wait for this turn to finish before changing its model.');
         const selected = this.models.require(thread.profileId, model);
         if (selected.harnessId !== thread.model.harnessId) throw new UserError('Start a new thread to change its harness.');
         return toView(await this.update(threadId, (t) => ({ ...t, model: selected })));
@@ -132,14 +149,11 @@ export class Threads {
         return null;
       })
       .on('threads.resume', async ({ threadId }) => {
-        assertResumable(this.require(threadId));
         await this.beginTurn(threadId, RESUME_PROMPT, { resume: true });
         return null;
       })
       .on('threads.retry', async ({ threadId }) => {
-        const thread = this.require(threadId);
-        const { text, resume } = retryOf(thread, (await this.transcript(thread.id)).items);
-        await this.beginTurn(thread.id, text, { resume });
+        await this.beginTurn(threadId, '', { retry: true });
         return null;
       })
       .on('threads.snooze', async ({ threadId, until }) => toView(await this.update(threadId, (t) => snooze(t, until))))
@@ -150,35 +164,89 @@ export class Threads {
         return toView(updated);
       })
       .on('threads.delete', async ({ threadId }) => {
-        const thread = this.require(threadId);
-        if (this.running.has(thread.id)) throw new UserError('Stop the thread before deleting it');
-        this.transcripts.delete(thread.id);
-        await this.commit(this.list.filter((t) => t.id !== thread.id));
-        await rm(this.transcriptPath(thread.id), { force: true });
+        await this.deleteThreads([this.require(threadId)]);
         return null;
       });
   }
 
   // ---- turns ----
 
-  private async beginTurn(threadId: string, text: string, { resume = false } = {}) {
+  private trackStart<T>(start: () => Promise<T>): Promise<T> {
+    const pending = start();
+    this.starts.add(pending);
+    void pending.then(() => this.starts.delete(pending), () => this.starts.delete(pending));
+    return pending;
+  }
+
+  private async deleteThreads(threads: Thread[]) {
+    // Validate the entire current membership before any effect.
+    if (threads.some((t) => this.running.has(t.id) || t.status === 'running')) {
+      throw new UserError('Stop the thread before deleting it');
+    }
+    const ids = new Set(threads.map((t) => t.id));
+    const saved = this.commit(this.list.filter((t) => !ids.has(t.id)));
+    const writes: Promise<void>[] = [];
+    for (const id of ids) {
+      const live = this.transcripts.get(id);
+      if (live) {
+        clearTimeout(live.saveTimer);
+        writes.push(live.file.idle());
+      }
+      this.transcripts.delete(id);
+    }
+    await saved;
+    await Promise.all(writes);
+    for (const id of ids) await rm(this.transcriptPath(id), { force: true });
+  }
+
+  private beginTurn(threadId: string, text: string, options: { resume?: boolean; retry?: boolean } = {}, stored?: Promise<void>) {
+    if (this.closing) throw new UserError('This machine is shutting down');
     const thread = this.require(threadId);
-    if (!this.profiles.get(thread.profileId)) throw new UserError('The profile this thread started with no longer exists');
-    const access = await this.profiles.hubAccess(thread.profileId);
-    this.models.require(thread.profileId, thread.model);
-    const cwd = thread.checkoutId ? this.projects.checkout(thread.checkoutId).path : join(this.home, 'workspaces', thread.id);
-
-    const started = startTurn(thread, text, now());
-    const turnId = randomUUID();
-    await this.update(thread.id, () => started);
-    await this.addItem(thread.id, { kind: 'user', id: `${turnId}:u`, turnId, text, at: now(), ...(resume ? { resume } : {}) });
-
+    if (options.resume) assertResumable(thread);
+    if (this.running.has(threadId) || thread.status === 'running') throw new UserError('This thread is already working. Stop it or wait for it to finish.');
     const controller = new AbortController();
-    this.running.set(thread.id, controller);
-    const env = harnessEnv(process.env, access, configFolderOf(this.home, thread.profileId));
-    const turn = this.runTurn(started, turnId, { cwd, prompt: text, env, signal: controller.signal });
-    this.turns.add(turn);
-    void turn.finally(() => this.turns.delete(turn));
+    this.running.set(threadId, controller);
+    const preparation = this.prepareTurn(threadId, text, options, controller, stored);
+    this.preparing.add(preparation);
+    void preparation.then(() => this.preparing.delete(preparation), () => this.preparing.delete(preparation));
+    return preparation;
+  }
+
+  private async prepareTurn(threadId: string, text: string, options: { resume?: boolean; retry?: boolean }, controller: AbortController, stored?: Promise<void>) {
+    let release = () => {};
+    let started = false;
+    try {
+      if (stored) await stored;
+      let thread = this.require(threadId);
+      if (thread.checkoutId) release = this.projects.useCheckout(thread.checkoutId);
+      let resume = options.resume ?? false;
+      if (resume) assertResumable(thread);
+      if (options.retry) ({ text, resume } = retryOf(thread, (await this.transcript(threadId)).items));
+      if (!this.profiles.get(thread.profileId)) throw new UserError('The profile this thread started with no longer exists');
+      const access = await this.profiles.hubAccess(thread.profileId);
+      if (controller.signal.aborted || this.closing) throw new UserError('Turn interrupted before starting');
+      thread = this.require(threadId);
+      this.models.require(thread.profileId, thread.model);
+      const cwd = thread.checkoutId ? this.projects.checkout(thread.checkoutId).path : join(this.home, 'workspaces', thread.id);
+      const next = startTurn(thread, text, now());
+      const turnId = randomUUID();
+      started = true;
+      await this.update(thread.id, () => next);
+      await this.addItem(thread.id, { kind: 'user', id: `${turnId}:u`, turnId, text, at: now(), ...(resume ? { resume } : {}) });
+      const env = harnessEnv(process.env, access, configFolderOf(this.home, thread.profileId));
+      const turn = this.runTurn(next, turnId, { cwd, prompt: text, env, signal: controller.signal });
+      this.turns.add(turn);
+      void turn.then(() => this.turns.delete(turn), (err) => {
+        this.turns.delete(turn);
+        console.error('[threads] finishing turn failed', err);
+      });
+    } catch (err) {
+      this.running.delete(threadId);
+      if (started) await this.update(threadId, (t) => endTurn(t, controller.signal.aborted ? 'interrupted' : 'failed', now()));
+      throw err;
+    } finally {
+      release();
+    }
   }
 
   private async runTurn(
@@ -189,6 +257,10 @@ export class Threads {
     const transcript = new TurnTranscript(turnId);
     let outcome: TurnOutcome | null = null;
     try {
+      if (run.signal.aborted) {
+        outcome = 'interrupted';
+        return;
+      }
       for await (const msg of this.harness.run({ ...run, sessionId: thread.sessionId, model: thread.model.modelId === 'default' ? undefined : thread.model.modelId })) {
         for (const change of transcript.accept(msg)) {
           if (change.type === 'end') outcome = change.outcome;
@@ -218,9 +290,9 @@ export class Threads {
         await this.addItem(thread.id, { kind: 'notice', id: `${turnId}:stop`, turnId, tone: 'info', text: 'Stopped.' });
       }
       for (const item of transcript.unfinishedTools()) await this.addItem(thread.id, item);
+      await this.flush(thread.id);
       this.running.delete(thread.id);
       await this.update(thread.id, (t) => endTurn(t, outcome ?? 'failed', now()));
-      await this.flush(thread.id);
     }
   }
 
@@ -298,8 +370,12 @@ export class Threads {
     await live.file.write(live.items);
   }
 
-  /** Waits for running turns to settle and every write to land. */
+  /** Interrupts turns and flushes their resumable state before the machine exits. */
   async close() {
+    this.closing = true;
+    for (const controller of this.running.values()) controller.abort();
+    await Promise.allSettled([...this.starts]);
+    await Promise.allSettled([...this.preparing]);
     await Promise.allSettled([...this.turns]);
     for (const id of this.transcripts.keys()) await this.flush(id);
     await this.file.idle();

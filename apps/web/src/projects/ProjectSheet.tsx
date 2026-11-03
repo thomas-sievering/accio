@@ -17,13 +17,12 @@ export function ProjectSheet({ project, onClose }: { project: ProjectView; onClo
   const { checkoutsOf } = useProjects();
   const { threads = [] } = useThreads();
   const threadCount = threads.filter((t) => t.projectId === project.id).length;
-  const { error, run } = useAction();
+  const { busy, error, run } = useAction();
   const [confirming, setConfirming] = useState<string>();
 
   const remove = (checkoutId: string) =>
     run(async () => {
-      for (const t of threads.filter((t) => t.checkoutId === checkoutId)) await client.call('threads.delete', { threadId: t.id });
-      await client.call('checkouts.remove', { id: checkoutId });
+      await client.call('checkouts.remove', { id: checkoutId, deleteThreads: confirming === checkoutId });
     }).finally(() => setConfirming(undefined));
 
   return (
@@ -44,7 +43,7 @@ export function ProjectSheet({ project, onClose }: { project: ProjectView; onClo
             <span>Profile</span>
             <select
               value={project.profileId}
-              disabled={threadCount > 0}
+              disabled={busy || threadCount > 0}
               onChange={(e) => run(() => client.call('projects.setProfile', { projectId: project.id, profileId: e.target.value }))}
             >
               {profiles.map((a) => (
@@ -70,15 +69,15 @@ export function ProjectSheet({ project, onClose }: { project: ProjectView; onClo
                   <code className="grow">{c.path}</code>
                   {confirming === c.id ? (
                     <>
-                      <button className="ghost" onClick={() => setConfirming(undefined)}>
+                      <button disabled={busy} className="ghost" onClick={() => setConfirming(undefined)}>
                         Cancel
                       </button>
-                      <button className="ghost danger" onClick={() => remove(c.id)}>
+                      <button disabled={busy} className="ghost danger" onClick={() => remove(c.id)}>
                         Delete {count} {count === 1 ? 'thread' : 'threads'} and remove
                       </button>
                     </>
                   ) : (
-                    <button className="ghost danger" onClick={() => (count > 0 ? setConfirming(c.id) : remove(c.id))}>
+                    <button disabled={busy} className="ghost danger" onClick={() => (count > 0 ? setConfirming(c.id) : remove(c.id))}>
                       Remove
                     </button>
                   )}

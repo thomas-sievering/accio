@@ -18,7 +18,7 @@ import {
   type ProjectsData,
 } from './project.js';
 
-/** Threads (a later slice) veto removing a checkout they live in, or moving a project they belong to. */
+/** Threads veto removing a checkout they live in, or moving a project they belong to. */
 export type CheckoutInUse = (checkoutId: string) => string | undefined;
 export type ProjectInUse = (projectId: string) => string | undefined;
 
@@ -27,6 +27,9 @@ export class Projects {
   private file: JsonFile<ProjectsData>;
   private data: ProjectsData = { projects: [], checkouts: [] };
   private inUseChecks: CheckoutInUse[] = [];
+  private checkoutUsers = new Map<string, number>();
+  private removing = new Set<string>();
+  private removeThreads?: (id: string) => Promise<void>;
   private projectInUseChecks: ProjectInUse[] = [];
 
   constructor(
@@ -70,6 +73,22 @@ export class Projects {
     this.projectInUseChecks.push(check);
   }
 
+  /** Reserve a checkout during turn preparation, before its thread is visible. */
+  useCheckout(id: string): () => void {
+    this.checkout(id);
+    if (this.removing.has(id)) throw new UserError('This checkout is being removed');
+    this.checkoutUsers.set(id, (this.checkoutUsers.get(id) ?? 0) + 1);
+    return () => {
+      const count = (this.checkoutUsers.get(id) ?? 1) - 1;
+      if (count) this.checkoutUsers.set(id, count);
+      else this.checkoutUsers.delete(id);
+    };
+  }
+
+  onRemoveThreads(remove: (id: string) => Promise<void>) {
+    this.removeThreads = remove;
+  }
+
   register(router: Router) {
     router
       .on('projects.get', () => this.data)
@@ -91,13 +110,24 @@ export class Projects {
         await this.commit(data);
         return checkout;
       })
-      .on('checkouts.remove', async ({ id }) => {
-        for (const check of this.inUseChecks) {
-          const reason = check(id);
-          if (reason) throw new UserError(`This checkout still has ${reason}`);
+      .on('checkouts.remove', async ({ id, deleteThreads }) => {
+        this.checkout(id);
+        if (this.removing.has(id) || this.checkoutUsers.has(id)) throw new UserError('This checkout is busy. Wait for its turns to finish.');
+        this.removing.add(id);
+        try {
+          if (deleteThreads) {
+            if (!this.removeThreads) throw new UserError('Thread removal is unavailable');
+            await this.removeThreads(id);
+          }
+          for (const check of this.inUseChecks) {
+            const reason = check(id);
+            if (reason) throw new UserError(`This checkout still has ${reason}`);
+          }
+          await this.commit(removeCheckout(this.data, id));
+          return null;
+        } finally {
+          this.removing.delete(id);
         }
-        await this.commit(removeCheckout(this.data, id));
-        return null;
       })
       .on('projects.setProfile', async ({ projectId, profileId }) => {
         this.profiles.require(profileId);
@@ -106,6 +136,9 @@ export class Projects {
         // GLOSSARY: a project's profile can change only while it has no threads,
         // since each thread keeps the profile it started with.
         if (project.profileId !== profileId) {
+          if (this.data.checkouts.some((c) => c.projectId === projectId && (this.checkoutUsers.has(c.id) || this.removing.has(c.id)))) {
+            throw new UserError('This project is busy. Wait for its turns to start or finish.');
+          }
           for (const check of this.projectInUseChecks) {
             const reason = check(projectId);
             if (reason) throw new UserError(`This project still has ${reason}. Delete them before moving it to another profile.`);
@@ -115,6 +148,10 @@ export class Projects {
         await this.commit({ ...this.data, projects: this.data.projects.map((p) => (p.id === projectId ? updated : p)) });
         return updated;
       });
+  }
+
+  async close() {
+    await this.file.idle();
   }
 
   private async commit(next: ProjectsData) {

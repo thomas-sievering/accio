@@ -37,14 +37,15 @@ export type FolderInspection = {
 
 const Path = z.object({ path: z.string().trim().min(1, 'Choose a folder') });
 const AddCheckout = z.object({ path: z.string().trim().min(1), profileId: z.string().optional() });
-const ById = z.object({ id: z.string() });
+/** deleteThreads records explicit confirmation to delete all current checkout threads. */
+const RemoveCheckout = z.object({ id: z.string(), deleteThreads: z.boolean().optional() });
 const SetProfile = z.object({ projectId: z.string(), profileId: z.string() });
 
 export const projectMethods = {
   'projects.get': method<z.ZodObject<{}>, ProjectsState>(z.object({})),
   'checkouts.inspect': method<typeof Path, FolderInspection>(Path),
   'checkouts.add': method<typeof AddCheckout, CheckoutView>(AddCheckout),
-  'checkouts.remove': method<typeof ById, null>(ById),
+  'checkouts.remove': method<typeof RemoveCheckout, null>(RemoveCheckout),
   'projects.setProfile': method<typeof SetProfile, ProjectView>(SetProfile),
 };
 

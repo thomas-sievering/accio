@@ -77,6 +77,7 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
 
   const transport = await startTransport({ ...opts, router });
   send = transport.broadcast;
+  let closing: Promise<void> | undefined;
   return {
     ...transport,
     router,
@@ -87,13 +88,15 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
     settings,
     machines,
     hubUrl: hubProxy.url,
-    close: async () => {
+    close: () => closing ??= (async () => {
+      const turnsClosed = threads.close();
       await transport.close();
-      await threads.close();
+      await turnsClosed;
+      await projects.close();
       await machines.disconnect();
       await hubProxy.close();
       await hub.close();
       await settings.close();
-    },
+    })(),
   };
 }

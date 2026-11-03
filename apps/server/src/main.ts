@@ -15,9 +15,16 @@ const url = `http://${config.host}:${app.port}`;
 console.log(`ACCIO_READY ${JSON.stringify({ url, token: config.token })}`);
 console.log(`accio server: ${url}/#token=${config.token}`);
 
-const shutdown = async () => {
-  await app.close();
-  process.exit(0);
+let stopping: Promise<void> | undefined;
+const shutdown = () => {
+  stopping ??= app.close().then(() => { process.exit(0); }, (error) => {
+    console.error('accio shutdown failed', error);
+    process.exit(1);
+  });
 };
+process.on('message', (message) => {
+  if (message && typeof message === 'object' && 'type' in message && message.type === 'shutdown') shutdown();
+});
+process.on('disconnect', shutdown);
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
