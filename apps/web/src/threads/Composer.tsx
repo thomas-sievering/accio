@@ -1,18 +1,24 @@
-import { useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { ArrowUp, StopSquare } from '../app/icons';
 
-/** botbot's pill composer. Enter sends, Shift+Enter adds a line. */
+/**
+ * T3 Code's boxed composer: the message on top, a toolbar row with Send (or Stop) below.
+ * Enter sends, Shift+Enter adds a line.
+ */
 export function Composer({
   onSend,
   onStop,
   disabled,
   placeholder,
+  toolbar,
 }: {
   onSend: (text: string) => Promise<void>;
   /** Set while a turn runs: the send button becomes Stop. */
   onStop?: () => Promise<void>;
   disabled: boolean;
   placeholder: string;
+  /** Shown left of the send button. */
+  toolbar?: ReactNode;
 }) {
   const [text, setText] = useState('');
   const [error, setError] = useState<string>();
@@ -57,21 +63,24 @@ export function Composer({
             }
           }}
         />
-        {onStop ? (
-          <button
-            type="button"
-            className="send stop"
-            title="Stop"
-            aria-label="Stop"
-            onClick={() => onStop().catch((e: Error) => setError(e.message))}
-          >
-            <StopSquare />
-          </button>
-        ) : (
-          <button type="submit" className="send" title="Send" aria-label="Send" disabled={disabled || !text.trim()}>
-            <ArrowUp />
-          </button>
-        )}
+        <div className="composer-bar">
+          {toolbar}
+          {onStop ? (
+            <button
+              type="button"
+              className="send stop"
+              title="Stop"
+              aria-label="Stop"
+              onClick={() => onStop().catch((e: Error) => setError(e.message))}
+            >
+              <StopSquare />
+            </button>
+          ) : (
+            <button type="submit" className="send" title="Send" aria-label="Send" disabled={disabled || !text.trim()}>
+              <ArrowUp />
+            </button>
+          )}
+        </div>
       </form>
     </div>
   );

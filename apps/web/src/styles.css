@@ -939,7 +939,7 @@ button.row {
 
 /* Transcript (botbot's chat column) */
 .messages {
-  --chat-width: 860px;
+  --chat-width: 760px;
   --message-width: 720px;
   flex: 1;
   overflow-y: auto;
@@ -1126,10 +1126,10 @@ button.row {
   }
 }
 
-/* Composer (botbot's pill) */
+/* Composer (T3 Code's box) */
 .composer-wrap {
   flex: none;
-  width: min(860px, calc(100% - 32px));
+  width: min(760px, calc(100% - 32px));
   margin: 0 auto 14px;
 }
 .composer-error {
@@ -1137,10 +1137,10 @@ button.row {
 }
 .composer {
   display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  padding: 6px 6px 6px 14px;
-  border-radius: 24px;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 10px 10px 16px;
+  border-radius: 16px;
   background: var(--raised);
   border: 1px solid var(--line-2);
 }
@@ -1148,25 +1148,36 @@ button.row {
   border-color: oklch(0.36 0 none);
 }
 .composer textarea {
-  flex: 1;
   resize: none;
   border: 0;
   outline: none;
   background: none;
   color: var(--ink);
   font: inherit;
-  padding: 7px 0;
+  min-height: 44px;
+  padding: 2px 0;
   line-height: 20px;
 }
 .composer textarea::placeholder {
   color: var(--dim);
 }
+.composer-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.composer-harness {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
 .send {
   display: grid;
   place-items: center;
   flex: none;
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   background: var(--green);
   color: #052e16;
@@ -1176,8 +1187,8 @@ button.row {
   cursor: default;
 }
 .send svg {
-  width: 17px;
-  height: 17px;
+  width: 15px;
+  height: 15px;
 }
 
 /* Stop and Resume */
@@ -1193,7 +1204,7 @@ button.row {
   display: flex;
   align-items: center;
   gap: 12px;
-  width: min(860px, calc(100% - 32px));
+  width: min(760px, calc(100% - 32px));
   margin: 0 auto 8px;
   padding: 8px 8px 8px 14px;
   border-radius: 12px;
@@ -1262,7 +1273,7 @@ button.row {
   display: flex;
   align-items: center;
   gap: 12px;
-  width: min(860px, calc(100% - 32px));
+  width: min(760px, calc(100% - 32px));
   margin: 0 auto 8px;
   padding: 6px 6px 6px 14px;
   font-size: 13px;
@@ -1443,4 +1454,68 @@ button.row {
 }
 .pill.bad .dot {
   background: var(--red);
+}
+
+/* A thread with no messages yet: question, composer and context in the middle (T3 Code's new thread) */
+.hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(760px, calc(100% - 32px));
+  margin: auto;
+  padding-bottom: 8vh;
+}
+.hero h1 {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  text-align: center;
+  color: var(--ink);
+}
+.hero-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 26px;
+  font-size: 13px;
+  color: var(--dim);
+}
+.hero .profile-note,
+.hero .composer-wrap {
+  width: 100%;
+}
+.hero .composer-wrap {
+  margin: 0;
+}
+.hero-meta {
+  display: flex;
+  gap: 4px;
+  width: 100%;
+  margin-top: 8px;
+  padding: 0 6px;
+}
+.hero-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 3px 6px;
+  font-size: 12px;
+  color: var(--dim);
+  white-space: nowrap;
+}
+.hero-chip svg {
+  flex: none;
+  width: 13px;
+  height: 13px;
+}
+.hero-chip.push {
+  margin-left: auto;
+}
+
+.project-mark {
+  flex: none;
+  display: block;
+  border-radius: 3px;
 }

@@ -1,6 +1,6 @@
 import type { ThreadView } from '@accio/protocol';
 import { Check, Clock, Undo } from '../app/icons';
-import { ProfileTile, useProfiles } from '../profiles/profiles';
+import { ProjectMark } from '../projects/ProjectMark';
 import { useProjects } from '../projects/projects';
 import { useThreadMenu } from './ThreadMenu';
 import { useThreads } from './threads';
@@ -15,7 +15,6 @@ export type RowPlace = 'open' | 'working' | 'snoozed' | 'settled';
 export function ThreadRow({ thread: t, place }: { thread: ThreadView; place: RowPlace }) {
   const { selectedId, select, marks, now, settle, snooze, reopen } = useThreads();
   const { state } = useProjects();
-  const { profiles = [], filter } = useProfiles();
   const project = state?.projects.find((p) => p.id === t.projectId)?.name;
   const mark = marks[t.id];
   const card = place === 'open' || place === 'working';
@@ -56,7 +55,7 @@ export function ThreadRow({ thread: t, place }: { thread: ThreadView; place: Row
       <div className={className} onContextMenu={onContextMenu}>
         <button className="row-main" onClick={() => select(t.id)}>
           <span className="card-top">
-            {filter === 'all' && <ProfileTile profile={profiles.find((a) => a.id === t.profileId)} size="xs" />}
+            <ProjectMark id={t.projectId} />
             <span className="card-project">{project}</span>
             <CardStatus thread={t} now={now} />
           </span>
