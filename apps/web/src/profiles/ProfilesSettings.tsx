@@ -4,6 +4,7 @@ import { useClient } from '../app/connection';
 import { Chevron, Plus, User } from '../app/icons';
 import { SettingsSection } from '../app/Settings';
 import { useAction } from '../app/useAction';
+import { ResourcePicker } from '../resources/ResourcePicker';
 import { claudeAccount, hasSignedInAccount, useProfiles } from './profiles';
 
 /** Profiles select accounts configured in Accounts settings. */
@@ -99,6 +100,14 @@ function ProfileForm({ profile, onSaved, onDone }: { profile?: ProfileView; onSa
           <small className="hint">Set up and name accounts in Settings / Accounts. Choose one account per provider for this profile.</small>
         </div>
       </SettingsSection>
+      {profile && (
+        <SettingsSection title="Tools, MCP servers and skills">
+          <div className="setting-form">
+            <small className="hint">Turned on for every project and thread of {profile.name}. Changes save immediately, separately from Save.</small>
+            <ResourcePicker context={{ kind: 'profile', profile }} />
+          </div>
+        </SettingsSection>
+      )}
       <footer className="settings-actions">
         {profile && (
           <button
