@@ -7,7 +7,7 @@ import { startTestApp, type TestClient } from '../testing/testApp.js';
 describe('Codex and ChatGPT accounts', () => {
   let t: Awaited<ReturnType<typeof startTestApp>>;
   afterEach(() => t?.stop());
-  const codex = { harnessId: 'codex', modelId: 'default' };
+  const codex = { harnessId: 'codex', modelId: 'test-codex' };
 
   async function signIn(client: TestClient, fake: FakeCodex, name = 'Personal') {
     const account = await client.call('accounts.save', { name: `${name} ChatGPT`, providerId: 'openai' });
@@ -26,9 +26,14 @@ describe('Codex and ChatGPT accounts', () => {
     let c = await t.connect();
     const { profile, account } = await signIn(c, fake);
     const available = await c.call('models.list', { profileId: profile.id });
-    expect(available.models.map((m) => [m.harnessId, m.id])).toEqual([['codex', 'default'], ['codex', 'test-codex'], ['codex', 'test-fast']]);
+    // The account's models, with no separate "Codex default" entry; the account default is flagged instead.
+    expect(available.models.map((m) => [m.harnessId, m.id, m.isDefault])).toEqual([['codex', 'test-codex', true], ['codex', 'test-fast', false]]);
     await c.call('models.favorite', { profileId: profile.id, model: codex, favorite: true });
-    // A Codex-only profile chooses Codex even when the caller omits a model.
+    // 'default' is no longer listed but still resolves to the account default, as clients and stored threads may send it.
+    const viaAlias = await c.call('threads.start', { profileId: profile.id, model: { harnessId: 'codex', modelId: 'default' }, text: 'hello' });
+    expect(viaAlias.model).toEqual(codex);
+    await c.waitFor('threads.changed', (ts) => ts.some((x) => x.id === viaAlias.id && x.status === 'idle'));
+    // A Codex-only profile chooses the account's default Codex model when the caller omits a model.
     const thread = await c.call('threads.start', { profileId: profile.id, text: 'hello' });
     expect(thread.model).toEqual(codex);
     await c.waitFor('threads.changed', (ts) => ts.some((x) => x.id === thread.id && x.status === 'idle'));

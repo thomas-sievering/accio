@@ -248,7 +248,7 @@ export class Threads {
       const access = await this.profiles.hubAccess(thread.profileId, thread.model.harnessId === 'codex' ? 'openai' : 'anthropic');
       if (controller.signal.aborted || this.closing) throw new UserError('Turn interrupted before starting');
       thread = this.require(threadId);
-      this.models.require(thread.profileId, thread.model);
+      thread = { ...thread, model: this.models.require(thread.profileId, thread.model) };
       const cwd = thread.checkoutId ? this.projects.checkout(thread.checkoutId).path : join(this.home, 'workspaces', thread.id);
       const next = startTurn(thread, text, now());
       const turnId = randomUUID();
@@ -291,7 +291,7 @@ export class Threads {
       }
       const harness = this.harnesses[thread.model.harnessId];
       if (!harness) throw new UserError('This harness is not installed on this machine');
-      for await (const msg of harness.run({ ...run, sessionId: thread.sessionId, model: this.models.executionModel(thread.profileId, thread.model) })) {
+      for await (const msg of harness.run({ ...run, sessionId: thread.sessionId, model: thread.model.modelId })) {
         for (const change of transcript.accept(msg)) {
           if (change.type === 'end') outcome = change.outcome;
           await this.apply(thread.id, change);

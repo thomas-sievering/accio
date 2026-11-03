@@ -27,7 +27,7 @@ export function HarnessesSettings() {
       {harnesses?.map((h) => (
         <SettingsSection key={h.id} title={h.name}>
           <SettingRow title="Providers"><span>{h.providers.map((p) => p === 'anthropic' ? 'Anthropic' : 'OpenAI').join(', ')}</span></SettingRow>
-          <SettingRow title="Models" description={h.id === 'codex' ? 'Available models come from the signed-in ChatGPT account.' : "Model aliases follow Claude Code's current versions."}><span>{h.models.map((m) => m.name).join(', ')}</span></SettingRow>
+          <SettingRow title="Models" description={h.id === 'codex' ? 'Available models come from the signed-in ChatGPT account.' : "Model aliases follow Claude Code's current versions."}><span>{h.models.length ? h.models.map((m) => m.name).join(', ') : 'Per account'}</span></SettingRow>
           {h.machines.length === 0 && <SettingRow title="No installations reported" />}
           {h.machines.map((install) => {
             const machine = machines?.find((m) => m.id === install.machineId);
