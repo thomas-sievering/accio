@@ -3,7 +3,7 @@ import type { ThreadView, TranscriptItem } from '@accio/protocol';
 import { DEFAULT_MODEL } from '@accio/protocol';
 import { UserError } from '../rpc/router.js';
 
-/** A thread as stored: what clients see, plus the Claude session it continues. */
+/** A thread as stored: what clients see, plus the harness session it continues. */
 export type Thread = ThreadView & { sessionId: string | null };
 
 export const NEW_THREAD_TITLE = 'New thread';

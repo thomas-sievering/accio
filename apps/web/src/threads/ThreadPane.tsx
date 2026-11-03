@@ -1,9 +1,9 @@
 import type { CheckoutView, ProjectView, ThreadView } from '@accio/protocol';
-import { DEFAULT_MODEL, type ModelSelection } from '@accio/protocol';
+import { type ModelSelection } from '@accio/protocol';
 import { useState } from 'react';
 import { useClient } from '../app/connection';
 import { useLive } from '../app/useLive';
-import { claudeAccount, useProfiles } from '../profiles/profiles';
+import { accountForModel, defaultModel, useProfiles } from '../profiles/profiles';
 import { FolderLink } from '../projects/FolderLink';
 import { ProjectMark } from '../projects/ProjectMark';
 import { useProjects } from '../projects/projects';
@@ -48,11 +48,11 @@ export function ThreadPane({ thread, onOpenProfile }: { thread: ThreadView; onOp
       )}
       <ThreadNotice thread={thread} profile={place.profile} detail={detail} onOpenProfile={onOpenProfile} />
       <Composer
-        disabled={running || savingModel || !place.profile || !claudeAccount(place.profile)?.signedIn}
+        disabled={running || savingModel || !place.profile || !accountForModel(place.profile, thread.model)?.signedIn}
         onStop={running ? async () => void (await client.call('threads.stop', { threadId: thread.id })) : undefined}
-        placeholder={running ? 'Working…' : 'Ask Claude Code anything'}
+        placeholder={running ? 'Working…' : `Ask ${thread.model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}
         onSend={async (text) => void (await client.call('threads.send', { threadId: thread.id, text }))}
-        toolbar={<ModelPicker key={thread.id} profileId={thread.profileId} value={thread.model} disabled={running} onChange={async (model) => {
+        toolbar={<ModelPicker key={thread.id} profileId={thread.profileId} harnessId={thread.model.harnessId} value={thread.model} disabled={running} onChange={async (model) => {
           setSavingModel(true);
           try { await client.call('threads.setModel', { threadId: thread.id, model }); }
           finally { setSavingModel(false); }
@@ -71,7 +71,7 @@ export function DraftPane({ checkoutId, profileId, onOpenProfile }: { checkoutId
   const { select } = useThreads();
   const place = usePlace(checkoutId, profileId);
   const [choice, setChoice] = useState<{ checkoutId: string; profileId?: string; model: ModelSelection }>();
-  const model = choice?.checkoutId === checkoutId && choice.profileId === place.profile?.id ? choice.model : DEFAULT_MODEL;
+  const model = choice?.checkoutId === checkoutId && choice.profileId === place.profile?.id ? choice.model : defaultModel(place.profile);
   const machines = useLive(() => client.call('machines.list', {}), 'machines.changed');
   const [chosenMachineId, setChosenMachineId] = useState<string>();
   const local = machines?.find((m) => m.thisMachine);
@@ -86,12 +86,12 @@ export function DraftPane({ checkoutId, profileId, onOpenProfile }: { checkoutId
       <PaneHeader title="New thread" {...place} />
       <div className="hero">
         <h1>{checkoutId ? `What should we build in ${place.project?.name ?? 'this checkout'}?` : 'What should we build?'}</h1>
-        <ThreadNotice profile={place.profile} onOpenProfile={onOpenProfile} />
+        <ThreadNotice profile={place.profile} model={model} onOpenProfile={onOpenProfile} />
         {remote && <p className="note" role="status">Running threads on another machine is not available yet. Choose this machine to start a thread.</p>}
         {chosenMachineId && unavailable && <p className="note" role="status">The selected machine is offline. Choose an online machine.</p>}
         <Composer
-          disabled={!place.profile || !claudeAccount(place.profile)?.signedIn || unavailable || remote}
-          placeholder="Ask Claude Code anything"
+          disabled={!place.profile || !accountForModel(place.profile, model)?.signedIn || unavailable || remote}
+          placeholder={`Ask ${model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}
           onSend={async (text) => select((await client.call('threads.start', checkoutId ? { checkoutId, text, model, machineId } : { profileId: profileId!, text, model, machineId })).id)}
           toolbar={<>
             <select className="composer-machine" aria-label="Run on machine" value={machineId ?? ''} disabled={!machines} onChange={(e) => setChosenMachineId(e.target.value)}>

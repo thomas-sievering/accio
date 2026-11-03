@@ -1,4 +1,4 @@
-import type { ProfileView } from '@accio/protocol';
+import type { ProfileView, ProviderId } from '@accio/protocol';
 import { SignInError, type Hub, type SharedSettings } from '@accio/hub';
 import type { Broadcast, Router } from '../rpc/router.js';
 import { UserError } from '../rpc/router.js';
@@ -52,9 +52,9 @@ export class Profiles {
   }
 
   /** What a thread needs to run under this profile; refuses until it is signed in. */
-  async hubAccess(id: string): Promise<HubAccess> {
+  async hubAccess(id: string, providerId: ProviderId = 'anthropic'): Promise<HubAccess> {
     const profile = this.require(id);
-    if (!this.hub.summary(id).signedIn) throw new UserError(`Select a signed-in Claude account for ${profile.name} in Profiles.`);
+    if (!this.hub.selectedAccount(id, providerId)?.signedIn) throw new UserError(`Select a signed-in ${providerId === 'openai' ? 'ChatGPT' : 'Claude'} account for ${profile.name} in Profiles.`);
     return { baseUrl: this.hubUrl, accessKey: await this.hub.ensureProfile(id) };
   }
 
@@ -86,8 +86,8 @@ export class Profiles {
   register(router: Router) {
     router
       .on('accounts.list', () => this.hub.accountViews())
-      .on('accounts.save', async ({ id, name }) => {
-        const account = await asUserError(() => this.hub.saveAccount(name, id));
+      .on('accounts.save', async ({ id, name, providerId }) => {
+        const account = await asUserError(() => this.hub.saveAccount(name, id, providerId));
         this.announce();
         return account;
       })
@@ -96,7 +96,16 @@ export class Profiles {
         this.announce();
         return null;
       })
-      .on('accounts.beginSignIn', ({ id }) => asUserError(async () => this.hub.beginAccountSignIn(id)))
+      .on('accounts.beginSignIn', ({ id }) => asUserError(async () => this.hub.accountView(id).providerId === 'openai' ? this.hub.beginOpenAISignIn(id) : this.hub.beginAccountSignIn(id)))
+      .on('accounts.signInStatus', async ({ signInId }) => {
+        const result = await asUserError(() => this.hub.openaiSignInStatus(signInId));
+        if (result.status === 'complete') this.announce();
+        return result;
+      })
+      .on('accounts.cancelSignIn', async ({ signInId }) => {
+        await asUserError(() => this.hub.cancelAccountSignIn(signInId));
+        return null;
+      })
       .on('accounts.completeSignIn', async ({ signInId, code }) => {
         const account = await asUserError(() => this.hub.completeAccountSignIn(signInId, code));
         this.announce();
@@ -113,7 +122,7 @@ export class Profiles {
         await asUserError(() => this.hub.configureProfile(saved.id, req.accountId, async (accessKey) => {
           await writeConfigFolder(this.home, saved.id, { baseUrl: this.hubUrl, accessKey });
           await this.settings.setProfiles(profiles);
-        }));
+        }, req.openaiAccountId));
         this.announce();
         return this.view(saved);
       }))
@@ -136,8 +145,10 @@ export class Profiles {
   }
 
   private view(a: Profile): ProfileView {
-    return toView(a, this.hub.selectedAccount(a.id));
+    return toView(a, this.hub.selectedAccount(a.id), this.hub.selectedAccount(a.id, 'openai'));
   }
+
+  codexModels(id: string) { this.require(id); return this.hub.codexModels(id); }
 
   private views(): ProfileView[] {
     return this.list.map((a) => this.view(a));
@@ -152,6 +163,7 @@ export class Profiles {
   private announce() {
     this.broadcast('profiles.changed', this.views());
     this.broadcast('accounts.changed', this.hub.accountViews());
+    this.broadcast('models.changed', null);
   }
 
   private change<T>(run: () => Promise<T>): Promise<T> {

@@ -4,7 +4,7 @@ import { useClient } from '../app/connection';
 import { Chevron, Plus, User } from '../app/icons';
 import { SettingsSection } from '../app/Settings';
 import { useAction } from '../app/useAction';
-import { claudeAccount, useProfiles } from './profiles';
+import { claudeAccount, hasSignedInAccount, useProfiles } from './profiles';
 
 /** Profiles select accounts configured in Accounts settings. */
 export function ProfilesSettings({
@@ -31,7 +31,7 @@ export function ProfilesSettings({
           <span className="menu-icon"><User /></span>
           <span className="setting-text">
             <b>{p.name}</b>
-            <small className={claudeAccount(p)?.signedIn ? undefined : 'warn'}>{claudeAccount(p)?.name ?? 'No account selected'}{claudeAccount(p) && !claudeAccount(p)?.signedIn ? ' · Signed out' : ''}</small>
+            <small className={hasSignedInAccount(p) ? undefined : 'warn'}>{p.providers.flatMap((provider) => provider.accounts.map((a) => `${a.name}${a.signedIn ? '' : ' · Signed out'}`)).join(', ') || 'No account selected'}</small>
           </span>
           <Chevron />
         </button>
@@ -53,12 +53,13 @@ function ProfileForm({ profile, onSaved, onDone }: { profile?: ProfileView; onSa
   const client = useClient();
   const { accounts } = useProfiles();
   const [accountId, setAccountId] = useState(profile ? claudeAccount(profile)?.id ?? '' : '');
+  const [openaiAccountId, setOpenAIAccountId] = useState(profile?.providers.find((p) => p.id === 'openai')?.accounts[0]?.id ?? '');
   const [name, setName] = useState(profile?.name ?? '');
   const { busy, error, run } = useAction();
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const saved = await run(() => client.call('profiles.save', { id: profile?.id, name, accountId: accountId || null }));
+    const saved = await run(() => client.call('profiles.save', { id: profile?.id, name, accountId: accountId || null, openaiAccountId: openaiAccountId || null }));
     if (saved) onSaved(saved);
   };
   const remove = async () => {
@@ -88,7 +89,14 @@ function ProfileForm({ profile, onSaved, onDone }: { profile?: ProfileView; onSa
               ))}
             </select>
           </label>
-          <small className="hint">Set up and name accounts in Settings / Accounts. Choose one Claude account for this profile.</small>
+          <label className="field">
+            <span>OpenAI · ChatGPT account</span>
+            <select value={openaiAccountId} onChange={(e) => setOpenAIAccountId(e.target.value)} disabled={!accounts}>
+              <option value="">No account selected</option>
+              {accounts?.filter((a) => a.providerId === 'openai').map((a) => <option key={a.id} value={a.id}>{a.name}{a.email ? ` · ${a.email}` : ''}{a.signedIn ? '' : ' · Signed out'}</option>)}
+            </select>
+          </label>
+          <small className="hint">Set up and name accounts in Settings / Accounts. Choose one account per provider for this profile.</small>
         </div>
       </SettingsSection>
       <footer className="settings-actions">

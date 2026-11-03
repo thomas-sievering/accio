@@ -1,7 +1,7 @@
-import type { ProfileView, ThreadView } from '@accio/protocol';
+import type { ProfileView, ThreadView, ModelSelection } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { useAction } from '../app/useAction';
-import { claudeAccount } from '../profiles/profiles';
+import { accountForModel, defaultModel } from '../profiles/profiles';
 
 /**
  * The one slot above the composer for "this thread can't go on by itself right
@@ -12,12 +12,14 @@ export function ThreadNotice({
   thread,
   profile,
   detail,
+  model,
   onOpenProfile,
 }: {
   /** Absent for a draft, which can only be blocked by its profile. */
   thread?: ThreadView;
   profile: ProfileView | undefined;
   detail?: string;
+  model?: ModelSelection;
   onOpenProfile: (profileId: string) => void;
 }) {
   const client = useClient();
@@ -26,13 +28,14 @@ export function ThreadNotice({
   let text: React.ReactNode;
   let action: { label: string; run: () => unknown } | undefined;
   let tone = 'warn';
+  const selected = model ?? thread?.model ?? defaultModel(profile);
   if (!profile) {
     text = 'The profile this thread started with no longer exists.';
     tone = 'error';
-  } else if (!claudeAccount(profile)?.signedIn) {
+  } else if (!accountForModel(profile, selected)?.signedIn) {
     text = (
       <>
-        <b>{profile.name}</b> isn’t signed in with Claude, so this thread can’t run yet.
+        <b>{profile.name}</b> isn’t signed in with {selected.harnessId === 'codex' ? 'ChatGPT' : 'Claude'}, so this thread can’t run yet.
       </>
     );
     action = { label: 'Choose account', run: () => onOpenProfile(profile.id) };
