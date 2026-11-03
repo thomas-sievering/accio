@@ -105,4 +105,8 @@ it("points Claude at this turn's accio tools", async () => {
   expect(queryMock.mock.calls[0]![0].options.mcpServers).toEqual({ accio: { type: 'http', url: tools.url, headers: { Authorization: 'Bearer t' } } });
   await turn(new AbortController().signal).next();
   expect(queryMock.mock.calls[1]![0].options.mcpServers).toBeUndefined();
+  const remote = { type: 'http' as const, url: 'http://127.0.0.1:2/mcp', headers: { Authorization: 'Bearer remote' } };
+  await claudeCode.run({ cwd: '.', prompt: 'hi', sessionId: null, env: {}, tools, mcps: { remote }, resourceInstructions: 'Enabled skill: browser', signal: new AbortController().signal })[Symbol.asyncIterator]().next();
+  expect(queryMock.mock.calls[2]![0].options.mcpServers).toMatchObject({ accio: { url: tools.url }, remote });
+  expect(queryMock.mock.calls[2]![0].options.systemPrompt.append).toContain('Enabled skill: browser');
 });

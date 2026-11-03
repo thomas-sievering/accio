@@ -5,6 +5,7 @@ import { ProjectsProvider, useProjects } from '../projects/projects';
 import { AddProjectSheet } from '../projects/AddProjectSheet';
 import { ProjectSheet } from '../projects/ProjectSheet';
 import { ThreadsProvider, useThreads } from '../threads/threads';
+import { ResourcesProvider } from '../resources/resources';
 import { NewThreadButton } from '../threads/NewThreadButton';
 import { ThreadList } from '../threads/ThreadList';
 import { DraftPane, ThreadPane } from '../threads/ThreadPane';
@@ -22,7 +23,9 @@ export function App() {
     <ProfilesProvider>
       <ProjectsProvider>
         <ThreadsProvider>
-          <Shell />
+          <ResourcesProvider>
+            <Shell />
+          </ResourcesProvider>
         </ThreadsProvider>
       </ProjectsProvider>
     </ProfilesProvider>
@@ -37,19 +40,24 @@ export function App() {
 function Shell() {
   const { profiles, filter, setFilter } = useProfiles();
   const { state } = useProjects();
-  const { threads, selectedId, draft, projectScope, setProjectScope } = useThreads();
+  const { threads, selectedId, select, draft, projectScope, setProjectScope } = useThreads();
   const filterLabel = state?.projects.find((p) => p.id === projectScope)?.name
     ?? profiles?.find((p) => p.id === filter)?.name;
   const thread = threads?.find((t) => t.id === selectedId);
   const [sheet, setSheet] = useState<OpenSheet>(null);
   const [settings, setSettings] = useState<SettingsRoute | null>(null);
   const closeSettings = useCallback(() => setSettings(null), []);
+  const openThread = (id: string) => {
+    select(id);
+    setSettings(null);
+    setSheet(null);
+  };
   const close = () => setSheet(null);
   const openProject = sheet?.kind === 'project' ? state?.projects.find((p) => p.id === sheet.id) : undefined;
   const openProfile = (profileId: string) => setSettings({ section: 'profiles', profileId });
   const setUp = profiles && state && profiles.length > 0 && profiles.some(hasSignedInAccount) && state.projects.length > 0;
 
-  if (settings) return <Settings route={settings} onRoute={setSettings} onClose={closeSettings} />;
+  if (settings) return <Settings route={settings} onRoute={setSettings} onClose={closeSettings} onOpenThread={openThread} />;
 
   return (
     <div className="layout">
@@ -95,7 +103,7 @@ function Shell() {
         )}
       </main>
       {sheet?.kind === 'addProject' && <AddProjectSheet onClose={close} />}
-      {openProject && <ProjectSheet project={openProject} onClose={close} />}
+      {openProject && <ProjectSheet project={openProject} onClose={close} onOpenSettings={(route) => { close(); setSettings(route); }} />}
     </div>
   );
 }

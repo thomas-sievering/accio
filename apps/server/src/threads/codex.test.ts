@@ -67,4 +67,8 @@ it('gives Codex accio tools on start and on resume, and keeps tool arguments str
   }
   const [call] = codexEvents({ method: 'item/started', params: { item: { type: 'mcpToolCall', id: 'c', server: 'accio', tool: 'offer_choice', arguments: { question: 'Q' }, status: 'inProgress' } } });
   expect(call).toMatchObject({ kind: 'tool', name: 'accio/offer_choice', input: { question: 'Q' } });
+  const fake = new FakeCodex();
+  for await (const _ of codexHarness(fake.factory).run({ cwd: home, prompt: 'hi', sessionId: 'codex-session', env, tools, mcps: { remote: { type: 'http', url: 'https://example.test/mcp', headers: { Authorization: 'Bearer remote' } } }, resourceInstructions: 'Enabled skill: browser', signal: new AbortController().signal })) { /* drain */ }
+  expect(fake.latest.options.config).toContain('mcp_servers.remote.url="https://example.test/mcp"');
+  expect(fake.latest.requests.find(r => r.method === 'thread/resume')?.params).toMatchObject({ config: expected, developerInstructions: expect.stringContaining('Enabled skill: browser') });
 });
