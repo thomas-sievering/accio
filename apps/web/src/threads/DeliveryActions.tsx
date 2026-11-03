@@ -3,6 +3,7 @@ import type { DeliveryMode, DeliverySummary, ProjectView, ThreadView } from '@ac
 import { useClient, useConnectionStatus } from '../app/connection';
 import { Archive, Check, ChevronDown, Close, Play, Ship } from '../app/icons';
 import { useAction } from '../app/useAction';
+import { ciSummary, DeliveryProgress } from './DeliveryProgress';
 
 /** Delivery intent stays on the server, including when this view is closed or disconnected. */
 export function DeliveryActions({ thread, project, canRun }: { thread: ThreadView; project?: ProjectView; canRun: boolean }) {
@@ -77,7 +78,7 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
           <span className="delivery-added">+{summary.added}</span><span className="delivery-removed">−{summary.removed}</span>
         </span>}
         {queued || waiting ? <span className="delivery-split delivery-queued">
-          <span role="status"><span className="row-working" />{waiting ? delivery.waitingOn === 'review' ? 'Waiting for review' : delivery.waitingOn === 'agent' ? 'Continuing delivery…' : 'Waiting for checks' : thread.status === 'running' ? 'Ships when done' : 'Ship paused'}</span>
+          <span role="status"><span className="row-working" />{waiting ? delivery.waitingOn === 'review' ? 'Waiting for review' : delivery.waitingOn === 'agent' ? 'Continuing delivery…' : ciSummary(delivery.ci) ?? 'Waiting for checks' : thread.status === 'running' ? 'Ships when done' : 'Ship paused'}</span>
           <button disabled={busy} aria-label="Cancel queued delivery" title="Cancel queued delivery" onClick={() => void run(async () => { await client.call('threads.cancelDelivery', { threadId: thread.id }); })}><Close /></button>
         </span> : shipping ? <span className="delivery-pill" role="status"><span className="row-working" />{delivery.mode === 'review' ? 'Preparing review…' : 'Shipping…'}</span> : <span className="delivery-split">
           <button disabled={busy || !canRun || !summary?.available || !!thread.queuedMessages?.length} title={thread.queuedMessages?.length ? 'Send or remove queued messages first' : summary?.reason ?? (mode === 'review' ? 'Prepare a PR without merging' : `Finish, verify and ship to ${target}`)} onClick={() => deliver(mode)}><Ship />{mode === 'review' ? 'Prepare for review' : 'Ship'}</button>
@@ -91,6 +92,7 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
       </>}
       {!archived && summary?.previewAvailable && <button className="delivery-pill" disabled={busy} onClick={openApp}><Play />Open app</button>}
     </div>
+    {waiting && delivery.waitingOn === 'checks' && delivery.ci && <DeliveryProgress ci={delivery.ci} />}
     <div id={id} ref={menu} className="menu delivery-menu" popover="auto" role="menu" aria-label="Shipping options" style={position}
       onToggle={e => {
         if (e.newState === 'open' && trigger.current) {
