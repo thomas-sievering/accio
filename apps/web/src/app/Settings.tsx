@@ -6,6 +6,7 @@ import { AccountsSettings } from '../profiles/AccountsSettings';
 import { ProfilesSettings } from '../profiles/ProfilesSettings';
 import { useProfiles } from '../profiles/profiles';
 import { ArrowLeft, Hub, Layers, Monitor, Users } from './icons';
+import { SidebarResizer } from './SidebarResizer';
 
 /** Where Settings is open. `profileId` opens one profile ('new' to add one). */
 export type SettingsRoute = { section: 'profiles'; profileId?: string } | { section: 'accounts'; accountId?: string } | { section: 'hub' } | { section: 'harnesses' } | { section: 'machines'; machineId?: string };
@@ -73,6 +74,7 @@ export function Settings({ route, onRoute, onClose }: { route: SettingsRoute; on
           ))}
         </nav>
       </aside>
+      <SidebarResizer />
       <main className="main">
         <header className="main-top drag">
           <nav className="crumbs">

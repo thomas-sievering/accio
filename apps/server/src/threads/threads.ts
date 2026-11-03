@@ -282,7 +282,7 @@ export class Threads {
         outcome = 'interrupted';
         return;
       }
-      for await (const msg of this.harness.run({ ...run, sessionId: thread.sessionId, model: thread.model.modelId === 'default' ? undefined : thread.model.modelId })) {
+      for await (const msg of this.harness.run({ ...run, sessionId: thread.sessionId, model: thread.model.modelId })) {
         for (const change of transcript.accept(msg)) {
           if (change.type === 'end') outcome = change.outcome;
           await this.apply(thread.id, change);

@@ -12,6 +12,7 @@ import { ThreadSearch } from '../threads/ThreadSearch';
 import { FirstRun } from './FirstRun';
 import { Close, FolderPlus, Settings as Gear } from './icons';
 import { ScopeMenu } from './ScopeMenu';
+import { SidebarResizer } from './SidebarResizer';
 import { Settings, type SettingsRoute } from './Settings';
 
 type OpenSheet = { kind: 'addProject' } | { kind: 'project'; id: string } | null;
@@ -83,6 +84,7 @@ function Shell() {
           </button>
         </footer>
       </aside>
+      <SidebarResizer />
       <main className="main">
         {draft ? (
           <DraftPane key={`${draft.checkoutId}:${draft.profileId}`} {...draft} onOpenProfile={openProfile} />
