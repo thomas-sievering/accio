@@ -1,7 +1,7 @@
 import { readFile, mkdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { delimiter, join, resolve } from 'node:path';
-import type { Resources } from '@accio/hub';
+import type { ResourceAccess } from '@accio/hub';
 import type { ToolDefinition, ToolStatus } from '@accio/protocol';
 import { npmCli, runCommand, type CommandRunner } from './process.js';
 import { inside } from './skills.js';
@@ -12,7 +12,7 @@ export class ManagedTools {
   private repairs = new Map<string, Promise<string>>();
   private closed = false;
   private jobs = new Set<Promise<unknown>>();
-  constructor(private home: string, private machineId: string, private store: Resources, private announce: () => void,
+  constructor(private home: string, private machineId: string, private store: ResourceAccess, private announce: () => void,
     private repair: (tool: ToolDefinition, detail: string) => Promise<string>, private run: CommandRunner = runCommand) {}
   folder(tool: ToolDefinition) { return join(this.home, 'tools', tool.id, `${tool.version}-${createHash('sha256').update(tool.package).digest('hex').slice(0, 12)}`); }
   bin(tool: ToolDefinition) { return join(this.folder(tool), 'node_modules', '.bin'); }

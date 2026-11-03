@@ -3,6 +3,7 @@ import { method } from './rpc.js';
 import { ModelSelection } from './models.js';
 import type { AssetUrl, MediaBinding, ThreadAsset, ToolDetails } from './media.js';
 import type { LoadedSkill } from './workspaceSkills.js';
+import type { SecretRequestItem } from './secrets.js';
 
 /**
  * GLOSSARY: Thread. A durable conversation with a harness inside one checkout.
@@ -10,6 +11,8 @@ import type { LoadedSkill } from './workspaceSkills.js';
  */
 export type ThreadView = {
   repairToolId?: string;
+  /** The hub that owns this thread's profile; immutable across view switches. */
+  hubId?: string;
   id: string;
   /** Empty for a thread started with No project. */
   checkoutId: string;
@@ -19,6 +22,8 @@ export type ThreadView = {
   model: ModelSelection;
   title: string;
   status: ThreadStatus;
+  /** Live metadata only; the turn remains running while waiting for private input. */
+  needsSecret?: boolean;
   createdAt: string;
   updatedAt: string;
   /** GLOSSARY: Snooze. Hidden until this time; null when not snoozed. */
@@ -80,6 +85,7 @@ export type ChoicePick = { choiceId: string; option: number };
 
 /** One entry of a thread's transcript. */
 export type TranscriptItem =
+  | SecretRequestItem
   | { kind: 'user'; id: string; turnId: string; text: string; at: string; resume?: boolean; delivery?: DeliveryMode; pick?: ChoicePick }
   | { kind: 'assistant'; id: string; turnId: string; text: string; media?: MediaBinding[] }
   | { kind: 'tool'; id: string; turnId: string; name: string; summary: string; status: 'running' | 'done' | 'error' | 'interrupted'; output?: string; detailRevision?: number; loadedSkills?: LoadedSkill[] }

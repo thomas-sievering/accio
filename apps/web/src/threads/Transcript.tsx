@@ -1,6 +1,7 @@
 import { createContext, memo, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { TranscriptItem } from '@accio/protocol';
 import { AssistantMarkdown } from './AssistantMarkdown';
+import { SecretRequestCard } from '../secrets/SecretRequestCard';
 import { ToolGroup } from './ToolGroup';
 import { Chevron } from '../app/icons';
 import { useAppEvent } from '../app/appEvents';
@@ -12,7 +13,7 @@ import { Choice, optionName } from './Choice';
 import './transcript-media.css';
 
 /** Follow late media/layout changes only while the reader is already at the bottom. */
-export function Transcript({ threadId, items, working }: { threadId: string; items: TranscriptItem[]; working: boolean }) {
+export function Transcript({ threadId, items, working, onOpenSecrets }: { threadId: string; items: TranscriptItem[]; working: boolean; onOpenSecrets?: (profileId: string) => void }) {
   const scroller = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
@@ -99,14 +100,14 @@ export function Transcript({ threadId, items, working }: { threadId: string; ite
         pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40 || (pinned.current && !movedUp);
         setAway(!pinned.current);
         const top = el.getBoundingClientRect().top;
-        const visible = [...(content.current?.querySelectorAll<HTMLElement>(':scope .msg:not(.assistant), :scope .turn-work-toggle, :scope .tool-group-toggle, :scope .tool, :scope .choice, :scope .notice, :scope .turn-finished, :scope .msg.assistant > *') ?? [])]
+        const visible = [...(content.current?.querySelectorAll<HTMLElement>(':scope .msg:not(.assistant), :scope .turn-work-toggle, :scope .tool-group-toggle, :scope .tool, :scope .choice, :scope .secret, :scope .notice, :scope .turn-finished, :scope .msg.assistant > *') ?? [])]
           .find((node) => node.getBoundingClientRect().bottom > top);
         anchor.current = visible ? { element: visible, offset: visible.getBoundingClientRect().top - top } : undefined;
       }}>
         <div className="thread" ref={content}>
-          <RevealContext.Provider value={reveal}>
+          <RevealContext.Provider value={reveal}><OpenSecrets.Provider value={onOpenSecrets}>
             <Picks.Provider value={picks}><Blocks threadId={threadId} blocks={layoutTranscript(items, working ? lastTurn : undefined)} preparingTurn={working ? lastTurn : undefined} /></Picks.Provider>
-          </RevealContext.Provider>
+          </OpenSecrets.Provider></RevealContext.Provider>
           {working && !lastTurn && <div className="typing" aria-label="Working"><i /><i /><i /></div>}
         </div>
       </div>
@@ -135,6 +136,7 @@ function pickedOptions(items: TranscriptItem[]) {
   return { picked, names };
 }
 const Picks = createContext<ReturnType<typeof pickedOptions>>({ picked: new Map(), names: new Map() });
+const OpenSecrets = createContext<((profileId: string) => void) | undefined>(undefined);
 
 function Blocks({ threadId, blocks, preparingTurn, inWork = false }: { threadId: string; blocks: TranscriptBlock[]; preparingTurn?: string; inWork?: boolean }) {
   return blocks.map((block) => {
@@ -187,6 +189,7 @@ function PickedItem(props: { threadId: string; item: TranscriptItem; preparing: 
 const Item = memo(function Item({ threadId, item, preparing, picked, pickName }: {
   threadId: string; item: TranscriptItem; preparing: boolean; picked?: number; pickName?: string;
 }) {
+  const onOpenSecrets = useContext(OpenSecrets);
   switch (item.kind) {
     case 'user':
       return <div className={`msg user${item.resume ? ' resume' : ''}`} data-item-id={item.id}>
@@ -202,6 +205,8 @@ const Item = memo(function Item({ threadId, item, preparing, picked, pickName }:
       return null; // Rendered by ToolGroup.
     case 'notice':
       return <div className={`notice ${item.tone}`} data-item-id={item.id}>{item.text}</div>;
+    case 'secret':
+      return <SecretRequestCard threadId={threadId} item={item} onOpenSecrets={onOpenSecrets} />;
     case 'finished':
       return <div className="turn-finished">Worked for {formatDuration(item.ms)}</div>;
   }

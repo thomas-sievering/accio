@@ -15,6 +15,7 @@ import { ModelPicker } from './ModelPicker';
 import { ThreadNotice } from './ThreadNotice';
 import { ThreadActionsMenu } from './ThreadActionsMenu';
 import { Transcript } from './Transcript';
+import { useReportPendingSecrets } from '../secrets/pendingSecrets';
 import { useThreads, useTranscript } from './threads';
 
 /** Where a thread runs, looked up once for the header, the notice and the composer. */
@@ -27,10 +28,11 @@ function usePlace(checkoutId: string, profileId?: string) {
   return { checkout, project, profile };
 }
 
-export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits }: { thread: ThreadView; active?: boolean; onOpenProfile: (profileId: string) => void; onOpenLimits: (profileId: string) => void }) {
+export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits, onOpenSecrets }: { thread: ThreadView; active?: boolean; onOpenProfile: (profileId: string) => void; onOpenLimits: (profileId: string) => void; onOpenSecrets?: (profileId: string) => void }) {
   const client = useClient();
   const place = usePlace(thread.checkoutId, thread.profileId);
   const { items, error, retry } = useTranscript(thread.id);
+  useReportPendingSecrets(thread.id, items);
   const running = thread.status === 'running';
   const [savingModel, setSavingModel] = useState(false);
   const lastTurn = items?.findLast((item) => item.kind === 'user')?.turnId;
@@ -49,7 +51,7 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits 
     <>
       <PaneHeader title={thread.title} {...place} checkout={thread.workspace && !thread.workspace.releasedAt && place.checkout ? { ...place.checkout, path: thread.workspace.path } : place.checkout} actions={<ThreadActionsMenu key={thread.id} thread={thread} items={items} />} />
       {visibleItems ? <PendingPick.Provider value={{ pick, setPick, enabled: !running }}>
-        <Transcript threadId={thread.id} items={visibleItems} working={running} />
+        <Transcript threadId={thread.id} items={visibleItems} working={running} onOpenSecrets={onOpenSecrets} />
       </PendingPick.Provider> : (
         <div className="empty">
           {error && <>
@@ -61,6 +63,7 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits 
       <ThreadNotice thread={thread} profile={place.profile} detail={detail} onOpenProfile={onOpenProfile} />
       <Composer
         target={thread.id}
+        draftId={`thread:${thread.id}`}
         disabled={running || savingModel || thread.delivery?.status === 'queued' || !place.profile || !accountForModel(place.profile, thread.model)?.signedIn}
         actions={<DeliveryActions key={thread.id} thread={thread} project={place.project} canRun={!!place.profile && !!accountForModel(place.profile, thread.model)?.signedIn} />}
         onStop={running ? async () => void (await client.call('threads.stop', { threadId: thread.id })) : undefined}
@@ -112,6 +115,7 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
         {chosenMachineId && unavailable && <p className="note" role="status">The selected machine is offline. Choose an online machine.</p>}
         <Composer
           target="draft"
+          draftId={`new:${checkoutId}:${profileId ?? ''}`}
           disabled={!place.profile || !accountForModel(place.profile, model)?.signedIn || unavailable || remote}
           placeholder={`Ask ${model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}
           onSend={async (text) => select((await client.call('threads.start', checkoutId ? { checkoutId, text, model, machineId } : { profileId: profileId!, text, model, machineId })).id)}

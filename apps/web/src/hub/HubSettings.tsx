@@ -1,63 +1,44 @@
-import { useCallback, useEffect, useState } from 'react';
-import type { HubInfo } from '@accio/protocol';
-import { useClient, useConnectionStatus } from '../app/connection';
-import { Refresh } from '../app/icons';
-import { SettingRow, SettingsSection } from '../app/Settings';
+import { useState, type FormEvent } from 'react';
+import { useHubs } from '../app/connection';
+import { SettingsSection, SettingRow } from '../app/Settings';
+import { useAction } from '../app/useAction';
+import { HubSelector } from './HubSelector';
 
-/** GLOSSARY: Hub. Where it runs and whether it answers. Accounts live under profiles. */
 export function HubSettings() {
-  const client = useClient();
-  const status = useConnectionStatus();
-  const [hub, setHub] = useState<HubInfo>();
-  const [checking, setChecking] = useState(false);
-  const [error, setError] = useState<string>();
-
-  const load = useCallback(() => {
-    setChecking(true);
-    client
-      .call('hub.get', {})
-      .then(
-        (h) => {
-          setHub(h);
-          setError(undefined);
-        },
-        (err: Error) => setError(err.message),
-      )
-      .finally(() => setChecking(false));
-  }, [client]);
-
-  useEffect(() => {
-    if (status === 'open') load();
-  }, [status, load]);
-
-  if (!hub) return error ? <p className="error">{error}</p> : null;
-
-  return (
-    <>
-      <SettingsSection title="Hub">
-        <SettingRow
-          title="Status"
-          description="For now the hub runs inside this machine’s server. Later it runs on its own, always on, and every machine connects to it."
-        >
-          <span className={`pill ${hub.reachable ? 'ok' : 'bad'}`}>
-            <span className="dot" />
-            {hub.reachable ? 'Answering' : 'Not answering'}
-          </span>
-          <button className="side-icon" title="Check again" aria-label="Check again" onClick={load} disabled={checking}>
-            <Refresh />
-          </button>
-        </SettingRow>
-        <SettingRow title="Address" description="Threads reach their profile’s accounts here. accio writes it into each profile’s Claude config folder.">
-          <code>{hub.url}</code>
-        </SettingRow>
-        <SettingRow title="Accounts stored in" description="Readable by your user only. The tokens never leave the hub.">
-          <code>{hub.store}</code>
-        </SettingRow>
-        <SettingRow title="Shared settings stored in" description="Profiles and settings for each machine live here.">
-          <code>{hub.settingsStore}</code>
-        </SettingRow>
-      </SettingsSection>
-      {error && <p className="error">{error}</p>}
-    </>
-  );
+  const { hubs, selectedId, select, root } = useHubs();
+  const [name, setName] = useState(''); const [url, setUrl] = useState(''); const [code, setCode] = useState('');
+  const [pairing, setPairing] = useState<{ code: string; expiresAt: number }>();
+  const { busy, error, run } = useAction();
+  const current = hubs.find((h) => h.id === selectedId);
+  const pair = (e: FormEvent) => { e.preventDefault(); void run(async () => {
+    const hub = await root.call('hubs.pair', { name, url, code }); setName(''); setUrl(''); setCode(''); select(hub.id);
+  }); };
+  return <>
+    <SettingsSection title="Saved hubs">
+      {hubs.length > 0 && <div className="setting-form"><HubSelector /></div>}
+      {hubs.map((hub) => <SettingRow key={hub.id} title={hub.name} description={hub.url}>
+        <span className={`pill ${hub.status === 'connected' ? 'ok' : 'bad'}`}>{hub.status === 'connected' ? 'Connected' : hub.status === 'connecting' ? 'Connecting' : 'Offline'}</span>
+        {hub.id !== selectedId && <button type="button" className="link" onClick={() => select(hub.id)}>Use hub</button>}
+        <button type="button" className="link" disabled={busy || hub.running > 0} onClick={() => run(() => root.call('hubs.remove', { id: hub.id }))}>Remove</button>
+      </SettingRow>)}
+      {current?.error && <div className="setting-form"><p className="error" role="status">{current.error}</p></div>}
+    </SettingsSection>
+    <SettingsSection title="Add hub">
+      <form className="setting-form" onSubmit={pair}>
+        <label className="field"><span>Hub name</span><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Home server" maxLength={80} required /></label>
+        <label className="field"><span>Hub address</span><input type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://accio.mediatom.cc" required /></label>
+        <label className="field"><span>Pairing code</span><input value={code} onChange={(e) => setCode(e.target.value)} autoComplete="off" spellCheck={false} required /></label>
+        <p className="hint">For your first device, use the code displayed by the hub’s setup command. An already paired device can generate a code for another device.</p>
+        <button type="submit" className="ghost primary" disabled={busy || !name.trim() || !url.trim() || !code.trim()}>Connect hub</button>
+      </form>
+    </SettingsSection>
+    {current && <SettingsSection title="Pair another device">
+      <div className="setting-form">
+        <p className="hint">Generate a one-time code for {current.name}. Enter this hub’s address and the code on the other device.</p>
+        <button type="button" className="ghost" disabled={busy || current.status !== 'connected'} onClick={() => run(async () => setPairing(await root.call('hubs.createPairingCode', { id: current.id })))}>Generate pairing code</button>
+        {pairing && <p role="status"><code>{pairing.code}</code> · expires {new Date(pairing.expiresAt).toLocaleTimeString()}</p>}
+      </div>
+    </SettingsSection>}
+    {error && <p className="error" role="alert">{error}</p>}
+  </>;
 }

@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type Reac
 import { ArrowUp, Close, StopSquare } from '../app/icons';
 import { useAppEvent } from '../app/appEvents';
 import { useAction } from '../app/useAction';
+import { useClient } from '../app/connection';
 
 /**
  * T3 Code's boxed composer: the message on top, a toolbar row with Send (or Stop) below.
@@ -16,6 +17,7 @@ export function Composer({
   attachment,
   actions,
   target,
+  draftId = 'new',
 }: {
   onSend: (text: string) => Promise<void>;
   /** Set while a turn runs: the send button becomes Stop. */
@@ -30,8 +32,12 @@ export function Composer({
   actions?: ReactNode;
   /** Which `composer.insert` requests this composer accepts: its thread id, or 'draft'. */
   target?: string;
+  draftId?: string;
 }) {
-  const [text, setText] = useState('');
+  const client = useClient();
+  const storageKey = `accio:${client.hubId}:composer:${draftId}`;
+  const [text, updateText] = useState(() => sessionStorage.getItem(storageKey) ?? '');
+  const setText = (value: string) => { updateText(value); if (value) sessionStorage.setItem(storageKey, value); else sessionStorage.removeItem(storageKey); };
   const { busy, error, run } = useAction();
   const sending = useRef(false);
   const input = useRef<HTMLTextAreaElement>(null);

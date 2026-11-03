@@ -12,7 +12,7 @@ export function toView({ sessionId: _s, ...view }: Thread): ThreadView {
   return view;
 }
 
-export function newThread(input: { checkoutId: string; projectId: string; profileId: string; model?: ThreadView['model'] }, now: string): Thread {
+export function newThread(input: { checkoutId: string; projectId: string; profileId: string; hubId?: string; model?: ThreadView['model'] }, now: string): Thread {
   return {
     id: randomUUID(),
     ...input,

@@ -2,6 +2,7 @@ import type { ThreadView } from '@accio/protocol';
 import { Check, Clock, StopSquare, Undo } from '../app/icons';
 import { ProjectMark } from '../projects/ProjectMark';
 import { useProjects } from '../projects/projects';
+import { useNeedsSecret } from '../secrets/pendingSecrets';
 import { useThreadMenu } from './ThreadMenu';
 import type { ShelfPlace } from './shelves';
 import { useThreads, type ThreadActions } from './threads';
@@ -16,6 +17,8 @@ export function ThreadRow({ thread: t, place }: { thread: ThreadView; place: She
   const project = state?.projects.find((p) => p.id === t.projectId)?.name;
   // Working rows keep the full open look: project mark and the spinning status.
   const open = place === 'open' || place === 'working';
+  // Only a running turn can wait on a secret; the mark stays on the Working shelf row.
+  const needsSecret = (useNeedsSecret(t.id) || t.needsSecret === true) && t.status === 'running' && place === 'working';
   const openMenu = useThreadMenu();
   const onContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -44,9 +47,10 @@ export function ThreadRow({ thread: t, place }: { thread: ThreadView; place: She
         {open && (t.projectId ? <ProjectMark id={t.projectId} /> : <span className="no-project-mark" />)}
         <span className="row-name">
           <span className="row-title">{t.title}</span>
-          {(open || project) && <span className="row-project">{project ?? 'No project'}</span>}
+          {needsSecret ? <span className="row-project needs-secret">Needs a secret</span>
+            : (open || project) && <span className="row-project">{project ?? 'No project'}</span>}
         </span>
-        {open && <RowStatus thread={t} now={now} />}
+        {open && <RowStatus thread={t} now={now} needsSecret={needsSecret} />}
         {place === 'snoozed' && t.snoozedUntil && <span className="row-meta">{wakeLabel(t.snoozedUntil, now)}</span>}
         {place === 'settled' && t.settledAt && <span className="row-meta">{timeAgo(t.settledAt, now)}</span>}
       </button>
@@ -68,13 +72,13 @@ function hoverActions(t: ThreadView, place: ShelfPlace): HoverAction[] {
   ];
 }
 
-function RowStatus({ thread: t, now }: { thread: ThreadView; now: Date }) {
-  const label = { running: 'Working', interrupted: 'Interrupted', failed: 'Failed', idle: 'Done' }[t.status];
+function RowStatus({ thread: t, now, needsSecret }: { thread: ThreadView; now: Date; needsSecret?: boolean }) {
+  const label = needsSecret ? 'Needs a secret' : { running: 'Working', interrupted: 'Interrupted', failed: 'Failed', idle: 'Done' }[t.status];
   return (
     <span className="row-status" title={label}>
       <span className="row-meta">{timeAgo(t.updatedAt, now)}</span>
       <span className="row-mark" role="img" aria-label={label}>
-        {t.status === 'running' ? <span className="row-working" /> : <span className={`row-flag ${t.status}`} />}
+        {needsSecret ? <span className="row-flag needs-secret" /> : t.status === 'running' ? <span className="row-working" /> : <span className={`row-flag ${t.status}`} />}
       </span>
     </span>
   );

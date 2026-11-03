@@ -33,6 +33,17 @@ describe('layoutTranscript', () => {
     expect(shape(layoutTranscript([ask('q'), tool('1'), choice, say('a'), done()]))).toEqual(['q', { work: [['1']] }, 'c', 'a']);
   });
 
+  it.each(['pending', 'provided'] as const)('keeps a %s secret visible when other work is folded', (status) => {
+    const secret: TranscriptItem = { kind: 'secret', id: 's', turnId: 't1', requestId: 'r', slot: 'test:token',
+      label: 'Test token', reason: 'Test', profileId: 'p', profileName: 'Personal', projectId: 'project',
+      projectName: 'Project', machineName: 'This machine', status, candidates: [], expiresAt: '2026-11-03T13:00:00Z' };
+    const items = [ask('q'), tool('1'), secret, tool('2')];
+    const blocks = layoutTranscript(items, 't1');
+    expect(shape(blocks)).toEqual(['q', { work: [['1', '2']] }, 's']);
+    if (status === 'pending') expect(blocks[1]).toMatchObject({ activity: 'Waiting for secret' });
+    expect(shape(layoutTranscript([...items, say('a'), done()]))).toEqual(['q', { work: [['1', '2']] }, 's', 'a']);
+  });
+
   it('carries the duration, failures and a stable id on the work block', () => {
     const [, work] = layoutTranscript([ask('q'), tool('1', 'Bash', 't1', 'error'), tool('2'), say('a'), done('t1', 42_000)]);
     expect(work).toMatchObject({ kind: 'work', id: 't1:work', live: false, ms: 42_000, failed: 1 });

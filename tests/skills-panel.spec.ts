@@ -46,7 +46,7 @@ test('Skills tab lists project and inherited skills, adds, references, edits, di
   await panel(page).getByRole('button', { name: 'Add skill', exact: true }).click();
   const search = page.getByRole('combobox', { name: 'Search library skills' });
   await expect(search).toBeFocused();
-  await expect(page.getByRole('option')).toHaveText([/lib-review/]);
+  await expect(panel(page).getByRole('option')).toHaveText([/lib-review/]);
   await search.fill('nothing like this');
   await expect(panel(page).getByText('No matching skills.')).toBeVisible();
   await search.fill('review');

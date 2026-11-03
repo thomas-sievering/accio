@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { hostname, platform } from 'node:os';
 import { join } from 'node:path';
 import type { MachineInfo, MachineView } from '@accio/protocol';
-import type { HarnessInstall, SharedSettings } from '@accio/hub';
+import type { HarnessInstall, SettingsAccess } from '@accio/hub';
 import type { Broadcast, Router } from '../rpc/router.js';
 import { UserError } from '../rpc/router.js';
 import { JsonFile } from '@accio/persistence';
@@ -29,9 +29,10 @@ export function machineInfo(id: string): MachineInfo {
  * folders there (ADR 0004).
  */
 export class Machines {
+  async refresh() { await this.settings.refresh?.(); }
   constructor(
     private here: MachineInfo,
-    private settings: SharedSettings,
+    private settings: SettingsAccess,
     private broadcast: Broadcast,
   ) {
     settings.onMachinesChanged(() => this.announce());
@@ -75,14 +76,16 @@ export class Machines {
 
   register(router: Router) {
     router
-      .on('machine.get', () => ({ ...this.here, name: this.settings.machine(this.here.id)?.name ?? this.here.name }))
-      .on('machines.list', () => this.views())
+      .on('machine.get', async () => { await this.refresh(); return { ...this.here, name: this.settings.machine(this.here.id)?.name ?? this.here.name }; })
+      .on('machines.list', async () => { await this.refresh(); return this.views(); })
       .on('machines.rename', async ({ machineId, name }) => {
+        await this.refresh();
         if (!this.settings.machine(machineId)) throw new UserError('No such machine');
         await this.settings.renameMachine(machineId, name);
         return this.views().find((m) => m.id === machineId)!;
       })
       .on('machines.setProfileFolders', async ({ machineId, profileId, folders }) => {
+        await this.refresh();
         if (!this.settings.machine(machineId)) throw new UserError('No such machine');
         if (!this.settings.profiles().some((p) => p.id === profileId)) throw new UserError(`No profile ${profileId}`);
         await this.settings.setProfileFolders(machineId, profileId, folders);

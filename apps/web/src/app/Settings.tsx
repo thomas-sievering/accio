@@ -6,21 +6,24 @@ import { SystemPromptSettings } from '../harnesses/SystemPromptSettings';
 import { AccountsSettings } from '../profiles/AccountsSettings';
 import { ProfilesSettings } from '../profiles/ProfilesSettings';
 import { useProfiles } from '../profiles/profiles';
+import { SecretsSettings, type SecretsRoute } from '../secrets/SecretsSettings';
 import { ToolsSettings } from '../tools/ToolsSettings';
 import { McpSettings } from '../mcp/McpSettings';
 import { SkillsSettings } from '../skills/SkillsSettings';
 import { useResources } from '../resources/resources';
-import { ArrowLeft, BookOpen, Hub, Layers, Monitor, Plug, ScrollText, Users, Wrench } from './icons';
+import { ArrowLeft, BookOpen, Hub, Key, Layers, Monitor, Plug, ScrollText, Users, Wrench } from './icons';
 import { SidebarResizer } from './Resizer';
+import { HubSelector } from '../hub/HubSelector';
 
 /** Where Settings is open. `profileId` opens one profile ('new' to add one). */
-export type SettingsRoute = { section: 'profiles'; profileId?: string } | { section: 'accounts'; accountId?: string } | { section: 'hub' } | { section: 'harnesses' } | { section: 'systemPrompt' } | { section: 'machines'; machineId?: string }
+export type SettingsRoute = { section: 'profiles'; profileId?: string } | { section: 'accounts'; accountId?: string } | ({ section: 'secrets' } & SecretsRoute) | { section: 'hub' } | { section: 'harnesses' } | { section: 'systemPrompt' } | { section: 'machines'; machineId?: string }
   | { section: 'tools'; toolId?: string } | { section: 'mcps'; mcpId?: string } | { section: 'skills'; sourceId?: string };
 type Section = SettingsRoute['section'];
 
 const GROUPS: { label?: string; items: { id: Section; label: string; icon: ReactNode }[] }[] = [
   { label: 'Hub settings', items: [
     { id: 'accounts', label: 'Accounts', icon: <Users /> },
+    { id: 'secrets', label: 'Secrets', icon: <Key /> },
     { id: 'profiles', label: 'Profiles', icon: <Users /> },
     { id: 'harnesses', label: 'Harnesses', icon: <Layers /> },
     { id: 'systemPrompt', label: 'System prompt', icon: <ScrollText /> },
@@ -34,7 +37,7 @@ const GROUPS: { label?: string; items: { id: Section; label: string; icon: React
   {
     label: 'Connections',
     items: [
-      { id: 'hub', label: 'Hub', icon: <Hub /> },
+      { id: 'hub', label: 'Hubs', icon: <Hub /> },
     ],
   },
 ];
@@ -48,6 +51,8 @@ export function Settings({ route, onRoute, onClose, onOpenThread }: { route: Set
   const accountId = route.section === 'accounts' ? route.accountId : undefined;
   const accountLabel = accountId === 'new' || accountId === 'new-openai' ? 'New account' : accounts?.find((a) => a.id === accountId)?.name;
   const profileLabel = profileId === 'new' ? 'New profile' : profiles?.find((p) => p.id === profileId)?.name;
+  const secretLabel = route.section === 'secrets' && route.secretId ? route.secretId === 'new' ? 'New secret' : route.replace ? 'Replace value' : 'Edit secret' : undefined;
+  const backTo: SettingsRoute = route.section === 'secrets' ? { section: 'secrets', profileId: route.profileId } : { section: route.section };
   const toolId = route.section === 'tools' ? route.toolId : undefined;
   const mcpId = route.section === 'mcps' ? route.mcpId : undefined;
   const sourceId = route.section === 'skills' ? route.sourceId : undefined;
@@ -55,7 +60,7 @@ export function Settings({ route, onRoute, onClose, onOpenThread }: { route: Set
     : mcpId ? (mcpId === 'new' ? 'New MCP server' : resources?.mcps.find((m) => m.id === mcpId)?.name)
       : sourceId ? (sourceId === 'new' ? 'New skill source' : resources?.sources.find((s) => s.id === sourceId)?.name)
         : undefined;
-  const detailLabel = profileLabel || accountLabel || resourceLabel;
+  const detailLabel = profileLabel || accountLabel || secretLabel || resourceLabel;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -77,6 +82,7 @@ export function Settings({ route, onRoute, onClose, onOpenThread }: { route: Set
           </button>
         </header>
         <nav className="side-body">
+          <HubSelector />
           {GROUPS.map((g, n) => (
             <div key={n} className="settings-group">
               {g.label && <div className="settings-group-label">{g.label}</div>}
@@ -103,7 +109,7 @@ export function Settings({ route, onRoute, onClose, onOpenThread }: { route: Set
             <span className="sep">/</span>
             {detailLabel ? (
               <>
-                <button onClick={() => onRoute({ section: route.section })}>{LABEL[route.section]}</button>
+                <button onClick={() => onRoute(backTo)}>{LABEL[route.section]}</button>
                 <span className="sep">/</span>
                 <b>{detailLabel}</b>
               </>
@@ -119,9 +125,11 @@ export function Settings({ route, onRoute, onClose, onOpenThread }: { route: Set
                 profileId={profileId}
                 onOpen={(id) => onRoute({ section: 'profiles', profileId: id })}
                 onBack={() => onRoute({ section: 'profiles' })}
+                onOpenSecrets={(id) => onRoute({ section: 'secrets', profileId: id })}
               />
             )}
             {route.section === 'accounts' && <AccountsSettings accountId={accountId} onOpen={(id) => onRoute({ section: 'accounts', accountId: id })} onBack={() => onRoute({ section: 'accounts' })} />}
+            {route.section === 'secrets' && <SecretsSettings route={route} onRoute={(r) => onRoute({ section: 'secrets', ...r })} />}
             {route.section === 'hub' && <HubSettings />}
             {route.section === 'harnesses' && <HarnessesSettings />}
             {route.section === 'systemPrompt' && <SystemPromptSettings />}

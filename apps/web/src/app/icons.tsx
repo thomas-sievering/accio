@@ -172,6 +172,18 @@ export const Star = ({ filled = false }: { filled?: boolean }) => (
     <path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z" />
   </svg>
 );
+export const Key = () => (
+  <svg {...base}>
+    <circle cx="7.5" cy="15.5" r="4.5" />
+    <path d="m10.7 12.3 9.3-9.3M17 6l3 3M14.5 8.5l2 2" />
+  </svg>
+);
+export const MinusCircle = () => (
+  <svg {...base}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M8 12h8" />
+  </svg>
+);
 /** The Owl: accio's agent that works across every thread. From Lucide Lab (ISC licence). */
 export const Owl = () => (
   <svg {...base}>

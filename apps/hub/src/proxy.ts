@@ -16,7 +16,13 @@ const DROP_REQUEST = new Set([
   'accept-encoding',
   'keep-alive',
   'transfer-encoding',
+  'forwarded',
+  'via',
+  'x-real-ip',
+  'true-client-ip',
+  'cdn-loop',
 ]);
+const dropRequestHeader = (name: string) => DROP_REQUEST.has(name.toLowerCase()) || /^(cf-|x-forwarded-)/i.test(name);
 const DROP_RESPONSE = new Set(['content-encoding', 'content-length', 'transfer-encoding', 'connection', 'keep-alive']);
 
 export type ProxyOptions = { hub: Hub; host: string; port: number; upstream?: string; fetchImpl?: Fetch; openaiUpstream?: string; openaiFetch?: Fetch; handleMcp?: (req: IncomingMessage, res: ServerResponse) => Promise<boolean> };
@@ -84,7 +90,7 @@ export async function startHubProxy({ hub, host, port, upstream = ANTHROPIC_API,
     const send = (auth: NonNullable<typeof credentials>) => {
       const headers = new Headers();
       for (const [key, value] of Object.entries(req.headers)) {
-        if (value === undefined || DROP_REQUEST.has(key.toLowerCase()) || /^(chatgpt-|openai-organization$|openai-project$|cookie$|anthropic-)/i.test(key)) continue;
+        if (value === undefined || dropRequestHeader(key) || /^(chatgpt-|openai-organization$|openai-project$|cookie$|anthropic-)/i.test(key)) continue;
         headers.set(key, Array.isArray(value) ? value.join(', ') : value);
       }
       headers.set('authorization', `Bearer ${auth.accessToken}`);
@@ -132,7 +138,7 @@ function keyOf(req: IncomingMessage): string | null {
 export function upstreamHeaders(req: Pick<IncomingMessage, 'headers'>, accessToken: string): Headers {
   const h = new Headers();
   for (const [k, v] of Object.entries(req.headers)) {
-    if (v === undefined || DROP_REQUEST.has(k.toLowerCase())) continue;
+    if (v === undefined || dropRequestHeader(k)) continue;
     h.set(k, Array.isArray(v) ? v.join(', ') : v);
   }
   h.set('authorization', `Bearer ${accessToken}`);

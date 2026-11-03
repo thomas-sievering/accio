@@ -1,3 +1,4 @@
+import { HubSelector } from '../hub/HubSelector';
 import { useCallback, useRef, useState } from 'react';
 import { LimitsProvider } from '../limits/limits';
 import type { LimitsScope } from '../limits/limitsModel';
@@ -8,6 +9,7 @@ import { ProjectsProvider, useProjects } from '../projects/projects';
 import { AddProjectSheet } from '../projects/AddProjectSheet';
 import { ProjectSheet } from '../projects/ProjectSheet';
 import { ThreadsProvider, useThreads } from '../threads/threads';
+import { PendingSecretsProvider } from '../secrets/pendingSecrets';
 import { ResourcesProvider } from '../resources/resources';
 import { NewThreadButton } from '../threads/NewThreadButton';
 import { ThreadList } from '../threads/ThreadList';
@@ -30,7 +32,9 @@ export function App() {
         <ProjectsProvider>
           <ThreadsProvider>
             <ResourcesProvider>
-              <Shell />
+              <PendingSecretsProvider>
+                <Shell />
+              </PendingSecretsProvider>
             </ResourcesProvider>
           </ThreadsProvider>
         </ProjectsProvider>
@@ -63,6 +67,7 @@ function Shell() {
   const close = () => setSheet(null);
   const openProject = sheet?.kind === 'project' ? state?.projects.find((p) => p.id === sheet.id) : undefined;
   const openProfile = (profileId: string) => setSettings({ section: 'profiles', profileId });
+  const openSecrets = useCallback((profileId: string) => setSettings({ section: 'secrets', profileId }), []);
   const openAccount = (accountId: string) => setSettings({ section: 'accounts', accountId });
   // Limits cover the main pane until a thread or draft is opened; settings opened from them return here.
   const [limits, setLimits] = useState<{ scope: LimitsScope; navigation: number } | null>(null);
@@ -89,6 +94,7 @@ function Shell() {
       <div className={`layout${panelOpen ? ' with-panel' : ''}`} hidden={settings !== null}>
         <aside className="sidebar">
           <div className="side-controls drag">
+            <HubSelector />
             <div className="side-tools">
               <ThreadSearch />
               <ScopeMenu onOpenProject={(p) => setSheet({ kind: 'project', id: p.id })} />
@@ -134,7 +140,7 @@ function Shell() {
             {draft ? (
               <DraftPane key={`${draft.checkoutId}:${draft.profileId}`} {...draft} active={!limitsOpen && !settings} onOpenProfile={openProfile} onOpenLimits={openLimits} />
             ) : thread ? (
-              <ThreadPane key={thread.id} thread={thread} active={!limitsOpen && !settings} onOpenProfile={openProfile} onOpenLimits={openLimits} />
+              <ThreadPane key={thread.id} thread={thread} onOpenSecrets={openSecrets} active={!limitsOpen && !settings} onOpenProfile={openProfile} onOpenLimits={openLimits} />
             ) : (
               <>
                 <header className="main-top drag" />

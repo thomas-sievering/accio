@@ -38,12 +38,12 @@ export class Resources {
   deleteSource(id: string) { return this.save(d => ({ ...d, sources: d.sources.filter(s => s.id !== id), skills: d.skills.filter(s => s.sourceId !== id), skillSelections: Object.fromEntries(Object.entries(d.skillSelections ?? {}).filter(([key]) => !key.startsWith(`${id}:`))), skillSnapshots: (d.skillSnapshots ?? []).filter(s => s.sourceId !== id) })); }
   setSkillScope(id: string, scope: ResourceScope) { return this.save(d => { if (!d.skills.some(s => s.id === id)) throw new Error('No such skill'); return { ...d, skillSelections: { ...d.skillSelections, [id]: scope }, skills: d.skills.map(s => s.id === id ? { ...s, scope } : s) }; }); }
   /** Update just one project inside the store queue so concurrent selections keep each other. */
-  setSkillProject(id: string, projectKey: string, on: boolean) {
+  setSkillProject(id: string, selection: { projectKey: string; enabled: boolean }) {
     return this.save(d => {
       const skill = d.skills.find(skill => skill.id === id);
       if (!skill) throw new Error('No such skill');
-      const projectKeys = skill.scope.projectKeys.filter(key => key !== projectKey);
-      if (on) projectKeys.push(projectKey);
+      const projectKeys = skill.scope.projectKeys.filter(key => key !== selection.projectKey);
+      if (selection.enabled) projectKeys.push(selection.projectKey);
       const scope = { ...skill.scope, projectKeys };
       return { ...d, skillSelections: { ...d.skillSelections, [id]: scope }, skills: d.skills.map(skill => skill.id === id ? { ...skill, scope } : skill) };
     });
@@ -53,3 +53,6 @@ export class Resources {
   setToolStatus(status: ToolStatus) { return this.save(d => ({ ...d, toolStatuses: [...d.toolStatuses.filter(s => s.toolId !== status.toolId || s.machineId !== status.machineId), status] })); }
   async close() { await this.queue; await this.file.idle(); await this.secretsFile.idle(); }
 }
+
+/** Machine operations exclude reading MCP credentials or owning the persistence files. */
+export type ResourceAccess = Pick<Resources, Exclude<keyof Resources, 'credential' | 'load' | 'close'>>;
