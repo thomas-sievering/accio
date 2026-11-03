@@ -2,14 +2,20 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import type { ThreadView, TranscriptItem } from '@accio/protocol';
 import { useClient, useConnectionStatus } from '../app/connection';
 import { useLive, useLocalState } from '../app/useLive';
-import { nextMorning, shelveThreads, type ShelfMarks, type ThreadShelves } from './shelves';
+import { useProjects } from '../projects/projects';
+import { filterThreads, nextMorning, shelveThreads, type ShelfMarks, type ThreadShelves } from './shelves';
 
 type ThreadsCtx = {
   threads: ThreadView[] | undefined;
   selectedId: string;
   select: (id: string) => void;
-  /** Open threads by project, plus the Working, Snoozed and Settled shelves. */
+  /** The open list plus the Working, Snoozed and Settled shelves, after the project scope and search. */
   shelves: ThreadShelves;
+  /** The one project the sidebar is narrowed to, or '' for every visible project. */
+  projectScope: string;
+  setProjectScope: (projectId: string) => void;
+  query: string;
+  setQuery: (q: string) => void;
   marks: ShelfMarks;
   now: Date;
   settle: (id: string) => void;
@@ -25,6 +31,11 @@ export function ThreadsProvider({ children }: { children: ReactNode }) {
   const threads = useLive(() => client.call('threads.list', {}), 'threads.changed');
   const [selectedId, select] = useLocalState<string>('accio.thread', '');
   const [marks, setMarks] = useShelfMarks();
+  const { visible } = useProjects();
+  const [storedScope, setProjectScope] = useLocalState<string>('accio.projectScope', '');
+  const [query, setQuery] = useState('');
+  // A scope outside the selected profile (or a removed project) falls back to every project.
+  const projectScope = visible.some((p) => p.id === storedScope) ? storedScope : '';
   const now = useMinuteClock();
   const mark = (id: string, next: ShelfMarks[string] | undefined) => {
     const { [id]: _, ...rest } = marks;
@@ -36,7 +47,15 @@ export function ThreadsProvider({ children }: { children: ReactNode }) {
       threads,
       selectedId,
       select,
-      shelves: shelveThreads(threads ?? [], marks, now),
+      shelves: shelveThreads(
+        filterThreads(threads ?? [], new Set(projectScope ? [projectScope] : visible.map((p) => p.id)), query),
+        marks,
+        now,
+      ),
+      projectScope,
+      setProjectScope,
+      query,
+      setQuery,
       marks,
       now,
       settle: (id) => mark(id, { settledAt: new Date().toISOString() }),
@@ -45,7 +64,7 @@ export function ThreadsProvider({ children }: { children: ReactNode }) {
     }),
     // select and mark are stable in behaviour; recreate only when data changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [threads, selectedId, marks, now],
+    [threads, selectedId, marks, now, visible, projectScope, query],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
