@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { ProviderLogo, Refresh, Settings } from '../app/icons';
 import { useLimits } from './limits';
 import {
-  absoluteTime, blockingWindow, formatRemaining, fullTime, level, relativeTime, remainingPercent, resetDue, retryBlockedUntil, splitWindows,
+  absoluteTime, allowancePace, blockingWindow, formatRemaining, fullTime, level, relativeTime, remainingPercent, resetDue, retryBlockedUntil, splitWindows,
 } from './limitsModel';
 
 type Named = { id: string; name: string };
@@ -93,6 +93,10 @@ function SnapshotMeters({ snapshot, refreshing, now }: { snapshot: LimitsSnapsho
 /** Name and reset on the left, one simple remaining-allowance bar, remaining percentage on the right. */
 function Meter({ window: w, refreshing, now, scope }: { window: LimitWindow; refreshing: boolean; now: number; scope?: string }) {
   const remaining = remainingPercent(w);
+  const pace = allowancePace(w, now);
+  const paceState = pace ? pace.minutesAhead > 0 ? 'ahead' : pace.minutesAhead < 0 ? 'behind' : 'even' : null;
+  const paceText = pace && (pace.minutesAhead === 0 ? 'On pace' : `${relativeTime(Math.abs(pace.minutesAhead) * 60_000, 0).slice(3)} ${pace.minutesAhead > 0 ? 'ahead of pace' : 'behind pace'}`);
+  const paceDescription = pace && `${formatRemaining(remaining!)} allowance left; ${Math.round(pace.timeRemainingPercent)}% of the window's time left. Compared with even use until reset, based on reported usage. The marker shows time remaining.`;
   const state = level(w);
   const passed = resetDue(w, now);
   const reset = w.resetsAt ? Date.parse(w.resetsAt) : null;
@@ -109,11 +113,13 @@ function Meter({ window: w, refreshing, now, scope }: { window: LimitWindow; ref
           {resetText}
           {reset !== null && !passed && <> · <time dateTime={w.resetsAt!} title={fullTime(reset)}>{absoluteTime(reset, now)}</time></>}
         </small>
+        {pace && <small className={`limit-pace ${paceState}`} title={paceDescription || undefined}>{paceText}</small>}
       </div>
       <div className="limit-track" role={remaining === null ? 'img' : 'meter'} aria-label={`${name} allowance remaining${remaining === null ? ': usage not reported' : ''}`} aria-valuemin={remaining === null ? undefined : 0} aria-valuemax={remaining === null ? undefined : 100}
         aria-valuenow={remaining ?? undefined}
         aria-valuetext={remaining === null ? 'Usage not reported' : `${formatRemaining(remaining)} left${passed ? ', reset time passed, awaiting confirmation' : ''}`}>
         {remaining !== null && <span style={{ width: `${remaining}%` }} />}
+        {pace && <i className="limit-time-marker" style={{ left: `${pace.timeRemainingPercent}%` }} aria-hidden="true" />}
       </div>
       <span className="limit-value">{value}</span>
     </li>
