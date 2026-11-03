@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { method } from './rpc.js';
 import { ModelSelection } from './models.js';
+import type { AssetUrl, MediaBinding, ToolDetails } from './media.js';
 
 /**
  * GLOSSARY: Thread. A durable conversation with a harness inside one checkout.
@@ -34,8 +35,8 @@ export type ThreadStatus = 'idle' | 'running' | 'interrupted' | 'failed';
 /** One entry of a thread's transcript. */
 export type TranscriptItem =
   | { kind: 'user'; id: string; turnId: string; text: string; at: string; resume?: boolean }
-  | { kind: 'assistant'; id: string; turnId: string; text: string }
-  | { kind: 'tool'; id: string; turnId: string; name: string; summary: string; status: 'running' | 'done' | 'error'; output?: string }
+  | { kind: 'assistant'; id: string; turnId: string; text: string; media?: MediaBinding[] }
+  | { kind: 'tool'; id: string; turnId: string; name: string; summary: string; status: 'running' | 'done' | 'error' | 'interrupted'; output?: string; detailRevision?: number }
   | { kind: 'notice'; id: string; turnId: string; tone: 'info' | 'error'; text: string };
 
 /**
@@ -55,6 +56,9 @@ const SetModel = z.object({ threadId: z.string(), model: ModelSelection });
 const Snooze = z.object({ threadId: z.string(), until: z.iso.datetime({ offset: true }) });
 const Send = z.object({ threadId: z.string(), text: z.string().trim().min(1) });
 const Rename = z.object({ threadId: z.string(), title: z.string().trim().min(1).max(120) });
+const ToolDetailRequest = z.object({ threadId: z.string(), itemId: z.string().min(1).max(512) });
+const AssetRequest = z.object({ threadId: z.string(), assetId: z.string().uuid(), download: z.boolean().optional() });
+const FileRequest = z.object({ threadId: z.string(), path: z.string().min(1).max(4096) });
 
 export const threadMethods = {
   'threads.list': method<z.ZodObject<{}>, ThreadView[]>(z.object({})),
@@ -63,6 +67,10 @@ export const threadMethods = {
   'threads.transcript': method<typeof ThreadId, TranscriptItem[]>(ThreadId),
   /** Items and cursor captured together; subscribe before requesting, then ignore events through this cursor. */
   'threads.observe': method<typeof ThreadId, TranscriptSnapshot>(ThreadId),
+  'threads.toolDetails': method<typeof ToolDetailRequest, ToolDetails>(ToolDetailRequest),
+  'threads.assetUrl': method<typeof AssetRequest, AssetUrl>(AssetRequest),
+  /** A download grant for a current file explicitly linked in the thread. */
+  'threads.fileUrl': method<typeof FileRequest, AssetUrl>(FileRequest),
   'threads.send': method<typeof Send, null>(Send),
   'threads.setModel': method<typeof SetModel, ThreadView>(SetModel),
   /** Stops the running turn; the thread becomes interrupted. */

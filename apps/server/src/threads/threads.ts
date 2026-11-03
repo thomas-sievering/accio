@@ -32,6 +32,9 @@ import {
 } from './thread.js';
 import { TurnTranscript, type TranscriptChange } from './transcript.js';
 import type { Machines } from '../machine/machine.js';
+import { ThreadAssets } from './assets.js';
+import { ThreadContent } from './content.js';
+import { markdownReferences } from './markdown.js';
 
 type Live = { cursor: number; items: TranscriptItem[]; file: JsonFile<TranscriptItem[]>; saveTimer?: ReturnType<typeof setTimeout> };
 
@@ -46,6 +49,8 @@ export class Threads {
   private starts = new Set<Promise<unknown>>();
   private preparing = new Set<Promise<void>>();
   private turns = new Set<Promise<void>>();
+  readonly assets: ThreadAssets;
+  private content: ThreadContent;
 
   constructor(
     private home: string,
@@ -57,6 +62,8 @@ export class Threads {
     private machines: Machines,
   ) {
     this.file = new JsonFile(join(home, 'threads.json'), () => []);
+    this.assets = new ThreadAssets(home, (threadId) => this.list.some((thread) => thread.id === threadId));
+    this.content = new ThreadContent(home, this.assets);
     projects.onRemoveThreads((id) => this.deleteThreads(this.list.filter((t) => t.checkoutId === id)));
     projects.onCheckInUse((checkoutId) => this.countUsing((t) => t.checkoutId === checkoutId));
     projects.onCheckProjectInUse((projectId) => this.countUsing((t) => t.projectId === projectId));
@@ -146,6 +153,29 @@ export class Threads {
         // array/items, so this snapshot stays fixed even before RPC serialization.
         return { items: live.items, cursor: live.cursor };
       })
+      .on('threads.toolDetails', async ({ threadId, itemId }) => {
+        this.require(threadId);
+        const live = await this.transcript(threadId);
+        const item = live.items.find((entry) => entry.id === itemId);
+        if (item?.kind !== 'tool') throw new UserError('No such tool call');
+        const details = await this.content.details(threadId, itemId);
+        this.require(threadId);
+        if (details) return details;
+        if (item.detailRevision !== undefined) throw new UserError('Tool details are unavailable');
+        return { input: null, parts: item.output ? [{ type: 'text' as const, text: item.output }] : [] };
+      })
+      .on('threads.assetUrl', ({ threadId, assetId, download }) => {
+        this.require(threadId);
+        return this.assets.assetUrl(threadId, assetId, download);
+      })
+      .on('threads.fileUrl', async ({ threadId, path }) => {
+        const thread = this.require(threadId);
+        const live = await this.transcript(threadId);
+        this.require(threadId);
+        const linked = live.items.some((item) => item.kind === 'assistant' && markdownReferences(item.text).files.includes(path));
+        if (!linked) throw new UserError('This file is not linked in the thread');
+        return this.assets.fileUrl(threadId, this.cwd(thread), path);
+      })
       .on('threads.send', async ({ threadId, text }) => {
         await this.beginTurn(threadId, text);
         return null;
@@ -217,7 +247,10 @@ export class Threads {
     }
     await saved;
     await Promise.all(writes);
-    for (const id of ids) await rm(this.transcriptPath(id), { force: true });
+    for (const id of ids) {
+      await rm(this.transcriptPath(id), { force: true });
+      await this.content.delete(id);
+    }
   }
 
   private beginTurn(threadId: string, text: string, options: { resume?: boolean; retry?: boolean } = {}, stored?: Promise<void>) {
@@ -248,7 +281,7 @@ export class Threads {
       if (controller.signal.aborted || this.closing) throw new UserError('Turn interrupted before starting');
       thread = this.require(threadId);
       this.models.require(thread.profileId, thread.model);
-      const cwd = thread.checkoutId ? this.projects.checkout(thread.checkoutId).path : join(this.home, 'workspaces', thread.id);
+      const cwd = this.cwd(thread);
       const next = startTurn(thread, text, now());
       const turnId = randomUUID();
       started = true;
@@ -285,7 +318,7 @@ export class Threads {
       for await (const msg of this.harness.run({ ...run, sessionId: thread.sessionId, model: thread.model.modelId === 'default' ? undefined : thread.model.modelId })) {
         for (const change of transcript.accept(msg)) {
           if (change.type === 'end') outcome = change.outcome;
-          await this.apply(thread.id, change);
+          await this.apply(thread.id, change, run.cwd);
         }
       }
       if (run.signal.aborted) {
@@ -311,7 +344,7 @@ export class Threads {
         if (outcome === 'interrupted') {
           await this.addItem(thread.id, { kind: 'notice', id: `${turnId}:stop`, turnId, tone: 'info', text: 'Stopped.' });
         }
-        for (const item of transcript.unfinishedTools()) await this.addItem(thread.id, item);
+        for (const item of transcript.unfinishedTools(outcome === 'interrupted' ? 'interrupted' : 'error')) await this.addItem(thread.id, item);
         await this.flush(thread.id);
       } catch (error) {
         if (outcome !== 'interrupted') outcome = 'failed';
@@ -326,11 +359,21 @@ export class Threads {
     }
   }
 
-  private async apply(threadId: string, change: TranscriptChange) {
+  private async apply(threadId: string, change: TranscriptChange, cwd: string) {
     if (change.type === 'session') {
       await this.update(threadId, (t) => ({ ...t, sessionId: change.sessionId }), { quiet: true });
-    } else if (change.type === 'item') {
+    } else if (change.type === 'tool') {
+      await this.content.saveTool(threadId, change.item.id, change.input, change.content);
       await this.addItem(threadId, change.item);
+    } else if (change.type === 'item') {
+      let item = change.item;
+      if (item.kind === 'assistant' && item.text) {
+        const live = await this.transcript(threadId);
+        const previous = live.items.find((entry) => entry.id === item.id);
+        const media = await this.content.snapshotMarkdown(threadId, cwd, item.text, previous?.kind === 'assistant' ? previous.media : []);
+        item = { ...item, media };
+      }
+      await this.addItem(threadId, item);
     } else if (change.type === 'delta') {
       const live = await this.transcript(threadId);
       live.items = live.items.map((i) => (i.id === change.itemId && i.kind === 'assistant' ? { ...i, text: i.text + change.text } : i));
@@ -340,6 +383,10 @@ export class Threads {
   }
 
   // ---- storage ----
+
+  private cwd(thread: Thread) {
+    return thread.checkoutId ? this.projects.checkout(thread.checkoutId).path : join(this.home, 'workspaces', thread.id);
+  }
 
   private require(id: string): Thread {
     const t = this.list.find((x) => x.id === id);
@@ -390,6 +437,10 @@ export class Threads {
 
   private async addItem(threadId: string, item: TranscriptItem) {
     const live = await this.transcript(threadId);
+    if (item.kind === 'tool' && item.detailRevision === undefined) {
+      const previous = live.items.find((entry) => entry.id === item.id);
+      if (previous?.kind === 'tool' && previous.detailRevision !== undefined) item = { ...item, detailRevision: previous.detailRevision };
+    }
     live.items = upsertItem(live.items, item);
     this.scheduleSave(threadId, live);
     this.broadcast('thread.item', { threadId, cursor: ++live.cursor, item });

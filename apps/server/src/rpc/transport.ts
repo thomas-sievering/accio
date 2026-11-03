@@ -30,6 +30,7 @@ export type TransportOptions = {
   router: Router;
   /** Built web client to serve; omitted in dev, where Vite serves it. */
   webRoot?: string;
+  serveAsset?: (req: IncomingMessage, res: ServerResponse) => Promise<boolean>;
 };
 
 /**
@@ -37,7 +38,15 @@ export type TransportOptions = {
  * WebSocket must present the machine's token (ADR 0001: no anonymous access).
  */
 export async function startTransport(opts: TransportOptions) {
-  const http = createServer((req, res) => void serveStatic(opts.webRoot, req, res));
+  const http = createServer((req, res) => {
+    void (async () => {
+      if (opts.serveAsset && await opts.serveAsset(req, res)) return;
+      await serveStatic(opts.webRoot, req, res);
+    })().catch(() => {
+      if (!res.headersSent) res.writeHead(500, { 'content-type': 'text/plain' }).end('Content unavailable');
+      else res.destroy();
+    });
+  });
   const wss = new WebSocketServer({ noServer: true });
 
   http.on('upgrade', (req, socket, head) => {

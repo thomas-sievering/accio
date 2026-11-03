@@ -22,6 +22,15 @@ export class RpcClient {
     this.connect();
   }
 
+  /** Asset grants belong to the machine connection, never the renderer's filesystem. */
+  httpUrl(path: string): string {
+    const base = new URL(this.url);
+    base.protocol = base.protocol === 'wss:' ? 'https:' : 'http:';
+    base.pathname = '/';
+    base.search = '';
+    return new URL(path, base).href;
+  }
+
   private setStatus(s: ConnectionStatus) {
     this.status = s;
     for (const l of this.statusListeners) l(s);

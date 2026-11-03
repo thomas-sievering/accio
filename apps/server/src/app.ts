@@ -75,7 +75,7 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
   await threads.load();
   threads.register(router);
 
-  const transport = await startTransport({ ...opts, router });
+  const transport = await startTransport({ ...opts, router, serveAsset: (req, res) => threads.assets.handle(req, res) });
   send = transport.broadcast;
   let closing: Promise<void> | undefined;
   return {

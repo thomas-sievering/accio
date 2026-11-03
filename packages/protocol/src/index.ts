@@ -15,6 +15,7 @@ export * from './models.js';
 export * from './profiles.js';
 export * from './projects.js';
 export * from './threads.js';
+export * from './media.js';
 
 export const methods = {
   ...machineMethods,

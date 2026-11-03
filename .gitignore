@@ -5,3 +5,5 @@ dist/
 *.log
 *.tsbuildinfo
 .playwright-cli/
+test-results/
+playwright-report/
