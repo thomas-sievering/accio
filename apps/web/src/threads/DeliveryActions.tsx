@@ -97,6 +97,8 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
         {!receipt && summary && (summary.added > 0 || summary.removed > 0) && <span className="delivery-pill delivery-diff" title={`${summary.files} changed ${summary.files === 1 ? 'file' : 'files'}`} aria-label={`${summary.added} lines added, ${summary.removed} lines removed`}>
           <span className="delivery-added">+{summary.added}</span><span className="delivery-removed">−{summary.removed}</span>
         </span>}
+        {/* Line changes stay left; delivery state and actions sit right, beside the composer's send. */}
+        <span className="delivery-spacer" aria-hidden="true" />
         {status?.phase === 'queued' || status?.phase === 'paused' ? <span className={`delivery-split delivery-queued${status.phase === 'queued' ? ' delivery-sparkly' : ''}`}>
           {status.phase === 'queued' && <span className="delivery-sparkles" aria-hidden="true">
             {Array.from({ length: 9 }, (_, i) => <i key={i} />)}
