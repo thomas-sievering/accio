@@ -4,7 +4,7 @@ The user requested merge preparation after six completed audit rounds. Further a
 
 ## Integration
 
-Merged `origin/main` at `7b3654b` into `ui_analysis` in `1b15c54`. Resolved overlapping changes in Settings, delivery, thread naming, goals, streamed transcript layout and browser fixtures.
+Merged `origin/main` at `7b3654b` into `ui_analysis` in `1b15c54`. Resolved overlapping changes in Settings, delivery, thread naming, goals, streamed transcript layout and browser fixtures. Before publication, also integrated `2cdab84` (composer Tab thread cycling) in `97ee87a`, preserving both repair-thread navigation and thread cycling.
 
 - Preserve main's automatic naming, regeneration from both thread menus and clickable title editor. Retain keyboard-visible full-title tooltips and rename length feedback.
 - Preserve the Delivery side panel and CI track. Ship opens that panel; choosing a mode only stages it until the main action is pressed.
@@ -17,7 +17,8 @@ Merged `origin/main` at `7b3654b` into `ui_analysis` in `1b15c54`. Resolved over
 - Typecheck and production build pass. Vite reports the existing large-bundle advisory.
 - Full workspace unit run: **480 tests in 69 files pass** (`out/merge-unit.log`, two workers).
 - Full browser run: **40 tests pass in one invocation**, including targeted Electron journeys (`out/merge-e2e-final.log`). The first integration run passed 37/40: it caught a stale focus rule shrinking main's new 54 px sidebar rows to 44 px, plus two selectors that also matched the new clickable header title. Removed the stale rule, scoped those selectors to the sidebar, rebuilt and reran all 40 successfully. The original failure log remains at `out/merge-e2e.log`.
-- Production smoke plus onboarding Back/invalid-field focus and clipboard denial/success/reset pass at `out/verify/2026-11-04T14-39-48-830Z-44159872` (`out/merge-verify.log`). The final application change is `32be6f4`; the later preparation commit only records documentation.
+- Production smoke plus onboarding Back/invalid-field focus and clipboard denial/success/reset pass at `out/verify/2026-11-04T14-39-48-830Z-44159872` (`out/merge-verify.log`), after application change `32be6f4` and before the later composer integration. Server exit, port closure and scratch cleanup all passed.
+- After the final composer integration: typecheck, build and all **95 web unit tests** pass (`out/merge-publish-unit.log`, `out/merge-publish-build.log`); all **13 affected browser tests** pass (`out/merge-publish-e2e.log`).
 - `git diff --check` passes. Four curated PNGs are versioned; full local audit evidence remains ignored under `out/`.
 
 ## Coverage and outstanding polish
@@ -28,4 +29,4 @@ Live provider authentication/model turns, real GitHub/CI, exhaustive screen-read
 
 Compact CI wording, Settle Undo and preview acknowledgement remain optional polish. Previous force-stopped audits left some scratch state; an earlier automatic approval review blocked removal of one stopped probe's temporary folder. No unknown process was terminated or scratch directory deleted during merge preparation.
 
-Automatic approval review also rejected the shell action to write a temporary PR description during this preparation, with only “blocked by policy” as its reason. The prepared branch remains local; no PR was published.
+Automatic approval review initially rejected writing a temporary PR description, with only “blocked by policy” as its reason. After the user explicitly requested commit, push and merge, preparation resumed and the PR description was written successfully.
