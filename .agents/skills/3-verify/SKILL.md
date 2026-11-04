@@ -63,15 +63,18 @@ Use Playwright against the real production UI. The runner supplies `page`, `cont
 
 For inline media, tool-detail or delivery changes, also run `pnpm test:chat` (`tests/inline-chat.spec.ts`, `tests/delivery.spec.ts` and `tests/delivery-merge.spec.ts`). It covers Chromium and a hidden Electron shell against `scripts/chat-test-server.ts`, which substitutes the coding harness and, for PR delivery, hosting reads at production dependency boundaries. Git repositories and publication are real and disposable. This coverage does not establish live GitHub or coding-provider authentication. Each invocation allocates its own port; `ACCIO_CHAT_TEST_PORT` can override that choice. A fixture server started by hand (`node --import tsx scripts/chat-test-server.ts`) stops itself when its parent process exits or after `ACCIO_FIXTURE_TTL_MINUTES` (default 60); stop it sooner with Ctrl+C.
 
-For a changed flow, write `out/verify-journey.mjs` as an ES module with the same export contract, then run it with the command above. Copy the relevant mapped recipe into that journey, assert the expected outcomes, and wrap each interaction group in `await action('feature/entry: expected behavior', async () => { ... })`. Save checkpoints with `await capture('feature-state')`. Locators time out after 5 s (`ACCIO_VERIFY_TIMEOUT_MS` overrides); pass a longer `timeout` to a single wait for slow real effects such as a model reply. User actions go through Playwright clicks, typing, keyboard presses and selects. Use read-only files or RPC only as a second observation of effects; never create the tested state through internal setters or test endpoints.
+For a changed flow, write `out/verify-journey.mjs` as an ES module with the same export contract, then run it with the command above. Copy the relevant mapped recipe into that journey, assert the expected outcomes, and wrap each interaction group in `await action('feature/entry: expected behavior', async () => { ... })`. Save checkpoints with `await capture('feature-state')`. Locators time out after 5 s (`ACCIO_VERIFY_TIMEOUT_MS` overrides); pass a longer `timeout` to a single wait for slow real effects such as a model reply. User actions go through Playwright clicks, typing, keyboard presses and menu choices. Use read-only files or RPC only as a second observation of effects; never create the tested state through internal setters or test endpoints.
 
 Real handles in this app:
 
 - `page.getByRole('button', { name: 'Settings', exact: true })` opens settings. In settings, scope section navigation to `page.locator('.sidebar nav')` because breadcrumb buttons repeat section names.
 - `page.getByRole('textbox', { name: 'Name', exact: true })` edits a profile. First run instead uses `page.getByPlaceholder('personal, work…')`.
-- `page.getByRole('combobox', { name: /OpenAI · ChatGPT account/ })` selects a named account. Prefer the combobox role over label lookup for these wrapped selects.
+- Dropdowns are the app's own `MenuSelect`, not native selects: a button and a `menu` sharing one label, with `menuitemradio` choices. `selectOption` and `combobox` lookups do not apply. Pick with `await page.getByRole('button', { name: label, exact: true }).click()`, then `page.getByRole('menu', { name: label, exact: true }).getByRole('menuitemradio', { name: option }).click()` (as `tests/menu-select.ts` does).
+- A profile's accounts are an ordered list per provider (list `OpenAI · ChatGPT accounts`), added through the `Add ChatGPT account` / `Add Claude account` MenuSelect and removed with `Remove <name>`.
+- Settings lists end in a dashed `Add <thing>` row whose name is exact (`Add profile`, `Add tool`, `Add MCP server`, `Add skill source`, `Add hub`).
 - `page.getByRole('button', { name: 'Add project', exact: true })`, followed by textbox `Folder`, reaches the local project sheet.
-- `page.getByRole('button', { name: 'New thread', exact: true })` opens the picker. Its inputs are comboboxes `Search projects` and `Search profiles`; choices have role `option`.
+- `page.getByRole('button', { name: 'New thread', exact: true })` opens the picker. Its inputs are comboboxes `Search projects` and `Search profiles`; choices have role `option`. New thread, `Search threads` and `Filter threads` are hidden until setup is done (a profile with a signed-in account and a project), so the offline baseline cannot reach them.
+- Popover menus fade out over about 120 ms. Assert dismissal with `await menu.waitFor({ state: 'hidden' })`, not an immediate `isVisible()`.
 
 Selectors and complete journeys for the remaining branches live in the feature files. Use fresh ARIA snapshots to resolve ambiguities. Preserve Unicode labels literally.
 
@@ -103,5 +106,9 @@ For an interrupted invocation, send Ctrl+C to the runner and allow it to finish 
 
 - `scripts/verify.mjs`: executable Node launcher, read-only doctor, evidence and teardown. Run via `pnpm verify` or the explicit Node commands above.
 - `scripts/smoke.mjs`: default journey module; invoked by the runner, not as a standalone process. Extend coverage through a custom journey with the same injected arguments.
+- `scripts/resources.mjs`, `scripts/hubs.mjs`: offline journeys for tools/MCP/skills and hubs; run them through the runner as their feature files say.
+- `scripts/real-turn.mjs`, `scripts/link-hub.mjs`: the verify-device journeys behind `pnpm verify:real` and `pnpm verify:link-hub`.
 
-Keep the feature map current through `/x-maintain-verify`.
+## Keeping this current
+
+A change that renames, moves or hides a control updates the feature file that names it and any journey script that drives it, in the same change. Rerun `pnpm verify` and the offline journeys (`resources.mjs`, `hubs.mjs`) whenever a change touches settings, first run, menus or the sidebar.

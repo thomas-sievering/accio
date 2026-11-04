@@ -11,6 +11,11 @@ export default async function journey({ page, runDir, home, fixture, action, cap
   const button = (name) => page.getByRole('button', { name, exact: true });
   const nav = (name) => page.locator('.sidebar nav').getByRole('button', { name, exact: true });
   const textbox = (name) => page.getByRole('textbox', { name, exact: true });
+  // MenuSelect: a button and a menu that share one label.
+  const pick = async (label, option) => {
+    await button(label).click();
+    await page.getByRole('menu', { name: label, exact: true }).getByRole('menuitemradio', { name: option }).click();
+  };
   const resources = () => readFile(join(home, 'hub/resources.json'), 'utf8').then(JSON.parse);
   const log = [];
 
@@ -33,7 +38,7 @@ export default async function journey({ page, runDir, home, fixture, action, cap
   await action('tools/settings: empty state, preset, validation and machine-wide save', async () => {
     await button('Settings').click();
     await nav('Tools').click();
-    await page.getByRole('button', { name: /^Add tool / }).click();
+    await button('Add tool').click();
     await button('Use preset').click();
     assert.equal(await textbox('npm package').inputValue(), '@playwright/cli');
     assert.equal(await textbox('Executable').inputValue(), 'playwright-cli');
@@ -53,8 +58,8 @@ export default async function journey({ page, runDir, home, fixture, action, cap
   await capture('tools-preset-saved');
 
   await action('tools/status: a failing install needs attention and explains the blocked repair', async () => {
-    await button('Done').click();
-    await page.getByRole('button', { name: /^Add tool / }).click();
+    await button('Cancel').click();
+    await button('Add tool').click();
     await textbox('Name').fill('Broken tool');
     await textbox('npm package').fill('accio-verify-missing-package-zz9');
     await textbox('Version').fill('0.0.1');
@@ -73,12 +78,12 @@ export default async function journey({ page, runDir, home, fixture, action, cap
 
   await action('mcp/settings: bearer server available everywhere, token never shown', async () => {
     await nav('MCP servers').click();
-    await page.getByRole('button', { name: /^Add MCP server / }).click();
+    await button('Add MCP server').click();
     await textbox('Name').fill('Linear (work)');
     await textbox('Server URL').fill('not a url');
     await page.getByText(/Enter a full URL/).waitFor();
     await textbox('Server URL').fill('https://example.invalid/mcp');
-    await page.getByRole('combobox', { name: 'Authentication' }).selectOption('bearer');
+    await pick('Authentication', /^Bearer token/);
     await button('Add MCP server').click();
     await page.getByRole('main').getByRole('navigation').getByText('Linear (work)', { exact: true }).waitFor();
     await textbox('Bearer token').fill('verify-secret-token');
@@ -91,14 +96,14 @@ export default async function journey({ page, runDir, home, fixture, action, cap
     assert(!JSON.stringify(state).includes('verify-secret-token'));
     const creds = JSON.parse(await readFile(join(home, 'hub/mcp-credentials.json'), 'utf8'));
     assert(Object.keys(creds).includes(m.id));
-    await button('Done').click();
+    await button('Cancel').click();
     await page.getByRole('button', { name: /^Linear \(work\).*Signed in/ }).waitFor();
   });
   await action('mcp/oauth: sign-in failure stays visible', async () => {
-    await page.getByRole('button', { name: /^Add MCP server / }).click();
+    await button('Add MCP server').click();
     await textbox('Name').fill('Linear (personal)');
     await textbox('Server URL').fill('https://example.invalid/mcp');
-    await page.getByRole('combobox', { name: 'Authentication' }).selectOption('oauth');
+    await pick('Authentication', /^OAuth/);
     await button('Add MCP server').click();
     await page.getByRole('main').getByRole('navigation').getByText('Linear (personal)', { exact: true }).waitFor();
     await page.getByText(/Signed out\. Threads can’t use/).waitFor();
@@ -106,10 +111,10 @@ export default async function journey({ page, runDir, home, fixture, action, cap
     const alert = page.getByRole('alert');
     await alert.waitFor({ timeout: 60_000 });
     log.push({ oauthError: await alert.innerText() });
-    await button('Done').click();
+    await button('Cancel').click();
   });
   await action('mcp/stdio: local command server available everywhere', async () => {
-    await page.getByRole('button', { name: /^Add MCP server / }).click();
+    await button('Add MCP server').click();
     await textbox('Name').fill('Local echo');
     await page.getByRole('radio', { name: /^Local command/ }).check();
     await button('Add MCP server').click();
@@ -121,7 +126,7 @@ export default async function journey({ page, runDir, home, fixture, action, cap
     const m = (await resources()).mcps.find((x) => x.name === 'Local echo');
     assert.deepEqual(m.args, ['-e', 'process.stdin.resume()']);
     assert.equal(m.auth, 'none');
-    await button('Done').click();
+    await button('Cancel').click();
     await page.getByRole('button', { name: /^Local echo.*Local$/ }).waitFor();
   });
   await capture('mcp-list');
@@ -136,7 +141,7 @@ export default async function journey({ page, runDir, home, fixture, action, cap
 
   await action('skills/settings: add a Git source; skills start optional', async () => {
     await nav('Skills').click();
-    await page.getByRole('button', { name: /^Add skill source / }).click();
+    await button('Add skill source').click();
     await textbox('Name').fill('Verify skills');
     await textbox('Git URL').fill(source);
     await button('Add source').click();
@@ -145,7 +150,7 @@ export default async function journey({ page, runDir, home, fixture, action, cap
     await page.getByText('Optional', { exact: true }).waitFor();
   });
   await action('skills/scope: enable synced skill for the profile', async () => {
-    await button('Enable synced skill').click();
+    await button('Enable for…').click();
     await page.getByRole('group', { name: 'Profiles' }).getByRole('checkbox', { name: 'Verify personal' }).check();
     await button('Save').click();
     await page.getByText('On for Verify personal').waitFor();
@@ -180,8 +185,7 @@ export default async function journey({ page, runDir, home, fixture, action, cap
   });
   await action('skills/copy: copy into project once, refuse overwrite', async () => {
     await button('Copy into project').click();
-    const select = page.getByRole('combobox', { name: 'Checkout on this machine' });
-    await select.selectOption({ index: 1 });
+    await pick('Checkout on this machine', /^verify-project/);
     await button('Copy').click();
     await page.getByText(/^Copied to/).waitFor();
     await access(join(fixture, '.agents', 'skills', 'demo', 'SKILL.md'));
@@ -191,10 +195,9 @@ export default async function journey({ page, runDir, home, fixture, action, cap
   await capture('skills-copied');
 
   await action('projects/settings: only skills have project selections', async () => {
-    // The Filter gear opens the project's Settings page.
-    await button('Back').click();
-    await button('Filter threads').click();
-    await button('verify-project settings').click();
+    // The Filter gear is hidden until a profile is signed in, so open the project from Settings.
+    await nav('Projects').click();
+    await page.getByRole('main').getByRole('button', { name: /^verify-project/ }).click();
     const dialog = page.getByRole('main');
     const skill = dialog.getByRole('group', { name: 'Skills' }).getByRole('checkbox', { name: /^demo/ });
     assert(await skill.isChecked());
@@ -208,6 +211,7 @@ export default async function journey({ page, runDir, home, fixture, action, cap
   });
   await action('profiles/settings: only skills have profile selections', async () => {
     await button('Settings').click();
+    await nav('Profiles').click();
     await page.getByRole('button', { name: /^Verify personal/ }).click();
     assert.equal(await page.getByRole('group', { name: 'MCP servers' }).count(), 0);
     assert.equal(await page.getByRole('group', { name: 'Tools' }).count(), 0);

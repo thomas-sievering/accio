@@ -28,6 +28,7 @@ export default async function ({page, context, home, runDir, action, capture}) {
     });
     await action('hubs/pair: add an independent hub using its first-device code',async()=>{
       await button('Settings').click(); await page.locator('.sidebar nav').getByRole('button',{name:/^Hub: /}).click(); await page.getByRole('menuitem',{name:'Manage hubs'}).click();
+      await button('Add hub').click();
       await page.getByRole('textbox',{name:'Hub name',exact:true}).fill('Other dev');
       await page.getByRole('textbox',{name:'Hub address',exact:true}).fill('http://127.0.0.1:'+ready.port);
       await page.getByRole('textbox',{name:'Pairing code',exact:true}).fill(code); await button('Connect hub').click();
@@ -61,17 +62,16 @@ export default async function ({page, context, home, runDir, action, capture}) {
       await selected.press('Home');
       assert.equal(await page.getByRole('menuitemradio',{name:/^Local dev /}).evaluate(el=>el===document.activeElement),true);
       await page.keyboard.press('End');
-      assert.equal(await selected.evaluate(el=>el===document.activeElement),true);
-      await page.keyboard.press('ArrowDown');
+      assert.equal(await page.getByRole('menuitem',{name:'Manage hubs'}).evaluate(el=>el===document.activeElement),true);
       await page.keyboard.press('ArrowUp');
       assert.equal(await selected.evaluate(el=>el===document.activeElement),true);
       await page.keyboard.press('Escape');
-      assert.equal(await menu.isVisible(),false);
+      await menu.waitFor({state:'hidden'}); // menus fade out over 120ms
       assert.equal(await trigger.evaluate(el=>el===document.activeElement),true);
       await trigger.click();
       await selected.waitFor();
       await page.locator('.crumbs').click();
-      assert.equal(await menu.isVisible(),false);
+      await menu.waitFor({state:'hidden'}); // menus fade out over 120ms
       await button('Back').click();
     });
     await action('hubs/switch: restore the original hub without another pairing',async()=>{

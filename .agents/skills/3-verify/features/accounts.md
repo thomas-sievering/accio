@@ -13,7 +13,7 @@ Users name Claude or ChatGPT accounts, sign in with the provider, and select tho
 ## How to get to it (user POV)
 
 - Open `Settings` then `Accounts`. Choose `Add Claude account`, `Add ChatGPT account`, or an existing account.
-- After adding the first profile, use onboarding's `Provider`, provider account selector, `Account name` and `Use account` controls.
+- After adding the first profile, use onboarding's `Provider` radio cards, the provider account menu (when accounts exist) and `Continue`.
 - Select an account under Settings / Profiles to use it for coding.
 
 ## Driving it with Playwright
@@ -22,7 +22,7 @@ Preconditions: healthy isolated instance; a profile for selection/guard checks. 
 
 - **Create through settings.** Click `Settings`, then `page.locator('.sidebar nav').getByRole('button', { name: 'Accounts', exact: true })`. Click button matching `/^Add ChatGPT account/` (or `/^Add Claude account/`), fill textbox `Account name`, click exact `Add account`. Require button `Sign in with ChatGPT` (or `Sign in with Claude`), click `Cancel`, require a row named `Verify ChatGPT Signed out` for the smoke's account.
 - **Rename/cancel/delete.** Reopen that account row. Edit `Account name`, click `Save`, require the account list, and reopen to check the value. Cancel a new account via exact `Cancel` and require no new row. For an unreferenced account click `Delete` and require absence from the list.
-- **First-run entry.** On the `Choose an account for …` step, select combobox named `Provider`, choose `OpenAI · ChatGPT` or `Anthropic · Claude`, leave `Add a new account` selected, fill textbox `Account name`, click `Use account`. Require the matching provider sign-in button. Repeat with an existing named account through the provider-specific account combobox; require its selection to persist in Profiles.
+- **First-run entry.** On the `Choose an account for …` step, click the `ChatGPT` or `Claude` radio in radiogroup `Provider`, then `Continue`. With no account at that provider yet, this creates `<profile> <provider>` and shows the matching provider sign-in button. When accounts exist, the `ChatGPT account` (or `Claude account`) MenuSelect offers `New account` and each named account; choose one, click `Continue`, and require its selection to persist in Profiles.
 - **Deletion guard.** Select the account in a profile and save (see [Profiles](profiles.md)). Reopen the account in Accounts and assert `await page.getByRole('button', { name: 'Delete', exact: true }).isDisabled()`. Require text explaining the profile using it. Remove its profile reference before testing deletion.
 - **Browser sign-in (both providers).** Click exact `Sign in with Claude` or `Sign in with ChatGPT`; require status `Waiting for sign-in. Accio will finish automatically.` and the provider consent page. Complete browser approval with the account owner; require `Signed in as` in Accio without entering a code. Test both a local hub and a remote Linux hub through its public address. Keep authorization URLs, callback codes, pairing codes and credential stores out of evidence. A plain account name is safe to record.
 - **Cancel/sign out.** Cancel a waiting attempt and require the waiting UI to disappear. A late callback must fail. Sign out with exact `Sign out`; require the identity to disappear and affected profile sends to become disabled. Switching hubs during a pending attempt must preserve its original hub; return to that hub to observe completion.
