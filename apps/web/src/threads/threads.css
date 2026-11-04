@@ -778,8 +778,6 @@
 .effort-trigger:hover:not(:disabled) { background: var(--hover); color: var(--ink); }
 .effort-trigger:hover:not(:disabled) .effort-word { color: inherit; }
 .effort-trigger:disabled { cursor: default; opacity: 0.6; }
-.effort-word svg { display: inline-block; width: 10px; height: 10px; margin-left: 3px; vertical-align: middle; color: var(--dim); }
-.effort-trigger:hover:not(:disabled) svg { color: inherit; }
 .effort-menu .menu-item { justify-content: space-between; }
 .model-trigger svg { fill: currentColor; }
 .menu.effort-menu { position: fixed; inset: auto; position-area: none; position-try-fallbacks: none; width: 160px; margin: 0; }
@@ -813,7 +811,6 @@
 .model-picker-name { display: flex; align-items: center; gap: 8px; min-width: 0; white-space: nowrap; }
 .model-picker-name svg { flex: none; width: 13px; height: 13px; }
 .model-picker-row.selected .model-picker-name { color: var(--ink-strong); }
-.model-picker-badge { flex: none; padding: 1px 6px; border: 1px solid var(--line-2); border-radius: 999px; color: var(--muted); font-size: 11px; }
 .model-star { display: grid; place-items: center; flex: none; width: 24px; height: 24px; border-radius: 6px; color: var(--muted); opacity: 0; }
 .model-picker-row:hover .model-star, .model-picker-row:focus-within .model-star, .model-star:focus-visible, .model-star[aria-pressed="true"] { opacity: 1; }
 .model-star:hover { color: var(--ink-strong); }

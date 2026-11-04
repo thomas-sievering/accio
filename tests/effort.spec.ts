@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+﻿import { expect, test, type Page } from '@playwright/test';
 
 const token = 'isolated-chat-test-token';
 const chip = (page: Page) => page.getByRole('button', { name: /^Select model:/ });
@@ -12,16 +12,16 @@ async function openThread(page: Page) {
 test('scrolling over the model chip changes effort; clicking it lists the models', async ({ page, baseURL }) => {
   await page.goto(`${baseURL}/#token=${token}`);
   await openThread(page);
-  // Claude Code reports no default level, so the lowest step leaves it to Claude Code.
-  await expect(effort(page)).toHaveAccessibleName('Effort: Auto');
-  await expect(effort(page).locator('.effort-word-current')).toHaveText('Auto');
+  // Claude Code reports no default level, so an unchosen effort shows medium; there is no "Auto".
+  await expect(effort(page)).toHaveAccessibleName('Effort: Medium');
+  await expect(effort(page).locator('.effort-word-current')).toHaveText('Medium');
+  await expect(effort(page).locator('svg')).toHaveCount(0);
   const initialWidth = (await effort(page).boundingBox())!.width;
 
   await effort(page).hover();
-  await page.mouse.wheel(0, -50);
-  await page.mouse.wheel(0, -50);
-  await expect(effort(page)).toHaveAccessibleName('Effort: Medium');
-  await expect(effort(page).locator('.effort-word-current')).toHaveText('Medium');
+  await page.mouse.wheel(0, 50);
+  await expect(effort(page)).toHaveAccessibleName('Effort: Low');
+  await page.waitForTimeout(400);
   expect((await effort(page).boundingBox())!.width).toBe(initialWidth);
   await page.mouse.wheel(0, 50);
   await expect(effort(page)).toHaveAccessibleName('Effort: Low');
@@ -58,8 +58,8 @@ test('effort changes immediately without animation with reduced motion', async (
   await openThread(page);
   await effort(page).focus();
   for (let i = 0; i < 6; i++) await page.keyboard.press('ArrowDown');
-  await expect(effort(page).locator('.effort-word-current')).toHaveText('Auto');
-  await page.keyboard.press('ArrowUp');
   await expect(effort(page).locator('.effort-word-current')).toHaveText('Low');
+  await page.keyboard.press('ArrowUp');
+  await expect(effort(page).locator('.effort-word-current')).toHaveText('Medium');
   expect(await effort(page).locator('.effort-word').evaluate((el) => el.getAnimations({ subtree: true }).length)).toBe(0);
 });
