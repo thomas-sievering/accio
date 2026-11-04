@@ -16,3 +16,8 @@ it('asks the delivery turn to report its steps', () => {
   const workspace = { path: '/w', sourcePath: '/s', branch: 'accio/t', startRevision: 'a', releasedAt: null };
   expect(deliveryPrompt(workspace, delivery('running'))).toContain('delivery_step');
 });
+
+it('lets a failure that passes on one rerun count as flaky instead of a reason to keep rerunning', () => {
+  const workspace = { path: '/w', sourcePath: '/s', branch: 'accio/t', startRevision: 'a', releasedAt: null };
+  expect(deliveryPrompt(workspace, delivery('running'))).toContain('does not reproduce when you rerun it once, treat it as flaky');
+});
