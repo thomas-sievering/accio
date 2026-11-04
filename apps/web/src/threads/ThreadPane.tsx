@@ -1,4 +1,4 @@
-import type { CheckoutView, ChoicePick, ProjectView, ThreadView } from '@accio/protocol';
+import type { CheckoutView, ChoicePick, ProjectView, RemoteMachine, ThreadView } from '@accio/protocol';
 import { type ModelSelection } from '@accio/protocol';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useClient } from '../app/connection';
@@ -27,18 +27,19 @@ import { viewTransition } from '../ui/viewTransition';
 import { useThreads, useTranscript } from './threads';
 
 /** Where a thread runs, looked up once for the header, the notice and the composer. */
-function usePlace(checkoutId: string, profileId?: string) {
+function usePlace(checkoutId: string, profileId?: string, projectId?: string) {
   const { profiles = [] } = useProfiles();
   const { state } = useProjects();
   const checkout = state?.checkouts.find((c) => c.id === checkoutId);
-  const project = state?.projects.find((p) => p.id === checkout?.projectId);
+  // Another machine's thread has no checkout here; it names this machine's project for the same repository.
+  const project = state?.projects.find((p) => p.id === (checkout?.projectId ?? projectId));
   const profile = profiles.find((p) => p.id === (profileId ?? project?.profileId));
   return { checkout, project, profile };
 }
 
 export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits, onOpenSecrets }: { thread: ThreadView; active?: boolean; onOpenProfile: (profileId: string) => void; onOpenLimits: (profileId: string) => void; onOpenSecrets?: (profileId: string) => void }) {
   const client = useClient();
-  const place = usePlace(thread.checkoutId, thread.profileId);
+  const place = usePlace(thread.checkoutId, thread.profileId, thread.machine ? thread.projectId : undefined);
   const { items, error, retry } = useTranscript(thread.id);
   useReportPendingSecrets(thread.id, items);
   // GLOSSARY: Shipped note. Seeing a delivered thread reads its note, so it can settle as usual.
@@ -64,7 +65,7 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
 
   return (
     <>
-      <PaneHeader title={thread.title} titleEditor={renaming ? <TitleEdit thread={thread} className="header-rename" onDone={() => setRenaming(false)} /> : <EditableTitle key={thread.id} thread={thread} />} {...place} checkout={thread.workspace && !thread.workspace.releasedAt && place.checkout ? { ...place.checkout, path: thread.workspace.path } : place.checkout} actions={<ThreadActionsMenu key={thread.id} thread={thread} items={items} onRename={() => setRenaming(true)} />} />
+      <PaneHeader title={thread.title} titleEditor={renaming ? <TitleEdit thread={thread} className="header-rename" onDone={() => setRenaming(false)} /> : <EditableTitle key={thread.id} thread={thread} />} {...place} checkout={thread.workspace && !thread.workspace.releasedAt && place.checkout ? { ...place.checkout, path: thread.workspace.path } : place.checkout} actions={<ThreadActionsMenu key={thread.id} thread={thread} items={items} onRename={() => setRenaming(true)} />} projectName={thread.projectName} machine={thread.machine} />
       {!visibleItems && !error && startedWith.has(thread.id) ? <StartingTranscript text={startedWith.get(thread.id)!} /> : visibleItems ? <PendingPick.Provider value={{ pick, setPick, enabled: !running }}>
         <Transcript threadId={thread.id} items={visibleItems} working={running} onOpenSecrets={onOpenSecrets} />
       </PendingPick.Provider> : (
@@ -188,8 +189,10 @@ function PaneHeader(props: {
   project?: ProjectView;
   profile?: { id: string };
   actions?: ReactNode;
+  projectName?: string;
+  machine?: RemoteMachine;
 }) {
-  const { checkout, project } = props;
+  const { checkout, project, machine } = props;
   return (
     <header className="main-top drag">
       <div className="thread-title">
@@ -198,8 +201,9 @@ function PaneHeader(props: {
           <span className="thread-project-name">
             {project
               ? <ProjectCrumbMenu project={project} path={checkout?.path} />
-              : checkout ? 'unknown project' : 'No project'}
+              : props.projectName ?? (checkout ? 'unknown project' : 'No project')}
           </span>
+          {machine && <span className="thread-machine faint" title={machine.online ? `Runs on ${machine.name}` : `${machine.name} is offline`}>· {machine.name}{machine.online ? '' : ' (offline)'}</span>}
         </span>
         <span className="faint" aria-hidden="true">/</span>
         {props.titleEditor ?? <b title={props.title}>{props.title}</b>}

@@ -8,6 +8,7 @@ export type { CodexModel } from './openaiAuth.js';
 export { startHubService, type HubSnapshot } from './service.js';
 export { HubClient, hubAddress, remoteSettings, type SettingsAccess } from './client.js';
 export { remoteResources, remoteMcp } from './resourceClient.js';
+export { RelaySocket, type RelayHandlers, type RelayRequest } from './relayClient.js';
 export {
   SharedSettings,
   PROVIDERS,

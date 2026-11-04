@@ -17,6 +17,8 @@ import { RESOURCE_WRITES } from './resourceClient.js';
 import { SecretsVault, SecretStoreError } from './secrets.js';
 
 export const HUB_PROTOCOL = 1;
+/** Largest relay WebSocket message; machines split bigger frames into chunks. */
+export const RELAY_FRAME_BYTES = 1024 * 1024;
 export type HubSnapshot = {
   hubId: string; protocol: number; revision: number; epoch: string;
   profiles: ProfileView[]; accounts: AccountView[];
@@ -60,6 +62,28 @@ export async function startHubService(opts: HubServiceOptions) {
   const proxy = await startHubProxy({ hub, host: '127.0.0.1', port: 0, upstream: opts.anthropicUrl, fetchImpl: opts.claudeFetch, openaiUpstream: opts.openaiUrl, openaiFetch: opts.openaiFetch });
   const sockets = new WebSocketServer({ noServer: true, maxPayload: 16_384 });
   const owners = new Map<WebSocket, string>();
+  const relay = new WebSocketServer({ noServer: true, maxPayload: RELAY_FRAME_BYTES });
+  /** GLOSSARY: Relay. One socket per machine; a newer one replaces the older. */
+  const relays = new Map<string, WebSocket>();
+  function relayPeers() {
+    const frame = JSON.stringify({ kind: 'peers', from: 'hub', machines: [...relays.keys()] });
+    for (const ws of relays.values()) if (ws.readyState === WebSocket.OPEN) ws.send(frame);
+  }
+  function closeRelay(machineId: string, reason: string) { relays.get(machineId)?.close(4001, reason); }
+  /** Forwards a frame by its `to`, stamped with the authenticated sender. The rest stays opaque. */
+  function forward(from: string, text: string) {
+    let frame: any;
+    try { frame = JSON.parse(text); } catch { return; }
+    if (!frame || typeof frame !== 'object' || Array.isArray(frame) || typeof frame.to !== 'string' || frame.to.length > 128 || !['request', 'response', 'event', 'chunk'].includes(frame.kind)) return;
+    frame.from = from;
+    const out = JSON.stringify(frame);
+    const targets = frame.to === '*' ? [...relays].filter(([id]) => id !== from).map(([, ws]) => ws) : [relays.get(frame.to)].filter((ws) => !!ws && frame.to !== from);
+    let sent = false;
+    for (const ws of targets) if (ws!.readyState === WebSocket.OPEN) { ws!.send(out); sent = true; }
+    if (!sent && frame.to !== '*' && typeof frame.id === 'string' && (frame.kind === 'request' || frame.kind === 'chunk')) {
+      relays.get(from)?.send(JSON.stringify({ kind: 'undeliverable', from: 'hub', id: frame.id }));
+    }
+  }
   const logins = new Map<string, Login>();
   const pairingAttempts = new Map<string, { count: number; until: number }>();
   let revision = 0;
@@ -109,6 +133,7 @@ export async function startHubService(opts: HubServiceOptions) {
         await trust.revoke(p.machineId);
         for (const [token, grant] of grants) if (grant.machineId === p.machineId) { grant.release(); grants.delete(token); }
         for (const [ws, owner] of owners) if (owner === p.machineId) ws.close(4001, 'Pairing revoked');
+        closeRelay(p.machineId, 'Pairing revoked');
         await settings.machineDisconnected(p.machineId); return null;
       }
       case 'accounts.list': return hub.accountViews();
@@ -237,6 +262,7 @@ export async function startHubService(opts: HubServiceOptions) {
       if (typeof p.code !== 'string' || typeof p.machineId !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(p.machineId)) throw new SignInError('Invalid pairing request');
       const paired = await trust.pair(p.code, p.machineId);
       for (const [ws, owner] of owners) if (owner === p.machineId) ws.close(4001, 'Pairing renewed');
+      closeRelay(p.machineId, 'Pairing renewed');
       return json(res, 200, { ...paired, protocol: HUB_PROTOCOL });
     }
     if (path === '/state' || path === '/rpc') {
@@ -274,6 +300,20 @@ export async function startHubService(opts: HubServiceOptions) {
   }
   server.on('upgrade', (req, socket, head) => {
     const machineId = auth(req);
+    if (machineId && req.url === '/relay') {
+      relay.handleUpgrade(req, socket, head, (ws) => {
+        const previous = relays.get(machineId);
+        relays.set(machineId, ws);
+        previous?.close(4000, 'Replaced by a newer connection');
+        (ws as any).alive = true;
+        ws.on('pong', () => { (ws as any).alive = true; });
+        ws.on('error', () => {});
+        ws.on('message', (data, binary) => { if (!binary && relays.get(machineId) === ws) forward(machineId, String(data)); });
+        ws.once('close', () => { if (relays.get(machineId) === ws) { relays.delete(machineId); relayPeers(); } });
+        relayPeers();
+      });
+      return;
+    }
     if (!machineId || req.url !== '/events') { socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n'); return; }
     sockets.handleUpgrade(req, socket, head, (ws) => {
       owners.set(ws, machineId);
@@ -285,6 +325,10 @@ export async function startHubService(opts: HubServiceOptions) {
     });
   });
   const heartbeat = setInterval(() => {
+    for (const ws of relay.clients) {
+      if (!(ws as any).alive) { ws.terminate(); continue; }
+      (ws as any).alive = false; ws.ping();
+    }
     for (const ws of sockets.clients) {
       const owner = owners.get(ws);
       if (!(ws as any).alive || !owner) { ws.terminate(); continue; }
@@ -299,7 +343,7 @@ export async function startHubService(opts: HubServiceOptions) {
   const url = `http://${opts.host ?? '127.0.0.1'}:${port}`;
   mcp.setUrl(opts.publicUrl ?? url);
   return { hub, settings, resources, secrets, trust, port, url, snapshot, createPairingCode: () => HubTrust.createCode(opts.home),
-    async close() { closing = true; clearInterval(heartbeat); for (const ws of sockets.clients) ws.terminate(); await new Promise<void>((resolve) => server.close(() => resolve())); sockets.close(); await queue; for (const grant of grants.values()) grant.release(); await proxy.close(); await modelsRefreshed; await hub.close(); await secrets.close(); await resources.close(); await settings.close(); await trust.close(); } };
+    async close() { closing = true; clearInterval(heartbeat); for (const ws of sockets.clients) ws.terminate(); for (const ws of relay.clients) ws.terminate(); await new Promise<void>((resolve) => server.close(() => resolve())); sockets.close(); relay.close(); await queue; for (const grant of grants.values()) grant.release(); await proxy.close(); await modelsRefreshed; await hub.close(); await secrets.close(); await resources.close(); await settings.close(); await trust.close(); } };
 }
 
 function json(res: ServerResponse, status: number, value: unknown) { res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify(value)); }

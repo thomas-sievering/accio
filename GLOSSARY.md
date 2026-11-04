@@ -9,7 +9,7 @@ A connected computer, together with its files and settings. It can run a client,
 _Avoid_: Environment, host, node
 
 **Hub**:
-The service that connects clients and workers, holds profiles, provider accounts and shared settings, trusts paired machines and clients, and forwards workers' model requests to the selected accounts. It never runs turns itself. Each client window uses one hub at a time, with multiple machines connected to that hub. A machine can save several independent hubs, such as Home server and Local dev; hubs have separate state and durable identities. The general thread relay is future work.
+The service that connects clients and workers, holds profiles, provider accounts and shared settings, trusts paired machines and clients, and forwards workers' model requests to the selected accounts. It never runs turns itself. Each client window uses one hub at a time, with multiple machines connected to that hub. A machine can save several independent hubs, such as Home server and Local dev; hubs have separate state and durable identities. It relays threads between machines without storing them.
 _Avoid_: Home machine, accio hub, accio proxy, CLI proxy, gateway, master, connector
 
 **Pairing**:
@@ -25,7 +25,7 @@ The process on a machine that runs harnesses, executes turns and provides access
 _Avoid_: Server (for the role), machine (for the process), agent, sub-agent
 
 **Relay**:
-The hub passing messages between a client and a worker, or between workers on different machines, so you can read and drive a thread from any client. The thread stays on its worker's machine; nothing is copied. General thread relay is planned, not yet implemented.
+The hub passing messages between workers on different machines, so you can read and drive a thread from any client. The thread stays on its worker's machine; nothing is copied. Each client lists every machine's threads together, with the owning machine's name on the others. While that machine is offline its threads stay listed from the last list it sent, greyed and read-only. Images, files and Open app on another machine's thread, and starting a thread there, are not relayed yet. See the [relay plan](docs/plans/thread-relay.md).
 _Avoid_: Sync (for threads), tunnel
 
 **Shared settings**:
