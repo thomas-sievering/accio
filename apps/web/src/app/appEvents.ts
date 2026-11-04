@@ -16,6 +16,8 @@ export type AppEvents = {
   'settings.open': SettingsRoute;
   /** Open a project's settings, such as from the thread header's project name. */
   'project.open': { id: string };
+  /** Open a project's dashboard, such as from the thread header's project name. */
+  'project.dashboard': { id: string };
   /** A thread was snoozed until a time (ISO); the sidebar says so briefly. */
   'thread.snoozed': { threadId: string; until: string };
   /** Open the side panel at a tab, such as Delivery after pressing Ship. */

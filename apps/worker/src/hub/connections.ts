@@ -11,6 +11,7 @@ import { registerHarnesses } from '../harnesses/harnesses.js';
 import { finishGoalTool } from '../goals/goal.js';
 import { deliveryStepTool } from '../threads/deliveryStep.js';
 import { Projects } from '../projects/projects.js';
+import { ProjectApps } from '../projects/projectApps.js';
 import { Threads } from '../threads/threads.js';
 import type { Harness } from '../threads/harness.js';
 import { AccioTools } from '../tools/tools.js';
@@ -72,6 +73,7 @@ export class HubConnections {
     const models = new Models(profiles, settings, this.here.id, claudeModels);
     profiles.register(router); machines.register(router); models.register(router, broadcast); registerHarnesses(router, settings, models);
     const projects = new Projects(record.home, profiles, machines, broadcast); await projects.load(); projects.register(router);
+    const projectApps = new ProjectApps(record.home, projects, broadcast); projectApps.register(router);
     const tools = new AccioTools([offerChoice, finishGoalTool((id, outcome, summary) => threads.finishGoal(id, outcome, summary), (id) => threads.goalActive(id)),
       deliveryStepTool((id, step, note) => threads.reportDeliveryStep(id, step, note), (id) => threads.deliveryRunning(id))]);
     const secrets = remoteSecrets(client);
@@ -91,8 +93,8 @@ export class HubConnections {
       if (initialized && !this.closing) void threads.continueAfterRestart().catch(error => console.error('[threads] startup recovery failed', error));
     };
     workspace = { client, router, profiles, machines, models, projects, threads, tools, resources, secrets, home: record.home,
-      initialize: origin => { tools.listen(record.id === this.defaultId ? origin : `${origin}/hubs/${record.id}`); initialized = true; continueAfterRestart(); if (client.status === 'connected') reconciliation = resources.reconcile().catch(error => console.error('[resources] startup check failed', error)); },
-      close: async () => { await threads.close(); await secrets.close(); await resources.close(); await reconciliation; await profiles.close(); await projects.close(); await client.close(); } };
+      initialize: origin => { if (!initialized) void projectApps.load().catch(error => console.error('[project apps] startup failed', error)); tools.listen(record.id === this.defaultId ? origin : `${origin}/hubs/${record.id}`); initialized = true; continueAfterRestart(); if (client.status === 'connected') reconciliation = resources.reconcile().catch(error => console.error('[resources] startup check failed', error)); },
+      close: async () => { await projectApps.close(); await threads.close(); await secrets.close(); await resources.close(); await reconciliation; await profiles.close(); await projects.close(); await client.close(); } };
     this.workspaces.set(record.id, workspace);
     client.onChanged(() => { this.announce(); broadcast('resources.changed', resources.state()); continueAfterRestart(); });
     if (client.status === 'connected') { await profiles.load(); await profiles.syncReferences(); }

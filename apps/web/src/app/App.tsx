@@ -6,6 +6,7 @@ import { LimitsView } from '../limits/LimitsView';
 import { hasSignedInAccount, ProfilesProvider, useProfiles } from '../profiles/profiles';
 import { ProjectsProvider, useProjects } from '../projects/projects';
 import { AddProjectSheet } from '../projects/AddProjectSheet';
+import { ProjectDashboard } from '../projects/ProjectDashboard';
 import { ThreadsProvider, useThreads } from '../threads/threads';
 import { PendingSecretsProvider } from '../secrets/pendingSecrets';
 import { ResourcesProvider } from '../resources/resources';
@@ -63,9 +64,14 @@ function Shell() {
   useAppEvent('project.open', ({ id }) => setSettings({ section: 'projects', projectId: id }));
   const [panelWanted, togglePanel] = usePanelOpen();
   const [limits, setLimits] = useState<{ scope: LimitsScope; navigation: number } | null>(null);
+  const [dashboard, setDashboard] = useState<{ projectId: string; navigation: number } | null>(null);
+  // Like Limits, the dashboard covers the main pane until a thread or draft is opened.
+  const dashboardProject = dashboard !== null && dashboard.navigation === navigation ? state?.projects.find((p) => p.id === dashboard.projectId) : undefined;
+  const closeDashboard = useCallback(() => setDashboard(null), []);
+  useAppEvent('project.dashboard', ({ id }) => { setLimits(null); setDashboard({ projectId: id, navigation }); });
   const limitsOpen = limits !== null && limits.navigation === navigation;
   // The panel belongs to an open thread or draft: home, onboarding and Limits have none.
-  const hasPane = !!(thread || draft) && !limitsOpen;
+  const hasPane = !!(thread || draft) && !limitsOpen && !dashboardProject;
   const panelOpen = panelWanted && hasPane;
   const narrow = useNarrow();
   const overlay = panelOpen && narrow && settings === null;
@@ -111,6 +117,7 @@ function Shell() {
   const openLimits = (scope: LimitsScope, origin?: SettingsRoute) => {
     limitsOrigin.current = origin;
     limitsReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setDashboard(null);
     setLimits({ scope, navigation });
   };
   const draftProfileId = draft && (draft.profileId ?? state?.projects.find((p) => p.id === state.checkouts.find((c) => c.id === draft.checkoutId)?.projectId)?.profileId);
@@ -191,8 +198,9 @@ function Shell() {
             <LimitsView scope={limits.scope} onScope={(scope) => setLimits({ scope, navigation })} onClose={closeLimits}
               onOpenAccount={openAccount} />
           )}
+          {dashboardProject && !limitsOpen && !settings && <ProjectDashboard key={dashboardProject.id} project={dashboardProject} onClose={closeDashboard} />}
           {/* Keep the composer and reading position mounted while checking limits/settings. */}
-          <div className="thread-surface" hidden={limitsOpen || settings !== null}>
+          <div className="thread-surface" hidden={limitsOpen || !!dashboardProject || settings !== null}>
             {draft ? (
               <DraftPane key={`${draft.checkoutId}:${draft.profileId}`} {...draft} active={!limitsOpen && !settings} onOpenProfile={openProfile} onOpenLimits={openLimits} />
             ) : thread ? (

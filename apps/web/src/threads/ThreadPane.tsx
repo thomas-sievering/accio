@@ -177,7 +177,7 @@ function PaneHeader(props: {
           {project && <ProjectMark id={project.id} size={16} />}
           <span className="thread-project-name">
             {project
-              ? <button type="button" className="thread-project-link" title={`${project.name} settings${checkout ? ` · ${checkout.path}` : ''}`} onClick={() => emitAppEvent('project.open', { id: project.id })}>{project.name}</button>
+              ? <button type="button" className="thread-project-link" title={`${project.name} dashboard${checkout ? ` · ${checkout.path}` : ''}`} onClick={() => emitAppEvent('project.dashboard', { id: project.id })}>{project.name}</button>
               : checkout ? 'unknown project' : 'No project'}
           </span>
         </span>
