@@ -10,7 +10,9 @@ for (const [sectionName, addName] of [
     const button = (name: string) => page.getByRole('button', { name, exact: true });
     await button('Settings').click();
     await nav.getByRole('button', { name: sectionName, exact: true }).click();
-    await page.getByRole('button', { name: new RegExp('^' + addName) }).click();
+    const add = page.getByRole('button', { name: new RegExp('^' + addName) });
+    await expect(add).toBeEnabled();
+    await add.click();
     const field = page.locator('.settings-page').getByRole('textbox').first();
     await field.fill('Unsaved form input');
     await field.press('Escape');

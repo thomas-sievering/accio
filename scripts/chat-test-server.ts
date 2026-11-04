@@ -12,6 +12,8 @@ import { DeliveryGit, DeliveryPending } from '../apps/server/src/threads/deliver
 import { git } from '../apps/server/src/git.js';
 
 const home = await mkdtemp(join(tmpdir(), 'accio-chat-browser-'));
+// Disposable encryption for this isolated fixture, including headless Linux runners.
+process.env.ACCIO_SECRET_KEY = Buffer.alloc(32, 42).toString('base64');
 const fixture = (name: string) => readFile(resolve('tests/fixtures', name));
 const token = 'isolated-chat-test-token';
 const image = await fixture('chat.png');

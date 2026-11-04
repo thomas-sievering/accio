@@ -63,7 +63,8 @@ jobs:
           name: browser-results
           path: |
             test-results/
-            out/limits-browser/
+            out/e2e/chat/
+            out/e2e/limits/
           retention-days: 7
   image:
     needs: [verify, browser]
