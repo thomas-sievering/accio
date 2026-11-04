@@ -3,7 +3,7 @@ import { Readable } from 'node:stream';
 import type { Fetch } from './claudeOAuth.js';
 import type { Hub } from './hub.js';
 
-export const ANTHROPIC_API = 'https://api.anthropic.com';
+const ANTHROPIC_API = 'https://api.anthropic.com';
 const OAUTH_BETA = 'oauth-2025-04-20';
 
 /** Headers that belong to one hop, or that carry the caller's credentials. */
@@ -25,7 +25,7 @@ const DROP_REQUEST = new Set([
 const dropRequestHeader = (name: string) => DROP_REQUEST.has(name.toLowerCase()) || /^(cf-|x-forwarded-)/i.test(name);
 const DROP_RESPONSE = new Set(['content-encoding', 'content-length', 'transfer-encoding', 'connection', 'keep-alive']);
 
-export type ProxyOptions = { hub: Hub; host: string; port: number; upstream?: string; fetchImpl?: Fetch; openaiUpstream?: string; openaiFetch?: Fetch; handleMcp?: (req: IncomingMessage, res: ServerResponse) => Promise<boolean> };
+type ProxyOptions = { hub: Hub; host: string; port: number; upstream?: string; fetchImpl?: Fetch; openaiUpstream?: string; openaiFetch?: Fetch };
 
 /**
  * The hub's front door for threads. Claude Code calls it with a profile's access
@@ -33,7 +33,7 @@ export type ProxyOptions = { hub: Hub; host: string; port: number; upstream?: st
  * profile's OAuth token and forwards to Anthropic. The caller is the real Claude
  * Code, so nothing else about the request changes (ADR 0007).
  */
-export async function startHubProxy({ hub, host, port, upstream = ANTHROPIC_API, fetchImpl = fetch, openaiUpstream = 'https://chatgpt.com/backend-api/codex', openaiFetch = fetch, handleMcp }: ProxyOptions) {
+export async function startHubProxy({ hub, host, port, upstream = ANTHROPIC_API, fetchImpl = fetch, openaiUpstream = 'https://chatgpt.com/backend-api/codex', openaiFetch = fetch }: ProxyOptions) {
   const server = createServer((req, res) => {
     handle(req, res).catch((err) => {
       if (res.destroyed) return;
@@ -44,7 +44,6 @@ export async function startHubProxy({ hub, host, port, upstream = ANTHROPIC_API,
   });
 
   async function handle(req: IncomingMessage, res: ServerResponse) {
-    if (handleMcp && await handleMcp(req, res)) return;
     const key = keyOf(req);
     const profile = key ? hub.profileForKey(key) : undefined;
     if (!profile) return sendError(res, 401, 'authentication_error', 'Unknown accio hub key');
@@ -135,7 +134,7 @@ function keyOf(req: IncomingMessage): string | null {
   return typeof apiKey === 'string' ? apiKey : null;
 }
 
-export function upstreamHeaders(req: Pick<IncomingMessage, 'headers'>, accessToken: string): Headers {
+function upstreamHeaders(req: Pick<IncomingMessage, 'headers'>, accessToken: string): Headers {
   const h = new Headers();
   for (const [k, v] of Object.entries(req.headers)) {
     if (v === undefined || dropRequestHeader(k)) continue;

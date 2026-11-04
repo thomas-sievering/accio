@@ -4,6 +4,8 @@ import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import type { DeliveryCI, DeliveryPullRequest, DeliverySummary, ThreadDelivery, ThreadWorkspace } from '@accio/protocol';
 import { UserError } from '../rpc/router.js';
+import { now } from '../time.js';
+import { git, maybeGit } from '../git.js';
 
 const exec = promisify(execFile);
 /** Waiting uses machine-side checks; a model is woken only when it has more work. */
@@ -15,13 +17,6 @@ export class DeliveryUnavailable extends UserError {}
 export type DeliveryObservation = (patch: Partial<ThreadDelivery>) => Promise<void>;
 export type DeliveryHosting = (cwd: string, args: string[]) => Promise<any>;
 const PR_FIELDS = 'number,url,state,headRefOid,baseRefName,isDraft,mergeCommit,mergedAt,statusCheckRollup,reviewDecision,autoMergeRequest,mergeStateStatus,mergeable';
-export async function git(cwd: string, ...args: string[]): Promise<string> {
-  const { stdout } = await exec('git', ['-C', cwd, ...args], { windowsHide: true, timeout: 30_000, maxBuffer: 4 * 1024 * 1024 });
-  return stdout.trim();
-}
-async function maybeGit(cwd: string, ...args: string[]) {
-  return git(cwd, ...args).catch(() => null);
-}
 
 /** Git owns worktree removal; we never recursively delete a project or force a dirty checkout away. */
 export class DeliveryGit {
@@ -122,7 +117,7 @@ export class DeliveryGit {
       result = { ...result, ...patch };
       await observed?.(patch);
     };
-    const checkedAt = new Date().toISOString();
+    const checkedAt = now();
     const origin = await maybeGit(workspace.sourcePath, 'config', '--get', 'remote.origin.url');
     const slug = origin ? githubRepo(origin) : undefined;
     const localRevision = await maybeGit(workspace.path, 'rev-parse', 'HEAD');
@@ -244,7 +239,7 @@ async function assertChecksWithProgress(cwd: string, slug: string, revision: str
   try { assertChecks(checks); }
   catch (error) {
     if (!(error instanceof DeliveryPending) || error.continueAgent) throw error;
-    const progress: DeliveryCI = { revision, updatedAt: new Date().toISOString(), checks: [] };
+    const progress: DeliveryCI = { revision, updatedAt: now(), checks: [] };
     progress.checks = await Promise.all(checks.map(async check => {
       const status = String(check.conclusion || check.status || check.state || 'pending').toLowerCase();
       const url = check.html_url ?? check.detailsUrl ?? check.target_url ?? check.targetUrl;

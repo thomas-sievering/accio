@@ -1,15 +1,14 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import type { ResourceScope, ResourcesState, SkillEntry, SkillSource } from '@accio/protocol';
 import { useClient } from '../app/connection';
-import { BookOpen, Chevron, Plus } from '../app/icons';
-import { SettingRow, SettingsSection } from '../app/Settings';
+import { BookOpen, Plus } from '../app/icons';
+import { ConfirmDelete, SettingLink, SettingRow, SettingsSection } from '../app/Settings';
 import { useAction } from '../app/useAction';
 import { useProfiles } from '../profiles/profiles';
 import { useProjects } from '../projects/projects';
-import { isOptional, scopeSummary, shortRevision, slugId, useResources } from '../resources/resources';
+import { isOptional, LoadError, scopeSummary, shortRevision, slugId, useResources } from '../resources/resources';
 import { ScopeEditor } from '../resources/ScopeEditor';
 import { Field } from '../resources/Field';
-import { LoadError } from '../tools/ToolsSettings';
 
 const activeRevision = (state: ResourcesState, sourceId: string) => state.skills.find((s) => s.sourceId === sourceId)?.revision;
 
@@ -33,24 +32,12 @@ export function SkillsSettings({ sourceId, onOpen, onBack }: { sourceId?: string
           const enabled = skills.filter((k) => !isOptional(k.scope)).length;
           const rev = activeRevision(state, s.id);
           return (
-            <button key={s.id} className="setting setting-link" onClick={() => onOpen(s.id)}>
-              <span className="menu-icon"><BookOpen /></span>
-              <span className="setting-text">
-                <b>{s.name}</b>
-                <small>{skills.length} skill{skills.length === 1 ? '' : 's'} · {enabled} enabled, {skills.length - enabled} optional · {s.url}</small>
-              </span>
+            <SettingLink key={s.id} icon={<BookOpen />} title={s.name} description={<>{skills.length} skill{skills.length === 1 ? '' : 's'} · {enabled} enabled, {skills.length - enabled} optional · {s.url}</>} onClick={() => onOpen(s.id)}>
               {rev && <code className="revision" title={rev}>{shortRevision(rev)}</code>}
-              <Chevron />
-            </button>
+            </SettingLink>
           );
         })}
-        <button className="setting setting-link" onClick={() => onOpen('new')}>
-          <span className="menu-icon"><Plus /></span>
-          <span className="setting-text">
-            <b>Add skill source</b>
-            <small>Cloned on the hub; every SKILL.md inside becomes a skill.</small>
-          </span>
-        </button>
+        <SettingLink icon={<Plus />} title="Add skill source" description="Cloned on the hub; every SKILL.md inside becomes a skill." chevron={false} onClick={() => onOpen('new')} />
       </SettingsSection>
     </>
   );
@@ -121,7 +108,6 @@ function SourceDetail({ source, state, onDeleted }: { source: SkillSource; state
   const active = activeRevision(state, source.id);
   const versions = state.skillVersions.filter((v) => v.sourceId === source.id).reverse();
   const [preview, setPreview] = useState<SkillEntry[]>();
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const check = useAction();
   const apply = useAction();
   const del = useAction();
@@ -207,16 +193,8 @@ function SourceDetail({ source, state, onDeleted }: { source: SkillSource; state
 
       {del.error && <p className="error" role="alert">{del.error}</p>}
       <footer className="settings-actions">
-        {confirmDelete ? (
-          <>
-            <button type="button" className="ghost" disabled={del.busy} onClick={() => setConfirmDelete(false)}>Keep</button>
-            <button type="button" className="ghost danger" disabled={del.busy} onClick={async () => { if (await del.run(async () => (await client.call('skills.deleteSource', { id: source.id }), true))) onDeleted(); }}>
-              Delete {source.name} and its {skills.length} skill{skills.length === 1 ? '' : 's'}
-            </button>
-          </>
-        ) : (
-          <button type="button" className="ghost danger" onClick={() => setConfirmDelete(true)}>Delete source</button>
-        )}
+        <ConfirmDelete label="Delete source" busy={del.busy} confirm={`Delete ${source.name} and its ${skills.length} skill${skills.length === 1 ? '' : 's'}`}
+          onDelete={async () => { if (await del.run(async () => (await client.call('skills.deleteSource', { id: source.id }), true))) onDeleted(); }} />
         <span className="spacer" />
         <button type="button" className="ghost" onClick={onDeleted}>Done</button>
       </footer>

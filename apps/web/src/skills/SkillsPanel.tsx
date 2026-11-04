@@ -7,7 +7,6 @@ import { useAction } from '../app/useAction';
 import { useProjects } from '../projects/projects';
 import { shortRevision } from '../resources/resources';
 import { byName, isAddable, isInherited, isProjectSkill, originLabel, skillReference, useWorkspaceSkills } from './workspaceSkills';
-import './skills-panel.css';
 
 /**
  * The skills the open thread (or draft) gets on its next turn: the project's

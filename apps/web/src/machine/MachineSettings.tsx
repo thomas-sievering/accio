@@ -29,7 +29,7 @@ export function MachineSettings({ machineId, onOpen, onOpenThread }: { machineId
               <b>{m.name}{m.thisMachine ? ' (this machine)' : ''}</b>
               <small>{m.platform} · {m.harnesses.length} harness{m.harnesses.length === 1 ? '' : 'es'}</small>
             </span>
-            <span className={`pill ${m.connected ? 'ok' : ''}`}><span className="dot" />{m.connected ? 'Connected' : 'Offline'}</span>
+            <ConnectionPill connected={m.connected} />
             <Chevron />
           </button>
         ))}
@@ -37,6 +37,8 @@ export function MachineSettings({ machineId, onOpen, onOpenThread }: { machineId
     </>
   );
 }
+
+const ConnectionPill = ({ connected }: { connected: boolean }) => <span className={`pill ${connected ? 'ok' : ''}`}><span className="dot" />{connected ? 'Connected' : 'Offline'}</span>;
 
 function MachineDetail({ machine, onOpenThread }: { machine: MachineView; onOpenThread: (threadId: string) => void }) {
   const { profiles = [] } = useProfiles();
@@ -46,7 +48,7 @@ function MachineDetail({ machine, onOpenThread }: { machine: MachineView; onOpen
       <SettingsSection title={machine.name}>
         <MachineName machine={machine} />
         <SettingRow title="Status" description={machine.thisMachine ? 'The computer this window is talking to.' : undefined}>
-          <span className={`pill ${machine.connected ? 'ok' : ''}`}><span className="dot" />{machine.connected ? 'Connected' : 'Offline'}</span>
+          <ConnectionPill connected={machine.connected} />
         </SettingRow>
         <SettingRow title="Platform"><code>{machine.platform}</code></SettingRow>
         <SettingRow title="accio version"><code>{machine.version}</code></SettingRow>

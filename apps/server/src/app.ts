@@ -1,4 +1,3 @@
-import { Router, type Broadcast } from './rpc/router.js';
 import { startTransport } from './rpc/transport.js';
 import { loadMachineId, machineInfo } from './machine/machine.js';
 import { SharedSettings, startHubService, type Fetch } from '@accio/hub';

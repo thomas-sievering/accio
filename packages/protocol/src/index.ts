@@ -1,37 +1,34 @@
 import type { z } from 'zod';
-import { workspaceSkillMethods } from './workspaceSkills.js';
-export * from './workspaceSkills.js';
-import { resourceMethods, type ResourceEvents } from './resources.js';
-export * from './resources.js';
-import { machineMethods, type MachineEvents } from './machine.js';
-import { harnessMethods } from './harnesses.js';
-import { modelMethods, type ModelEvents } from './models.js';
 import { hubMethods, type HubEvents } from './hub.js';
-import { profileMethods, type ProfileEvents } from './profiles.js';
 import { limitsMethods, type LimitsEvents } from './limits.js';
+import { machineMethods, type MachineEvents } from './machine.js';
+import { modelMethods, type ModelEvents } from './models.js';
+import { profileMethods, type ProfileEvents } from './profiles.js';
 import { projectMethods, type ProjectEvents } from './projects.js';
-import { threadMethods, type ThreadEvents } from './threads.js';
+import { resourceMethods, type ResourceEvents } from './resources.js';
 import { secretMethods, type SecretEvents } from './secrets.js';
+import { threadMethods, type ThreadEvents } from './threads.js';
+import { workspaceSkillMethods } from './workspaceSkills.js';
 
-export * from './rpc.js';
-export * from './machine.js';
 export * from './hub.js';
-export * from './harnesses.js';
+export * from './limits.js';
+export * from './machine.js';
+export * from './media.js';
 export * from './models.js';
 export * from './profiles.js';
-export * from './limits.js';
 export * from './projects.js';
-export * from './threads.js';
-export * from './media.js';
-export * from './shellCommand.js';
+export * from './resources.js';
+export * from './rpc.js';
 export * from './secrets.js';
+export * from './shellCommand.js';
+export * from './threads.js';
+export * from './workspaceSkills.js';
 
 export const methods = {
   ...workspaceSkillMethods,
   ...resourceMethods,
   ...machineMethods,
   ...hubMethods,
-  ...harnessMethods,
   ...modelMethods,
   ...profileMethods,
   ...limitsMethods,

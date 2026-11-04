@@ -1,6 +1,5 @@
 import { memo, useEffect, useId, useState } from 'react';
 import { Chevron } from '../app/icons';
-import './tool-group.css';
 import { ToolCallRow } from './ToolCallRow';
 import { useReveal } from './reveal';
 import { describeTools, type ToolItem } from './transcriptBlocks';

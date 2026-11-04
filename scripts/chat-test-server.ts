@@ -7,7 +7,8 @@ import { startApp } from '../apps/server/src/app.js';
 import { FakeHarness, SESSION, replyWith } from '../apps/server/src/testing/fakeHarness.js';
 import { fakeClaudeFetch, TestClient } from '../apps/server/src/testing/testApp.js';
 import type { HarnessMessage } from '../apps/server/src/threads/harness.js';
-import { DeliveryGit, DeliveryPending, git } from '../apps/server/src/threads/delivery.js';
+import { DeliveryGit, DeliveryPending } from '../apps/server/src/threads/delivery.js';
+import { git } from '../apps/server/src/git.js';
 
 const home = await mkdtemp(join(tmpdir(), 'accio-chat-browser-'));
 const fixture = (name: string) => readFile(resolve('tests/fixtures', name));
@@ -265,6 +266,7 @@ await client.waitFor('threads.changed', (threads) => threads.some((entry) => ent
 await client.call('mcp.save', { id: 'docs-search', name: 'docs-search', transport: 'http', url: 'https://mcp.example.test/docs', args: [], auth: 'oauth' });
 await client.call('mcp.save', { id: 'local-db', name: 'local-db', transport: 'stdio', command: 'db-mcp', args: ['--readonly'], auth: 'none' });
 console.log(`Chat fixture ready: http://127.0.0.1:${app.port}`);
+process.send?.({ type: 'ready' });
 let closing = false;
 const close = async () => {
   if (closing) return;
@@ -277,3 +279,4 @@ const close = async () => {
 };
 process.on('SIGINT', () => void close());
 process.on('SIGTERM', () => void close());
+process.on('message', message => { if ((message as { type?: string })?.type === 'shutdown') void close(); });

@@ -4,8 +4,8 @@ import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { optionalScope } from '@accio/hub';
 import type { SkillEntry, SkillSource } from '@accio/protocol';
 import { runCommand, type CommandRunner } from './process.js';
+import { inside } from '../paths.js';
 
-export function inside(root: string, path: string) { const rel = relative(root, path); return rel === '' || !rel.startsWith(`..${sep}`) && rel !== '..' && !isAbsolute(rel); }
 /** Immutable source snapshots: updating a source never changes files a turn already received. */
 export class SkillFiles {
   constructor(private home: string, private run: CommandRunner = runCommand) {}

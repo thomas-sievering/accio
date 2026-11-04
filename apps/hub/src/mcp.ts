@@ -2,7 +2,8 @@ import { createHash, randomBytes } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
 import type { McpDefinition } from '@accio/protocol';
-import { type McpCredential, type Resources } from './resources.js';
+import type { Fetch } from './claudeOAuth.js';
+import type { McpCredential, Resources } from './resources.js';
 
 type Pending = { id: string; verifier: string; redirect: string; endpoint: string; clientId: string; clientSecret?: string; expires: number; resource: string; epoch: number };
 type Grant = { id: string; profileId: string; projectKey?: string };
@@ -16,7 +17,7 @@ export class McpGateway {
   private epochs = new Map<string, number>();
   private refreshing = new Map<string, Promise<McpCredential>>();
   private baseUrl = '';
-  constructor(private resources: Resources, private fetchImpl: typeof fetch = fetch) {}
+  constructor(private resources: Resources, private fetchImpl: Fetch = fetch) {}
   setUrl(url: string) { this.baseUrl = url; }
   grant(id: string, profileId: string, projectKey?: string) {
     const token = randomBytes(32).toString('hex');

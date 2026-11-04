@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { basename } from 'node:path';
 import type { CheckoutView, ProjectView } from '@accio/protocol';
 import { UserError } from '../rpc/router.js';
+import { pathKey, samePath } from '../paths.js';
 
 export type Project = ProjectView;
 export type Checkout = CheckoutView;
@@ -9,16 +10,6 @@ export type ProjectsData = { projects: Project[]; checkouts: Checkout[] };
 
 /** What git says about a folder. */
 export type FolderFacts = { root: string; repoKey: string | null };
-
-/** Paths compare case-insensitively on Windows and macOS, with one separator style. */
-export function samePath(a: string, b: string): boolean {
-  return pathKey(a) === pathKey(b);
-}
-
-function pathKey(p: string): string {
-  const unified = p.replace(/\\/g, '/').replace(/\/+$/, '');
-  return process.platform === 'linux' ? unified : unified.toLowerCase();
-}
 
 function isInside(path: string, root: string): boolean {
   const p = pathKey(path);

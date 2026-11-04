@@ -7,7 +7,7 @@ import { Hub } from './hub.js';
 import { SharedSettings, type MachineHello, type SharedSeed } from './sharedSettings.js';
 import { OpenAIAuth, type CodexModel } from './openaiAuth.js';
 import type { CodexFactory } from '@accio/codex';
-import { SignInError, type Fetch } from './claudeOAuth.js';
+import { SIGN_IN_TTL_MS, SignInError, type Fetch } from './claudeOAuth.js';
 import { HubTrust } from './trust.js';
 import { startHubProxy } from './proxy.js';
 import { profileViews, saveSharedProfile } from './profile.js';
@@ -23,7 +23,6 @@ export type HubSnapshot = {
   machines: ReturnType<SharedSettings['machines']>;
   favorites: Record<string, { harnessId: string; modelId: string }[]>;
   models: Record<string, CodexModel[]>;
-  store: string; settingsStore: string;
   resources: ResourcesState;
   limits: AccountLimitsView[];
   secrets: SecretSummary[];
@@ -65,7 +64,7 @@ export async function startHubService(opts: HubServiceOptions) {
     const profiles = settings.profiles();
     return { hubId: trust.id, protocol: HUB_PROTOCOL, revision, epoch, profiles: profileViews(profiles, hub), accounts: hub.accountViews(), machines: settings.machines(),
       favorites: Object.fromEntries(profiles.map((p) => [p.id, settings.modelFavorites(p.id)])),
-      models: Object.fromEntries(profiles.map((p) => [p.id, hub.codexModels(p.id)])), resources: resources.state(), limits: hub.limits.views(), secrets: profiles.flatMap(p => secrets.list(p.id)), store: hub.storePath, settingsStore: settings.storePath };
+      models: Object.fromEntries(profiles.map((p) => [p.id, hub.codexModels(p.id)])), resources: resources.state(), limits: hub.limits.views(), secrets: profiles.flatMap(p => secrets.list(p.id)) };
   }
   function announce() { revision++; for (const ws of sockets.clients) if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ revision })); }
   settings.onMachinesChanged(announce);
@@ -75,7 +74,7 @@ export async function startHubService(opts: HubServiceOptions) {
   function auth(req: IncomingMessage) { const token = /^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1]; return token ? trust.authenticate(token) : undefined; }
   function login(id: string, machineId: string) {
     const pending = logins.get(id);
-    if (!pending || pending.machineId !== machineId || Date.now() - pending.startedAt > 15 * 60_000) throw new SignInError('This sign-in has expired or was cancelled. Start it again.');
+    if (!pending || pending.machineId !== machineId || Date.now() - pending.startedAt > SIGN_IN_TTL_MS) throw new SignInError('This sign-in has expired or was cancelled. Start it again.');
     return pending;
   }
   async function execute(machineId: string, method: string, raw: any): Promise<unknown> {
@@ -282,7 +281,7 @@ export async function startHubService(opts: HubServiceOptions) {
       if (!(ws as any).alive || !owner) { ws.terminate(); continue; }
       (ws as any).alive = false; ws.ping();
     }
-    for (const [id, pending] of logins) if (Date.now() - pending.startedAt > 15 * 60_000) { logins.delete(id); void hub.cancelAccountSignIn(id).catch(() => {}); }
+    for (const [id, pending] of logins) if (Date.now() - pending.startedAt > SIGN_IN_TTL_MS) { logins.delete(id); void hub.cancelAccountSignIn(id).catch(() => {}); }
   }, 25_000);
   heartbeat.unref();
   await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(opts.port ?? 47322, opts.host ?? '127.0.0.1', resolve); });

@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { JsonFile } from '@accio/persistence';
+import { JsonFile, JsonStore } from '@accio/persistence';
 import { McpDefinition, ToolDefinition } from '@accio/protocol';
 import type { ResourceScope, ResourcesState, SkillEntry, SkillSource, ToolStatus } from '@accio/protocol';
 
@@ -12,27 +12,26 @@ export type McpCredential = { accessToken: string; refreshToken?: string; expire
 
 /** Definitions and selections are shared; credentials are kept in a separate hub-only file. */
 export class Resources {
-  private file: JsonFile<Data>;
+  private store: JsonStore<Data>;
+  /** Written inside the store's queue, so credential and definition changes stay ordered. */
   private secretsFile: JsonFile<Record<string, McpCredential>>;
-  private data: Data = { tools: [], sources: [], skills: [], mcps: [], toolStatuses: [] };
   private secrets: Record<string, McpCredential> = {};
-  private queue: Promise<unknown> = Promise.resolve();
   constructor(home: string) {
-    this.file = new JsonFile(join(home, 'hub', 'resources.json'), () => this.data);
+    this.store = new JsonStore(join(home, 'hub', 'resources.json'), () => ({ tools: [], sources: [], skills: [], mcps: [], toolStatuses: [] }));
     this.secretsFile = new JsonFile(join(home, 'hub', 'mcp-credentials.json'), () => ({}));
   }
+  private get data() { return this.store.data; }
   async load() {
-    this.data = await this.file.read();
+    const data = await this.store.load();
     // Parsing strips legacy tool/MCP scopes; only skills still have selections.
-    this.data.tools = this.data.tools.map(tool => ToolDefinition.parse(tool));
-    this.data.mcps = this.data.mcps.map(mcp => McpDefinition.parse(mcp));
+    data.tools = data.tools.map(tool => ToolDefinition.parse(tool));
+    data.mcps = data.mcps.map(mcp => McpDefinition.parse(mcp));
     this.secrets = await this.secretsFile.read();
   }
   state(): ResourcesState { const { skillSnapshots = [], skillSelections: _selections, ...data } = this.data; return structuredClone({ ...data, skillVersions: skillSnapshots.map(s => ({ sourceId: s.sourceId, revision: s.revision, active: this.data.skills.some(skill => skill.sourceId === s.sourceId && skill.revision === s.revision) })), mcps: this.data.mcps.map(m => ({ ...m, signedIn: !!this.secrets[m.id] })) }); }
   credential(id: string) { return this.secrets[id] ? { ...this.secrets[id] } : undefined; }
-  private change(fn: () => Promise<void>) { const result = this.queue.then(fn); this.queue = result.catch(() => {}); return result; }
-  private save(fn: (data: Data) => Data) { return this.change(async () => { const next = fn(this.data); await this.file.write(next); this.data = next; }); }
-  async setCredential(id: string, value?: McpCredential) { await this.change(async () => { const next = { ...this.secrets }; if (value) next[id] = value; else delete next[id]; await this.secretsFile.write(next); this.secrets = next; }); }
+  private save(fn: (data: Data) => Data) { return this.store.change(() => this.store.commit(fn(this.data))); }
+  async setCredential(id: string, value?: McpCredential) { await this.store.change(async () => { const next = { ...this.secrets }; if (value) next[id] = value; else delete next[id]; await this.secretsFile.write(next); this.secrets = next; }); }
   saveTool(tool: ToolDefinition) { return this.save(d => {
     const previous = d.tools.find(t => t.id === tool.id);
     const changed = previous && (previous.package !== tool.package || previous.version !== tool.version || previous.executable !== tool.executable || JSON.stringify(previous.checkArgs) !== JSON.stringify(tool.checkArgs));
@@ -58,7 +57,7 @@ export class Resources {
   saveMcp(mcp: McpDefinition) { return this.save(d => ({ ...d, mcps: [...d.mcps.filter(m => m.id !== mcp.id), mcp] })); }
   async deleteMcp(id: string) { await this.setCredential(id); await this.save(d => ({ ...d, mcps: d.mcps.filter(m => m.id !== id) })); }
   setToolStatus(status: ToolStatus) { return this.save(d => ({ ...d, toolStatuses: [...d.toolStatuses.filter(s => s.toolId !== status.toolId || s.machineId !== status.machineId), status] })); }
-  async close() { await this.queue; await this.file.idle(); await this.secretsFile.idle(); }
+  async close() { await this.store.idle(); await this.secretsFile.idle(); }
 }
 
 /** Machine operations exclude reading MCP credentials or owning the persistence files. */

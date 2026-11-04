@@ -118,11 +118,15 @@ Hiding a thread until a chosen time, when it comes back.
 _Avoid_: Mute, defer
 
 **Settle**:
-Marking a thread as done in the sidebar. It stays readable and can be reopened; its owned worktree and processes remain allocated.
+Marking a thread as done in the sidebar, by hand or automatically once its delivery is verified. It stays readable and can be reopened; its owned worktree and processes remain allocated.
 _Avoid_: Archive, close, resolve
 
 **Ship**:
 Requesting delivery from the owning thread: finish the work, integrate the target branch, verify and publish under the project's direct or pull-request policy. A request made during work waits for that turn to finish. It authorizes publication under its recorded policy.
+
+**Delivery policy**:
+A project's choice of how Ship publishes: directly onto the target branch, or through a pull request. It applies to new requests; an existing request keeps the policy it was recorded with.
+_Avoid_: Merge mode, strategy
 
 **Prepare for review**:
 Requesting preparation and verification of a pull request without authorizing its merge. The owned worktree stays available for review fixes.
@@ -131,9 +135,33 @@ Requesting preparation and verification of a pull request without authorizing it
 Releasing a delivered thread's owned worktree and branch after checking its published revision, preserving unpublished work and stopping its owned preview. Conversation history remains, the thread is settled, and a follow-up allocates a fresh worktree. See the [delivery notes](docs/plans/thread-delivery.md) for eligibility and recovery.
 _Avoid_: Settle, delete (for releasing execution resources)
 
+**Owned preview**:
+The app a thread's harness starts from its owned worktree through the project's preview command, on its own port, opened by the **Open app** button. Accio stops it on Archive or shutdown. Processes started any other way are not previews.
+_Avoid_: Dev server, sandbox
+
 **Shelf**:
 A group of threads in the sidebar apart from the open list: Working (a turn is running), Snoozed and Settled.
 _Avoid_: Folder, inbox, tab
+
+## Secrets and limits
+
+**Secret**:
+A named token a thread can request through the `request_secret` accio tool. Values stay write-only on the hub, encrypted, and reach the harness only as a temporary file for one turn.
+_Avoid_: Credential (for the hub's provider tokens), key, password
+
+**Save & use**:
+Answering a secret request by keeping the value on the hub for the current profile, project and purpose, so later requests for that purpose are answered automatically.
+
+**Use once**:
+Answering a secret request for the current turn only; nothing is stored.
+
+**Limits**:
+The allowance windows and reset times a provider reports for an account, read by the hub with the account's own credentials. Profiles that select the same account share one allowance. Shown from the sidebar, the composer indicator and account settings.
+_Avoid_: Quota, usage, rate limit (in UI text)
+
+**Hub connection**:
+A machine's saved record of one hub: its name, URL and server-only credential, with its own local workspace under `hubs/<hub-id>`. A window selects one connection at a time.
+_Avoid_: Server (in UI text), endpoint
 
 ## Skills
 

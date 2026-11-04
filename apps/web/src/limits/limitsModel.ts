@@ -168,15 +168,6 @@ export function relativeTime(at: number, now: number): string {
   return future ? `in ${text}` : `${text} ago`;
 }
 
-const time = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
-const weekdayTime = new Intl.DateTimeFormat(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
-const dateTime = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 const full = new Intl.DateTimeFormat(undefined, { dateStyle: 'full', timeStyle: 'short' });
 
-/** A short absolute time: "14:05", "Tue 14:05" within the week, else "Nov 12, 14:05". */
-export function absoluteTime(at: number, now: number): string {
-  const d = new Date(at);
-  if (new Date(now).toDateString() === d.toDateString()) return time.format(d);
-  return Math.abs(at - now) < 6 * 86_400_000 ? weekdayTime.format(d) : dateTime.format(d);
-}
 export const fullTime = (at: number) => full.format(new Date(at));

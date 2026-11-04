@@ -1,5 +1,5 @@
 import type { HubClient } from './client.js';
-import { SecretStoreError, type SecretsAccess, type SecretScope } from './secrets.js';
+import { SecretStoreError, allowed, type SecretsAccess, type SecretScope } from './secrets.js';
 
 /** Cache metadata only. Values travel directly to the machine's scoped delivery logic. */
 export function remoteSecrets(client: HubClient): SecretsAccess {
@@ -35,8 +35,7 @@ export function remoteSecrets(client: HubClient): SecretsAccess {
     status: () => call('secrets.status'),
     list: profileId => records().filter(s => s.profileId === profileId).map(s => ({ ...s, projectIds: [...s.projectIds] })),
     inUse: profileId => records().some(s => s.profileId === profileId),
-    current: (id, version, scope) => active().some(s => s.id === id && s.version === version && s.profileId === scope.profileId && s.slot === scope.slot &&
-      (s.profileWide || scope.projectId !== null && s.projectIds.includes(scope.projectId))),
+    current: (id, version, scope) => active().some(s => s.id === id && s.version === version && allowed(s, scope)),
     save: input => call('secrets.save', input),
     remove: async id => { await call('secrets.delete', { id }); },
     bind: async (id, scope) => { await call('secrets.bind', { id, scope: scopeOnly(scope) }); },

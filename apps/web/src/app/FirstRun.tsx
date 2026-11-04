@@ -4,8 +4,7 @@ import { useClient, useHubs } from './connection';
 import { Monitor, ProviderLogo } from './icons';
 import { useAction } from './useAction';
 import { hasSignedInAccount, useProfiles } from '../profiles/profiles';
-import { SignInWithClaude } from '../profiles/SignInWithClaude';
-import { SignInWithOpenAI } from '../profiles/SignInWithOpenAI';
+import { SignIn } from '../profiles/SignIn';
 import { AddProjectForm } from '../projects/AddProjectSheet';
 import { useProjects } from '../projects/projects';
 import { PairHubForm } from '../hub/PairHubForm';
@@ -141,7 +140,7 @@ function SetUpAccount({ profile }: { profile: ProfileView }) {
   const [providerId, setProviderId] = useState<'anthropic' | 'openai'>('anthropic');
   const { busy, error, run } = useAction();
   const account = profile.providers.find((p) => p.id === providerId)?.accounts[0];
-  if (account) return account.providerId === 'openai' ? <SignInWithOpenAI account={account} /> : <SignInWithClaude account={account} />;
+  if (account) return <SignIn account={account} />;
   const provider = providers.find((p) => p.id === providerId)!;
   const existing = accounts?.filter((a) => a.providerId === providerId) ?? [];
   const submit = (e: FormEvent) => {

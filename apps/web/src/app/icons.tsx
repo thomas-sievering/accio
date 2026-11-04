@@ -157,11 +157,6 @@ export const Folder = () => (
     <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
   </svg>
 );
-export const ShieldOff = () => (
-  <svg {...base}>
-    <path d="m2 2 20 20M5 5a1 1 0 0 0-1 1v7c0 5 3.5 7.5 7.67 8.94a1 1 0 0 0 .67.01c2.35-.82 4.31-2.07 5.6-3.7M9.31 3.66A12 12 0 0 0 11.24 2.26a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1v7.34" />
-  </svg>
-);
 /** Brand marks for model providers; filled, so they skip the stroke defaults. Anthropic's models show the Claude mark (from Simple Icons) in Claude's orange. */
 export const ProviderLogo = ({ providerId }: { providerId: string }) => providerId === 'anthropic' ? (
   <svg width={14} height={14} viewBox="0 0 24 24" fill="#d97757" aria-hidden>

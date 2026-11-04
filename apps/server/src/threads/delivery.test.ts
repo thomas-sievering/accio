@@ -4,7 +4,8 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { JsonFile } from '@accio/persistence';
 import { FakeHarness, gate, replyWith } from '../testing/fakeHarness.js';
 import { startTestApp, type TestClient } from '../testing/testApp.js';
-import { DeliveryGit, DeliveryPending, deliveryPrompt, git } from './delivery.js';
+import { DeliveryGit, DeliveryPending, deliveryPrompt } from './delivery.js';
+import { git } from '../git.js';
 import type { ThreadDelivery, ThreadView } from '@accio/protocol';
 
 // These tests spawn real Git processes; allow for Windows CI contention.

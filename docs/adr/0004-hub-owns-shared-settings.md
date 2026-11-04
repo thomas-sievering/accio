@@ -4,7 +4,7 @@ Profiles, which project belongs to which profile (ADR 0008), skill sources and M
 
 Almost every setting is shared. The few that apply to one machine, such as its profile folders and which harnesses it has installed, are stored on the hub too, under that machine, so every client sees and edits them in the same place. The hub also keeps the list of paired machines and whether each is connected.
 
-In v0.1 the hub runs inside the machine's server, stores shared settings in `hub/settings.json` (not yet in git), and the server still applies the profile rules, such as unique names, before writing them there.
+The hub is a standalone service (ADR 0014); it stores shared settings in its own `settings.json` and applies the profile rules, such as unique names, itself before writing them.
 
 ## Consequences
 

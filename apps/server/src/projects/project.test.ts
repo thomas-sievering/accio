@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { normalizeRemoteUrl, parseRemotes, repoKeyOf } from './repoIdentity.js';
-import { addCheckout, removeCheckout, samePath, suggestProfile, type ProjectsData } from './project.js';
+import { addCheckout, removeCheckout, suggestProfile, type ProjectsData } from './project.js';
+import { samePath } from '../paths.js';
 
 describe('repo identity', () => {
   it.each([

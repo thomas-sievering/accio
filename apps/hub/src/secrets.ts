@@ -1,7 +1,7 @@
 import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from 'node:crypto';
 import { lstat, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { JsonFile, privateDirectory, privateFile, privatePowerShell } from '@accio/persistence';
+import { JsonStore, privateDirectory, privateFile, privatePowerShell } from '@accio/persistence';
 import type { SecretSummary } from '@accio/protocol';
 
 type StoredSecret = SecretSummary & { ciphertext: string; nonce: string; tag: string };
@@ -12,17 +12,16 @@ const unavailable = 'Saved secrets are unavailable. Configure a 32-byte base64 A
 
 /** The Hub owns reusable values; machines receive only individually authorized deliveries. */
 export class SecretsVault {
-  private records: StoredSecret[] = [];
-  private queue: Promise<unknown> = Promise.resolve();
+  private store: JsonStore<StoredSecret[]>;
   private key?: Promise<Buffer>;
-  private file: JsonFile<StoredSecret[]>;
   private listeners: ((id: string, profileId: string) => Promise<void> | void)[] = [];
   private directory: string;
   constructor(home: string, private suppliedKey = process.env.ACCIO_SECRET_KEY) {
     this.directory = join(home, 'hub', 'secrets');
-    this.file = new JsonFile(join(this.directory, 'values.json'), () => []);
+    this.store = new JsonStore(join(this.directory, 'values.json'), () => []);
   }
-  async load() { this.records = await this.file.read(); }
+  private get records() { return this.store.data; }
+  async load() { await this.store.load(); }
   onChanged(listener: (id: string, profileId: string) => Promise<void> | void) { this.listeners.push(listener); }
   async status(): Promise<{ available: boolean; reason?: string }> {
     try { await this.masterKey(); return { available: true }; } catch { return { available: false, reason: unavailable }; }
@@ -70,7 +69,7 @@ export class SecretsVault {
     });
   }
   async resolve(scope: SecretScope): Promise<{ metadata: SecretSummary; value: string } | null> {
-    await this.queue;
+    await this.store.idle();
     const matches = this.records.filter(r => allowed(r, scope));
     if (matches.length !== 1) return null;
     const record = matches[0]!; const value = this.decrypt(record, await this.masterKey());
@@ -85,7 +84,7 @@ export class SecretsVault {
       await this.announce(this.records.find(r => r.id === id)!);
     });
   }
-  async close() { await this.queue; }
+  async close() { await this.store.idle(); }
   private assertUnique(profileId: string, slot: string, projectIds: string[], profileWide: boolean, except?: string) {
     if (this.records.some(r => r.id !== except && r.profileId === profileId && r.slot === slot &&
       (r.profileWide || profileWide || r.projectIds.some(id => projectIds.includes(id))))) {
@@ -128,15 +127,16 @@ export class SecretsVault {
     const key = Buffer.from(await privatePowerShell(`${protect}Unprotect($bytes,$null,[Security.Cryptography.DataProtectionScope]::CurrentUser))`, stored.toString('base64')), 'base64');
     if (key.length !== 32) throw new Error('Invalid key'); return key;
   }
-  private change<T>(fn: () => Promise<T>): Promise<T> { const pending = this.queue.then(fn); this.queue = pending.catch(() => {}); return pending; }
-  private async commit(records: StoredSecret[]) { await this.file.write(records); this.records = records; }
+  private change<T>(fn: () => Promise<T>): Promise<T> { return this.store.change(fn); }
+  private commit(records: StoredSecret[]) { return this.store.commit(records); }
   private async announce(record: SecretSummary) { for (const listener of this.listeners) await listener(record.id, record.profileId); }
 }
 
 function summary({ ciphertext: _ciphertext, nonce: _nonce, tag: _tag, ...metadata }: StoredSecret): SecretSummary {
   return { ...metadata, projectIds: [...metadata.projectIds] };
 }
-function allowed(record: SecretSummary, scope: SecretScope) {
+/** Whether a secret may be delivered for this scope. */
+export function allowed(record: SecretSummary, scope: SecretScope) {
   return record.profileId === scope.profileId && record.slot === scope.slot && (record.profileWide || (scope.projectId !== null && record.projectIds.includes(scope.projectId)));
 }
 export function checkValue(value: string) {

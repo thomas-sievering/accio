@@ -2,6 +2,9 @@
   padding: 4px 8px 6px;
   color: var(--dim);
   font-size: 12px;
+  white-space: nowrap;
+  overflow: clip;
+  text-overflow: ellipsis;
 }
 /* Right-click menu, placed at the pointer rather than under a button. */
 .menu.context-menu {
@@ -19,11 +22,6 @@
   opacity: 0.45;
   cursor: default;
   background: none;
-}
-.menu-label {
-  white-space: nowrap;
-  overflow: clip;
-  text-overflow: ellipsis;
 }
 .menu-error {
   margin: 4px 8px;

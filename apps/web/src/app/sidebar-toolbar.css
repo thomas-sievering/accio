@@ -1,9 +1,5 @@
 
 /* Sidebar toolbar: search, project filter, new thread (as in T3 Code) */
-.side-icon:disabled {
-  opacity: 0.4;
-  pointer-events: none;
-}
 .side-empty {
   margin: 24px 12px;
   color: var(--dim);

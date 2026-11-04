@@ -4,7 +4,8 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { JsonFile } from '@accio/persistence';
 import { FakeHarness, gate, replyWith } from '../testing/fakeHarness.js';
 import { startTestApp, type TestClient } from '../testing/testApp.js';
-import { DeliveryGit, DeliveryUnavailable, git, type DeliveryObservation } from './delivery.js';
+import { DeliveryGit, DeliveryUnavailable, type DeliveryObservation } from './delivery.js';
+import { git } from '../git.js';
 import type { ThreadView } from '@accio/protocol';
 
 vi.setConfig({ testTimeout: 25_000 });

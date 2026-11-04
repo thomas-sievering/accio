@@ -26,7 +26,7 @@ export type MachineView = MachineInfo & {
   profileFolders: Record<string, string[]>;
 };
 
-export const SetProfileFolders = z.object({
+const SetProfileFolders = z.object({
   machineId: z.string(),
   profileId: z.string(),
   folders: z.array(z.string().trim().min(1)).default([]),

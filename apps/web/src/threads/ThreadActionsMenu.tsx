@@ -2,7 +2,6 @@ import { useId, useState } from 'react';
 import type { ThreadView, ToolDetails, TranscriptItem } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { More } from '../app/icons';
-import { optionLetter } from './Choice';
 import { useAction } from '../app/useAction';
 
 export function ThreadActionsMenu({ thread, items }: { thread: ThreadView; items?: TranscriptItem[] }) {
@@ -24,9 +23,10 @@ export function ThreadActionsMenu({ thread, items }: { thread: ThreadView; items
           const detail = item.detailRevision === undefined ? undefined : await client.call('threads.toolDetails', { threadId: thread.id, itemId: item.id });
           return [`## Tool: ${item.name} (${item.status})`, item.summary, detail ? formatDetails(detail) : item.output].filter((text) => text !== undefined && text !== '').join('\n\n');
         }
+        default: return undefined;
       }
     }));
-    await navigator.clipboard.writeText([`# ${thread.title}`, ...entries].join('\n\n'));
+    await navigator.clipboard.writeText([`# ${thread.title}`, ...entries.filter((entry) => entry !== undefined)].join('\n\n'));
     setCopied(true);
   });
 

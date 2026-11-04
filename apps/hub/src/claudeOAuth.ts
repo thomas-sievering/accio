@@ -37,6 +37,9 @@ export function beginSignIn(random: (n: number) => Buffer = randomBytes, redirec
 
 export class SignInError extends Error {}
 
+/** How long any started sign-in stays open. */
+export const SIGN_IN_TTL_MS = 15 * 60 * 1000;
+
 /**
  * Reads what you pasted: Anthropic's page shows `code#state`; a full redirect
  * URL or a bare code also works. A state that doesn't match this sign-in is refused.
@@ -133,7 +136,7 @@ export async function refreshAccount(fetchImpl: Fetch, account: ClaudeAccount, n
 }
 
 /** Refresh this long before expiry so no request goes out with a token about to lapse. */
-export const REFRESH_MARGIN_MS = 5 * 60 * 1000;
+const REFRESH_MARGIN_MS = 5 * 60 * 1000;
 
 export function needsRefresh(account: ClaudeAccount, now = Date.now()): boolean {
   return account.expiresAt - now < REFRESH_MARGIN_MS;

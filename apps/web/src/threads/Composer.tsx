@@ -16,7 +16,7 @@ export function Composer({
   attachment,
   actions,
   target,
-  draftId = 'new',
+  draftId,
 }: {
   onSend: (text: string, mode?: 'steer' | 'queue') => Promise<void>;
   /** Set while a turn runs; Stop stays beside Send. */
@@ -30,8 +30,8 @@ export function Composer({
   /** Compact thread delivery controls, outside the message input. */
   actions?: ReactNode;
   /** Which `composer.insert` requests this composer accepts: its thread id, or 'draft'. */
-  target?: string;
-  draftId?: string;
+  target: string;
+  draftId: string;
 }) {
   const client = useClient();
   const storageKey = `accio:${client.hubId}:composer:${draftId}`;

@@ -79,7 +79,7 @@ export type ThreadStatusView = {
 const short = (revision?: string) => revision?.slice(0, 7);
 
 /** Structured PR identity, or the number parsed from a legacy URL. */
-export function pullRequestOf(d: ThreadDelivery): { number: number; url: string } | undefined {
+function pullRequestOf(d: ThreadDelivery): { number: number; url: string } | undefined {
   if (d.pullRequest) return { number: d.pullRequest.number, url: d.pullRequest.url };
   const match = d.pullRequestUrl?.match(/\/pull\/(\d+)(?:[/?#]|$)/);
   return match && d.pullRequestUrl ? { number: Number(match[1]), url: d.pullRequestUrl } : undefined;

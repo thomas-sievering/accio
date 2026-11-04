@@ -11,7 +11,7 @@ const home = await mkdtemp(join(tmpdir(), 'accio-limits-browser-'));
 const reads = new Map<string, number>();
 const codex = new FakeCodex();
 codex.rateLimitsResponse = { rateLimits: { limitId: 'codex', primary: { usedPercent: 14, windowDurationMins: 300, resetsAt: Math.floor(Date.now() / 1000) + 3600 }, secondary: { usedPercent: 39, windowDurationMins: 10080 } } };
-const app = await startApp({ home, host: '127.0.0.1', port: 47482, hubPort: 0, token: 'isolated-limits-test-token', webRoot: resolve('apps/web/dist') }, {
+const app = await startApp({ home, host: '127.0.0.1', port: Number(process.env.ACCIO_LIMITS_TEST_PORT ?? 47482), hubPort: 0, token: 'isolated-limits-test-token', webRoot: resolve('apps/web/dist') }, {
   harness: new FakeHarness(async function* () { yield* replyWith('Limits fixture reply'); }),
   codexFactory: async (options) => {
     const client = await codex.factory(options);
@@ -45,6 +45,7 @@ const app = await startApp({ home, host: '127.0.0.1', port: 47482, hubPort: 0, t
   },
 });
 console.log(`Limits fixture ready: http://127.0.0.1:${app.port}`);
+process.send?.({ type: 'ready' });
 let closing = false;
 const close = async () => {
   if (closing) return;
@@ -56,3 +57,4 @@ const close = async () => {
 };
 process.on('SIGINT', () => { void close(); });
 process.on('SIGTERM', () => { void close(); });
+process.on('message', message => { if ((message as { type?: string })?.type === 'shutdown') void close(); });

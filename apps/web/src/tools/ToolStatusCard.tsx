@@ -50,7 +50,7 @@ export function ToolStatusCard({ tool, machine, status, heading, onOpenThread }:
     <div className="tool-card" aria-label={`${title}: ${r.label}`} role="group">
       <div className="tool-card-head">
         <b>{title}</b>
-        <span className={`pill ${r.tone === 'ok' ? 'ok' : r.tone === 'bad' ? 'bad' : r.tone === 'busy' ? 'busy' : ''}`}><span className="dot" />{r.label}</span>
+        <span className={`pill ${r.tone}`}><span className="dot" />{r.label}</span>
       </div>
       <p className={`tool-card-text${r.label === 'Needs attention' ? ' failed' : ''}`} title={status?.detail}>
         {r.label === 'Needs attention' ? <code>{text}</code> : r.label === 'Ready' && firstLine(status?.detail) ? <>{text} · <code>{firstLine(status?.detail)}</code></> : text}

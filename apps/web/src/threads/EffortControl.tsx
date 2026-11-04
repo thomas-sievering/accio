@@ -3,7 +3,7 @@ import type { ModelView } from '@accio/protocol';
 import type { Step } from './steps';
 
 const NAMES: Record<string, string> = { none: 'None', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
-export const effortName = (id: string) => NAMES[id] ?? id.replace(/^./, (c) => c.toUpperCase());
+const effortName = (id: string) => NAMES[id] ?? id.replace(/^./, (c) => c.toUpperCase());
 
 /**
  * GLOSSARY: Effort. The levels a model accepts, lowest first. Without a default the

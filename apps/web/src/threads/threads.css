@@ -24,11 +24,6 @@
   border-radius: 8px;
   text-align: start;
 }
-button.row {
-  gap: 10px;
-  padding: 0 8px;
-  text-align: start;
-}
 .row:hover:not(.active) {
   background: var(--hover);
 }
@@ -47,20 +42,6 @@ button.row {
 .row:hover .row-name,
 .row:focus-within .row-name {
   color: var(--ink-strong);
-}
-.row-add {
-  color: var(--dim);
-}
-.row-add .row-name {
-  color: var(--dim);
-}
-.row-add:hover .row-name {
-  color: var(--muted);
-}
-.row-add svg {
-  flex: none;
-  width: 14px;
-  height: 14px;
 }
 .row-working {
   flex: none;
@@ -265,10 +246,6 @@ button.row {
 }
 
 /* Working, Snoozed, Settled shelves, pushed to the bottom of the sidebar. */
-.side-body {
-  display: flex;
-  flex-direction: column;
-}
 .shelves {
   margin-top: auto;
   padding-top: 16px;
@@ -414,12 +391,13 @@ button.row {
   white-space: pre-wrap;
 }
 .msg.user.resume {
-  background: var(--raised-2);
   color: var(--muted);
   font-style: italic;
 }
 .msg.assistant {
   align-self: flex-start;
+  min-width: 0;
+  width: min(var(--message-width), 92%);
 }
 .msg.assistant > :first-child {
   margin-top: 0;
@@ -470,6 +448,8 @@ button.row {
 .tool {
   position: relative;
   align-self: flex-start;
+  min-width: 0;
+  width: min(var(--message-width), 92%);
   max-width: min(var(--message-width), 92%);
 }
 .tool button {
@@ -747,11 +727,6 @@ button.row {
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-}
-.composer-harness {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--muted);
 }
 /* The model and its effort sit together on the left of the composer bar. */
 .model-choice { display: inline-flex; align-items: center; gap: 2px; min-width: 0; margin-right: auto; }

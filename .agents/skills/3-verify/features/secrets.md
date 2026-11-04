@@ -4,7 +4,7 @@ Use this flow for private input, saved project credentials, the Working-row mark
 
 ## Deterministic journey
 
-Run `pnpm test:secrets`. It builds and drives the production UI/server with a scripted harness at the existing `AppDeps.harness` boundary, two signed-in fixture profiles, a disposable git project and dummy marker values. The fixture owns port 47483; do not attach to another process on that port. No real provider account or inference is used. `tests/setup-secrets.ts` owns the child, asks it to shut down over IPC and waits for private-file cleanup on Windows too.
+Run `pnpm test:secrets`. It builds and drives the production UI/server with a scripted harness at the existing `AppDeps.harness` boundary, two signed-in fixture profiles, a disposable git project and dummy marker values. Each invocation allocates its own port (`ACCIO_SECRETS_TEST_PORT` overrides it); do not attach to another process. No real provider account or inference is used. `tests/servers.ts` owns the child, asks it to shut down over IPC and waits for private-file cleanup on Windows too.
 
 `tests/secret-ui.spec.ts` drives Save & use, a second request with automatic reuse and no input/confirmation, Settings list, replacement, explicit profile-wide access, an empty other profile, deletion, Use once and Decline. The fixture reads delivered bytes at the harness boundary, checks for accidental values in thread storage, and removes its home. Inspect `out/secrets-ui/cleanup.json` after completion; all cleanup/exposure flags must be true. Trace, screenshot and video collection are disabled while typing. Use dummy markers only.
 
