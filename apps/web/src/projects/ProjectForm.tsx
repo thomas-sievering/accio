@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import type { ProjectView } from '@accio/protocol';
 import { useClient } from '../app/connection';
-import { Sheet } from '../app/Sheet';
 import { SettingsFooter, SettingsSection, useEscape, type SettingsRoute } from '../app/Settings';
 import { useAction } from '../app/useAction';
 import { useProfiles } from '../profiles/profiles';
@@ -16,9 +15,9 @@ import { projectKey, toggled, useResources } from '../resources/resources';
 /**
  * A project's profile, delivery and skills, staged until Save like the rest of settings, and its checkouts on this machine.
  * A checkout is removed only after a second, explicit click (which also deletes its threads).
- * `dialog` floats it over the app (header chip, Filter gear); `page` is the Settings / Projects detail page.
+ * The Settings / Projects detail page; the header chip and the Filter gear open it too.
  */
-export function ProjectForm({ project, mode, onClose, onOpenSettings }: { project: ProjectView; mode: 'dialog' | 'page'; onClose: () => void; onOpenSettings: (route: SettingsRoute) => void }) {
+export function ProjectForm({ project, onClose, onOpenSettings }: { project: ProjectView; onClose: () => void; onOpenSettings: (route: SettingsRoute) => void }) {
   const client = useClient();
   const { profiles = [] } = useProfiles();
   const { checkoutsOf } = useProjects();
@@ -27,7 +26,6 @@ export function ProjectForm({ project, mode, onClose, onOpenSettings }: { projec
   const threadCount = threads.filter((t) => t.projectId === project.id).length;
   const { busy, error, run } = useAction();
   const [confirming, setConfirming] = useState<string>();
-  const [discarding, setDiscarding] = useState(false);
   const [profileId, setProfileId] = useState(project.profileId);
   const [policy, setPolicy] = useState(project.deliveryPolicy ?? 'direct');
   const [previewCommand, setPreviewCommand] = useState(project.previewCommand ?? '');
@@ -42,7 +40,6 @@ export function ProjectForm({ project, mode, onClose, onOpenSettings }: { projec
   const dirty = profileId !== project.profileId || deliveryChanged || skillChanges.length > 0;
   // An open inline confirmation takes Escape first.
   useEscape(confirming !== undefined, () => setConfirming(undefined));
-  useEscape(discarding, () => setDiscarding(false));
 
   const remove = (checkoutId: string) =>
     run(async () => {
@@ -98,7 +95,7 @@ export function ProjectForm({ project, mode, onClose, onOpenSettings }: { projec
                 {confirming === c.id ? (
                   <>
                     <button type="button" disabled={busy} className="ghost" onClick={() => setConfirming(undefined)}>
-                      Keep
+                      Cancel
                     </button>
                     <button type="button" disabled={busy} className="ghost danger" onClick={() => remove(c.id)}>
                       {count > 0 ? `Remove checkout and delete ${count} ${count === 1 ? 'thread' : 'threads'}` : 'Confirm remove'}
@@ -129,38 +126,12 @@ export function ProjectForm({ project, mode, onClose, onOpenSettings }: { projec
     </>
   );
 
-  if (mode === 'page') {
-    return (
-      <div className="settings-profile-form">
-        <SettingsSection>
-          <div className="setting-form">{fields}</div>
-        </SettingsSection>
-        <SettingsFooter busy={busy} onCancel={onClose} saveLabel="Save" saveDisabled={busy || !dirty} onSave={() => void save()} />
-      </div>
-    );
-  }
   return (
-    <Sheet title={project.name} onClose={onClose} guard={() => {
-      if (!dirty || busy) return false;
-      setDiscarding(true);
-      return true;
-    }}>
-      <div className="sheet-body">{fields}</div>
-      <footer className="sheet-foot">
-        <span className="spacer" />
-        {discarding ? (
-          <>
-            <span className="hint">Discard changes?</span>
-            <button type="button" className="ghost danger" onClick={onClose}>Discard</button>
-            <button type="button" className="ghost" autoFocus onClick={() => setDiscarding(false)}>Keep editing</button>
-          </>
-        ) : (
-          <>
-            <button type="button" className="ghost" disabled={busy} onClick={onClose}>Cancel</button>
-            <button type="button" className="ghost primary" disabled={busy || !dirty} onClick={() => void save()}>Save</button>
-          </>
-        )}
-      </footer>
-    </Sheet>
+    <div className="settings-profile-form">
+      <SettingsSection>
+        <div className="setting-form">{fields}</div>
+      </SettingsSection>
+      <SettingsFooter busy={busy} onCancel={onClose} saveLabel="Save" saveDisabled={busy || !dirty} onSave={() => void save()} dirty={dirty && !busy} />
+    </div>
   );
 }

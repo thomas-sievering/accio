@@ -28,7 +28,7 @@ export function QueueTray({ thread }: { thread: ThreadView }) {
         if (!busy) void run(async () => { await action(message.id, 'save', edit.text); setEdit(undefined); });
       }}>
         <input aria-label="Edit queued message" autoFocus value={edit.text} onChange={e => setEdit({ ...edit, text: e.target.value })} />
-        <button disabled={busy || !edit.text.trim()}>Save</button>
+        <button className="queue-save" disabled={busy || !edit.text.trim()}>Save</button>
         <button type="button" disabled={busy} onClick={() => void run(async () => { await action(message.id, 'cancel'); setEdit(undefined); })}>Cancel</button>
       </form> : <>
         <span className="queued-text" title={message.text}>{message.text || 'Picked option'}</span>

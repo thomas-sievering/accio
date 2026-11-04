@@ -38,16 +38,15 @@ export function FirstRun() {
       <h1 className="first-run-kicker">Set up Accio</h1>
       {current === 0 && <ChooseHub onLocal={chooseLocal} />}
       {current === 1 && (
-        <Screen title="Name your first profile" sub="A side of your life threads run under. Add more later in Settings.">
+        <Screen title="Name your first profile" sub="A profile groups the accounts and projects for one side of your life, such as personal or work.">
           <AddProfile />
         </Screen>
       )}
       {current === 2 && unsigned && (
         <Screen title={`Choose an account for ${unsigned.name}`} sub="Threads under this profile use its Claude or ChatGPT subscription.">
-          <SetUpAccount key={unsigned.id} profile={unsigned} />
+          <SetUpAccount key={unsigned.id} profile={unsigned} onAddProject={(state?.projects.length ?? 0) === 0 ? () => setAddingProject(true) : undefined} />
         </Screen>
       )}
-      {current === 2 && (state?.projects.length ?? 0) === 0 && <button type="button" className="link first-run-back" onClick={() => setAddingProject(true)}>Set up a project first</button>}
       {addingProject && <AddProjectSheet onClose={() => setAddingProject(false)} />}
       {current === 2 && (state?.projects.length ?? 0) > 0 && <p className="first-run-sub" role="status">Added {state!.projects.map((p) => p.name).join(', ')}.</p>}
       {current === 3 && (
@@ -123,7 +122,7 @@ function AddProfile() {
   return (
     <form onSubmit={submit} className="field" noValidate>
       <input value={name} onChange={(e) => { setName(e.target.value); setMissing(false); }} placeholder="personal, work…" aria-label="Profile name" aria-invalid={missing} aria-describedby={missing ? 'profile-name-error' : undefined} autoFocus />
-      {missing && <small className="error" id="profile-name-error" role="alert">Name required</small>}
+      {missing && <small className="error" id="profile-name-error" role="alert">Enter a name for the profile.</small>}
       {error && <p className="error">{error}</p>}
       <button type="submit" className="ghost primary first-run-next" disabled={busy}>Continue</button>
     </form>
@@ -136,7 +135,7 @@ const providers = [
 ] as const;
 
 /** Pick a provider; a new account is named after the profile unless you reuse one the hub already has. */
-function SetUpAccount({ profile }: { profile: ProfileView }) {
+function SetUpAccount({ profile, onAddProject }: { profile: ProfileView; onAddProject?: () => void }) {
   const client = useClient();
   const { accounts } = useProfiles();
   const [selected, setSelected] = useState('');
@@ -146,9 +145,13 @@ function SetUpAccount({ profile }: { profile: ProfileView }) {
   const [signingIn, setSigningIn] = useState(!!started);
   const { busy, error, run } = useAction();
   const account = profile.providers.find((p) => p.id === providerId)?.accounts[0];
+  const projectFirst = onAddProject && <button type="button" className="link" onClick={onAddProject}>Set up a project first</button>;
   if (account && signingIn) return <>
     <SignIn account={account} />
-    <button type="button" className="link first-run-back" onClick={() => setSigningIn(false)}>Back</button>
+    <div className="first-run-links">
+      <button type="button" className="link" onClick={() => setSigningIn(false)}>Back</button>
+      {projectFirst && <><span aria-hidden="true">·</span>{projectFirst}</>}
+    </div>
   </>;
   const provider = providers.find((p) => p.id === providerId)!;
   const existing = accounts?.filter((a) => a.providerId === providerId) ?? [];
@@ -176,5 +179,6 @@ function SetUpAccount({ profile }: { profile: ProfileView }) {
     </select></label>}
     <button type="submit" className="ghost primary first-run-next" disabled={busy || !accounts}>Continue</button>
     {error && <p className="error">{error}</p>}
+    {projectFirst && <div className="first-run-links">{projectFirst}</div>}
   </form>;
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { HubSettings } from '../hub/HubSettings';
 import { MachineSettings } from '../machine/MachineSettings';
 import { HarnessesSettings } from '../harnesses/HarnessesSettings';
@@ -13,7 +13,7 @@ import { SkillsSettings } from '../skills/SkillsSettings';
 import { ProjectsSettings } from '../projects/ProjectsSettings';
 import { useProjects } from '../projects/projects';
 import { useResources } from '../resources/resources';
-import { ArrowLeft, BookOpen, Chevron, Hub, Folder, IdCard, Key, Layers, Monitor, Plug, ScrollText, Users, Wrench } from './icons';
+import { ArrowLeft, BookOpen, Chevron, Folder, Hub, IdCard, Key, Layers, Limits, Monitor, Plug, ScrollText, Users, Wrench } from './icons';
 import { useClient } from './connection';
 import { useLive } from './useLive';
 import { SidebarResizer } from './Resizer';
@@ -48,8 +48,14 @@ const GROUPS: { label?: string; items: { id: Section; label: string; icon: React
 ];
 const LABEL = Object.fromEntries(GROUPS.flatMap((g) => g.items.map((i) => [i.id, i.label]))) as Record<Section, string>;
 
+/**
+ * Leaving a settings page with unsaved edits asks first. The page's footer registers
+ * `ask` while it is dirty; it returns true when it took over (and calls `go` on Discard).
+ */
+const LeaveGuard = createContext<{ current?: (go: () => void) => boolean }>({});
+
 /** Settings replace the whole window while open, as in T3 Code. Back (top of the sidebar, as in Cal.com and Circle) or Escape returns to the threads. */
-export function Settings({ route, onRoute, onClose, onOpenThread }: { route: SettingsRoute; onRoute: (r: SettingsRoute) => void; onClose: () => void; onOpenThread: (threadId: string) => void }) {
+export function Settings({ route, onRoute, onClose, onOpenThread, onOpenLimits }: { route: SettingsRoute; onRoute: (r: SettingsRoute) => void; onClose: () => void; onOpenThread: (threadId: string) => void; onOpenLimits?: () => void }) {
   const { profiles, accounts } = useProfiles();
   const { state: resources } = useResources();
   const { state: projectState } = useProjects();
@@ -75,8 +81,13 @@ export function Settings({ route, onRoute, onClose, onOpenThread }: { route: Set
 
   const inDetail = !!(profileId || accountId || toolId || mcpId || sourceId || (route.section === 'secrets' && route.secretId) || (route.section === 'machines' && route.machineId) || (route.section === 'hub' && route.hubId) || (route.section === 'projects' && route.projectId));
   // Escape goes up one level and leaves Settings only from a top-level page; an open inline confirmation takes it first (useEscape).
+  const leave = useRef<(go: () => void) => boolean>(undefined);
+  /** Every way out of a page (section, breadcrumb, Back, Escape) goes through the page's unsaved-edit check. */
+  const go = (to: () => void) => { if (!leave.current?.(to)) to(); };
+  const navigate = (r: SettingsRoute) => go(() => onRoute(r));
+  const leaveSettings = () => go(onClose);
   const escape = useRef<() => void>(() => undefined);
-  escape.current = () => (inDetail ? onRoute(backTo) : onClose());
+  escape.current = () => (inDetail ? navigate(backTo) : leaveSettings());
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // Escape inside a field only leaves the field.
@@ -93,7 +104,7 @@ export function Settings({ route, onRoute, onClose, onOpenThread }: { route: Set
     <div className="layout">
       <aside className="sidebar">
         <header className="side-top drag">
-          <button className="settings-back" title="Back to threads (Esc)" onClick={onClose}>
+          <button className="settings-back" title="Back to threads (Esc)" onClick={leaveSettings}>
             <ArrowLeft />
             Back
           </button>
@@ -108,12 +119,18 @@ export function Settings({ route, onRoute, onClose, onOpenThread }: { route: Set
                   key={i.id}
                   className={`settings-link${route.section === i.id ? ' active' : ''}`}
                   aria-current={route.section === i.id ? 'page' : undefined}
-                  onClick={() => onRoute({ section: i.id })}
+                  onClick={() => navigate({ section: i.id })}
                 >
                   {i.icon}
                   {i.label}
                 </button>
               ))}
+              {g.label === 'Hub settings' && onOpenLimits && (
+                <button className="settings-link" onClick={() => go(onOpenLimits)}>
+                  <Limits />
+                  Limits
+                </button>
+              )}
             </div>
           ))}
         </nav>
@@ -126,7 +143,7 @@ export function Settings({ route, onRoute, onClose, onOpenThread }: { route: Set
             <span className="sep">/</span>
             {detailLabel ? (
               <>
-                <button onClick={() => onRoute(backTo)}>{LABEL[route.section]}</button>
+                <button onClick={() => navigate(backTo)}>{LABEL[route.section]}</button>
                 <span className="sep">/</span>
                 <b>{detailLabel}</b>
               </>
@@ -135,6 +152,7 @@ export function Settings({ route, onRoute, onClose, onOpenThread }: { route: Set
             )}
           </nav>
         </header>
+        <LeaveGuard.Provider value={leave}>
         <div className="settings-scroll">
           <div className="settings-page">
             {route.section === 'profiles' && (
@@ -142,7 +160,7 @@ export function Settings({ route, onRoute, onClose, onOpenThread }: { route: Set
                 profileId={profileId}
                 onOpen={(id) => onRoute({ section: 'profiles', profileId: id })}
                 onBack={() => onRoute({ section: 'profiles' })}
-                onOpenSecrets={(id) => onRoute({ section: 'secrets', profileId: id })}
+                onOpenSecrets={(id) => navigate({ section: 'secrets', profileId: id })}
               />
             )}
             {route.section === 'accounts' && <AccountsSettings accountId={accountId} onOpen={(id) => onRoute({ section: 'accounts', accountId: id })} onBack={() => onRoute({ section: 'accounts' })} />}
@@ -153,10 +171,11 @@ export function Settings({ route, onRoute, onClose, onOpenThread }: { route: Set
             {route.section === 'tools' && <ToolsSettings key={toolId ?? ''} toolId={toolId} onOpen={(id) => onRoute({ section: 'tools', toolId: id })} onBack={() => onRoute({ section: 'tools' })} onOpenThread={onOpenThread} />}
             {route.section === 'mcps' && <McpSettings key={mcpId ?? ''} mcpId={mcpId} onOpen={(id) => onRoute({ section: 'mcps', mcpId: id })} onBack={() => onRoute({ section: 'mcps' })} />}
             {route.section === 'skills' && <SkillsSettings key={sourceId ?? ''} sourceId={sourceId} onOpen={(id) => onRoute({ section: 'skills', sourceId: id })} onBack={() => onRoute({ section: 'skills' })} />}
-            {route.section === 'projects' && <ProjectsSettings projectId={route.projectId} onOpen={(projectId) => onRoute({ section: 'projects', projectId })} onRoute={onRoute} />}
+            {route.section === 'projects' && <ProjectsSettings projectId={route.projectId} onOpen={(projectId) => onRoute({ section: 'projects', projectId })} onRoute={navigate} />}
             {route.section === 'machines' && <MachineSettings machineId={route.machineId} onOpen={(machineId) => onRoute({ section: 'machines', machineId })} onBack={() => onRoute({ section: 'machines' })} onOpenThread={onOpenThread} />}
           </div>
         </div>
+        </LeaveGuard.Provider>
       </main>
     </div>
   );
@@ -233,11 +252,13 @@ export function SettingLink({ icon, title, description, warn, chevron = true, on
 }
 
 /**
- * The one footer of every settings detail page: Delete on the left (it asks inline, naming what it deletes),
- * Cancel and Save on the right. Without `saveLabel` the page has nothing to save and offers Done.
- * Delete stays visible but disabled, with `blocked` as its reason, when the thing is in use.
+ * The one footer of every settings detail page: Delete on the left, Cancel and Save on the right.
+ * Without `saveLabel` the page has nothing to save and offers Done. Delete stays visible but disabled,
+ * with `blocked` as its reason, when the thing is in use.
+ * Every confirmation reads the same way: what happens, then Cancel, then the red action last.
+ * With `dirty`, leaving the page another way asks "Discard changes?" here first.
  */
-export function SettingsFooter({ remove, busy, onCancel, saveLabel, saveDisabled, saveForm, onSave }: {
+export function SettingsFooter({ remove, busy, onCancel, saveLabel, saveDisabled, saveForm, onSave, dirty = false }: {
   remove?: { name: string; run: () => void; blocked?: string; consequence?: string };
   busy?: boolean;
   onCancel: () => void;
@@ -247,16 +268,28 @@ export function SettingsFooter({ remove, busy, onCancel, saveLabel, saveDisabled
   saveForm?: string;
   /** Saves without a form; otherwise the button submits one. */
   onSave?: () => void;
+  /** Unsaved edits: leaving through the sidebar, breadcrumb, Back or Escape asks first. */
+  dirty?: boolean;
 }) {
   const [confirming, setConfirming] = useState(false);
+  const [leaving, setLeaving] = useState<() => void>();
+  const save = useRef<HTMLButtonElement>(null);
+  const guard = useContext(LeaveGuard);
+  useEffect(() => {
+    if (!dirty) return;
+    guard.current = (go) => { setLeaving(() => go); return true; };
+    return () => { guard.current = undefined; };
+  }, [dirty, guard]);
+  const keepEditing = () => { setLeaving(undefined); requestAnimationFrame(() => save.current?.focus()); };
   useEscape(confirming, () => setConfirming(false));
+  useEscape(!!leaving, keepEditing);
   return (
     <footer className="settings-actions">
-      {remove && (confirming ? (
+      {remove && !leaving && (confirming ? (
         <>
-          <button type="button" className="ghost danger" disabled={busy} onClick={remove.run}>Delete {remove.name}</button>
-          <button type="button" className="ghost" disabled={busy} onClick={() => setConfirming(false)}>Cancel</button>
           {remove.consequence && <small className="hint">{remove.consequence}</small>}
+          <button type="button" className="ghost" disabled={busy} autoFocus onClick={() => setConfirming(false)}>Cancel</button>
+          <button type="button" className="ghost danger" disabled={busy} onClick={remove.run}>Delete {remove.name}</button>
         </>
       ) : (
         <>
@@ -265,13 +298,21 @@ export function SettingsFooter({ remove, busy, onCancel, saveLabel, saveDisabled
         </>
       ))}
       <span className="spacer" />
-      {!confirming && (
-        <>
+      {/* Keep confirmation buttons distinct from Save: reusing a clicked button as
+          type=submit can submit the form after its click handler keeps editing. */}
+      {leaving ? (
+        <Fragment key="discard-prompt">
+          <small className="hint">Discard changes?</small>
+          <button type="button" className="ghost" autoFocus onClick={keepEditing}>Keep editing</button>
+          <button type="button" className="ghost danger" onClick={() => { const go = leaving; setLeaving(undefined); go(); }}>Discard</button>
+        </Fragment>
+      ) : !confirming && (
+        <Fragment key="edit-actions">
           <button type="button" className="ghost" disabled={busy} onClick={onCancel}>{saveLabel ? 'Cancel' : 'Done'}</button>
           {saveLabel && (
-            <button type={onSave ? 'button' : 'submit'} form={onSave ? undefined : saveForm} className="ghost primary" disabled={saveDisabled} onClick={onSave}>{saveLabel}</button>
+            <button ref={save} type={onSave ? 'button' : 'submit'} form={onSave ? undefined : saveForm} className="ghost primary" disabled={saveDisabled} onClick={onSave}>{saveLabel}</button>
           )}
-        </>
+        </Fragment>
       )}
     </footer>
   );

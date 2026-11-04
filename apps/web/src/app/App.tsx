@@ -6,7 +6,6 @@ import { LimitsView } from '../limits/LimitsView';
 import { hasSignedInAccount, ProfilesProvider, useProfiles } from '../profiles/profiles';
 import { ProjectsProvider, useProjects } from '../projects/projects';
 import { AddProjectSheet } from '../projects/AddProjectSheet';
-import { ProjectSheet } from '../projects/ProjectSheet';
 import { ThreadsProvider, useThreads } from '../threads/threads';
 import { PendingSecretsProvider } from '../secrets/pendingSecrets';
 import { ResourcesProvider } from '../resources/resources';
@@ -24,7 +23,7 @@ import { Settings, type SettingsRoute } from './Settings';
 import { PanelToggle, SidePanel, useNarrow, usePanelOpen } from './SidePanel';
 import { SnoozeNotice } from '../threads/SnoozeNotice';
 
-type OpenSheet = { kind: 'addProject' } | { kind: 'project'; id: string } | null;
+type OpenSheet = { kind: 'addProject' } | null;
 
 export function App() {
   return (
@@ -60,7 +59,8 @@ function Shell() {
   const [settings, setSettings] = useState<SettingsRoute | null>(null);
   const closeSettings = useCallback(() => setSettings(null), []);
   useAppEvent('settings.open', setSettings);
-  useAppEvent('project.open', ({ id }) => setSheet({ kind: 'project', id }));
+  // One project editor: the header chip and the Filter gear open its Settings page.
+  useAppEvent('project.open', ({ id }) => setSettings({ section: 'projects', projectId: id }));
   const [panelWanted, togglePanel] = usePanelOpen();
   const [limits, setLimits] = useState<{ scope: LimitsScope; navigation: number } | null>(null);
   const limitsOpen = limits !== null && limits.navigation === navigation;
@@ -88,7 +88,6 @@ function Shell() {
     setSheet(null);
   };
   const close = () => setSheet(null);
-  const openProject = sheet?.kind === 'project' ? state?.projects.find((p) => p.id === sheet.id) : undefined;
   const openProfile = (profileId: string) => setSettings({ section: 'profiles', profileId });
   const openSecrets = useCallback((profileId: string) => setSettings({ section: 'secrets', profileId }), []);
   const openAccount = (accountId: string) => setSettings({ section: 'accounts', accountId });
@@ -141,13 +140,14 @@ function Shell() {
 
   return (
     <>
-      {settings && <Settings route={settings} onRoute={setSettings} onClose={closeSettings} onOpenThread={openThread} />}
+      {settings && <Settings route={settings} onRoute={setSettings} onClose={closeSettings} onOpenThread={openThread}
+        onOpenLimits={() => { setSettings(null); openLimits(defaultLimitsScope(profiles, currentProfileId, filter)); }} />}
       <div className={`layout${panelOpen ? ' with-panel' : ''}`} hidden={settings !== null}>
         <aside className="sidebar" inert={overlay}>
           <div className="side-controls drag">
             <div className="side-tools">
               {!settingUp && <ThreadSearch />}
-              {!settingUp && <ScopeMenu onOpenProject={(p) => setSheet({ kind: 'project', id: p.id })} />}
+              {!settingUp && <ScopeMenu onOpenProject={(p) => setSettings({ section: 'projects', projectId: p.id })} />}
               <button className="side-icon" title="Add project" aria-label="Add project" disabled={!profiles?.length} onClick={() => setSheet({ kind: 'addProject' })}>
                 <FolderPlus />
               </button>
@@ -176,7 +176,7 @@ function Shell() {
             <ConnectionNotice />
           </footer>
         </aside>
-        <SidebarResizer />
+        <div inert={overlay} style={{ display: 'contents' }}><SidebarResizer /></div>
         <div className="main" role="main" inert={overlay}>
           {limitsOpen && !settings && (
             <LimitsView scope={limits.scope} onScope={(scope) => setLimits({ scope, navigation })} onClose={closeLimits}
@@ -200,7 +200,6 @@ function Shell() {
         {panelOpen && <SidePanel overlay={overlay} />}
         {hasPane && <PanelToggle open={panelOpen} onToggle={togglePanel} />}
         {sheet?.kind === 'addProject' && <AddProjectSheet onClose={close} />}
-        {openProject && <ProjectSheet project={openProject} onClose={close} onOpenSettings={(route) => { close(); setSettings(route); }} />}
       </div>
     </>
   );

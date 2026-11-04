@@ -110,7 +110,7 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
           <button ref={trigger} popoverTarget={id} disabled={busy || !summary?.available || !!thread.queuedMessages?.length} aria-label="Shipping options" aria-haspopup="menu"><ChevronDown /></button>
         </span>}
         {status?.canCheck && <button className="delivery-pill" disabled={busy} onClick={() => call('threads.checkDelivery')}><Refresh />Check now</button>}
-        {status?.canStopFollowUps && <button className="delivery-pill" disabled={busy} title="Keep tracking the PR without starting the agent again" onClick={() => call('threads.cancelDelivery')}><StopSquare />Stop watching PR</button>}
+        {status?.canStopFollowUps && <button className="delivery-pill" disabled={busy} title="The PR stays tracked; the agent no longer starts to fix failing checks" onClick={() => call('threads.cancelDelivery')}><StopSquare />Stop automatic fixes</button>}
         {status?.canCancel && status.phase !== 'queued' && <button className="delivery-pill" disabled={busy} onClick={() => call('threads.cancelDelivery')}><Close />Cancel delivery</button>}
       </>}
       {settled && !hasChip && <span className="delivery-settled">Settled</span>}
@@ -124,7 +124,8 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
     </div>
     {hint && <p className={`delivery-hint tone-${status?.tone ?? 'ready'}`} role={status?.phase === 'attention' || status?.phase === 'closed' ? 'alert' : undefined}
       title={status?.phase === 'unavailable' ? thread.delivery?.observationError : undefined}>
-      <span className="delivery-dot" aria-hidden="true" /><span className="delivery-hint-text">{hint}</span>
+      {/* The chip beside it already carries the tone; only a call to act keeps its own mark. */}
+      {status?.tone === 'attention' && <span className="delivery-dot" aria-hidden="true" />}<span className="delivery-hint-text">{hint}</span>
     </p>}
     {status?.ci && <DeliveryProgress ci={status.ci} />}
     <div id={id} ref={menu} className="menu delivery-menu" popover="auto" role="menu" aria-label="Shipping options" style={position}

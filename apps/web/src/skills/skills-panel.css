@@ -83,7 +83,7 @@
   width: 11px;
   height: 11px;
   margin-left: auto;
-  opacity: 0;
+  opacity: 0.6;
   transition: transform 0.12s, opacity 0.12s;
 }
 .skills-fold:is(:hover, :focus-visible, [aria-expanded="true"]) > svg {

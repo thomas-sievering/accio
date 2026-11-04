@@ -1,3 +1,4 @@
+import { Chevron } from '../app/icons';
 import type { DeliveryCI } from '@accio/protocol';
 
 export function ciSummary(ci?: DeliveryCI): string | undefined {
@@ -5,13 +6,13 @@ export function ciSummary(ci?: DeliveryCI): string | undefined {
   const active = ci.checks.find(c => c.status === 'in_progress')
     ?? ci.checks.find(c => !['success', 'neutral', 'skipped'].includes(c.status));
   if (!active) return 'CI · Checks finishing';
-  if (active.step) return `CI · ${active.name} · ${active.step.name} · step ${active.step.current} of ${active.step.total}`;
+  if (active.step) return `CI · ${active.step.name} · ${active.step.current} of ${active.step.total}`;
   return `CI · ${active.name} · ${active.status.replaceAll('_', ' ')}`;
 }
 
 export function DeliveryProgress({ ci }: { ci: DeliveryCI }) {
   return <details className="delivery-progress">
-    <summary>CI details · {ci.checks.filter(c => ['success', 'neutral', 'skipped'].includes(c.status)).length} of {ci.checks.length} checks complete</summary>
+    <summary><Chevron />CI details · {ci.checks.filter(c => ['success', 'neutral', 'skipped'].includes(c.status)).length} of {ci.checks.length} checks complete</summary>
     <ul>{ci.checks.map((check, index) => <li key={index}>
       {check.url && /^https:\/\/github\.com\//.test(check.url)
         ? <a href={check.url} target="_blank" rel="noreferrer">{check.name} ↗</a> : <span>{check.name}</span>}

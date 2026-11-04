@@ -39,6 +39,20 @@
   align-self: flex-start;
   margin-top: 14px;
 }
+/* Secondary ways on, together on one muted row under the step's main action. */
+.first-run-links {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+  color: var(--dim);
+  font-size: 13px;
+}
+/* The sign-in step's main action is full width, like Continue on the other steps. */
+.first-run .signin-start {
+  width: 100%;
+  height: 38px;
+  margin-top: 16px;
+}
 .first-run-dots {
   display: flex;
   gap: 6px;
@@ -66,10 +80,10 @@
     transform: translateY(4px);
   }
 }
-.first-run .sheet-body {
+.first-run-screen .sheet-body {
   padding: 0;
 }
-.first-run .sheet-foot {
+.first-run-screen .sheet-foot {
   padding: 12px 0 0;
   border: 0;
 }

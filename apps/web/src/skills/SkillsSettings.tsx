@@ -178,9 +178,6 @@ function SourceDetail({ source, state, onDeleted }: { source: SkillSource; state
 
       <section className="settings-section">
         <h2>Skills</h2>
-        <p className="note section-note">
-          <b>Enable for…</b> keeps a skill managed by Accio: it follows this source’s applied revision. <b>Copy into project</b> writes an independent copy to the project’s <code>.agents/skills/</code> for you to commit and edit; it never updates.
-        </p>
         <div className="settings-card">
           {skills.length === 0 && <SettingRow title="No skills in this revision" />}
           {skills.map((s) => <SkillRow key={s.id} skill={s} />)}
@@ -214,11 +211,11 @@ function SkillRow({ skill }: { skill: SkillEntry }) {
         <span className="setting-text">
           <b>{skill.name}</b>
           {skill.description && <small>{skill.description}</small>}
-          <small className={isOptional(skill.scope) ? 'dim' : 'on-text'}>{isOptional(skill.scope) ? 'Optional' : `Enabled: ${scopeSummary(skill.scope, profiles, projects?.projects)}`}</small>
+          <small className={isOptional(skill.scope) ? 'dim' : 'on-text'}>{isOptional(skill.scope) ? 'Optional' : `On for ${scopeSummary(skill.scope, profiles, projects?.projects)}`}</small>
         </span>
         <span className="setting-value">
-          <button type="button" className="ghost" aria-expanded={open === 'scope'} onClick={() => setOpen(open === 'scope' ? undefined : 'scope')}>Enable for…</button>
-          <button type="button" className="ghost" aria-expanded={open === 'copy'} onClick={() => { setOpen(open === 'copy' ? undefined : 'copy'); setCopied(undefined); }}>Copy into project</button>
+          <button type="button" className="ghost" title="Keep it managed by Accio: it follows this source's applied revision" aria-expanded={open === 'scope'} onClick={() => setOpen(open === 'scope' ? undefined : 'scope')}>Enable for…</button>
+          <button type="button" className="ghost" title="Write an independent copy to the project's .agents/skills/ to commit and edit; it never updates" aria-expanded={open === 'copy'} onClick={() => { setOpen(open === 'copy' ? undefined : 'copy'); setCopied(undefined); }}>Copy into project</button>
         </span>
       </div>
       {open === 'scope' && (

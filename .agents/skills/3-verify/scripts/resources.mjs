@@ -148,7 +148,7 @@ export default async function journey({ page, runDir, home, fixture, action, cap
     await button('Enable synced skill').click();
     await page.getByRole('group', { name: 'Profiles' }).getByRole('checkbox', { name: 'Verify personal' }).check();
     await button('Save').click();
-    await page.getByText('Enabled: Verify personal').waitFor();
+    await page.getByText('On for Verify personal').waitFor();
     assert.equal((await resources()).skills[0].scope.profileIds.length, 1);
   });
 
@@ -190,19 +190,21 @@ export default async function journey({ page, runDir, home, fixture, action, cap
   });
   await capture('skills-copied');
 
-  await action('projects/sheet: only skills have project selections', async () => {
+  await action('projects/settings: only skills have project selections', async () => {
+    // The Filter gear opens the project's Settings page.
     await button('Back').click();
     await button('Filter threads').click();
     await button('verify-project settings').click();
-    const dialog = page.getByRole('dialog');
+    const dialog = page.getByRole('main');
     const skill = dialog.getByRole('group', { name: 'Skills' }).getByRole('checkbox', { name: /^demo/ });
     assert(await skill.isChecked());
     assert(await skill.isDisabled());
-    await dialog.getByText('On for profile Verify personal').first().waitFor();
+    await dialog.getByText('On for Verify personal').first().waitFor();
     assert.equal(await dialog.getByRole('group', { name: 'MCP servers' }).count(), 0);
     assert.equal(await dialog.getByRole('group', { name: 'Tools' }).count(), 0);
     await capture('project-sheet-resources');
-    await button('Close').click();
+    await button('Cancel').click();
+    await button('Back').click();
   });
   await action('profiles/settings: only skills have profile selections', async () => {
     await button('Settings').click();

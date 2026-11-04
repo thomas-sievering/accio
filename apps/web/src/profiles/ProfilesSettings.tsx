@@ -76,16 +76,12 @@ function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: Pr
 
   return (
     <form className="settings-profile-form" onSubmit={submit} noValidate>
+      {/* One card for who the profile is and which accounts it uses, so Skills fits above the footer. */}
       <SettingsSection>
         <div className="setting-form">
-          <Field label="Name" error={touched && !name.trim() && 'Name required'}>
+          <Field label="Name" error={touched && !name.trim() && 'Enter a name for the profile.'}>
             {(p) => <input {...p} value={name} onChange={(e) => setName(e.target.value)} placeholder="personal, work…" autoFocus={!profile} required />}
           </Field>
-          {error && <p className="error">{error}</p>}
-        </div>
-      </SettingsSection>
-      <SettingsSection title="Accounts">
-        <div className="setting-form">
           <label className="field">
             <span>Anthropic · Claude account</span>
             <select value={accountId} onChange={(e) => setAccountId(e.target.value)} disabled={!accounts}>
@@ -102,14 +98,10 @@ function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: Pr
               {accounts?.filter((a) => a.providerId === 'openai').map((a) => <option key={a.id} value={a.id}>{a.name}{a.email ? ` · ${a.email}` : ''}{a.signedIn ? '' : ' · Signed out'}</option>)}
             </select>
           </label>
-          <small className="hint">Accounts are set up in Settings / Accounts.</small>
+          {error && <p className="error">{error}</p>}
+          <small className="hint">Accounts are set up in Settings / Accounts.{profile && onOpenSecrets && <> <button type="button" className="link" onClick={() => onOpenSecrets(profile.id)}>Saved secrets</button></>}</small>
         </div>
       </SettingsSection>
-      {profile && onOpenSecrets && (
-        <SettingsSection>
-          <SettingLink title="Saved secrets" onClick={() => onOpenSecrets(profile.id)} />
-        </SettingsSection>
-      )}
       {profile && (
         <SettingsSection title="Skills">
           <div className="setting-form">
@@ -118,7 +110,7 @@ function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: Pr
           </div>
         </SettingsSection>
       )}
-      <SettingsFooter remove={profile && { name: profile.name, run: remove, consequence: 'Its accounts stay; only the profile goes.' }} busy={busy} onCancel={onDone} saveLabel={profile ? 'Save' : 'Add profile'} saveDisabled={busy || !accounts || !dirty} />
+      <SettingsFooter remove={profile && { name: profile.name, run: remove, consequence: 'Its accounts stay; only the profile goes.' }} busy={busy} onCancel={onDone} saveLabel={profile ? 'Save' : 'Add profile'} saveDisabled={busy || !accounts || !dirty} dirty={!!profile && dirty && !busy} />
     </form>
   );
 }

@@ -158,7 +158,7 @@ export function deliveryStatus(t: ThreadView): DeliveryStatus | undefined {
       ...(progress ? { ci: d.ci } : {}),
     };
   }
-  if (stopped && known.phase === 'waiting') known = { ...known, detail: pr ? `Automatic follow-ups stopped · still tracking #${pr.number}` : 'Automatic follow-ups stopped' };
+  if (stopped && known.phase === 'waiting') known = { ...known, detail: pr ? `Automatic fixes stopped · still tracking #${pr.number}` : 'Automatic fixes stopped' };
   const canShip = known.phase === 'attention' || known.phase === 'closed';
   if (d.observationError) {
     return { ...base, phase: 'unavailable', label: 'Status unavailable', tone: 'unavailable', glyph: pr ? 'pr' : 'alert', badge: 'Unavailable',
@@ -187,7 +187,7 @@ export function threadStatus(t: ThreadView, { needsSecret = false }: { needsSecr
  * "Waiting for merge" reads as Review and live CI as its step, so a narrow row never cuts a phrase.
  */
 export function shortStatus(label: string): string {
-  const step = label.match(/^CI\b.*step (\d+) of (\d+)/);
+  const step = label.match(/^CI\b.* (\d+) of (\d+)$/);
   if (step) return `CI · step ${step[1]}/${step[2]}`;
   if (label.startsWith('CI')) return 'CI';
   if (label === 'Waiting for merge') return 'Review';

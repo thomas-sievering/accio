@@ -176,9 +176,6 @@
   width: 12px;
   height: 12px;
 }
-.side-icon.on {
-  color: var(--green);
-}
 
 /* Side panel: the right-hand column, under the window's caption buttons. */
 .side-panel {

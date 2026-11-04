@@ -78,9 +78,9 @@ function PickerRow({ item, context, staged, profileId, projectKey: key, profileN
   const status = inherited === 'global'
     ? 'On everywhere'
     : inherited === 'profile'
-      ? `On for profile ${profileName}`
+      ? `On for ${profileName}`
       : own
-        ? context.kind === 'project' ? 'On for this project' : 'On for this profile'
+        ? context.kind === 'project' ? 'On for this project' : `On for ${profileName}`
         : 'Optional';
   const change = (checked: boolean) => {
     if (staged) { staged.set(item.id, checked); return Promise.resolve(); }

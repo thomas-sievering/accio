@@ -54,7 +54,8 @@ test('Skills tab lists project and inherited skills, adds, references, edits, di
   await search.press('Enter');
   await expect(panel(page).getByRole('status').filter({ hasText: 'lib-review added to this project' })).toBeAttached();
   const review = projectList(page).locator('.skill-item').filter({ hasText: 'lib-review' });
-  await expect(review).toContainText('Library · Library');
+  await expect(review).toContainText('Library');
+  await expect(review).not.toContainText('Library · Library');
   await expect(panel(page).getByRole('button', { name: 'Add skill', exact: true })).toBeFocused();
 
   // The selection is the hub's: a fresh load shows it too.

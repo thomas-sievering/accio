@@ -136,39 +136,36 @@ function ToolForm({ tool, taken, onSaved, onDone, after }: { tool?: ToolDefiniti
               {(p) => <input {...p} value={value.package} onChange={(e) => set('package', e.target.value)} placeholder="@playwright/cli" spellCheck={false} required />}
             </Field>
             <Field label="Version" className="version-field" error={show('version')}>
-              {(p) => <input {...p} value={value.version} onChange={(e) => set('version', e.target.value)} placeholder="1.2.3" spellCheck={false} required />}
+              {(p) => <input {...p} value={value.version} onChange={(e) => set('version', e.target.value)} placeholder="1.2.3, exact" title="An exact version, so every machine runs the same tool" spellCheck={false} required />}
             </Field>
           </div>
-          <small className="hint">Pin an exact version so every machine runs the same tool. {tool && 'Changing it installs the new version alongside the old one.'}</small>
           <div className="field-row">
             <Field label="Executable" className="grow" error={show('executable')}>
               {(p) => <input {...p} value={value.executable} onChange={(e) => set('executable', e.target.value)} placeholder="playwright-cli" spellCheck={false} required />}
             </Field>
-            <label className="field grow">
+            <label className="field grow" title="Accio runs the executable with these arguments to check it works">
               <span>Health check arguments</span>
               <input value={argsText} onChange={(e) => setArgs(e.target.value)} placeholder="--version" spellCheck={false} />
             </label>
           </div>
-          <small className="hint">Accio runs the executable with these arguments (separated by spaces) to check it works.</small>
         </div>
       </SettingsSection>
       <p className="note">Saving installs and checks this tool on this machine. Managed tools are available to every profile and project on the machine.</p>
       <SettingsSection title="Repair">
         <div className="setting-form">
-          <label className="field">
+          <label className="field" title="When a check fails, Accio starts a thread on that machine that fixes the install, then checks again">
             <span>Repair threads run as</span>
             <select value={value.repairProfileId ?? ''} onChange={(e) => set('repairProfileId', e.target.value || undefined)}>
               <option value="">Any signed-in profile</option>
               {profiles.map((p) => <option key={p.id} value={p.id}>{p.name}{hasSignedInAccount(p) ? '' : ' · Signed out'}</option>)}
             </select>
           </label>
-          <small className="hint">When a check fails, Accio starts a thread on that machine that diagnoses and fixes the install, then checks again.</small>
           {repairWarning && <small className="warn" role="status">{repairWarning}</small>}
         </div>
       </SettingsSection>
       {after}
       {error && <p className="error" role="alert">{error}</p>}
-      <SettingsFooter remove={tool && { name: tool.name, run: remove }} busy={busy} onCancel={onDone} saveLabel={tool ? 'Save' : 'Add tool'} saveDisabled={busy || (!!tool && !changed)} />
+      <SettingsFooter remove={tool && { name: tool.name, run: remove }} busy={busy} onCancel={onDone} saveLabel={tool ? 'Save' : 'Add tool'} saveDisabled={busy || (!!tool && !changed)} dirty={!!tool && changed && !busy} />
     </form>
   );
 }

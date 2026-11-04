@@ -66,7 +66,7 @@ function MachineDetail({ machine, onBack, onOpenThread }: { machine: MachineView
     <form className="settings-profile-form" id="machine-form" onSubmit={submit} noValidate>
       <SettingsSection>
         <div className="setting-form">
-          <Field label="Machine name" error={touched && !shownName.trim() && 'Name required'} hint="Shared with everyone connected to the hub.">
+          <Field label="Machine name" error={touched && !shownName.trim() && 'Enter a name for the machine.'} hint="Shared with everyone connected to the hub.">
             {(p) => <input {...p} value={shownName} onChange={(e) => setName(e.target.value)} maxLength={100} required disabled={busy} />}
           </Field>
         </div>
@@ -110,7 +110,7 @@ function MachineDetail({ machine, onBack, onOpenThread }: { machine: MachineView
         ))}
       </SettingsSection>
       {error && <p className="error" role="alert">{error}</p>}
-      <SettingsFooter busy={busy} onCancel={onBack} saveLabel="Save" saveDisabled={busy || (!renamed && changedFolders.length === 0)} />
+      <SettingsFooter busy={busy} onCancel={onBack} saveLabel="Save" saveDisabled={busy || (!renamed && changedFolders.length === 0)} dirty={!busy && (renamed || changedFolders.length > 0)} />
     </form>
   );
 }

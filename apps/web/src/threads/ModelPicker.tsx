@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { modelKey, type ModelSelection, type ModelsState, type UsedUpLimit } from '@accio/protocol';
 import { useClient, useConnectionStatus } from '../app/connection';
-import { Check, ProviderLogo, Star } from '../app/icons';
+import { Check, ChevronDown, ProviderLogo, Star } from '../app/icons';
 import { EffortWord, effortSteps } from './EffortControl';
 import { useSteps, useWheelSteps } from './steps';
 
@@ -152,6 +152,8 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
           setEffortPosition({ left: Math.max(12, Math.min(rect.left, window.innerWidth - 172)), bottom: window.innerHeight - rect.top + 8, top: 'auto' });
         }}>
         <EffortWord key={modelKey(current)} steps={effort.steps} index={stepper.shown} />
+        {/* A small caret says this opens a menu, as the word alone read like a label. */}
+        <ChevronDown />
       </button>
       <div id={effortId} ref={effortMenu} popover="auto" className="menu effort-menu" role="menu" aria-label="Effort" style={effortPosition}
         onToggle={(event) => {

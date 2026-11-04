@@ -20,8 +20,8 @@ export function HubSettings({ adding, onAdd, onBack }: { adding?: boolean; onAdd
     <SettingsSection>
       {hubs.map((hub) => <SettingRow key={hub.id} icon={<Hub />} title={hub.name} description={confirming === hub.id ? 'You will be disconnected from this hub.' : hub.url}>
         {confirming === hub.id ? <>
-          <button type="button" className="ghost danger" disabled={busy} autoFocus onClick={() => void run(async () => { await root.call('hubs.remove', { id: hub.id }); setConfirming(undefined); })}>Remove {hub.name}</button>
-          <button type="button" className="ghost" disabled={busy} onClick={() => setConfirming(undefined)}>Cancel</button>
+          <button type="button" className="ghost" disabled={busy} autoFocus onClick={() => setConfirming(undefined)}>Cancel</button>
+          <button type="button" className="ghost danger" disabled={busy} onClick={() => void run(async () => { await root.call('hubs.remove', { id: hub.id }); setConfirming(undefined); })}>Remove {hub.name}</button>
         </> : <>
           <StatusPill tone={hub.status === 'connected' ? 'ok' : hub.error ? 'bad' : undefined}>{hub.status === 'connected' ? 'Connected' : hub.status === 'connecting' ? 'Connecting' : 'Offline'}</StatusPill>
           {hub.id !== selectedId && <button type="button" className="ghost" onClick={() => select(hub.id)}>Use hub</button>}

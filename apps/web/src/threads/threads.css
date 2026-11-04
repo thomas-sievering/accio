@@ -181,8 +181,8 @@
   gap: 4px;
   min-width: 0;
   margin: 0;
-  font-size: 11px;
-  line-height: 14px;
+  font-size: 12px;
+  line-height: 15px;
 }
 /* Idle rows read "project · Ready"; the project gives way before the short status does. */
 .row-project-name {
@@ -228,12 +228,15 @@
   padding: 0;
 }
 
-/* Keyboard focus shows a long title in full, since a native tooltip only appears on hover. */
+/* Keyboard focus shows up to two lines of a long title; hover and the accessible name carry it in full. */
 .row.open:has(.row-main:focus-visible) {
   height: auto;
   min-height: 44px;
 }
 .row.open .row-main:focus-visible .row-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   white-space: normal;
   overflow-wrap: anywhere;
 }
@@ -668,13 +671,14 @@
   flex-direction: column;
   gap: 8px;
 }
+/* Turn notices such as "Stopped." read like "Worked for": a muted line at the column's left edge. */
 .notice {
-  align-self: center;
+  align-self: stretch;
   max-width: 100%;
-  padding: 4px 10px;
-  font-size: 12.5px;
+  margin: 2px 0;
+  padding-inline-start: 12px;
+  font-size: 12px;
   color: var(--muted);
-  text-align: center;
   white-space: pre-wrap;
 }
 .notice.error {
@@ -769,6 +773,8 @@
 .effort-trigger:hover:not(:disabled) { background: var(--hover); color: var(--ink); }
 .effort-trigger:hover:not(:disabled) .effort-word { color: inherit; }
 .effort-trigger:disabled { cursor: default; opacity: 0.6; }
+.effort-trigger > svg { width: 10px; height: 10px; margin-left: 3px; color: var(--dim); }
+.effort-trigger:hover:not(:disabled) > svg { color: inherit; }
 .effort-menu .menu-item { justify-content: space-between; }
 .model-trigger svg { fill: currentColor; }
 .menu.effort-menu { position: fixed; inset: auto; position-area: none; position-try-fallbacks: none; width: 160px; margin: 0; }
@@ -890,7 +896,10 @@ div.model-picker-empty b { color: var(--ink); font-weight: 500; }
 .queued-message button:hover:not(:disabled) { color: var(--ink-strong); background: var(--raised-2); }
 .queued-message button svg { width: 13px; height: 13px; }
 .queued-message form { display: flex; flex: 1; min-width: 0; gap: 6px; }
-.queued-message input { flex: 1; min-width: 0; padding: 4px 6px; }
+.queued-message input { flex: 1; min-width: 0; padding: 4px 6px; border: 1px solid var(--line-2); border-radius: 5px; background: var(--bg); color: var(--ink); font: inherit; font-weight: 400; outline: 0; }
+.queued-message input:focus { border-color: var(--blue); }
+/* Save is the edit's primary action; Cancel stays plain. */
+.queued-message .queue-save:not(:disabled) { color: var(--ink-strong); background: var(--raised-2); }
 @media (max-width: 600px) { .queued-when, .composer-queue kbd { display: none; } }
 /* The one slot above the composer: why the thread can't go on, and the action that fixes it */
 .notice-bar {

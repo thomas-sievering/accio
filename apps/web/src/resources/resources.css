@@ -49,7 +49,7 @@
   color: var(--dim);
 }
 .on-text {
-  color: var(--green) !important;
+  color: var(--dim);
 }
 
 /* Per-project / per-profile selection */

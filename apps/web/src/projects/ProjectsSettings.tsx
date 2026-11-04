@@ -17,7 +17,7 @@ export function ProjectsSettings({ projectId, onOpen, onRoute }: { projectId?: s
   const projects = [...state.projects].sort((a, b) => a.name.localeCompare(b.name));
   const open = projects.find((p) => p.id === projectId);
   if (projectId && !open) return <><p className="note">This project no longer exists.</p><button type="button" className="link" onClick={() => onOpen(undefined)}>All projects</button></>;
-  if (open) return <ProjectForm key={open.id} project={open} mode="page" onClose={() => onOpen(undefined)} onOpenSettings={onRoute} />;
+  if (open) return <ProjectForm key={open.id} project={open} onClose={() => onOpen(undefined)} onOpenSettings={onRoute} />;
   return (
     <>
       <p className="note">Each project belongs to one profile.</p>

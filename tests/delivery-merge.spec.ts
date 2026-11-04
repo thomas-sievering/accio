@@ -24,7 +24,7 @@ test('review-only PR stays visible until an external merge, then settles without
   // The chip already says it waits for a merge; the caption only says when it was checked.
   await expect(actions).not.toContainText('Prepared for review; merge manually');
   await expect(actions).toContainText('checked just now');
-  await expect(actions.getByRole('button', { name: 'Stop watching PR', exact: true })).toBeVisible();
+  await expect(actions.getByRole('button', { name: 'Stop automatic fixes', exact: true })).toBeVisible();
   // The sidebar has room for a short word; the row's title keeps the full status.
   await expect(page.locator('.row.active')).toContainText('Review');
   await expect(page.locator('.row.active .row-main')).toHaveAttribute('title', /Waiting for merge · #123/);
@@ -95,15 +95,15 @@ test('stopping review follow-ups retains PR tracking and prevents later failed c
   await page.getByRole('button', { name: 'Prepare for review', exact: true }).click();
   const actions = page.locator('.delivery-actions');
   await expect(actions).toContainText('Waiting for merge');
-  await actions.getByRole('button', { name: 'Stop watching PR', exact: true }).click();
-  await expect(actions).toContainText('Automatic follow-ups stopped · still tracking #123');
+  await actions.getByRole('button', { name: 'Stop automatic fixes', exact: true }).click();
+  await expect(actions).toContainText('Automatic fixes stopped · still tracking #123');
   await expect(actions.getByRole('link', { name: /#123/ })).toBeVisible();
   const metadata = JSON.parse(await readFile(resolve('out', `chat-test-${new URL(baseURL!).port}.json`), 'utf8'));
   const host = JSON.parse(await readFile(metadata.reviewHostFile, 'utf8'));
   await writeFile(metadata.reviewHostFile, JSON.stringify({ ...host, checks: 'FAILURE' }));
   await actions.getByRole('button', { name: 'Check now', exact: true }).click();
   await expect(actions).toContainText('Needs attention');
-  await expect(actions).toContainText('Automatic follow-ups stopped');
+  await expect(actions).toContainText('Automatic follow-ups stopped. PR observation continues.');
   await expect(page.getByRole('button', { name: 'Stop', exact: true })).toHaveCount(0);
   await actions.screenshot({ path: info.outputPath('follow-ups-stopped.png') });
   const client = await TestClient.open(`${baseURL!.replace('http:', 'ws:')}/ws?token=isolated-chat-test-token`);

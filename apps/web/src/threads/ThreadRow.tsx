@@ -7,7 +7,7 @@ import { StatusGlyphIcon } from './StatusMark';
 import { shortStatus, statusText, threadStatus } from './status';
 import { RowRename, useRenaming, useThreadMenu } from './ThreadMenu';
 import { snoozeThread } from './SnoozeNotice';
-import type { ShelfPlace } from './shelves';
+import { wakeText, type ShelfPlace } from './shelves';
 import { useThreads, type ThreadActions } from './threads';
 
 /**
@@ -99,7 +99,7 @@ function hoverActions(t: ThreadView, place: ShelfPlace): HoverAction[] {
 }
 
 function meta(t: ThreadView, place: ShelfPlace, now: Date): string {
-  if (place === 'snoozed' && t.snoozedUntil) return wakeLabel(t.snoozedUntil, now);
+  if (place === 'snoozed' && t.snoozedUntil) return wakeText(new Date(t.snoozedUntil), now);
   if (place === 'settled' && t.settledAt) return timeAgo(t.settledAt, now);
   return timeAgo(t.updatedAt, now);
 }
@@ -110,10 +110,4 @@ function timeAgo(iso: string, now: Date): string {
   if (minutes < 60) return `${minutes}m`;
   const hours = Math.round(minutes / 60);
   return hours < 24 ? `${hours}h` : `${Math.round(hours / 24)}d`;
-}
-
-function wakeLabel(iso: string, now: Date): string {
-  const when = new Date(iso);
-  const time = when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  return when.toDateString() === now.toDateString() ? time : `${when.toLocaleDateString([], { weekday: 'short' })} ${time}`;
 }
