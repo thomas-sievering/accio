@@ -368,7 +368,7 @@ export class ProjectApps {
     const rt = this.runtimes.get(projectId);
     // A running app's poll keeps the branch fresh; otherwise read it now.
     if (!rt?.checkedAt || Date.now() - Date.parse(rt.checkedAt) > this.timing.pollMs * 2) await fetchTip(cwd, branch).catch(() => null);
-    const log = await maybeGit(cwd, 'log', '--first-parent', '-n', '50', `--format=${COMMIT_FORMAT}`, `refs/remotes/origin/${branch}`);
+    const log = await maybeGit(cwd, 'log', '--first-parent', '-n', '30', `--format=${COMMIT_FORMAT}`, `refs/remotes/origin/${branch}`);
     return { branch, commits: log ? parseCommits(log) : [] };
   }
 

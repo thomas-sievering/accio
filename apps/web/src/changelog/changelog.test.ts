@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ChangelogEntry } from '@accio/protocol';
-import { byDay, filterChangelog, landedText } from './changelog';
+import { byDay, entryForCommit, filterChangelog, landedText } from './changelog';
 
 const entry = (id: string, extra: Partial<ChangelogEntry> = {}): ChangelogEntry => ({
   id, threadId: `t-${id}`, projectId: 'p1', profileId: 'personal', title: `Thread ${id}`, target: 'main',
@@ -42,4 +42,25 @@ it('groups entries by the day they shipped', () => {
     entry('c', { deliveredAt: new Date('2026-11-03T09:00:00').toISOString() }),
   ], now);
   expect(groups.map((g) => [g.day, ids(g.entries)])).toEqual([['Today', ['a', 'b']], ['Yesterday', ['c']]]);
+});
+
+describe('entryForCommit', () => {
+  const commit = (sha: string, subject: string) => ({ sha, subject, author: 'Ada', at: '2026-11-04T10:00:00Z' });
+  const direct = entry('direct', { revision: 'abc1234' });
+  const merged = entry('merged', { pullRequest: { number: 100, url: 'u' }, revision: 'fff0000' });
+
+  it('joins a commit to the delivery that published that revision, abbreviated or not', () => {
+    expect(entryForCommit(commit('abc1234def5678', 'Fix login'), [merged, direct])?.id).toBe('direct');
+    expect(entryForCommit(commit('fff0000', 'Anything'), [entry('full', { revision: 'fff0000aaaa' })])?.id).toBe('full');
+  });
+
+  it('falls back to the PR number a squash merge ends its subject with', () => {
+    expect(entryForCommit(commit('9999999', 'Glide the first send (#100)'), [direct, merged])?.id).toBe('merged');
+    expect(entryForCommit(commit('9999999', 'Mentions (#100) midway'), [merged])).toBeUndefined();
+  });
+
+  it('leaves commits made outside accio unjoined', () => {
+    expect(entryForCommit(commit('1234567', 'Manual tweak'), [direct, merged])).toBeUndefined();
+    expect(entryForCommit(commit('1234567', 'Other PR (#7)'), [direct, merged])).toBeUndefined();
+  });
 });

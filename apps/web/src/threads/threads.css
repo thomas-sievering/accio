@@ -973,3 +973,7 @@ div.model-picker-empty b { color: var(--ink); font-weight: 500; }
 .thread-title-form input { min-width: 100px; width: 260px; max-width: 35vw; }
 .model-name { overflow: hidden; text-overflow: ellipsis; }
 .model-version { margin-left: 0.35em; color: var(--muted); }
+/* A project dashboard row: the project is implied, so only the title and its state. */
+.row.open.one-line {
+  height: 36px;
+}
