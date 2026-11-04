@@ -187,6 +187,11 @@
   gap: 22px;
 }
 .pairing-copy { min-height: 32px; }
+.machine-onboard ol { margin: 0; padding-left: 22px; }
+.machine-onboard li + li { margin-top: 8px; }
+.machine-onboard-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.machine-onboard summary { cursor: pointer; margin-bottom: 12px; }
+.machine-onboard textarea { width: 100%; resize: vertical; }
 .settings-actions {
   position: sticky;
   bottom: 0;

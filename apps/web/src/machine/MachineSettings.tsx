@@ -10,31 +10,34 @@ import { FolderList } from './FolderList';
 import { useAction } from '../app/useAction';
 import { useResources } from '../resources/resources';
 import { ToolStatusCard } from '../tools/ToolStatusCard';
+import { OnboardMachine } from './OnboardMachine';
 
 /** The machines known to the hub, including those currently offline. */
 export function MachineSettings({ machineId, onOpen, onBack, onOpenThread }: { machineId?: string; onOpen: (id: string) => void; onBack: () => void; onOpenThread: (threadId: string) => void }) {
   const client = useClient();
+  const [onboarding, setOnboarding] = useState(false);
   const machines = useLive(() => client.call('machines.list', {}), 'machines.changed');
   if (!machines) return <p className="note">Loading machines…</p>;
   const machine = machines.find((m) => m.id === machineId);
   if (machine) return <MachineDetail key={machine.id} machine={machine} onBack={onBack} onOpenThread={onOpenThread} />;
   return (
     <>
-      <p className="note">Machines known to the hub. Their profile folders are stored on the hub too.</p>
-      <SettingsSection>
+      <p className="note">Workers connected to this hub run coding turns. Open a machine to manage its name, tools and profile folders.</p>
+      <SettingsSection add={!onboarding ? { label: 'Add machine', onClick: () => setOnboarding(true) } : undefined}>
         {machines.length === 0 && <SettingRow title="No machines connected yet" />}
         {machines.map((m) => (
           <button key={m.id} className="setting setting-link" onClick={() => onOpen(m.id)}>
             <span className="menu-icon"><Monitor /></span>
             <span className="setting-text">
               <b>{m.name}{m.thisMachine ? ' (this machine)' : ''}</b>
-              <small>{m.platform} · {m.harnesses.length} harness{m.harnesses.length === 1 ? '' : 'es'}</small>
+              <small>Worker · {m.platform} · {m.harnesses.length} harness{m.harnesses.length === 1 ? '' : 'es'}</small>
             </span>
             <StatusPill tone={m.connected ? 'ok' : undefined}>{m.connected ? 'Connected' : 'Offline'}</StatusPill>
             <Chevron />
           </button>
         ))}
       </SettingsSection>
+      {onboarding && <OnboardMachine onClose={() => { setOnboarding(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.settings-add')?.focus()); }} />}
     </>
   );
 }
@@ -74,6 +77,7 @@ function MachineDetail({ machine, onBack, onOpenThread }: { machine: MachineView
           <StatusPill tone={machine.connected ? 'ok' : undefined}>{machine.connected ? 'Connected' : 'Offline'}</StatusPill>
         </SettingRow>
         <SettingRow title="Platform"><code>{machine.platform}</code></SettingRow>
+        <SettingRow title="Role" description="Runs coding turns. The desktop app also includes a client.">Worker</SettingRow>
         <SettingRow title="Accio version"><code>{machine.version}</code></SettingRow>
         {!machine.connected && <SettingRow title="Last seen"><span>{new Date(machine.lastSeen).toLocaleString()}</span></SettingRow>}
       </SettingsSection>
