@@ -61,6 +61,24 @@ describe('TurnTranscript', () => {
     expect(t.unfinishedTools()).toEqual([]);
   });
 
+  it('shows shell descriptions while preserving the full command in details', () => {
+    const input = { command: 'git status --short; git fetch origin', description: 'Check state and fetch' };
+    const claude = new TurnTranscript('t1');
+    const [bash] = toolChanges(claude.accept(assistant([{ type: 'tool_use', id: 'tu1', name: 'Bash', input }])));
+    expect(bash).toMatchObject({ item: { summary: input.description }, input });
+    const harness = new TurnTranscript('t2');
+    const [shell] = toolChanges(harness.accept({ type: 'harness_event', event: {
+      kind: 'tool', id: 'shell', name: 'Shell', summary: input.command, input, status: 'running',
+    } }));
+    expect(shell).toMatchObject({ item: { summary: input.description }, input });
+    for (const name of ['Bash', 'Shell']) {
+      for (const description of [undefined, '', '   ']) {
+        expect(summarizeTool(name, { command: 'bash -lc "git status"', description })).toBe('git status');
+      }
+    }
+    expect(summarizeTool('Read', { file_path: 'README.md', description: 'Read docs' })).toBe('README.md');
+  });
+
   it('streams text, then confirms it with the full message under the same id', () => {
     const t = new TurnTranscript('t1');
     const changes = [
