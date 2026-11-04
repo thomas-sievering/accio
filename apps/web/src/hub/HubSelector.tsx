@@ -1,9 +1,9 @@
 import { useId, useRef, useState, type KeyboardEvent } from 'react';
 import { useHubs } from '../app/connection';
-import { Check, ChevronDown, Hub } from '../app/icons';
+import { Check, ChevronDown, Hub, Settings } from '../app/icons';
 
-/** Settings-sidebar card and menu naming the hub the settings below apply to. */
-export function HubSelector() {
+/** Settings-sidebar card and menu naming the hub the settings below apply to; its menu switches hubs and opens this machine's saved hubs. */
+export function HubSelector({ onManage }: { onManage: () => void }) {
   const { hubs, selectedId, select } = useHubs();
   const id = useId();
   const menu = useRef<HTMLDivElement>(null);
@@ -21,7 +21,7 @@ export function HubSelector() {
       trigger.current?.focus();
       return;
     }
-    const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]'));
+    const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]'));
     const index = items.indexOf(document.activeElement as HTMLButtonElement);
     const next = event.key === 'ArrowDown' ? (index + 1) % items.length
       : event.key === 'ArrowUp' ? (index - 1 + items.length) % items.length
@@ -39,9 +39,8 @@ export function HubSelector() {
     </span>
   </>;
 
-  if (!switchable) return <div className="hub-switcher">{label(current)}</div>;
   return <>
-    <button type="button" ref={trigger} className="hub-switcher switchable" popoverTarget={id}
+    <button type="button" ref={trigger} className="hub-switcher" popoverTarget={id}
       aria-label={`Hub: ${current.name}`} aria-haspopup="menu" aria-expanded={open} aria-controls={id}
       onKeyDown={(event) => {
         if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
@@ -55,10 +54,10 @@ export function HubSelector() {
     <div id={id} ref={menu} className="menu hub-menu" popover="auto" role="menu" aria-label="Choose hub" onKeyDown={move}
       onToggle={(event) => {
         setOpen(event.newState === 'open');
-        if (event.newState === 'open') menu.current?.querySelector<HTMLButtonElement>('[aria-checked="true"]')?.focus();
+        if (event.newState === 'open') menu.current?.querySelector<HTMLButtonElement>('[aria-checked="true"], [role="menuitem"]')?.focus();
       }}>
-      <div className="menu-label">Switch hub</div>
-      {hubs.map((hub) => <button key={hub.id} type="button" className="menu-item" role="menuitemradio" aria-checked={hub.id === selectedId}
+      {switchable && <div className="menu-label">Switch hub</div>}
+      {switchable && hubs.map((hub) => <button key={hub.id} type="button" className="menu-item" role="menuitemradio" aria-checked={hub.id === selectedId}
         onClick={() => {
           menu.current?.hidePopover();
           trigger.current?.focus();
@@ -67,6 +66,15 @@ export function HubSelector() {
         {label(hub)}
         {hub.id === selectedId && <Check />}
       </button>)}
+      {switchable && <hr />}
+      <button type="button" className="menu-item" role="menuitem"
+        onClick={() => {
+          menu.current?.hidePopover();
+          onManage();
+        }}>
+        <Settings />
+        Manage hubs
+      </button>
     </div>
   </>;
 }

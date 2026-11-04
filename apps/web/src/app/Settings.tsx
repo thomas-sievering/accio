@@ -14,7 +14,7 @@ import { SkillsSettings } from '../skills/SkillsSettings';
 import { ProjectsSettings } from '../projects/ProjectsSettings';
 import { useProjects } from '../projects/projects';
 import { useResources } from '../resources/resources';
-import { ArrowLeft, BookOpen, Chevron, Folder, Hub, IdCard, Key, Layers, Limits, Monitor, Plug, Plus, ScrollText, Users, Wrench } from './icons';
+import { ArrowLeft, BookOpen, Chevron, Folder, IdCard, Key, Layers, Limits, Monitor, Plug, Plus, ScrollText, Users, Wrench } from './icons';
 import { useClient } from './connection';
 import { useLive } from './useLive';
 import { SidebarResizer } from './Resizer';
@@ -25,30 +25,33 @@ export type SettingsRoute = { section: 'profiles'; profileId?: string } | { sect
   | { section: 'naming' } | { section: 'tools'; toolId?: string } | { section: 'mcps'; mcpId?: string } | { section: 'skills'; sourceId?: string } | { section: 'projects'; projectId?: string };
 type Section = SettingsRoute['section'];
 
-const GROUPS: { label?: string; items: { id: Section; label: string; icon: ReactNode }[] }[] = [
-  { label: 'Hub settings', items: [
-    { id: 'accounts', label: 'Accounts', icon: <IdCard /> },
-    { id: 'secrets', label: 'Secrets', icon: <Key /> },
+/**
+ * Every page listed is a shared setting of the hub chosen in the selector above them. This machine's saved hubs
+ * open from that selector's menu instead. `limits` opens the Limits sheet, not a page.
+ */
+const GROUPS: { label: string; items: { id: Exclude<Section, 'hub'> | 'limits'; label: string; icon: ReactNode }[] }[] = [
+  { label: 'Profiles', items: [
     { id: 'profiles', label: 'Profiles', icon: <Users /> },
+    { id: 'accounts', label: 'Accounts', icon: <IdCard /> },
+    { id: 'limits', label: 'Limits', icon: <Limits /> },
+    { id: 'secrets', label: 'Secrets', icon: <Key /> },
+  ] },
+  { label: 'Threads', items: [
     { id: 'harnesses', label: 'Harnesses', icon: <Layers /> },
     { id: 'systemPrompt', label: 'System prompt', icon: <ScrollText /> },
     { id: 'naming', label: 'Thread naming', icon: <ScrollText /> },
-    { id: 'machines', label: 'Machines', icon: <Monitor /> },
   ] },
   { label: 'Tools and skills', items: [
     { id: 'tools', label: 'Tools', icon: <Wrench /> },
     { id: 'mcps', label: 'MCP servers', icon: <Plug /> },
     { id: 'skills', label: 'Skills', icon: <BookOpen /> },
-    { id: 'projects', label: 'Projects', icon: <Folder /> },
   ] },
-  {
-    label: 'Connections',
-    items: [
-      { id: 'hub', label: 'Hubs', icon: <Hub /> },
-    ],
-  },
+  { label: 'Projects and machines', items: [
+    { id: 'projects', label: 'Projects', icon: <Folder /> },
+    { id: 'machines', label: 'Machines', icon: <Monitor /> },
+  ] },
 ];
-const LABEL = Object.fromEntries(GROUPS.flatMap((g) => g.items.map((i) => [i.id, i.label]))) as Record<Section, string>;
+const LABEL = { hub: 'Hubs', ...Object.fromEntries(GROUPS.flatMap((g) => g.items.map((i) => [i.id, i.label]))) } as Record<Section | 'limits', string>;
 
 /**
  * Leaving a settings page with unsaved edits asks first. The page's footer registers
@@ -131,27 +134,26 @@ export function Settings({ route, onRoute, onClose, onOpenThread, onOpenLimits }
           </button>
         </header>
         <nav className="side-body">
-          <HubSelector />
+          <HubSelector onManage={() => navigate({ section: 'hub' })} />
           {GROUPS.map((g, n) => (
             <div key={n} className="settings-group">
-              {g.label && <div className="settings-group-label">{g.label}</div>}
-              {g.items.map((i) => (
+              <div className="settings-group-label">{g.label}</div>
+              {g.items.map(({ id, label, icon }) => id === 'limits' ? onOpenLimits && (
+                <button key={id} className="settings-link" onClick={() => go(onOpenLimits)}>
+                  {icon}
+                  {label}
+                </button>
+              ) : (
                 <button
-                  key={i.id}
-                  className={`settings-link${route.section === i.id ? ' active' : ''}`}
-                  aria-current={route.section === i.id ? 'page' : undefined}
-                  onClick={() => navigate({ section: i.id })}
+                  key={id}
+                  className={`settings-link${route.section === id ? ' active' : ''}`}
+                  aria-current={route.section === id ? 'page' : undefined}
+                  onClick={() => navigate({ section: id })}
                 >
-                  {i.icon}
-                  {i.label}
+                  {icon}
+                  {label}
                 </button>
               ))}
-              {g.label === 'Hub settings' && onOpenLimits && (
-                <button className="settings-link" onClick={() => go(onOpenLimits)}>
-                  <Limits />
-                  Limits
-                </button>
-              )}
             </div>
           ))}
         </nav>
