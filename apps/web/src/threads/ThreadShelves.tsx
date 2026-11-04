@@ -58,6 +58,7 @@ function Shelf(props: { name: string; label: string; count: number; defaultOpen?
   const [open, setOpen] = useLocalState<'1' | '0'>(`accio.shelf.${props.name}`, props.defaultOpen ? '1' : '0');
   const expanded = open === '1';
   const revealed = useRef(props.reveal ?? 0);
+  const section = useRef<HTMLElement>(null);
   useEffect(() => {
     if (!props.reveal || props.reveal === revealed.current) return;
     revealed.current = props.reveal;
@@ -65,8 +66,11 @@ function Shelf(props: { name: string; label: string; count: number; defaultOpen?
   }, [props.reveal, setOpen]);
   if (props.count === 0) return null;
   return (
-    <section className="shelf">
-      <button className="shelf-head" aria-expanded={expanded} onClick={() => setOpen(expanded ? '0' : '1')}>
+    <section ref={section} className="shelf">
+      <button className="shelf-head" aria-expanded={expanded} onClick={() => {
+        setOpen(expanded ? '0' : '1');
+        if (!expanded) requestAnimationFrame(() => section.current?.querySelector('.row')?.scrollIntoView({ block: 'nearest' }));
+      }}>
         <span>{props.label}</span>
         <span className="shelf-count">{props.count}</span>
         <span className="shelf-chevron">

@@ -44,11 +44,10 @@ export function FirstRun() {
       )}
       {current === 2 && unsigned && (
         <Screen title={`Choose an account for ${unsigned.name}`} sub="Threads under this profile use its Claude or ChatGPT subscription.">
-          <SetUpAccount key={unsigned.id} profile={unsigned} onAddProject={(state?.projects.length ?? 0) === 0 ? () => setAddingProject(true) : undefined} />
+          <SetUpAccount key={unsigned.id} profile={unsigned} addedProject={state?.projects.map(p => p.name).join(', ')} onAddProject={(state?.projects.length ?? 0) === 0 ? () => setAddingProject(true) : undefined} />
         </Screen>
       )}
       {addingProject && <AddProjectSheet onClose={() => setAddingProject(false)} />}
-      {current === 2 && (state?.projects.length ?? 0) > 0 && <p className="first-run-sub" role="status">Added {state!.projects.map((p) => p.name).join(', ')}.</p>}
       {current === 3 && (
         <Screen title="Add your first project" sub="Point Accio at a folder with code in it.">
           <AddProjectForm />
@@ -135,7 +134,7 @@ const providers = [
 ] as const;
 
 /** Pick a provider; a new account is named after the profile unless you reuse one the hub already has. */
-function SetUpAccount({ profile, onAddProject }: { profile: ProfileView; onAddProject?: () => void }) {
+function SetUpAccount({ profile, onAddProject, addedProject }: { profile: ProfileView; onAddProject?: () => void; addedProject?: string }) {
   const client = useClient();
   const { accounts } = useProfiles();
   const [selected, setSelected] = useState('');
@@ -145,7 +144,7 @@ function SetUpAccount({ profile, onAddProject }: { profile: ProfileView; onAddPr
   const [signingIn, setSigningIn] = useState(!!started);
   const { busy, error, run } = useAction();
   const account = profile.providers.find((p) => p.id === providerId)?.accounts[0];
-  const projectFirst = onAddProject && <button type="button" className="link" onClick={onAddProject}>Set up a project first</button>;
+  const projectFirst = addedProject ? <span role="status">Added {addedProject}.</span> : onAddProject && <button type="button" className="link" onClick={onAddProject}>Set up a project first</button>;
   if (account && signingIn) return <>
     <SignIn account={account} />
     <div className="first-run-links">

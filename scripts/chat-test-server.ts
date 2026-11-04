@@ -168,7 +168,7 @@ const harness = new FakeHarness(async function* (run) {
   // The first browser view occurs after these source files have gone away.
   for (const name of ['chat.png', 'chat.webm', 'chat.ogg', 'my image.png', '漢字.png', 'literal%20image.png']) await rm(join(run.cwd, name));
 });
-const app = await startApp({ home, host: '127.0.0.1', port: Number(process.env.ACCIO_CHAT_TEST_PORT ?? 47481), hubPort: 0, token, webRoot: resolve('apps/web/dist') }, {
+const app = await startApp({ home, host: '127.0.0.1', port: Number(process.env.ACCIO_CHAT_TEST_PORT ?? 47481), hubPort: 0, token, webRoot: resolve(process.env.ACCIO_CHAT_TEST_WEB_ROOT ?? 'apps/web/dist') }, {
   harness,
   // Hosting is the external boundary under test. Git publication and thread state stay real.
   deliveryHosting: async (_cwd, args) => {

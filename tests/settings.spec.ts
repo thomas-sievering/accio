@@ -32,6 +32,8 @@ test('keeping unsaved settings edits never submits the form and discarding leave
   await page.getByRole('button', { name: /^Guard original No account selected$/ }).click();
   await expect(name).toHaveValue('Guard original');
   await expect(button('Save')).toBeDisabled();
+  await name.press('Escape');
+  await expect(page.getByRole('button', { name: /^Guard original No account selected$/ })).toBeFocused();
 });
 
 test('Limits returns to its Settings origin and restores keyboard focus', async ({ page, baseURL }) => {
@@ -48,4 +50,23 @@ test('Limits returns to its Settings origin and restores keyboard focus', async 
   await page.getByRole('button', { name: 'Close limits', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Settings', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Limits', exact: true })).toBeFocused();
+});
+
+test('a project preview command saves on Enter like the profile form', async ({ page, baseURL }) => {
+  await page.goto(`${baseURL}/#token=isolated-chat-test-token`);
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  const projects = page.locator('.sidebar nav').getByRole('button', { name: 'Projects', exact: true });
+  await projects.click();
+  const row = page.getByRole('button', { name: /^delivery-project/ });
+  await row.click();
+  const command = page.getByRole('textbox', { name: /^Preview command/ });
+  const original = await command.inputValue();
+  await command.fill('node audit-preview.cjs');
+  await command.press('Enter');
+  await expect(row).toBeVisible();
+  await row.click();
+  await expect(command).toHaveValue('node audit-preview.cjs');
+  await command.fill(original);
+  await command.press('Enter');
+  await expect(row).toBeVisible();
 });

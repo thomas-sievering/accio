@@ -122,6 +122,9 @@
 .field :is(input, select, textarea)[aria-invalid='true'] {
   border-color: var(--red);
 }
+.field :is(input, select, textarea)[aria-invalid='true']:focus {
+  outline-color: var(--red);
+}
 .error {
   margin: 0;
   color: var(--red);

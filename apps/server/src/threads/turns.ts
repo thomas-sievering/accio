@@ -134,13 +134,18 @@ export class Turns {
         thread = { ...thread, workspace, sessionId: null, delivery: undefined };
       }
       if (delivering) thread = { ...thread, delivery: { ...thread.delivery!, status: 'running', detail: undefined } };
-      else {
-        if (!options.resume && !options.retry) thread = { ...thread, workVersion: (thread.workVersion ?? 0) + 1 };
-        if (thread.delivery && ['delivered', 'ready', 'waiting'].includes(thread.delivery.status)) { deps.deliveries.clearCheck(threadId); thread = { ...thread, delivery: { ...thread.delivery, status: 'blocked', detail: 'New work needs to be shipped before archiving.' } }; }
-      }
       const cwd = state.cwd(thread);
       const prompt = delivering && !resume ? deliveryPrompt(thread.workspace!, thread.delivery!) : picked;
       if (delivering && !resume) text = thread.delivery!.mode === 'review' ? 'Prepare for review.' : `Ship to ${thread.delivery!.baseBranch} when ready.`;
+      // A refused resource preparation is not a sent message or a failed turn.
+      // Reserve the turn above, but publish it only after its tools are ready.
+      const env = turnEnv(state.home, thread.profileId, thread.model.harnessId, access);
+      resources = await deps.resources()?.prepare(thread.profileId, thread.projectId, env, { repair: !!thread.repairToolId, cwd });
+      if (controller.signal.aborted || state.closing) throw new UserError('Turn interrupted before starting');
+      if (!delivering) {
+        if (!options.resume && !options.retry) thread = { ...thread, workVersion: (thread.workVersion ?? 0) + 1 };
+        if (thread.delivery && ['delivered', 'ready', 'waiting'].includes(thread.delivery.status)) { deps.deliveries.clearCheck(threadId); thread = { ...thread, delivery: { ...thread.delivery, status: 'blocked', detail: 'New work needs to be shipped before archiving.' } }; }
+      }
       let next = startTurn(thread, text, now());
       const turnId = randomUUID();
       started = true;
@@ -149,9 +154,6 @@ export class Turns {
         queuedMessages: options.queuedId ? t.queuedMessages?.filter(m => m.id !== options.queuedId) : t.queuedMessages,
       }));
       await transcripts.add(thread.id, { kind: 'user', id: `${turnId}:u`, turnId, text, at: now(), ...(resume ? { resume } : {}), ...(delivering ? { delivery: thread.delivery!.mode } : {}), ...(pick ? { pick } : {}) });
-      const env = turnEnv(state.home, thread.profileId, thread.model.harnessId, access);
-      resources = await deps.resources()?.prepare(thread.profileId, thread.projectId, env, { repair: !!thread.repairToolId, cwd });
-      if (controller.signal.aborted || state.closing) throw new UserError('Turn interrupted before starting');
       const grant = deps.tools?.grant(thread.id);
       const turnResources = resources;
       this.liveInputs.set(thread.id, { turnId });

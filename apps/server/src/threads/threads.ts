@@ -298,9 +298,11 @@ export class Threads {
         await this.profiles.hubAccess(profileId, providerOf(choice.harnessId));
         state.assertOpen();
         const selected = model ? this.models.requireExact(profileId, choice) : this.models.require(profileId, choice);
+        if (!options.repairToolId) await this.resources?.requireToolsReady();
+        state.assertOpen();
         // GLOSSARY: a thread keeps the profile it started with for its whole life.
         const thread = newThread({ checkoutId: checkout?.id ?? '', projectId: project?.id ?? '', profileId, hubId: this.profiles.client.id, model: selected }, now());
-        if (options.repairToolId) { thread.repairToolId = options.repairToolId; thread.title = `Repair ${options.repairToolId}`; }
+        if (options.repairToolId) { thread.repairToolId = options.repairToolId; thread.title = `Repair ${this.resources?.state().tools.find(tool => tool.id === options.repairToolId)?.name ?? options.repairToolId}`; }
         if (checkout) thread.workspace = await this.deliveries.git.allocate(thread.id, checkout.path);
         if (!checkout) await mkdir(join(state.home, 'workspaces', thread.id), { recursive: true });
         // Quiet: clients first see the thread once its turn is running, never as an idle empty thread.

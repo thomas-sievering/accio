@@ -127,11 +127,11 @@ export function ProjectForm({ project, onClose, onOpenSettings }: { project: Pro
   );
 
   return (
-    <div className="settings-profile-form">
+    <form className="settings-profile-form" onSubmit={(event) => { event.preventDefault(); if (!busy && dirty) void save(); }}>
       <SettingsSection>
         <div className="setting-form">{fields}</div>
       </SettingsSection>
       <SettingsFooter busy={busy} onCancel={onClose} saveLabel="Save" saveDisabled={busy || !dirty} onSave={() => void save()} dirty={dirty && !busy} />
-    </div>
+    </form>
   );
 }

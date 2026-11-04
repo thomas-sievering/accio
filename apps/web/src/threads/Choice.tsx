@@ -42,13 +42,14 @@ export function Choice({ threadId, item, picked }: { threadId: string; item: Cho
             <button className="choice-open" aria-label={`View ${optionName(item, index)}`} onClick={() => setOpen(index)}>
               <OptionImage threadId={threadId} option={option} />
             </button>
+          </div>
+          <div className="choice-caption"><span className="choice-label">{optionName(item, index)}</span>
             {(toggle || selected === index) && (
               <button className="choice-check" disabled={!toggle} aria-pressed={selected === index}
                 aria-label={selected === index ? `Picked ${optionName(item, index)}` : `Pick ${optionName(item, index)}`}
                 onClick={() => toggle?.(index)}><Check /></button>
             )}
           </div>
-          <span className="choice-label">{optionName(item, index)}</span>
         </div>
       ))}
     </div>

@@ -9,6 +9,7 @@ import { PairHubForm } from './PairHubForm';
 export function HubSettings({ adding, onAdd, onBack }: { adding?: boolean; onAdd?: () => void; onBack?: () => void } = {}) {
   const { hubs, selectedId, select, root } = useHubs();
   const [pairing, setPairing] = useState<{ code: string; expiresAt: number }>();
+  const [copied, setCopied] = useState(false);
   const [confirming, setConfirming] = useState<string>();
   const { busy, error, run } = useAction();
   useEscape(!!confirming, () => setConfirming(undefined));
@@ -37,8 +38,8 @@ export function HubSettings({ adding, onAdd, onBack }: { adding?: boolean; onAdd
     {current && <SettingsSection title="Pair another device">
       <div className="setting-form">
         <p className="hint">Generate a one-time code for {current.name}. Enter this hub’s address and the code on the other device.</p>
-        <button type="button" className="ghost" disabled={busy || current.status !== 'connected'} onClick={() => run(async () => setPairing(await root.call('hubs.createPairingCode', { id: current.id })))}>Generate pairing code</button>
-        {pairing && <p role="status"><code>{pairing.code}</code> · expires {new Date(pairing.expiresAt).toLocaleTimeString()}</p>}
+        <button type="button" className="ghost" disabled={busy || current.status !== 'connected'} onClick={() => run(async () => { setPairing(await root.call('hubs.createPairingCode', { id: current.id })); setCopied(false); })}>Generate pairing code</button>
+        {pairing && <p role="status"><code>{pairing.code}</code> · expires {new Date(pairing.expiresAt).toLocaleTimeString()} <button type="button" className="link" onClick={() => void run(async () => { await navigator.clipboard.writeText(pairing.code); setCopied(true); })}>{copied ? 'Copied' : 'Copy code'}</button></p>}
       </div>
     </SettingsSection>}
     {error && <p className="error" role="alert">{error}</p>}

@@ -1,4 +1,4 @@
-import { Fragment, createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { HubSettings } from '../hub/HubSettings';
 import { MachineSettings } from '../machine/MachineSettings';
 import { HarnessesSettings } from '../harnesses/HarnessesSettings';
@@ -78,6 +78,15 @@ export function Settings({ route, onRoute, onClose, onOpenThread, onOpenLimits }
   const hubLabel = route.section === 'hub' && route.hubId ? 'Add hub' : undefined;
   const projectLabel = route.section === 'projects' && route.projectId ? projectState?.projects.find((p) => p.id === route.projectId)?.name : undefined;
   const detailLabel = projectLabel || profileLabel || accountLabel || secretLabel || resourceLabel || machineLabel || hubLabel;
+  const previousDetail = useRef<string | undefined>(undefined);
+  useLayoutEffect(() => {
+    if (document.activeElement === document.body) {
+      const rows = [...document.querySelectorAll<HTMLElement>('.settings-page .setting-link')];
+      const row = previousDetail.current && rows.find(el => el.textContent?.startsWith(previousDetail.current!));
+      (row || document.querySelector<HTMLElement>('.main-top .crumbs'))?.focus();
+    }
+    previousDetail.current = detailLabel;
+  }, [route, detailLabel]);
 
   const inDetail = !!(profileId || accountId || toolId || mcpId || sourceId || (route.section === 'secrets' && route.secretId) || (route.section === 'machines' && route.machineId) || (route.section === 'hub' && route.hubId) || (route.section === 'projects' && route.projectId));
   // Escape goes up one level and leaves Settings only from a top-level page; an open inline confirmation takes it first (useEscape).
@@ -90,11 +99,14 @@ export function Settings({ route, onRoute, onClose, onOpenThread, onOpenLimits }
   escape.current = () => (inDetail ? navigate(backTo) : leaveSettings());
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      // Escape inside a field only leaves the field.
+      // Text fields use the same leave guard; native selects keep their own Escape.
       const t = e.target;
       // A sheet over Settings (project settings) takes Escape itself.
-      if (document.querySelector('dialog[open]')) return;
-      if (e.key === 'Escape' && !(t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement)) escape.current();
+      if (document.querySelector('dialog[open], :popover-open')) return;
+      if (e.key === 'Escape' && !e.defaultPrevented && !(t instanceof HTMLSelectElement)) {
+        e.preventDefault();
+        escape.current();
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -138,7 +150,7 @@ export function Settings({ route, onRoute, onClose, onOpenThread, onOpenLimits }
       <SidebarResizer />
       <main className="main">
         <header className="main-top drag">
-          <nav className="crumbs">
+          <nav className="crumbs" tabIndex={-1}>
             <span>Settings</span>
             <span className="sep">/</span>
             {detailLabel ? (
@@ -284,7 +296,7 @@ export function SettingsFooter({ remove, busy, onCancel, saveLabel, saveDisabled
   useEscape(confirming, () => setConfirming(false));
   useEscape(!!leaving, keepEditing);
   return (
-    <footer className="settings-actions">
+    <footer className="settings-actions" role={leaving || confirming ? 'group' : undefined} aria-label={leaving ? 'Discard changes?' : confirming ? `Delete ${remove?.name}?` : undefined}>
       {remove && !leaving && (confirming ? (
         <>
           {remove.consequence && <small className="hint">{remove.consequence}</small>}

@@ -2,6 +2,7 @@ import type { MachineView, ToolDefinition, ToolStatus } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { useAction } from '../app/useAction';
 import { useThreads } from '../threads/threads';
+import { Chevron } from '../app/icons';
 
 export type Readiness = { label: 'Ready' | 'Installing' | 'Needs attention' | 'Offline' | 'Pending'; tone: 'ok' | 'busy' | 'bad' | 'idle' };
 
@@ -55,7 +56,7 @@ export function ToolStatusCard({ tool, machine, status, heading, onOpenThread }:
       <p className="tool-card-text">
         {r.label === 'Ready' && firstLine(status?.detail) ? <>{text} · <code>{firstLine(status?.detail)}</code></> : text}
       </p>
-      {r.label === 'Needs attention' && status?.detail && <details className="tool-card-details"><summary>Details</summary><code>{status.detail}</code></details>}
+      {r.label === 'Needs attention' && status?.detail && <details className="tool-card-details"><summary><Chevron />Details</summary><code>{status.detail}</code></details>}
       {status?.status === 'error' && (
         status.repairThreadId
           ? <p className="hint">{repairThread ? `A repair thread is ${repairThread.status === 'running' ? 'working on it' : 'open'}. Accio checks again when it completes.` : 'A repair thread was started but is no longer listed here.'}</p>

@@ -38,6 +38,6 @@ The latest fixes add keyboard-visible title/effort tooltips, stable focused row 
 
 ## Score interpretation
 
-Round 1 started at 6–8 across the nine categories. In round 4, Sonnet and GPT Sol each gave four categories 9; Opus gave Feedback and Efficiency 9. Every other round-4 score was 8. In round 5 GPT Sol gave seven categories 9, with Clarity and Accessibility 8. Sonnet and Opus round 5 failed at provider rate limits. Scores were assigned before the subsequent fixes; they cannot be presented as ratings of those fixes. See the individual reports for exact verdicts and unmet preconditions.
+Round 1 started at 6–8 across the nine categories. In round 4, Sonnet and GPT Sol each gave four categories 9; Opus gave Feedback and Efficiency 9. Every other round-4 score was 8. In round 5 GPT Sol gave seven categories 9, with Clarity and Accessibility 8. The Claude children initially failed at rate limits, then were resumed separately on Claude HRC and produced reports. Sonnet gave four categories 9 and Opus three, with other scores 8. Their reports note the shared checkout changed during the resumed runs; Opus limits its affected baseline evidence explicitly. See `round-5/plan.md` for the complete table and audit caveat. Scores cannot be presented as ratings of the subsequent fixes.
 
 Live provider sign-in and real model execution, exhaustive screen-reader conformance, and native OS integration remain outside the established audit evidence. Mocked provider and hosting boundaries are identified in the fixture suites.
