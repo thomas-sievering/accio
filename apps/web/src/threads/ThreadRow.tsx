@@ -1,12 +1,14 @@
 import type { ThreadView } from '@accio/protocol';
+import { useTooltip } from '../app/Tooltip';
 import { Check, Clock, StopSquare, Undo } from '../app/icons';
 import { ProjectMark } from '../projects/ProjectMark';
 import { useProjects } from '../projects/projects';
 import { useNeedsSecret } from '../secrets/pendingSecrets';
 import { StatusGlyphIcon } from './StatusMark';
-import { statusText, threadStatus } from './status';
-import { useThreadMenu } from './ThreadMenu';
-import type { ShelfPlace } from './shelves';
+import { shortStatus, statusText, threadStatus } from './status';
+import { RowRename, useRenaming, useThreadMenu } from './ThreadMenu';
+import { snoozeThread } from './SnoozeNotice';
+import { wakeText, type ShelfPlace } from './shelves';
 import { useThreads, type ThreadActions } from './threads';
 
 /**
@@ -17,14 +19,21 @@ export function ThreadRow({ thread: t, place }: { thread: ThreadView; place: She
   const { selectedId, select, now, act } = useThreads();
   const { state } = useProjects();
   const project = state?.projects.find((p) => p.id === t.projectId)?.name;
-  // Working rows keep the full open look: project mark and the spinning status.
-  const open = place === 'open' || place === 'working';
-  // Only a running turn can wait on a secret; the mark stays on the Working shelf row.
-  const needsSecret = (useNeedsSecret(t.id) || t.needsSecret === true) && t.status === 'running' && place === 'working';
+  // Every row has the same layout; only open rows carry the live status mark.
+  const open = place === 'open';
+  // Only a running turn can wait on a secret.
+  const needsSecret = (useNeedsSecret(t.id) || t.needsSecret === true) && t.status === 'running' && open;
   const openMenu = useThreadMenu();
+  const [renamingId] = useRenaming();
+  const renaming = renamingId === t.id;
+  const titleTip = useTooltip(t.title, '.row-title');
   const onContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
-    openMenu(t, e.clientX, e.clientY);
+    // Shift+F10 and the menu key report no pointer: open under the row instead.
+    if (e.clientX === 0 && e.clientY === 0) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      openMenu(t, rect.left + 24, rect.bottom);
+    } else openMenu(t, e.clientX, e.clientY);
   };
 
   const actions = (
@@ -33,9 +42,11 @@ export function ThreadRow({ thread: t, place }: { thread: ThreadView; place: She
         <button
           key={a.label}
           className="row-action"
+          // Pointer shortcuts only; the keyboard reaches the same actions through the row menu (Shift+F10).
+          tabIndex={-1}
           title={a.title}
           aria-label={a.label}
-          onClick={() => void act[a.run](t.id).catch((e: Error) => console.error(e.message))}
+          onClick={() => void (a.run === 'snooze' ? snoozeThread(act, t.id) : act[a.run](t.id)).catch((e: Error) => console.error(e.message))}
         >
           {a.icon}
         </button>
@@ -45,36 +56,34 @@ export function ThreadRow({ thread: t, place }: { thread: ThreadView; place: She
   const status = threadStatus(t, { needsSecret });
   const statusLine = statusText(status.label, status.delivery?.pullRequest);
   const delivery = status.delivery;
-  // Shelved rows are one line: a delivery outcome stays visible as a badge, also on hover.
-  const badge = !open && delivery && <span className={`row-badge tone-${delivery.tone}`} title={statusText(delivery.label, delivery.pullRequest)}>
-    <StatusGlyphIcon glyph={delivery.glyph} tone={delivery.tone} />{delivery.badge}
-  </span>;
-  const className = `row${open ? ' open' : ''}${t.id === selectedId ? ' active' : ''}${place === 'settled' ? ' settled' : ''}`;
+  // Shelved rows say nothing of an idle turn; a delivery outcome stays visible.
+  const showState = status.showLabel && (open || !!delivery);
+  const className = `row open${t.id === selectedId ? ' active' : ''}${place === 'settled' ? ' settled' : ''}`;
+  const Main = renaming ? 'div' : 'button';
   return (
-    <div className={className} onContextMenu={onContextMenu}>
-      <button className="row-main" onClick={() => select(t.id)} title={`${t.title} · ${project ?? 'No project'}${status.showLabel ? ` · ${statusLine}` : ''}`} aria-current={t.id === selectedId ? 'page' : undefined}>
-        {open && (t.projectId ? <ProjectMark id={t.projectId} /> : <span className="no-project-mark" />)}
+    <div className={`${className}${renaming ? ' renaming' : ''}`} onContextMenu={onContextMenu}>
+      <Main className="row-main" {...(renaming ? {} : { ...titleTip.props, onClick: () => select(t.id), title: `${t.title} · ${project ?? 'No project'}${showState ? ` · ${statusLine}` : ''}`, 'aria-current': t.id === selectedId ? 'page' as const : undefined })}>
+        {t.projectId ? <ProjectMark id={t.projectId} /> : <span className="no-project-mark" />}
         <span className="row-name">
-          <span className="row-title">{t.title}</span>
-          {open ? <span className={`row-project${status.showLabel ? ' with-state' : ''}`}>
-            <span className="row-project-name">{project ?? 'No project'}</span>
-            {status.showLabel && <span className={`row-state tone-${status.tone}`}>
-              <span className="row-state-label">{status.label}</span>
+          {renaming ? <RowRename thread={t} /> : <span className="row-title">{t.title}</span>}
+          {/* A delivery status takes the whole line: the project mark already names the project. */}
+          <span className={`row-project${showState ? ' with-state' : ''}${delivery && showState ? ' delivery' : ''}`}>
+            {!(delivery && showState) && <span className="row-project-name">{project ?? 'No project'}</span>}
+            {showState && <span className={`row-state tone-${status.tone}`}>
+              <span className="row-state-label">{delivery ? shortStatus(status.label) : status.label}</span>
               {delivery?.pullRequest && <span className="row-state-pr">&nbsp;· #{delivery.pullRequest.number}</span>}
             </span>}
-          </span> : project && <span className="row-project">{project}</span>}
-        </span>
-        {badge}
-        {open && <span className="row-status">
-          <span className="row-meta">{timeAgo(t.updatedAt, now)}</span>
-          <span className={`row-mark tone-${status.tone}`} role="img" aria-label={statusLine}>
-            <StatusGlyphIcon glyph={status.glyph} tone={status.tone} />
           </span>
-        </span>}
-        {place === 'snoozed' && t.snoozedUntil && <span className="row-meta">{wakeLabel(t.snoozedUntil, now)}</span>}
-        {place === 'settled' && t.settledAt && <span className="row-meta">{timeAgo(t.settledAt, now)}</span>}
-      </button>
+        </span>
+        <span className="row-status">
+          <span className="row-meta">{meta(t, place, now)}</span>
+          {open && <span className={`row-mark tone-${status.tone}`} role="img" aria-label={statusLine}>
+            <StatusGlyphIcon glyph={status.glyph} tone={status.tone} />
+          </span>}
+        </span>
+      </Main>
       {actions}
+      {!renaming && titleTip.tooltip}
     </div>
   );
 }
@@ -92,16 +101,16 @@ function hoverActions(t: ThreadView, place: ShelfPlace): HoverAction[] {
   ];
 }
 
+function meta(t: ThreadView, place: ShelfPlace, now: Date): string {
+  if (place === 'snoozed' && t.snoozedUntil) return wakeText(new Date(t.snoozedUntil), now);
+  if (place === 'settled' && t.settledAt) return timeAgo(t.settledAt, now);
+  return timeAgo(t.updatedAt, now);
+}
+
 function timeAgo(iso: string, now: Date): string {
   const minutes = Math.round((now.getTime() - new Date(iso).getTime()) / 60_000);
   if (minutes < 1) return 'now';
   if (minutes < 60) return `${minutes}m`;
   const hours = Math.round(minutes / 60);
   return hours < 24 ? `${hours}h` : `${Math.round(hours / 24)}d`;
-}
-
-function wakeLabel(iso: string, now: Date): string {
-  const when = new Date(iso);
-  const time = when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  return when.toDateString() === now.toDateString() ? time : `${when.toLocaleDateString([], { weekday: 'short' })} ${time}`;
 }

@@ -28,6 +28,9 @@ describe('hub resource management', () => {
     expect((await c.call('threads.list', {}))).toHaveLength(1);
     expect(harness.runs[0]?.prompt).toContain('browser dependency missing');
     expect(harness.runs[0]?.env.PATH).toContain(join(t.home, 'tools'));
+    await expect(c.call('threads.start', { profileId: 'personal', text: 'Blocked draft' })).rejects.toThrow('not ready');
+    expect(await c.call('threads.list', {})).toHaveLength(1);
+    expect(harness.runs).toHaveLength(1);
     held.release();
     await c.waitFor('resources.changed', state => state.toolStatuses.some(s => s.toolId === definition.id && s.status === 'ready'));
     expect((await c.call('resources.get', {})).toolStatuses[0]?.status).toBe('ready');

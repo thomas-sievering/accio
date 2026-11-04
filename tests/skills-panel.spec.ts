@@ -6,6 +6,40 @@ const panel = (page: Page) => page.getByRole('tabpanel', { name: 'Skills' });
 const projectList = (page: Page) => panel(page).locator('section').first();
 const skillRow = (page: Page, name: string) => panel(page).locator('.skill-item').filter({ has: page.getByRole('button', { name: new RegExp(`^${name}\\b`) }) });
 
+test('narrow panel wraps focus in both directions without a blank or background stop', async ({ page, baseURL }, info) => {
+  await page.setViewportSize({ width: 900, height: 700 });
+  await openSkills(page, baseURL!, /Skills fixture/);
+  const first = page.getByRole('tab', { name: 'Skills', exact: true });
+  const toggle = page.getByRole('button', { name: 'Side panel', exact: true });
+  await first.focus();
+  await page.keyboard.press('Shift+Tab');
+  await expect(toggle).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(first).toBeFocused();
+  for (const direction of ['Tab', 'Shift+Tab']) {
+    for (let i = 0; i < 20; i++) {
+      await page.keyboard.press(direction);
+      expect(await page.evaluate(() => {
+        const focused = document.activeElement;
+        return !!focused?.closest('.side-panel, .panel-toggle');
+      })).toBe(true);
+    }
+  }
+  await page.screenshot({ path: info.outputPath('overlay-keyboard-focus.png') });
+  await page.keyboard.press('Escape');
+  await expect(toggle).toBeFocused();
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+  // Settings opened from the narrow panel must release its focus boundary.
+  await toggle.click();
+  await page.getByRole('tab', { name: 'MCP', exact: true }).click();
+  await page.getByRole('tabpanel', { name: 'MCP' }).getByRole('button', { name: 'docs-search Remote', exact: true }).click();
+  await expect(page.locator('.settings-page').getByRole('textbox').first()).toBeFocused();
+  const accounts = page.locator('.sidebar nav').getByRole('button', { name: 'Accounts', exact: true });
+  await accounts.focus();
+  await page.keyboard.press('Tab');
+  await expect(page.locator('.sidebar nav').getByRole('button', { name: 'Secrets', exact: true })).toBeFocused();
+});
+
 async function openSkills(page: Page, baseURL: string, thread: RegExp) {
   await page.goto(`${baseURL}/#token=${token}`);
   await page.locator('.sidebar').getByRole('button', { name: thread }).click();
@@ -54,7 +88,8 @@ test('Skills tab lists project and inherited skills, adds, references, edits, di
   await search.press('Enter');
   await expect(panel(page).getByRole('status').filter({ hasText: 'lib-review added to this project' })).toBeAttached();
   const review = projectList(page).locator('.skill-item').filter({ hasText: 'lib-review' });
-  await expect(review).toContainText('Library · Library');
+  await expect(review).toContainText('Library');
+  await expect(review).not.toContainText('Library · Library');
   await expect(panel(page).getByRole('button', { name: 'Add skill', exact: true })).toBeFocused();
 
   // The selection is the hub's: a fresh load shows it too.
@@ -107,9 +142,9 @@ test('MCP tab lists every MCP server, flags sign-in and opens settings', async (
   await expect(mcp.getByRole('heading', { name: 'Servers 2' })).toBeVisible();
   await expect(row('docs-search')).toContainText('Remote');
   await expect(row('docs-search')).toContainText('https://mcp.example.test/docs');
-  await expect(mcp.getByRole('button', { name: 'docs-search: sign in' })).toBeVisible();
+  await expect(row('docs-search')).toContainText('Signed out');
   await expect(row('local-db')).toContainText('db-mcp --readonly');
-  await expect(row('local-db').getByRole('button', { name: /sign in/ })).toHaveCount(0);
+  await expect(row('local-db')).not.toContainText('Signed out');
   await page.screenshot({ path: testInfo.outputPath('mcp-panel.png') });
 
   // Arrow keys move between tabs, and the choice is remembered.

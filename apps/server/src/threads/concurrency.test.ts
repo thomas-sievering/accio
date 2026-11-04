@@ -66,6 +66,20 @@ it('releases a failed preparation so the thread can be sent another message', as
   expect(await rpc('threads.send', { threadId: thread.id, text: 'again' })).toMatchObject({ ok: true });
 });
 
+it('keeps refused resource preparation out of the transcript and preserves the saved turn state', async () => {
+  const { c, thread } = await setup();
+  const before = (await c.call('threads.list', {})).find(t => t.id === thread.id);
+  const transcript = await c.call('threads.transcript', { threadId: thread.id });
+  const spy = vi.spyOn(t.app.resources, 'prepare').mockRejectedValue(new Error('Broken tool is not ready. A repair thread was started.'));
+  for (let i = 0; i < 3; i++) {
+    expect(await rpc('threads.send', { threadId: thread.id, text: 'Not sent' })).toMatchObject({ ok: false });
+    expect((await c.call('threads.list', {})).find(t => t.id === thread.id)).toEqual(before);
+    expect(await c.call('threads.transcript', { threadId: thread.id })).toEqual(transcript);
+  }
+  spy.mockRestore();
+  expect(await rpc('threads.send', { threadId: thread.id, text: 'after repair' })).toMatchObject({ ok: true });
+});
+
 it('checks every checkout member before deleting any, including a pending turn', async () => {
   const harness = new FakeHarness(async function* (run, n) {
     if (n < 3) { yield* replyWith('done'); return; }

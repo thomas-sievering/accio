@@ -52,7 +52,7 @@ it.each([[false, false], [true, false], [false, true]])('runs the bundled Codex 
   await client.waitFor('threads.changed', (threads) => threads.some((t) => t.id === thread.id && t.status !== 'running'), 15_000);
   const first = (await client.call('threads.list', {})).find((t) => t.id === thread.id);
   const transcript = await client.call('threads.transcript', { threadId: thread.id });
-  expect(transcript.filter((i) => i.kind === 'notice')).toHaveLength(withMcp ? 1 : 0);
+  expect(transcript.filter((i) => i.kind === 'notice')).toHaveLength(0);
   if (withMcp) expect(mcpRequests).toEqual(expect.arrayContaining(['initialize', 'tools/list']));
   expect(first?.status).toBe('idle');
   if (withShell) {
@@ -67,7 +67,7 @@ it.each([[false, false], [true, false], [false, true]])('runs the bundled Codex 
   await client.call('threads.send', { threadId: thread.id, text: 'Continue the conversation.' });
   await client.waitFor('threads.changed', (threads) => threads.some((t) => t.id === thread.id && t.status !== 'running'), 15_000);
   const after = await client.call('threads.transcript', { threadId: thread.id });
-  expect(after.filter((i) => i.kind === 'notice')).toHaveLength(withMcp ? 2 : 0);
+  expect(after.filter((i) => i.kind === 'notice')).toHaveLength(0);
   expect(after.filter((i) => i.kind === 'assistant')).toHaveLength(2);
   expect(requests).toHaveLength(withShell ? 3 : 2);
 }, 40_000);

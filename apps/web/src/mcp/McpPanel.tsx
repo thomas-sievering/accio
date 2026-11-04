@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import type { McpView } from '@accio/protocol';
 import { emitAppEvent } from '../app/appEvents';
 import { Settings } from '../app/icons';
+import { StatusPill } from '../app/Settings';
 import { useResources } from '../resources/resources';
 
 const byName = (a: McpView, b: McpView) => a.name.localeCompare(b.name);
@@ -45,8 +46,7 @@ function McpItem({ mcp, onOpen }: { mcp: McpView; onOpen: (id: string) => void }
           <span className="skill-name">{mcp.name}</span>
           <span className="skill-origin">{mcp.transport === 'http' ? 'Remote' : 'Local'}</span>
         </button>
-        {needsSignIn && <button type="button" className="tag bad mcp-signin" title="Not signed in. Sign in from settings."
-          aria-label={`${mcp.name}: sign in`} onClick={() => onOpen(mcp.id)}>Sign in</button>}
+        {needsSignIn && <StatusPill tone="warn">Signed out</StatusPill>}
       </div>
       {where && <p className="skill-desc mcp-where" title={where}>{where}</p>}
       {mcp.status && <p className="skill-desc mcp-status">{mcp.status}</p>}

@@ -1,9 +1,10 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { FolderInspection } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { Sheet } from '../app/Sheet';
 import { useAction } from '../app/useAction';
 import { useProfiles } from '../profiles/profiles';
+import { focusFirstInvalid } from '../resources/Field';
 
 export function AddProjectSheet({ onClose }: { onClose: () => void }) {
   return (
@@ -24,6 +25,8 @@ export function AddProjectForm({ onAdded, onCancel }: { onAdded?: () => void; on
   const [seen, setSeen] = useState<FolderInspection | null>(null);
   const [profileId, setProfileId] = useState('');
   const { busy, error, run, clear } = useAction();
+  const [tried, setTried] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
 
   // Look the folder up as you type or pick, so you see what will happen before adding.
   useEffect(() => {
@@ -53,10 +56,13 @@ export function AddProjectForm({ onAdded, onCancel }: { onAdded?: () => void; on
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!seen) return;
-    const added = await run(() => client.call('checkouts.add', { path: seen.path, profileId: seen.existingProject ? undefined : profileId }));
+    setTried(true);
+    // Problems sit under the field they belong to; Add itself stays pressable.
+    if (!seen || seen.alreadyAdded || (!seen.existingProject && !profileId && !onlyProfileId)) return focusFirstInvalid(formRef.current);
+    const added = await run(() => client.call('checkouts.add', { path: seen.path, profileId: seen.existingProject ? undefined : (profileId || onlyProfileId) }));
     if (added) {
       setPath('');
+      setTried(false);
       onAdded?.();
     }
   };
@@ -64,20 +70,24 @@ export function AddProjectForm({ onAdded, onCancel }: { onAdded?: () => void; on
   const joining = seen?.existingProject;
   // With one profile there is nothing to choose: say where it goes instead.
   const onlyProfile = profiles.length === 1 ? profiles[0] : undefined;
+  const onlyProfileId = onlyProfile?.id;
+  const pathProblem = !path.trim() ? (tried ? 'Choose a folder' : undefined) : error;
+  const profileProblem = tried && !joining && !profileId && !onlyProfileId ? 'Choose a profile' : undefined;
 
   return (
-    <form onSubmit={submit}>
+    <form onSubmit={submit} ref={formRef} noValidate>
       <div className="sheet-body">
         <label className="field">
           <span>Folder</span>
           <span className="row-input">
-            <input value={path} onChange={(e) => setPath(e.target.value)} placeholder="S:\my-repo" autoFocus spellCheck={false} />
+            <input value={path} onChange={(e) => { setPath(e.target.value); setTried(false); }} placeholder="S:\my-repo" autoFocus data-autofocus spellCheck={false} aria-invalid={pathProblem || (tried && seen?.alreadyAdded) ? true : undefined} />
             {window.accioDesktop && (
               <button type="button" className="ghost" onClick={browse}>
                 Browse…
               </button>
             )}
           </span>
+          {pathProblem && <small className="error" role="alert">{pathProblem}</small>}
         </label>
 
         {seen && (
@@ -113,7 +123,7 @@ export function AddProjectForm({ onAdded, onCancel }: { onAdded?: () => void; on
           !onlyProfile && (
             <label className="field">
               <span>Profile</span>
-              <select value={profileId} onChange={(e) => setProfileId(e.target.value)} required>
+              <select value={profileId} onChange={(e) => setProfileId(e.target.value)} aria-invalid={profileProblem ? true : undefined}>
                 <option value="" disabled>
                   Choose…
                 </option>
@@ -124,10 +134,10 @@ export function AddProjectForm({ onAdded, onCancel }: { onAdded?: () => void; on
                   </option>
                 ))}
               </select>
+              {profileProblem && <small className="error" role="alert">{profileProblem}</small>}
             </label>
           )
         )}
-        {error && <p className="error">{error}</p>}
       </div>
       <footer className="sheet-foot">
         <span className="spacer" />
@@ -136,7 +146,7 @@ export function AddProjectForm({ onAdded, onCancel }: { onAdded?: () => void; on
             Cancel
           </button>
         )}
-        <button type="submit" className="ghost primary" disabled={!seen || seen.alreadyAdded || (!joining && !profileId) || busy}>
+        <button type="submit" className="ghost primary" disabled={busy}>
           Add
         </button>
       </footer>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ThreadView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { useAction } from '../app/useAction';
@@ -11,6 +11,13 @@ export function QueueTray({ thread }: { thread: ThreadView }) {
   const [edit, setEdit] = useState<{ id: string; text: string }>();
   const action = (messageId: string, action: 'steer' | 'remove' | 'edit' | 'save' | 'cancel', text?: string) =>
     client.call('threads.queued', { threadId: thread.id, messageId, action, text });
+  // The edit tray belongs to its turn: when the turn ends or stops, release the held message and close it.
+  const editing = edit?.id;
+  useEffect(() => {
+    if (thread.status === 'running' || !editing) return;
+    setEdit(undefined);
+    void action(editing, 'cancel').catch(() => {});
+  }, [thread.status]);
   if (!thread.queuedMessages?.length) return null;
   return <section className="queue-tray" aria-label="Queued messages">
     {error && <p className="error" role="alert">{error}</p>}
@@ -21,7 +28,7 @@ export function QueueTray({ thread }: { thread: ThreadView }) {
         if (!busy) void run(async () => { await action(message.id, 'save', edit.text); setEdit(undefined); });
       }}>
         <input aria-label="Edit queued message" autoFocus value={edit.text} onChange={e => setEdit({ ...edit, text: e.target.value })} />
-        <button disabled={busy || !edit.text.trim()}>Save</button>
+        <button className="queue-save" disabled={busy || !edit.text.trim()}>Save</button>
         <button type="button" disabled={busy} onClick={() => void run(async () => { await action(message.id, 'cancel'); setEdit(undefined); })}>Cancel</button>
       </form> : <>
         <span className="queued-text" title={message.text}>{message.text || 'Picked option'}</span>

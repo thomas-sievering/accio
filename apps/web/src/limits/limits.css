@@ -393,7 +393,7 @@ p.limits-message {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  height: 26px;
+  height: 32px;
   padding: 0 8px;
   border-radius: 6px;
   color: var(--muted);

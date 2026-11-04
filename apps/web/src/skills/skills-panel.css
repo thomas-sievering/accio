@@ -83,7 +83,7 @@
   width: 11px;
   height: 11px;
   margin-left: auto;
-  opacity: 0;
+  opacity: 0.6;
   transition: transform 0.12s, opacity 0.12s;
 }
 .skills-fold:is(:hover, :focus-visible, [aria-expanded="true"]) > svg {
@@ -287,4 +287,15 @@
   height: 28px;
   padding: 0 10px;
   font-size: 12.5px;
+}
+
+/* A source's counts, then its repository path cut in the middle when the row is narrow. */
+.source-line {
+  display: flex;
+  gap: 0.4em;
+  min-width: 0;
+}
+.source-line > span:first-child {
+  flex: none;
+  white-space: nowrap;
 }

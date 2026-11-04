@@ -1,13 +1,14 @@
 /* A run of tool calls: summary line, then a step rail joining each call's dot. */
 .tool-group {
-  align-self: flex-start;
-  max-width: min(var(--message-width), 92%);
+  align-self: stretch;
+  min-width: 0;
+  max-width: 100%;
 }
 .tool-group-toggle {
   display: flex;
   align-items: center;
   gap: 8px;
-  max-width: 100%;
+  width: 100%;
   padding: 3px 8px;
   border-radius: 8px;
   color: var(--muted);

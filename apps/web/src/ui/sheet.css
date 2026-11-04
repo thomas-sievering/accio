@@ -2,7 +2,7 @@
 /* Sheet (botbot's <dialog> sheet) */
 .sheet {
   width: min(520px, calc(100vw - 48px));
-  margin: min(12vh, 120px) auto auto;
+  margin: min(8vh, 64px) auto auto;
   padding: 0;
   border: 1px solid var(--line-2);
   border-radius: 10px;
@@ -21,15 +21,17 @@
 }
 .sheet-head h2 {
   margin: 0;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--muted);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink-strong);
 }
 .sheet-body {
   display: flex;
   flex-direction: column;
   gap: 14px;
   padding: 4px 24px 22px;
+  max-height: calc(100vh - 180px);
+  overflow-y: auto;
 }
 .sheet-body .list {
   margin: 0 -14px;
@@ -66,6 +68,10 @@
 .ghost:disabled {
   opacity: 0.4;
   pointer-events: none;
+}
+.ghost.danger:disabled {
+  color: var(--dim);
+  opacity: 1;
 }
 
 /* Forms */
@@ -112,6 +118,12 @@
 .check small {
   color: var(--dim);
   font-size: 12px;
+}
+.field :is(input, select, textarea)[aria-invalid='true'] {
+  border-color: var(--red);
+}
+.field :is(input, select, textarea)[aria-invalid='true']:focus {
+  outline-color: var(--red);
 }
 .error {
   margin: 0;

@@ -63,5 +63,5 @@ export function useSecretStore(enabled = true): SecretStore | undefined {
 export function accessLabel(secret: Pick<SecretSummary, 'profileWide' | 'projectIds'>, profileName: string, projectName: (id: string) => string | undefined): string {
   if (secret.profileWide) return `All ${profileName} projects`;
   const names = secret.projectIds.map((id) => projectName(id) ?? 'Removed project');
-  return names.length ? names.join(', ') : 'No projects yet';
+  return names.length ? names.join(', ') : 'No project access';
 }

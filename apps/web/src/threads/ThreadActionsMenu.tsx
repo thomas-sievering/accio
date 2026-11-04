@@ -1,15 +1,19 @@
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import type { ThreadView, ToolDetails, TranscriptItem } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { More } from '../app/icons';
 import { useAction } from '../app/useAction';
+import { focusMenuItem, onMenuKeyDown } from '../ui/menuKeys';
+import { ThreadMenuItems } from './ThreadMenu';
 
-export function ThreadActionsMenu({ thread, items }: { thread: ThreadView; items?: TranscriptItem[] }) {
+export function ThreadActionsMenu({ thread, items, onRename }: { thread: ThreadView; items?: TranscriptItem[]; onRename?: () => void }) {
   const client = useClient();
   const id = useId();
   const { busy, error, run, clear } = useAction();
-  const { busy: generating, error: namingError, run: generate, clear: clearNaming } = useAction();
   const [copied, setCopied] = useState(false);
+  const menu = useRef<HTMLDivElement>(null);
+  // A fresh set of items each time the menu opens, so a half-done rename or delete never lingers.
+  const [opened, setOpened] = useState(0);
 
   const copy = () => void run(async () => {
     if (!items) return;
@@ -35,16 +39,17 @@ export function ThreadActionsMenu({ thread, items }: { thread: ThreadView; items
     <button className="row-action thread-actions-trigger" popoverTarget={id} aria-label="Thread actions" title="Thread actions" aria-haspopup="menu">
       <More />
     </button>
-    <div id={id} className="menu thread-actions-menu" popover="auto" role="menu" aria-label="Thread actions"
-      onToggle={(e) => { if (e.newState === 'open') { clear(); clearNaming(); setCopied(false); } }}>
-      <button className="menu-item" role="menuitem" disabled={!items || busy || generating} onClick={copy} title="Copy the full thread to clipboard">
-        <span className="menu-text">{busy ? 'Copying…' : 'Copy'}</span>
-      </button>
-      {copied && <p className="thread-copy-status" role="status">Copied to clipboard</p>}
-      <button className="menu-item" role="menuitem" disabled={busy || generating} onClick={() => void generate(() => client.call('threads.regenerateTitle', { threadId: thread.id }))}>
-        <span className="menu-text">{generating ? 'Generating…' : 'Regenerate title'}</span>
-      </button>
-      {(error || namingError) && <p className="error menu-error" role="alert">{error || namingError}</p>}
+    <div id={id} ref={menu} className="menu thread-actions-menu" popover="auto" role="menu" aria-label="Thread actions"
+      onKeyDown={onMenuKeyDown}
+      onToggle={(e) => { if (e.newState === 'open') { clear(); setCopied(false); setOpened((n) => n + 1); focusMenuItem(menu.current); } }}>
+      <ThreadMenuItems key={opened} thread={thread} close={() => menu.current?.hidePopover()} onRename={onRename} before={<>
+        <button className="menu-item" role="menuitem" disabled={!items || busy} onClick={copy}>
+          <span className="menu-text">{busy ? 'Copying…' : 'Copy as Markdown'}</span>
+        </button>
+        {copied && <p className="thread-copy-status" role="status">Copied to clipboard</p>}
+        {error && <p className="error menu-error" role="alert">Could not copy thread: {error}</p>}
+        <hr />
+      </>} />
     </div>
   </>;
 }

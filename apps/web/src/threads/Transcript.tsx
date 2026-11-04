@@ -97,7 +97,8 @@ export function Transcript({ threadId, items, working, onOpenSecrets }: { thread
         const movedUp = el.scrollTop < lastTop.current;
         lastTop.current = el.scrollTop;
         pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40 || (pinned.current && !movedUp);
-        setAway(!pinned.current);
+        // Only a reader more than a viewport above the end needs the shortcut.
+        setAway(!pinned.current && el.scrollHeight - el.scrollTop - el.clientHeight > el.clientHeight);
         const top = el.getBoundingClientRect().top;
         const visible = [...(content.current?.querySelectorAll<HTMLElement>(':scope .msg:not(.assistant), :scope .turn-work-toggle, :scope .tool-group-toggle, :scope .tool, :scope .choice, :scope .secret, :scope .notice, :scope .turn-finished, :scope .msg.assistant > *') ?? [])]
           .find((node) => node.getBoundingClientRect().bottom > top);
@@ -193,10 +194,11 @@ const Item = memo(function Item({ threadId, item, preparing, picked, pickName }:
     case 'user':
       // GLOSSARY: Goal. A turn accio started itself is a divider, not something you said.
       if (item.goal === 'continue') return <div className="goal-continue" data-item-id={item.id}>Continuing toward the goal</div>;
-      return <div className={`msg user${item.resume ? ' resume' : ''}`} data-item-id={item.id}>
+      if (item.resume) return <div className="notice info" data-item-id={item.id}>Resumed</div>;
+      return <div className="msg user" data-item-id={item.id}>
         {item.steered && <span className="msg-pick">Steered mid-turn</span>}
         {pickName && <span className="msg-pick">✓ {pickName}</span>}
-        {item.resume ? 'Resume' : item.text}
+        {item.text}
       </div>;
     case 'choice':
       return <Choice threadId={threadId} item={item} picked={picked} />;

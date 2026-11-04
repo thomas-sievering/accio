@@ -39,11 +39,12 @@
   user-select: none;
 }
 
-/* Sidebar: one scroller with sticky top bar and footer. */
+/* Sidebar: fixed toolbar and footer around one scrolling body. */
 .sidebar {
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
+  min-height: 0;
+  overflow: hidden;
   background: var(--side);
   border-inline-end: 1px solid var(--line);
   font-size: 13px;
@@ -67,13 +68,14 @@
 .side-body {
   display: flex;
   flex-direction: column;
-  flex: 1 0 auto;
-  padding: 8px 10px 16px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 10px 24px;
+  scroll-padding-block-end: 24px;
 }
 .side-controls {
-  position: sticky;
-  top: 0;
-  z-index: 2;
+  flex: none;
   padding: 0 10px;
   background: var(--side);
 }
@@ -119,22 +121,13 @@
 .thread-filter:has(+ .menu:popover-open) {
   background: var(--hover);
 }
-.filter-dot {
-  position: absolute;
-  top: 4px;
-  right: 3px;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--green);
-}
 .side-search {
   display: flex;
   align-items: center;
   gap: 8px;
   flex: 1;
   min-width: 0;
-  height: 30px;
+  height: 32px;
   padding: 0 8px;
   border-radius: 8px;
   color: var(--dim);
@@ -146,7 +139,7 @@
   color: var(--muted);
 }
 .side-search:focus-within {
-  outline: 1px solid var(--line-2);
+  outline: 2px solid var(--blue);
 }
 .side-search > svg {
   flex: none;
@@ -182,9 +175,6 @@
 .side-search-clear svg {
   width: 12px;
   height: 12px;
-}
-.side-icon.on {
-  color: var(--green);
 }
 
 /* Side panel: the right-hand column, under the window's caption buttons. */
@@ -277,4 +267,33 @@
 /* ...and needs none once the side panel takes that corner. */
 .layout.with-panel .main-top {
   padding-inline-end: 16px;
+}
+
+/* Narrow windows: the side panel overlays the thread instead of splitting it. */
+@media (max-width: 1100px) {
+  .layout.with-panel {
+    grid-template-columns: var(--sidebar-w, 272px) minmax(0, 1fr);
+  }
+  .layout.with-panel .side-panel {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: 0;
+    z-index: 4;
+    width: min(var(--panel-w, 320px), max(240px, calc(100% - var(--sidebar-w, 272px) - 48px)));
+    box-shadow: -12px 0 32px #0005;
+  }
+  .layout.with-panel .resizer-right {
+    display: none;
+  }
+  /* Dims the covered thread; clicking it closes the panel. */
+  .panel-scrim {
+    position: absolute;
+    inset-block: 0;
+    inset-inline: 0;
+    z-index: 3;
+    background: #0006;
+  }
+  .layout.with-panel .main-top {
+    padding-inline-end: calc(var(--caption) + 48px);
+  }
 }

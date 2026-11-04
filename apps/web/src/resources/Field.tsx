@@ -2,6 +2,11 @@ import { useId, type ReactNode } from 'react';
 
 type Props = { id: string; 'aria-invalid'?: boolean; 'aria-describedby'?: string };
 
+/** After a failed submit, moves focus to the first field marked invalid (once the error state has rendered). */
+export function focusFirstInvalid(root: ParentNode | null | undefined) {
+  requestAnimationFrame(() => root?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus());
+}
+
 /**
  * A labelled input whose error and hint describe it without becoming part of
  * its accessible name.

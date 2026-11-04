@@ -17,6 +17,8 @@ export function LimitsView({ scope, onScope, onClose, onOpenAccount }: {
   onOpenAccount: (accountId: string) => void;
 }) {
   const { profiles } = useProfiles();
+  const heading = useRef<HTMLElement>(null);
+  useEffect(() => { heading.current?.focus(); }, []);
   const { views, loadError, retryLoad, refreshError, refresh, status, now } = useLimits();
   const missing = scope !== 'all' && profiles !== undefined && !profiles.some((p) => p.id === scope);
   const groups = profiles && !missing ? limitsLayout(profiles, scope) : [];
@@ -41,7 +43,7 @@ export function LimitsView({ scope, onScope, onClose, onOpenAccount }: {
       <header className="main-top drag">
         <div className="thread-title">
           <span className="limits-title-icon"><Limits /></span>
-          <b>Limits</b>
+          <b ref={heading} role="heading" aria-level={1} tabIndex={-1}>Limits</b>
         </div>
         <span className="spacer" />
         <button type="button" className="ghost with-icon limits-refresh-all" disabled={disconnected || refreshing || !canRefresh}
@@ -52,8 +54,8 @@ export function LimitsView({ scope, onScope, onClose, onOpenAccount }: {
       </header>
       <div className="settings-scroll">
         <div className="limits-page">
-          <ScopePicker scope={scope} onScope={onScope} />
-          {disconnected && <p className="limits-banner" role="status">Not connected to accio’s server. Values below are last known and update once it reconnects.</p>}
+          {(profiles?.length ?? 0) > 1 && <ScopePicker scope={scope} onScope={onScope} />}
+          {disconnected && <p className="limits-banner" role="status">Not connected to Accio’s server. Values below are last known and update once it reconnects.</p>}
           {!disconnected && loadError && (
             <div className="limits-banner error" role="alert">
               <span>Couldn’t load limits from the hub: {loadError}</span>

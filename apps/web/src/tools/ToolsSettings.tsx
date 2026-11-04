@@ -1,13 +1,13 @@
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
 import { ToolDefinition, type MachineView, type ToolStatus } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { Plus, Wrench } from '../app/icons';
-import { ConfirmDelete, SettingLink, SettingRow, SettingsSection } from '../app/Settings';
+import { SettingLink, SettingsFooter, SettingsSection } from '../app/Settings';
 import { useAction } from '../app/useAction';
 import { useLive } from '../app/useLive';
 import { hasSignedInAccount, useProfiles } from '../profiles/profiles';
 import { LoadError, slugId, useDraft, useResources } from '../resources/resources';
-import { Field } from '../resources/Field';
+import { Field, focusFirstInvalid } from '../resources/Field';
 import { readiness, ToolStatusCard } from './ToolStatusCard';
 
 /** `npm view @playwright/cli version` on 2026-11-03. Editable before saving. */
@@ -27,18 +27,15 @@ export function ToolsSettings({ toolId, onOpen, onBack, onOpenThread }: { toolId
   if (toolId && !tool) return <><p className="note">This tool was deleted.</p><button className="link" onClick={onBack}>All tools</button></>;
   if (tool) {
     return (
-      <>
-        <ToolForm key={tool.id} tool={tool} taken={[]} onSaved={() => {}} onDone={onBack} />
-        <MachineStatuses tool={tool} machines={machines} statuses={state.toolStatuses} onOpenThread={onOpenThread} />
-      </>
+      <ToolForm key={tool.id} tool={tool} taken={[]} onSaved={() => {}} onDone={onBack}
+        after={<MachineStatuses tool={tool} machines={machines} statuses={state.toolStatuses} onOpenThread={onOpenThread} />} />
     );
   }
   const here = machines?.find((m) => m.thisMachine);
   return (
     <>
-      <p className="note">Managed npm tools. accio installs each tool’s exact version into its own folder on every machine, checks it, and adds it to every thread’s PATH on that machine. A failed check starts a repair thread.</p>
-      <SettingsSection title="Tools">
-        {state.tools.length === 0 && <SettingRow title="No tools yet" description="Start with the Playwright CLI preset, or add any npm package with an executable." />}
+      <p className="note">Managed npm tools. Accio installs each tool’s exact version into its own folder on every machine, checks it, and adds it to every thread’s PATH on that machine. A failed check starts a repair thread.</p>
+      <SettingsSection>
         {[...state.tools].sort((a, b) => a.name.localeCompare(b.name)).map((t) => {
           const status = state.toolStatuses.find((s) => s.toolId === t.id && s.machineId === here?.id);
           const r = readiness(here, status);
@@ -76,7 +73,7 @@ const valid = {
   executable: (v: string) => ToolDefinition.shape.executable.safeParse(v).success,
 };
 
-function ToolForm({ tool, taken, onSaved, onDone }: { tool?: ToolDefinition; taken: string[]; onSaved: (t: ToolDefinition) => void; onDone: () => void }) {
+function ToolForm({ tool, taken, onSaved, onDone, after }: { tool?: ToolDefinition; taken: string[]; onSaved: (t: ToolDefinition) => void; onDone: () => void; /** Shown between the form and its footer. */ after?: ReactNode }) {
   const client = useClient();
   const { profiles = [] } = useProfiles();
   const { value, dirty, set, reset } = useDraft<Draft>(tool ?? blank());
@@ -104,7 +101,7 @@ function ToolForm({ tool, taken, onSaved, onDone }: { tool?: ToolDefinition; tak
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setTouched(true);
-    if (invalid) return;
+    if (invalid) return focusFirstInvalid(e.currentTarget);
     const saved = await run(() => client.call('tools.save', {
       ...value,
       id: tool?.id ?? slugId(value.name, taken),
@@ -123,7 +120,7 @@ function ToolForm({ tool, taken, onSaved, onDone }: { tool?: ToolDefinition; tak
 
   return (
     <form className="settings-profile-form" onSubmit={submit} noValidate>
-      <SettingsSection title={tool ? tool.name : 'New tool'}>
+      <SettingsSection>
         <div className="setting-form">
           {!tool && (
             <div className="preset">
@@ -139,46 +136,36 @@ function ToolForm({ tool, taken, onSaved, onDone }: { tool?: ToolDefinition; tak
               {(p) => <input {...p} value={value.package} onChange={(e) => set('package', e.target.value)} placeholder="@playwright/cli" spellCheck={false} required />}
             </Field>
             <Field label="Version" className="version-field" error={show('version')}>
-              {(p) => <input {...p} value={value.version} onChange={(e) => set('version', e.target.value)} placeholder="1.2.3" spellCheck={false} required />}
+              {(p) => <input {...p} value={value.version} onChange={(e) => set('version', e.target.value)} placeholder="1.2.3, exact" title="An exact version, so every machine runs the same tool" spellCheck={false} required />}
             </Field>
           </div>
-          <small className="hint">Pin an exact version so every machine runs the same tool. {tool && 'Changing it installs the new version alongside the old one.'}</small>
           <div className="field-row">
             <Field label="Executable" className="grow" error={show('executable')}>
               {(p) => <input {...p} value={value.executable} onChange={(e) => set('executable', e.target.value)} placeholder="playwright-cli" spellCheck={false} required />}
             </Field>
-            <label className="field grow">
+            <label className="field grow" title="Accio runs the executable with these arguments to check it works">
               <span>Health check arguments</span>
               <input value={argsText} onChange={(e) => setArgs(e.target.value)} placeholder="--version" spellCheck={false} />
             </label>
           </div>
-          <small className="hint">accio runs the executable with these arguments (separated by spaces) to check it works.</small>
         </div>
       </SettingsSection>
       <p className="note">Saving installs and checks this tool on this machine. Managed tools are available to every profile and project on the machine.</p>
       <SettingsSection title="Repair">
         <div className="setting-form">
-          <label className="field">
+          <label className="field" title="When a check fails, Accio starts a thread on that machine that fixes the install, then checks again">
             <span>Repair threads run as</span>
             <select value={value.repairProfileId ?? ''} onChange={(e) => set('repairProfileId', e.target.value || undefined)}>
               <option value="">Any signed-in profile</option>
               {profiles.map((p) => <option key={p.id} value={p.id}>{p.name}{hasSignedInAccount(p) ? '' : ' · Signed out'}</option>)}
             </select>
           </label>
-          <small className="hint">When a check fails, accio starts a thread on that machine that diagnoses and fixes the install, then checks again.</small>
           {repairWarning && <small className="warn" role="status">{repairWarning}</small>}
         </div>
       </SettingsSection>
+      {after}
       {error && <p className="error" role="alert">{error}</p>}
-      <footer className="settings-actions">
-        {tool && <ConfirmDelete busy={busy} confirm={`Delete ${tool.name} from the hub`} onDelete={remove} />}
-        <span className="spacer" />
-        {changed && tool && <button type="button" className="ghost" disabled={busy} onClick={() => { reset(); setArgs(undefined); setTouched(false); }}>Discard changes</button>}
-        <button type="button" className="ghost" onClick={onDone}>{tool ? 'Done' : 'Cancel'}</button>
-        <button type="submit" className="ghost primary" disabled={busy || (!!tool && !changed) || (touched && invalid)}>
-          {busy ? 'Saving…' : tool ? 'Save' : 'Add tool'}
-        </button>
-      </footer>
+      <SettingsFooter remove={tool && { name: tool.name, run: remove, consequence: 'Threads on every machine lose this tool.' }} busy={busy} onCancel={onDone} saveLabel={tool ? 'Save' : 'Add tool'} saveDisabled={busy || (!!tool && !changed)} dirty={changed && !busy} />
     </form>
   );
 }

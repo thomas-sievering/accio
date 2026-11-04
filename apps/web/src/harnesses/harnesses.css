@@ -34,6 +34,8 @@
     12.5px/1.55 'Cascadia Code',
     Consolas,
     monospace;
+  max-width: 72ch;
+  font-weight: 400;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   user-select: text;

@@ -4,6 +4,7 @@ import { useProfiles } from '../profiles/profiles';
 import { ProjectMark } from '../projects/ProjectMark';
 import { useProjects } from '../projects/projects';
 import { useThreads } from '../threads/threads';
+import { focusMenuItem, onMenuKeyDown } from '../ui/menuKeys';
 import { Check, Layers, ListFilter, Settings, User } from './icons';
 
 /**
@@ -30,9 +31,9 @@ export function ScopeMenu({ onOpenProject }: { onOpenProject: (p: ProjectView) =
     <>
       <button className={`side-icon thread-filter${active ? ' on' : ''}`} popoverTarget="scope-menu" title="Filter threads" aria-label="Filter threads" aria-haspopup="menu">
         <ListFilter />
-        {active && <span className="filter-dot" />}
       </button>
-      <div className="menu scope-menu" id="scope-menu" popover="auto" ref={menu} role="menu">
+      <div className="menu scope-menu" id="scope-menu" popover="auto" ref={menu} role="menu" aria-label="Filter threads"
+        onKeyDown={onMenuKeyDown} onToggle={(e) => { if (e.newState === 'open') focusMenuItem(menu.current); }}>
         <div className="menu-label">Filter threads</div>
         <button className="menu-item" role="menuitemradio" aria-checked={checked('all')} onClick={() => pick('all')}>
           <span className="menu-icon"><Layers /></span>

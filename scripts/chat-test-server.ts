@@ -12,6 +12,8 @@ import { DeliveryGit, DeliveryPending } from '../apps/server/src/threads/deliver
 import { git } from '../apps/server/src/git.js';
 
 const home = await mkdtemp(join(tmpdir(), 'accio-chat-browser-'));
+// Disposable encryption for this isolated fixture, including headless Linux runners.
+process.env.ACCIO_SECRET_KEY = Buffer.alloc(32, 42).toString('base64');
 const fixture = (name: string) => readFile(resolve('tests/fixtures', name));
 const token = 'isolated-chat-test-token';
 const image = await fixture('chat.png');
@@ -222,7 +224,7 @@ Object.assign(harness, { generateText: async ({ prompt }: { prompt: string }) =>
   if (!prompt.includes('Naming fixture:')) throw new Error('No naming response for this fixture');
   return JSON.stringify({ title: prompt.includes('Use German') ? 'Anmeldung reparieren' : 'Fix login redirects', needsRefinement: false });
 } });
-const app = await startApp({ home, host: '127.0.0.1', port: Number(process.env.ACCIO_CHAT_TEST_PORT ?? 47481), hubPort: 0, token, webRoot: resolve('apps/web/dist') }, {
+const app = await startApp({ home, host: '127.0.0.1', port: Number(process.env.ACCIO_CHAT_TEST_PORT ?? 47481), hubPort: 0, token, webRoot: resolve(process.env.ACCIO_CHAT_TEST_WEB_ROOT ?? 'apps/web/dist') }, {
   harness,
   // Hosting is the external boundary under test. Git publication and thread state stay real.
   deliveryHosting: async (_cwd, args) => {

@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef } from 'react';
 import type { ModelView } from '@accio/protocol';
 import type { Step } from './steps';
+import { ChevronDown } from '../app/icons';
 
 const NAMES: Record<string, string> = { none: 'None', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
 const effortName = (id: string) => NAMES[id] ?? id.replace(/^./, (c) => c.toUpperCase());
@@ -20,7 +21,7 @@ export function effortSteps(model: ModelView, value: string | undefined) {
 
 /** A little rolling spring on changes; reserve the labels' width so the chip stays still. */
 export function EffortWord({ steps, index }: { steps: Step<string | undefined>[]; index: number }) {
-  const label = steps[index]?.label.toLowerCase() ?? 'auto';
+  const label = steps[index]?.label ?? 'Auto';
   const incoming = useRef<HTMLSpanElement>(null);
   const outgoing = useRef<HTMLSpanElement>(null);
   const previous = useRef({ label, index });
@@ -30,7 +31,9 @@ export function EffortWord({ steps, index }: { steps: Step<string | undefined>[]
     previous.current = { label, index };
     if (before.label === label || !incoming.current || !outgoing.current || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const direction = index > before.index ? 1 : -1;
-    outgoing.current.textContent = before.label;
+    // Keep the caret beside the word while reserving the longest label's width.
+    const outgoingLabel = outgoing.current.querySelector('.effort-label');
+    if (outgoingLabel) outgoingLabel.textContent = before.label;
     const exit = outgoing.current.animate([
       { transform: 'translateY(0)', opacity: 1 },
       { transform: `translateY(${-direction * 16}px) scale(0.9)`, opacity: 0 },
@@ -45,8 +48,8 @@ export function EffortWord({ steps, index }: { steps: Step<string | undefined>[]
   }, [label, index]);
 
   return <span className="effort-word" aria-hidden>
-    {steps.map((step) => <span className="effort-word-size" key={step.label}>{step.label.toLowerCase()}</span>)}
-    <span ref={outgoing} className="effort-word-out" />
-    <span ref={incoming} className="effort-word-current">{label}</span>
+    {steps.map(step => <span className="effort-word-size" key={step.label}>{step.label}<ChevronDown /></span>)}
+    <span ref={outgoing} className="effort-word-out"><span className="effort-label" /><ChevronDown /></span>
+    <span ref={incoming} className="effort-word-current">{label}<ChevronDown /></span>
   </span>;
 }

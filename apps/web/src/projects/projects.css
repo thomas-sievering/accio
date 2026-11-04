@@ -9,3 +9,73 @@
   font-weight: 600;
   line-height: 1;
 }
+.path-mid {
+  display: flex;
+  min-width: 0;
+}
+.path-head {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.path-tail {
+  flex: none;
+  white-space: pre;
+}
+.path-link,
+.path-link .folder-link {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  text-align: start;
+}
+.menu-select {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 14px;
+  text-align: start;
+}
+.menu-select:hover:not(:disabled) {
+  border-color: var(--dim);
+}
+.menu-select:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.menu-select > svg {
+  flex: none;
+  color: var(--dim);
+}
+.menu.menu-select-list {
+  width: anchor-size(width, 240px);
+  max-width: calc(100vw - 16px);
+}
+.menu-select-list .menu-item[aria-checked="true"] {
+  background: var(--active);
+}
+.checkout-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.checkout-row .path-link,
+.checkout-row .path-link .folder-link {
+  font-weight: 400;
+}
+.checkout-row .path-link {
+  flex: 1;
+}
+.checkouts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}

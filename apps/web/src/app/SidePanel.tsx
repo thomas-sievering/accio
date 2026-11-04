@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { SkillContext } from '@accio/protocol';
 import { McpPanel } from '../mcp/McpPanel';
 import { DeliveryPanel, deliveryNeedsYou } from '../threads/DeliveryPanel';
@@ -24,6 +24,16 @@ export function usePanelOpen() {
   return [open, toggle] as const;
 }
 
+const NARROW = '(max-width: 1100px)';
+
+/** Whether the window is narrow enough for the side panel to overlay the thread instead of splitting it. */
+export function useNarrow() {
+  return useSyncExternalStore(
+    (notify) => { const q = window.matchMedia(NARROW); q.addEventListener('change', notify); return () => q.removeEventListener('change', notify); },
+    () => window.matchMedia(NARROW).matches,
+  );
+}
+
 /** Sits just left of the window's own caption buttons, whichever pane is showing. */
 export function PanelToggle({ open, onToggle }: { open: boolean; onToggle: () => void }) {
   return (
@@ -43,17 +53,37 @@ const storedTab = (): Tab => { const saved = localStorage.getItem(TAB_KEY); retu
  * The right-hand side panel: what sits beside the open thread or draft, one tab
  * at a time. The tab strip sits under the caption row, clear of its buttons.
  */
-export function SidePanel() {
+export function SidePanel({ overlay = false }: { overlay?: boolean }) {
   const { threads, selectedId, draft } = useThreads();
   const [tab, setTab] = useState<Tab>(storedTab);
   useAppEvent('panel.show', setTab);
   const tabRefs = useRef<Partial<Record<Tab, HTMLButtonElement | null>>>({});
+  const panel = useRef<HTMLElement>(null);
   const thread = threads?.find((t) => t.id === selectedId);
   // A draft has no thread yet: its skills come from the checkout (or the profile, without one).
   const context: SkillContext | undefined = draft
     ? draft.checkoutId ? { checkoutId: draft.checkoutId, ...(draft.profileId ? { profileId: draft.profileId } : {}) } : draft.profileId ? { profileId: draft.profileId } : undefined
     : thread ? { threadId: thread.id } : undefined;
   const key = context ? JSON.stringify(context) : '';
+  // An overlay takes focus with it when it opens.
+  useEffect(() => {
+    if (!overlay) return;
+    tabRefs.current[tab]?.focus();
+    const wrapFocus = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab' || event.defaultPrevented || document.querySelector('dialog[open], :popover-open')) return;
+      const controls = [...(panel.current?.querySelectorAll<HTMLElement>('button, input, textarea, select, a[href], [tabindex]') ?? [])]
+        .filter((el) => el.tabIndex >= 0 && !el.matches(':disabled') && !el.closest('[inert]') && el.getClientRects().length > 0);
+      const toggle = panel.current?.closest('.layout')?.querySelector<HTMLElement>('.panel-toggle');
+      if (toggle) controls.push(toggle);
+      const at = controls.indexOf(document.activeElement as HTMLElement);
+      if (at < 0 || (event.shiftKey ? at === 0 : at === controls.length - 1)) {
+        event.preventDefault();
+        (event.shiftKey ? controls.at(-1) : controls[0])?.focus();
+      }
+    };
+    document.addEventListener('keydown', wrapFocus);
+    return () => document.removeEventListener('keydown', wrapFocus);
+  }, [overlay]); // The active tab is focused only when entering the overlay.
   const select = (next: Tab, focus = false) => {
     setTab(next);
     localStorage.setItem(TAB_KEY, next);
@@ -61,7 +91,7 @@ export function SidePanel() {
   };
   return <>
     <PanelResizer />
-    <aside className="side-panel" aria-label="Side panel">
+    <aside ref={panel} className="side-panel" aria-label="Side panel">
       <header className="side-panel-top drag" />
       <div className="side-panel-tabs" role="tablist" aria-label="Side panel"
         onKeyDown={(e) => {

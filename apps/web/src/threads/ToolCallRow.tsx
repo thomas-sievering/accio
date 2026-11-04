@@ -44,13 +44,13 @@ export function ToolCallRow({ threadId, item }: { threadId: string; item: ToolIt
       {error && <div className="tool-detail-note error" role="alert">Could not load details: {error} <button className="tool-retry" onClick={() => setRetry((n) => n + 1)}>Retry</button></div>}
       {detail ? <>
         {detail.input !== null && detail.input !== undefined && <section aria-label="Tool input">
-          <div className="tool-section-label">Input</div><pre>{formatInput(detail.input)}</pre>
+          <div className="tool-section-label">Input</div><Output text={formatInput(detail.input)} />
         </section>}
         <section aria-label="Tool result">
           <div className="tool-section-label">Result</div>
           {detail.parts.map((part, index) => {
             switch (part.type) {
-              case 'text': return <pre key={index}>{part.text}</pre>;
+              case 'text': return <Output key={index} text={part.text} />;
               case 'media': return <InlineMedia key={`${index}:${part.asset.id}`} threadId={threadId} asset={part.asset} />;
               case 'unsupported': return <div className="tool-detail-note" key={index}>{part.label}</div>;
             }
@@ -58,9 +58,22 @@ export function ToolCallRow({ threadId, item }: { threadId: string; item: ToolIt
           {!detail.parts.length && <div className="tool-detail-note">{item.status === 'running' ? 'Waiting for result…' : 'No output.'}</div>}
           {detail.truncated && <div className="tool-detail-note">This result exceeded the saved detail limit; some output was omitted.</div>}
         </section>
-      </> : item.output !== undefined ? <pre>{item.output || 'No output.'}</pre> : !loading && !error && <div className="tool-detail-note">{item.status === 'running' ? 'Waiting for tool details…' : 'No saved details.'}</div>}
+      </> : item.output !== undefined ? <Output text={item.output || 'No output.'} /> : !loading && !error && <div className="tool-detail-note">{item.status === 'running' ? 'Waiting for tool details…' : 'No saved details.'}</div>}
     </div>}
   </div>;
+}
+
+const OUTPUT_LINES = 20;
+
+/** Long output is capped so one tool result cannot push the transcript away. */
+function Output({ text }: { text: string }) {
+  const [all, setAll] = useState(false);
+  const lines = text.split(/\r?\n/);
+  const capped = !all && lines.length > OUTPUT_LINES;
+  return <>
+    <pre>{capped ? lines.slice(0, OUTPUT_LINES).join('\n') : text}</pre>
+    {capped && <button className="tool-retry" onClick={() => setAll(true)}>Show all {lines.length} lines</button>}
+  </>;
 }
 
 function formatInput(input: unknown): string {

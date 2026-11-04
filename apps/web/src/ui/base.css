@@ -13,17 +13,20 @@
   --line-2: #34353a;
   --ink: #c8c9cd;
   --ink-strong: #dedfe3;
-  --muted: #898a92;
-  --dim: #696a70;
+  --muted: #9a9ba3;
+  --dim: #8f9099;
   --green: #6bc694;
   --blue: #8b9db8;
   --amber: #bca777;
   --red: #c47f84;
-  /* Width of the native caption buttons (titleBarOverlay in the desktop app). */
-  --caption: 138px;
+  /* Width of the native caption buttons: none in a browser, set on .desktop (titleBarOverlay in the desktop app). */
+  --caption: 0px;
   --caption-h: 52px;
   -webkit-font-smoothing: antialiased;
   overflow-wrap: break-word;
+}
+:root.desktop {
+  --caption: 138px;
 }
 *,
 *::before,
@@ -61,7 +64,7 @@ button {
 select {
   appearance: none;
   padding-right: 30px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%23898a92' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%239a9ba3' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 10px center;
   background-size: 12px;

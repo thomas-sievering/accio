@@ -110,7 +110,7 @@ it('settles verified direct publication once, retains the workspace, and respect
   expect((await view(client, thread.id)).settledAt).toBeNull();
   const home = app.home;
   await app.stop({ keepHome: true });
-  // Simulate the crash window after completed state was saved but its transcript receipt was not.
+  // Older versions wrote a transcript receipt; delivery state alone now carries the outcome.
   const path = join(home, 'transcripts', `${thread.id}.json`);
   const items = JSON.parse(await readFile(path, 'utf8'));
   await writeFile(path, JSON.stringify(items.filter((item: any) => !item.id.startsWith('delivery:'))));
@@ -118,9 +118,8 @@ it('settles verified direct publication once, retains the workspace, and respect
   const next = await app.connect();
   expect((await view(next, thread.id)).settledAt).toBeNull();
   await next.call('threads.checkDelivery', { threadId: thread.id });
-  const notices = (await next.call('threads.transcript', { threadId: thread.id })).filter(item => item.kind === 'notice' && item.id.startsWith('delivery:'));
-  expect(notices).toHaveLength(1);
-  expect(notices[0]).toMatchObject({ text: expect.stringContaining('Shipped to main') });
+  expect((await next.call('threads.transcript', { threadId: thread.id })).filter(item => item.kind === 'notice' && item.id.startsWith('delivery:'))).toHaveLength(0);
+  expect((await view(next, thread.id)).delivery).toMatchObject({ status: 'delivered', completedAt: expect.any(String) });
 });
 
 it('keeps review-only tracking past its agent budget and restart, then settles an external squash merge after target checks', async () => {
@@ -148,7 +147,7 @@ it('keeps review-only tracking past its agent budget and restart, then settles a
   expect(restarted.runs).toHaveLength(0);
   await next.call('threads.checkDelivery', { threadId: thread.id });
   const receipts = (await next.call('threads.transcript', { threadId: thread.id })).filter(item => item.kind === 'notice' && item.id.endsWith(':completed'));
-  expect(receipts).toHaveLength(1);
+  expect(receipts).toHaveLength(0);
 });
 
 it('saves the PR before preparation checks finish and resumes preparation without another model turn', async () => {
