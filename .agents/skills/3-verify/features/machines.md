@@ -5,6 +5,7 @@ Users see which machine is connected, its installed harnesses, its shared name, 
 ## Sub-features
 
 - `machines-status`: connected state, platform, app version and harness versions.
+- `machines-onboard`: Add machine opens setup steps for the selected hub; Generate pairing code issues a one-use code, Copy code acknowledges clipboard success or reports denial, and expired codes cannot be copied. Public hub addresses also offer a copyable setup prompt under Set up with a coding agent. Localhost addresses explain the reachability limit. Done returns focus to Add machine. Pair a second disposable worker through its first-run UI and require its Connected row in the original Machines list; code reuse must fail.
 - `machines-name`: rename this machine and reopen the saved name.
 - `machines-folders`: add/remove profile folders and observe project-profile suggestions.
 
