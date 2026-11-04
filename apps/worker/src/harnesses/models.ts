@@ -1,4 +1,4 @@
-import { DEFAULT_MODEL, accountInUse, modelKey, type HarnessModel, type ModelSelection, type ModelsState, type ModelView } from '@accio/protocol';
+import { DEFAULT_MODEL, accountInUse, fallbackEffort, modelKey, type HarnessModel, type ModelSelection, type ModelsState, type ModelView } from '@accio/protocol';
 import { HARNESSES, type SettingsAccess } from '@accio/hub';
 import type { Profiles } from '../profiles/profiles.js';
 import { UserError, type Broadcast, type Router } from '../rpc/router.js';
@@ -13,6 +13,20 @@ function newestFirst<T extends { name: string }>(models: T[]): T[] {
     return 0;
   };
   return [...models].sort((a, b) => compare(version(a.name), version(b.name)));
+}
+
+/**
+ * Marks every model a newer one of its family replaces ("GPT-6-Sol" once "GPT-6.1-Sol" exists),
+ * so the picker lists only the newest of each, as Claude Code's aliases already do. A family is
+ * the name without its version number. Expects the models newest first.
+ */
+export function markOlder<T extends { name: string }>(models: T[]): (T & { older?: true })[] {
+  const seen = new Set<string>();
+  return models.map((m) => {
+    const family = m.name.replace(/\d+(?:\.\d+)*/g, '').toLowerCase().replace(/[^a-z]/g, '');
+    if (!seen.has(family)) { seen.add(family); return m; }
+    return { ...m, older: true };
+  });
 }
 
 /** Choices are scoped to one profile and the machine that will execute the turn. */
@@ -30,7 +44,7 @@ export class Models {
     const models = HARNESSES.flatMap((h) => {
       if (!installed.some((i) => i.harnessId === h.id)) return [];
       const claudeAccount = signedIn('anthropic');
-      const catalog = h.id === 'codex' ? newestFirst(this.profiles.codexModels(profileId).map((m) => ({ ...m, efforts: m.efforts ?? [], providerId: 'openai' as const })))
+      const catalog = h.id === 'codex' ? markOlder(newestFirst(this.profiles.codexModels(profileId).map((m) => ({ ...m, efforts: m.efforts ?? [], providerId: 'openai' as const }))))
         : h.id === 'claudeCode' && claudeAccount ? this.claude.models(profileId, claudeAccount.id) : [];
       return catalog.flatMap((m): ModelView[] => {
         const provider = signedIn(m.providerId) && profile.providers.find((p) => p.id === m.providerId);
@@ -48,8 +62,8 @@ export class Models {
   harnessModels(harnessId: string): HarnessModel[] {
     const seen = new Map<string, HarnessModel>();
     for (const profile of this.profiles.all()) {
-      for (const { harnessId: h, harnessName: _, providerName: __, limited: ___, ...model } of this.list(profile.id).models) {
-        if (h === harnessId && !seen.has(model.id)) seen.set(model.id, model);
+      for (const { harnessId: h, harnessName: _, providerName: __, limited: ___, older, ...model } of this.list(profile.id).models) {
+        if (h === harnessId && !older && !seen.has(model.id)) seen.set(model.id, model);
       }
     }
     return [...seen.values()];
@@ -57,7 +71,7 @@ export class Models {
 
   /** A new thread's model. One whose own limit is used up is passed over while another is available. */
   default(profileId: string): ModelSelection {
-    const listed = this.list(profileId).models;
+    const listed = this.list(profileId).models.filter((m) => !m.older);
     const models = listed.some((m) => !m.limited) ? listed.filter((m) => !m.limited) : listed;
     const first = models.find((m) => m.harnessId === DEFAULT_MODEL.harnessId && m.id === DEFAULT_MODEL.modelId) ?? models.find((m) => m.isDefault) ?? models[0];
     return first ? { harnessId: first.harnessId, modelId: first.id } : DEFAULT_MODEL;
@@ -74,11 +88,13 @@ export class Models {
   }
 
   /**
-   * The effort a turn runs at: the chosen one, else the model's own default. Codex
-   * keeps a turn's effort for later turns, so the default is sent explicitly.
+   * The effort a turn runs at: the chosen one, else the fallback the picker shows. It is
+   * always sent explicitly, so the turn runs at the level the picker displays.
    */
   effort(profileId: string, selection: ModelSelection): string | undefined {
-    return selection.effort ?? this.list(profileId).models.find((m) => m.harnessId === selection.harnessId && m.id === selection.modelId)?.defaultEffort;
+    if (selection.effort) return selection.effort;
+    const model = this.list(profileId).models.find((m) => m.harnessId === selection.harnessId && m.id === selection.modelId);
+    return model && fallbackEffort(model);
   }
 
   /** The display name of a model, when this profile's list knows it. */

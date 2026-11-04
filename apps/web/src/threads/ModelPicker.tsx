@@ -67,7 +67,8 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
     ? { harnessId: 'codex', modelId: models.find((m) => m.harnessId === 'codex' && m.isDefault)?.id ?? 'default' } : value;
   const selected = models.find((m) => m.harnessId === current.harnessId && m.id === current.modelId);
   const shortName = short(selected?.name ?? fallbackName);
-  const visible = models.filter((m) => activeTab === 'favorites'
+  // An older model stays listed only while it is the thread's own, so it can still be seen and left.
+  const visible = models.filter((m) => !m.older || (m.harnessId === current.harnessId && m.id === current.modelId)).filter((m) => activeTab === 'favorites'
     ? favorites.has(modelKey({ harnessId: m.harnessId, modelId: m.id }))
     : JSON.stringify([m.providerId, m.harnessId]) === activeTab);
   // Open on the active model's provider, where the choice is likeliest; favourites only when nothing is selected.
@@ -120,8 +121,7 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
     (next) => onChange({ harnessId: current.harnessId, modelId: current.modelId, ...(next ? { effort: next } : {}) }), setError);
   useWheelSteps(effortTrigger, stepper.step, !!effort);
   const shownEffort = effort?.steps[stepper.shown];
-  const effortTip = useTooltip(`Effort: ${shownEffort?.label ?? 'Auto'}${shownEffort?.label === 'Auto' ? ' (the harness decides)' : ''}`);
-  // Auto leaves the effort to the harness.
+  const effortTip = useTooltip(`Effort: ${shownEffort?.label ?? ''}`);
   const description = selected?.name ?? fallbackName;
 
   return <span className="model-choice">
@@ -143,8 +143,8 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
     </button>
     {effort && <>
       <button {...effortTip.props} type="button" ref={effortTrigger} className="effort-trigger" popoverTarget={effortId}
-        disabled={disabled || busy || status !== 'open'} aria-label={`Effort: ${shownEffort?.label ?? 'Auto'}`} aria-haspopup="menu"
-        title={`Effort: ${shownEffort?.label === 'Auto' ? 'Auto (the harness decides)' : shownEffort?.label} · scroll or use the arrow keys to change`}
+        disabled={disabled || busy || status !== 'open'} aria-label={`Effort: ${shownEffort?.label ?? ''}`} aria-haspopup="menu"
+        title={`Effort: ${shownEffort?.label ?? ''} · scroll or use the arrow keys to change`}
         onKeyDown={(event) => {
           if (event.key === 'ArrowUp') { event.preventDefault(); stepper.step(1); }
           if (event.key === 'ArrowDown') { event.preventDefault(); stepper.step(-1); }
@@ -201,7 +201,7 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
           return <div className={`model-picker-row${isSelected ? ' selected' : ''}${m.limited ? ' limited' : ''}`} key={key} title={m.limited ? usedUpText(m.limited) : undefined}>
             <button type="button" data-model-choice aria-pressed={isSelected} onClick={() => void choose(choice)}>
               {/* Favourites mix providers, so each row carries its provider's logo instead of the full name. */}
-              <span className="model-picker-name">{activeTab === 'favorites' && <ProviderLogo providerId={m.providerId} />}{short(m.name)}{m.isDefault && <span className="model-picker-badge">Default</span>}</span>
+              <span className="model-picker-name">{activeTab === 'favorites' && <ProviderLogo providerId={m.providerId} />}{short(m.name)}</span>
               {m.limited && <small className="model-picker-limited">{usedUpText(m.limited)}</small>}
             </button>
             <button type="button" className="model-star" title={isFavorite ? 'Remove from favourites' : 'Add to favourites'}
