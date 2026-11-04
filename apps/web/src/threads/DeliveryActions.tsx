@@ -94,9 +94,7 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
   return <div className="delivery-actions">
     <div className="delivery-row" aria-label="Delivery actions">
       {!thread.workspace || (released && !archived) ? null : archived ? <span className="delivery-pill delivery-complete"><Check />Archived · history kept</span> : <>
-        {!receipt && summary && (summary.added > 0 || summary.removed > 0) && <span className="delivery-pill delivery-diff" title={`${summary.files} changed ${summary.files === 1 ? 'file' : 'files'}`} aria-label={`${summary.added} lines added, ${summary.removed} lines removed`}>
-          <span className="delivery-added">+{summary.added}</span><span className="delivery-removed">−{summary.removed}</span>
-        </span>}
+        {!receipt && summary && (summary.added > 0 || summary.removed > 0) && <DiffPill summary={summary} />}
         {/* Line changes stay left; delivery state and actions sit right, beside the composer's send. */}
         <span className="delivery-spacer" aria-hidden="true" />
         {status?.phase === 'queued' || status?.phase === 'paused' ? <span className={`delivery-split delivery-queued${status.phase === 'queued' ? ' delivery-sparkly' : ''}`}>
@@ -160,4 +158,16 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
     </div>
     {(error || loadError) && <p className="delivery-error" role="alert">{error ?? loadError}{loadError && <button className="ghost" onClick={() => setAttempt(n => n + 1)}>Retry</button>}</p>}
   </div>;
+}
+
+/** Added and removed exclude the paired edits, which show as an approximate modified count. */
+function DiffPill({ summary }: { summary: DeliverySummary }) {
+  const modified = summary.modified ?? 0;
+  const added = summary.added - modified, removed = summary.removed - modified;
+  const label = [added && `${added} lines added`, removed && `${removed} lines removed`, modified && `about ${modified} lines modified`].filter(Boolean).join(', ');
+  return <span className="delivery-pill delivery-diff" title={`${summary.files} changed ${summary.files === 1 ? 'file' : 'files'}`} aria-label={label}>
+    {added > 0 && <span className="delivery-added">+{added}</span>}
+    {removed > 0 && <span className="delivery-removed">−{removed}</span>}
+    {modified > 0 && <span className="delivery-modified">~{modified}</span>}
+  </span>;
 }

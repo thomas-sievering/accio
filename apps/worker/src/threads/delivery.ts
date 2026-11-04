@@ -20,6 +20,17 @@ export type DeliveryObservation = (patch: Partial<ThreadDelivery>) => Promise<vo
 export type DeliveryHosting = (cwd: string, args: string[]) => Promise<any>;
 const PR_FIELDS = 'number,url,state,headRefOid,baseRefName,isDraft,mergeCommit,mergedAt,statusCheckRollup,reviewDecision,autoMergeRequest,mergeStateStatus,mergeable';
 
+/**
+ * Git records no edits, only removals and additions. With no context lines each
+ * hunk is one contiguous change, so its paired removed and added lines count as modified.
+ */
+export function modifiedLines(patch: string): number {
+  let modified = 0;
+  for (const [, removed, added] of patch.matchAll(/^@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@/gm))
+    modified += Math.min(removed === undefined ? 1 : Number(removed), added === undefined ? 1 : Number(added));
+  return modified;
+}
+
 /** Git owns worktree removal; we never recursively delete a project or force a dirty checkout away. */
 export class DeliveryGit {
   private reads = new Map<string, Promise<any>>();
@@ -86,7 +97,7 @@ export class DeliveryGit {
   }
 
   async summary(workspace?: ThreadWorkspace): Promise<DeliverySummary> {
-    const empty = { available: false, added: 0, removed: 0, files: 0, previewAvailable: false };
+    const empty = { available: false, added: 0, removed: 0, modified: 0, files: 0, previewAvailable: false };
     if (!workspace) return { ...empty, reason: 'Shipping needs an owned Git worktree. Start a new thread in a committed Git project.' };
     if (workspace.releasedAt) return empty;
     // After integrating the target, the start revision would count everyone else's merged work too.
@@ -101,6 +112,9 @@ export class DeliveryGit {
       result.removed += Number(del) || 0;
       result.files++;
     }
+    // Best effort: a patch too large to read leaves every line counted as added or removed.
+    const hunks = await maybeGit(workspace.path, 'diff', '--no-ext-diff', '--no-color', '--unified=0', base, '--');
+    if (hunks) result.modified = modifiedLines(hunks);
     const untracked = await git(workspace.path, 'ls-files', '--others', '--exclude-standard', '-z');
     for (const name of untracked.split('\0').filter(Boolean)) {
       result.files++;
