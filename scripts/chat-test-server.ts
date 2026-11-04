@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
+import { closeWhenOrphaned } from './fixtureLifetime.js';
 import { startApp } from '../apps/server/src/app.js';
 import { FakeHarness, SESSION, replyWith } from '../apps/server/src/testing/fakeHarness.js';
 import { fakeClaudeFetch, TestClient } from '../apps/server/src/testing/testApp.js';
@@ -280,3 +281,4 @@ const close = async () => {
 process.on('SIGINT', () => void close());
 process.on('SIGTERM', () => void close());
 process.on('message', message => { if ((message as { type?: string })?.type === 'shutdown') void close(); });
+closeWhenOrphaned('Chat', () => void close());

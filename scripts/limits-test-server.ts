@@ -2,6 +2,7 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
+import { closeWhenOrphaned } from './fixtureLifetime.js';
 import { startApp } from '../apps/server/src/app.js';
 import { fakeClaudeFetch } from '../apps/server/src/testing/testApp.js';
 import { FakeCodex } from '../apps/server/src/testing/fakeCodex.js';
@@ -58,3 +59,4 @@ const close = async () => {
 process.on('SIGINT', () => { void close(); });
 process.on('SIGTERM', () => { void close(); });
 process.on('message', message => { if ((message as { type?: string })?.type === 'shutdown') void close(); });
+closeWhenOrphaned('Limits', () => void close());
