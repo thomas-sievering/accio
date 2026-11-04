@@ -85,9 +85,12 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
     : [reviewWait ? undefined : status?.detail, status && ['waiting', 'integrated', 'unavailable'].includes(status.phase) ? age : undefined].filter(Boolean).join(' · ') || undefined;
   const statusName = status && statusText(status.label, status.pullRequest);
   const hasChip = !!thread.workspace && (archived || (!!status && status.phase !== 'superseded'));
+  const checkingCI = delivery?.status === 'waiting' && (status?.phase === 'integrated'
+    ? delivery.waitingOn !== 'agent'
+    : status?.phase === 'waiting' && (delivery.waitingOn ?? 'checks') === 'checks');
   const statusBody = status && <>
-    <StatusGlyphIcon glyph={status.glyph} tone={status.tone} />
-    {statusName}
+    {checkingCI ? <span className="row-working delivery-ci-spinner" aria-hidden="true" /> : <StatusGlyphIcon glyph={status.glyph} tone={status.tone} />}
+    <span className="delivery-status-text">{statusName}</span>
     {status.pullRequest && <span className="delivery-ext" aria-hidden="true">↗</span>}
   </>;
 

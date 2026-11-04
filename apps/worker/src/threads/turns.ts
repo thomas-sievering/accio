@@ -151,7 +151,7 @@ export class Turns {
       }
       if (delivering) {
         const { step: _previous, ...delivery } = thread.delivery!;
-        thread = { ...thread, delivery: { ...delivery, status: 'running', detail: undefined, startedAt: now() } };
+        thread = { ...thread, delivery: { ...delivery, status: 'running', startedAt: now() } };
       }
       const cwd = state.cwd(thread);
       const goalCommand = parseGoalCommand(picked);

@@ -72,7 +72,7 @@ export function deliveryTrack(t: ThreadView, now = new Date()): DeliveryTrack | 
     if (integrated || waitingOn === 'review' || waitingOn === 'merge') checks.state = 'done';
     else if (waitingOn === 'agent') { checks.state = 'active'; checks.detail = 'Agent is fixing checks'; }
     else if (waitingOn === 'checks') { checks.state = 'waiting'; checks.ci = status.ci; }
-    else if (blocked && pr) { checks.state = 'failed'; checks.detail = d.detail ?? 'Needs attention'; }
+    else if (blocked && pr) { checks.state = 'failed'; checks.detail = d.detail ?? 'Needs attention'; checks.ci = status.ci; }
     stations.push(checks);
 
     const merge: Station = { id: 'merge', label: review ? 'Review and merge' : 'Merge', state: merged || integrated ? 'done' : 'todo' };
@@ -87,7 +87,7 @@ export function deliveryTrack(t: ThreadView, now = new Date()): DeliveryTrack | 
 
   const verify: Station = { id: 'target', label: `Checks on ${target}`, state: d.status === 'delivered' ? 'done' : 'todo' };
   if (d.status !== 'delivered' && (integrated || (!viaPr && pushed))) {
-    if (blocked) { verify.state = 'failed'; verify.detail = d.detail ?? 'Needs attention'; }
+    if (blocked) { verify.state = 'failed'; verify.detail = d.detail ?? 'Needs attention'; verify.ci = status.ci; }
     else { verify.state = 'waiting'; verify.ci = status.ci; }
   }
   if (d.status === 'delivered' && status.revision) verify.detail = status.revision;

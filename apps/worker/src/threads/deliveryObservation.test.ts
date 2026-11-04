@@ -122,6 +122,77 @@ it('settles verified direct publication once, retains the workspace, and respect
   expect((await view(next, thread.id)).delivery).toMatchObject({ status: 'delivered', completedAt: expect.any(String) });
 });
 
+it.each(['direct', 'pull-request'] as const)('wakes the owning agent to fix failed target checks after %s publication', async policy => {
+  let head = '';
+  let publications = 0;
+  let checks = 'PENDING';
+  const harness = new FakeHarness(async function* (run) {
+    if (run.prompt.startsWith('Deliver the current task')) {
+      publications++;
+      if (publications > 1) checks = 'SUCCESS';
+      await writeFile(join(run.cwd, 'feature'), `published change ${publications}\n`);
+      await git(run.cwd, 'add', '.');
+      await git(run.cwd, 'commit', '--quiet', '-m', `publication ${publications}`);
+      await git(run.cwd, 'push', '--quiet', 'origin', 'HEAD:main');
+      head = await git(run.cwd, 'rev-parse', 'HEAD');
+    }
+    yield* replyWith('done');
+  });
+  const { client, checkout, source, origin } = await project(harness);
+  await client.call('projects.setDelivery', { projectId: checkout.projectId, deliveryPolicy: policy, previewCommand: '' });
+  await git(source, 'config', `url.${origin.replaceAll('\\', '/')}.insteadOf`, 'https://github.com/test/fixture.git');
+  await git(source, 'remote', 'set-url', 'origin', 'https://github.com/test/fixture.git');
+  const prReads: string[][] = [];
+  const hosting = async (_cwd: string, args: string[]) => {
+    if (args[0] === 'pr') {
+      prReads.push(args);
+      const pr = { url: `https://github.com/test/fixture/pull/${publications}`, state: 'MERGED', headRefOid: head,
+        baseRefName: 'main', mergeCommit: { oid: head }, mergedAt: new Date().toISOString() };
+      return args[1] === 'view' ? pr : [pr];
+    }
+    if (args[1]!.includes('check-runs')) return { total_count: 1, check_runs: [{ name: 'browser tests', status: checks === 'PENDING' ? 'in_progress' : 'completed',
+      conclusion: checks === 'PENDING' ? null : checks, html_url: 'https://github.com/test/fixture/actions/runs/10' }] };
+    return { total_count: 0, statuses: [] };
+  };
+  const manager = new DeliveryGit(app.home, hosting);
+  const original = DeliveryGit.prototype.verify;
+  vi.spyOn(DeliveryGit.prototype, 'verify').mockImplementation((workspace, delivery, observed) => original.call(manager, workspace, delivery, observed));
+  const thread = await client.call('threads.start', { checkoutId: checkout.id, text: 'build feature' });
+  await wait(client, thread.id);
+  await client.call('threads.deliver', { threadId: thread.id, mode: 'ship' });
+  await wait(client, thread.id, t => t.status === 'idle' && t.delivery?.status === 'waiting');
+  const published = await view(client, thread.id);
+  expect(published.delivery!.integratedAt).toEqual(expect.any(String));
+  checks = 'FAILURE';
+  await client.call('threads.checkDelivery', { threadId: thread.id });
+  await wait(client, thread.id, t => t.status === 'idle' && t.delivery?.status === 'delivered');
+  expect(publications).toBe(2);
+  expect(harness.runs[2]!.cwd).toBe(thread.workspace!.path);
+  expect(harness.runs[2]!.prompt).toContain(`Checks failed on published revision ${published.delivery!.publishedRevision}`);
+  expect(harness.runs[2]!.prompt).toContain('browser tests (failure)');
+  expect(harness.runs[2]!.prompt).toContain(policy === 'direct' ? 'normal, non-force push' : 'open a new PR');
+  const repaired = await view(client, thread.id);
+  expect(repaired.delivery).toMatchObject({ continuationAttempts: 1, publishedRevision: head, policy });
+  expect(repaired.delivery!.publishedRevision).not.toBe(published.delivery!.publishedRevision);
+  expect(await git(source, 'ls-remote', 'origin', 'refs/heads/main')).toContain(head);
+  if (policy === 'pull-request') {
+    expect(repaired.delivery!.pullRequest!.number).toBe(2);
+    expect(prReads.map(args => args[1])).toEqual(['list', 'view', 'list']);
+  }
+});
+
+it('explains failed target checks without escalating a merged review-only grant', async () => {
+  const { client, thread, host, merge, harness } = await reviewProject();
+  await merge();
+  host.checks = 'FAILURE';
+  await client.call('threads.checkDelivery', { threadId: thread.id });
+  const blocked = await view(client, thread.id);
+  expect(blocked.delivery).toMatchObject({ status: 'blocked', ci: { checks: [{ status: 'failure' }] } });
+  expect(blocked.delivery!.detail).toContain('CI check (failure)');
+  expect(blocked.delivery!.detail).toContain('review-only request does not authorize');
+  expect(harness.runs).toHaveLength(2);
+});
+
 it('shows the shipped note in the thread and the Changelog, and settles only once the note is read', async () => {
   const harness = new FakeHarness(async function* (run) {
     if (run.prompt.startsWith('Deliver the current task')) {

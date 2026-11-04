@@ -60,7 +60,7 @@ export type DeliveryStatus = {
   canStopFollowUps: boolean;
   /** Observing again can change what is known: a pending wait, a published change, or a failed observation. */
   canCheck: boolean;
-  /** Live CI jobs and steps while checks are the open question; never kept once the outcome is known. */
+  /** Live CI jobs and steps, or failed checks explaining a blocker. */
   ci?: ThreadDelivery['ci'];
   /** A fresh Ship/Prepare for review is the way forward. */
   canShip: boolean;
@@ -139,6 +139,7 @@ export function deliveryStatus(t: ThreadView): DeliveryStatus | undefined {
   } else if (d.status === 'blocked') {
     // A real blocker wins over a known merge; the reason is the actionable part.
     known = { phase: 'attention', label: 'Needs attention', tone: 'attention', glyph: 'alert', badge: 'Needs attention',
+      ci: d.ci?.checks.some(c => ['failure', 'error', 'cancelled', 'timed_out', 'action_required', 'startup_failure'].includes(c.status)) ? d.ci : undefined,
       detail: d.detail ?? (merged || d.integratedAt ? `Merged, but checks on ${target} need attention` : 'Delivery needs attention') };
   } else if (merged || d.integratedAt) {
     // Live CI replaces the generic label; the merge or push stays in the glyph, badge and detail.

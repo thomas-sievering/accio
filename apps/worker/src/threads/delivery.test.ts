@@ -571,6 +571,38 @@ it('waits without running the agent again and verifies delivery when checks fini
   expect(restarted.runs).toHaveLength(0);
 });
 
+it.each(['in_progress', 'success', 'failure', 'original failure'] as const)('follows containing target CI after superseded cancellation: %s', async status => {
+  const { c, source, origin, checkout } = await setup();
+  const thread = await c.call('threads.start', { checkoutId: checkout.id, text: 'work' });
+  await wait(c, thread.id);
+  await writeFile(join(thread.workspace!.path, 'feature'), 'published feature\n');
+  await publish(thread.workspace!.path);
+  const revision = await git(thread.workspace!.path, 'rev-parse', 'HEAD');
+  const { revision: newer } = await advanceOrigin(origin);
+  await git(source, 'config', `url.${origin.replaceAll('\\', '/')}.insteadOf`, 'https://github.com/test/fixture.git');
+  await git(source, 'remote', 'set-url', 'origin', 'https://github.com/test/fixture.git');
+  const reads: string[] = [];
+  const manager = new DeliveryGit(t.home, async (_cwd, args) => {
+    if (args[1]!.includes('check-runs')) {
+      reads.push(args[1]!);
+      const conclusion = args[1]!.includes(revision) ? status === 'original failure' ? 'failure' : 'cancelled' : status;
+      return { total_count: 1, check_runs: [{ name: 'browser tests', status: conclusion === 'in_progress' ? conclusion : 'completed',
+        conclusion: conclusion === 'in_progress' ? null : conclusion }] };
+    }
+    return { total_count: 0, statuses: [] };
+  });
+  const intent: ThreadDelivery = { mode: 'ship', policy: 'direct', status: 'running', baseBranch: 'main', requestedAt: new Date().toISOString() };
+  if (status === 'success') {
+    expect(await manager.verify(thread.workspace!, intent)).toMatchObject({ status: 'delivered', publishedRevision: revision });
+  } else {
+    await expect(manager.verify(thread.workspace!, intent)).rejects.toMatchObject({
+      continueAgent: status !== 'in_progress', ci: { revision: status === 'original failure' ? revision : newer,
+        checks: [{ name: 'browser tests', status: status === 'original failure' ? 'failure' : status }] },
+    });
+  }
+  expect(reads).toHaveLength(status === 'original failure' ? 1 : 2);
+});
+
 it('wakes the same owning thread for actionable check failures with the original review-only grant', async () => {
   const harness = new FakeHarness();
   const { c, checkout } = await setup(harness);

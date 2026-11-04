@@ -200,9 +200,13 @@ export class Deliveries {
         observationError: error.message, observationFailures: (d.observationFailures ?? 0) + 1 } };
       const pending = error instanceof DeliveryPending;
       const budget = (d.continuationAttempts ?? 0) < 3 && Date.now() - Date.parse(d.requestedAt) < 60 * 60_000;
-      const exhausted = pending && error.continueAgent && (!budget || !!d.followUpsStoppedAt || !!d.integratedAt);
+      const reviewMerged = !!d.integratedAt && d.mode === 'review';
+      const exhausted = pending && error.continueAgent && (!budget || !!d.followUpsStoppedAt || reviewMerged);
+      const reason = d.followUpsStoppedAt ? 'Automatic fixes are stopped.' : reviewMerged
+        ? 'The review-only request does not authorize publishing fixes after merge. Request Ship to continue.'
+        : 'Automatic fixes reached the limit of 3 attempts or 1 hour. Request Ship to retry.';
       return { ...t, delivery: { ...d, status: pending && !exhausted ? 'waiting' : 'blocked',
-        detail: exhausted ? d.followUpsStoppedAt ? 'Automatic follow-ups stopped. PR observation continues.' : d.integratedAt ? 'Checks on the published revision need attention. Observation continues; the workspace has been kept.' : 'Delivery needs attention after its automatic follow-up budget. The workspace has been kept.' : error.message,
+        detail: exhausted ? `${error.message} ${reason}` : error.message,
         waitingOn: pending ? error.waitingOn : undefined, ci: pending ? error.ci : undefined, observationError: undefined, observationFailures: 0 } };
     });
     this.scheduleCheck(threadId);
@@ -221,10 +225,15 @@ export class Deliveries {
       const current = this.state.require(threadId);
       const d = current.delivery!;
       const pending = error instanceof DeliveryPending;
-      const canContinue = continueAgent && pending && error.continueAgent && !d.followUpsStoppedAt && !d.integratedAt
+      const canContinue = continueAgent && pending && error.continueAgent && !d.followUpsStoppedAt && (!d.integratedAt || d.mode === 'ship')
         && !current.queuedMessages?.length && !this.state.messageOps.has(threadId)
         && current.status === 'idle' && (d.continuationAttempts ?? 0) < 3 && Date.now() - Date.parse(d.requestedAt) < 60 * 60_000;
-      if (canContinue) await this.state.update(threadId, t => ({ ...t, delivery: { ...t.delivery!, ci: undefined, status: 'queued', continuationAttempts: (d.continuationAttempts ?? 0) + 1, detail: (error as Error).message } }));
+      if (canContinue) await this.state.update(threadId, t => ({ ...t, delivery: { ...t.delivery!, ci: undefined, status: 'queued',
+        continuationAttempts: (d.continuationAttempts ?? 0) + 1,
+        // A published failure needs a new revision (and a new PR under PR policy).
+        ...(d.integratedAt ? { integratedAt: undefined, publishedRevision: undefined, revision: undefined,
+          pullRequest: undefined, pullRequestUrl: undefined, completedAt: undefined } : {}),
+        detail: d.integratedAt ? `Checks failed on published revision ${d.publishedRevision}. ${error.message} Fix the failure and publish a follow-up using the original delivery policy. If a PR already merged, open a new PR for the fix.` : (error as Error).message } }));
       else await this.recordWait(threadId, error as Error);
       return;
     }

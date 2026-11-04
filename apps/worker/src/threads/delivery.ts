@@ -176,7 +176,20 @@ export class DeliveryGit {
     catch { throw new DeliveryUnavailable('Could not read the latest target branch on origin. Retrying without publishing again.'); }
     if (await maybeGit(workspace.path, 'merge-base', '--is-ancestor', publishedRevision, `refs/remotes/origin/${delivery.baseBranch}`) === null) throw new UserError('This revision has not reached the target branch. The workspace has been kept.');
     await record({ publishedRevision, integratedAt: result.integratedAt ?? checkedAt });
-    if (slug) await verifyGitHubChecks(workspace.sourcePath, slug, publishedRevision, result.integratedAt ?? delivery.requestedAt, this.hosting);
+    if (slug) {
+      try { await verifyGitHubChecks(workspace.sourcePath, slug, publishedRevision, result.integratedAt ?? delivery.requestedAt, this.hosting); }
+      catch (error) {
+        const checks = error instanceof DeliveryPending ? error.ci?.checks : undefined;
+        const cancelled = checks?.some(c => c.status === 'cancelled')
+          && !checks.some(c => ['failure', 'error', 'timed_out', 'action_required', 'startup_failure'].includes(c.status));
+        if (!cancelled) throw error;
+        const tip = await git(workspace.path, 'rev-parse', `refs/remotes/origin/${delivery.baseBranch}`);
+        // Branch concurrency can cancel this revision's run when a newer push contains it.
+        // Require CI proof on that containing target instead of treating cancellation as a code failure.
+        if (tip === publishedRevision) throw error;
+        await verifyGitHubChecks(workspace.sourcePath, slug, tip, result.integratedAt ?? delivery.requestedAt, this.hosting);
+      }
+    }
     // Host reads can take time. Files or commits added meanwhile still belong to this thread.
     if (await git(workspace.path, 'rev-parse', 'HEAD') !== revision || await git(workspace.path, 'branch', '--show-current') !== workspace.branch
       || await git(workspace.path, 'status', '--porcelain', '--untracked-files=all')) throw new UserError('The worktree changed during delivery verification. Its new work has been kept.');
@@ -227,7 +240,8 @@ async function ghJson(cwd: string, args: string[]): Promise<any> {
 }
 function assertChecks(checks: any[]) {
   const conclusions = checks.map(c => String(c.conclusion ?? c.state).toLowerCase());
-  if (conclusions.some(c => ['failure', 'error', 'cancelled', 'timed_out', 'action_required', 'startup_failure'].includes(c))) throw new DeliveryPending('Checks are failing. Continuing fixes in the owning thread.', true);
+  const failed = checks.filter((_, index) => ['failure', 'error', 'cancelled', 'timed_out', 'action_required', 'startup_failure'].includes(conclusions[index]!));
+  if (failed.length) throw new DeliveryPending(`Checks are failing: ${failed.map(c => `${c.name ?? c.context ?? 'CI check'} (${String(c.conclusion ?? c.state).toLowerCase()})`).join(', ')}.`, true);
   if (conclusions.some(c => !['success', 'neutral', 'skipped'].includes(c))) throw new DeliveryPending('Waiting for checks to finish.');
 }
 async function verifyGitHubChecks(cwd: string, slug: string, revision: string, requestedAt: string, hostingJson: typeof ghJson) {
@@ -250,7 +264,7 @@ async function verifyGitHubChecks(cwd: string, slug: string, revision: string, r
 async function assertChecksWithProgress(cwd: string, slug: string, revision: string, checks: any[], hostingJson: typeof ghJson) {
   try { assertChecks(checks); }
   catch (error) {
-    if (!(error instanceof DeliveryPending) || error.continueAgent) throw error;
+    if (!(error instanceof DeliveryPending)) throw error;
     const progress: DeliveryCI = { revision, updatedAt: now(), checks: [] };
     progress.checks = await Promise.all(checks.map(async check => {
       const status = String(check.conclusion || check.status || check.state || 'pending').toLowerCase();
@@ -270,7 +284,7 @@ async function assertChecksWithProgress(cwd: string, slug: string, revision: str
       }
       return entry;
     }));
-    throw new DeliveryPending(error.message, false, 'checks', progress);
+    throw new DeliveryPending(error.message, error.continueAgent, 'checks', progress);
   }
 }
 

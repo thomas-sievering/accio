@@ -75,7 +75,21 @@ test('CI wait shows current job and step, refreshes, survives reload and clears 
   await expect(page.getByText('CI fixture ready.', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Ship', exact: true }).click();
   const status = page.locator('.delivery-row [role="status"]');
-  await expect(status).toContainText('CI · Build image · 2 of 4');
+  const command = 'Run xvfb-run --auto-servernum pnpm exec playwright test --project=chromium --project=firefox --project=webkit tests/delivery.spec.ts tests/delivery-merge.spec.ts';
+  await expect(status).toContainText(`CI · ${command} · 2 of 4`);
+  const spinner = status.locator('.delivery-ci-spinner');
+  await expect(spinner).toBeVisible();
+  expect(await spinner.evaluate(el => el.getAnimations().some(animation => animation.playState === 'running'))).toBe(true);
+  // The completed agent stays idle while the delivery chip animates independently.
+  await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 600, height: 900 });
+  const label = status.locator('.delivery-status-text');
+  await expect(label).toHaveText(`CI · ${command} · 2 of 4`);
+  expect(await label.evaluate(el => el.getBoundingClientRect().height > parseFloat(getComputedStyle(el).lineHeight) * 1.5)).toBe(true);
+  expect(await status.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+  expect(await page.locator('.delivery-row').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('ci-command-narrow.png') });
+  await page.setViewportSize({ width: 1280, height: 900 });
   await expect(page.locator('.row-project').filter({ hasText: 'CI · step 2/4' })).toBeVisible();
   // Ship opens the side panel at Delivery: the track, with live CI under the station waiting on it.
   await expect(page.getByRole('tab', { name: 'Delivery' })).toHaveAttribute('aria-selected', 'true');
@@ -85,15 +99,43 @@ test('CI wait shows current job and step, refreshes, survives reload and clears 
   await expect(page.locator('.delivery-progress')).toContainText('last checked');
   await page.screenshot({ path: testInfo.outputPath('ci-progress.png') });
   await page.reload();
-  await expect(status).toContainText('Build image · 2 of 4');
+  await expect(status).toContainText(`${command} · 2 of 4`);
+  await expect(spinner).toBeVisible();
   await page.getByRole('button', { name: 'Check now', exact: true }).click();
   await expect(status).toContainText('Push image · 3 of 4');
   await page.getByRole('button', { name: 'Check now', exact: true }).click();
   await expect(page.locator('.delivery-actions [role="status"]')).toContainText('Shipped to main');
+  await expect(spinner).toHaveCount(0);
   await expect(page.locator('.delivery-progress')).toHaveCount(0);
   await expect(page.locator('.delivery-track .station-done')).toHaveCount(3);
   await expect(page.locator('.row-project').filter({ hasText: 'CI ·' })).toHaveCount(0);
   await expect(page.getByText('Ship to main when ready.', { exact: true })).toHaveCount(1);
+});
+
+test('stopped automatic fixes show the failed check and explain why the agent stays idle', async ({ page, baseURL }, testInfo) => {
+  await page.goto(`${baseURL}/#token=isolated-chat-test-token`);
+  await page.getByRole('button', { name: 'New thread', exact: true }).first().click();
+  await page.getByRole('option', { name: /ci-progress-project/ }).click();
+  await page.locator('.composer textarea').fill('Build CI failure fixture');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect(page.getByText('CI fixture ready.', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Ship', exact: true }).click();
+  const actions = page.locator('.delivery-actions');
+  await expect(actions).toContainText('CI ·');
+  await actions.getByRole('button', { name: 'Stop automatic fixes', exact: true }).click();
+  await actions.getByRole('button', { name: 'Check now', exact: true }).click();
+  await expect(actions).toContainText('Needs attention');
+  await expect(actions).toContainText('browser tests (failure)');
+  await expect(actions).toContainText('Automatic fixes are stopped.');
+  await expect(actions.locator('.delivery-ci-spinner')).toHaveCount(0);
+  const failure = page.locator('.delivery-track .station-failed');
+  await expect(failure).toContainText('Checks on main');
+  await expect(failure.getByRole('link', { name: 'browser tests ↗' })).toHaveAttribute('href', 'https://github.com/test/fixture/actions/runs/10/job/20');
+  await expect(failure.locator('.ci-failed')).toContainText('failure');
+  await page.reload();
+  await expect(actions).toContainText('browser tests (failure)');
+  await expect(page.locator('.delivery-ci-spinner')).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath('ci-failure-explained.png') });
 });
 
 test('a conversation with no changes stops Ship without waiting for checks', async ({ page, baseURL }, testInfo) => {
