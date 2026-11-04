@@ -85,7 +85,7 @@ test('High picked from the effort menu in a fresh draft is the new thread’s ef
   await expect(effort(page)).toHaveAccessibleName('Effort: High');
   expect((await threadNamed(baseURL, 'Queued effort from draft'))!.model.effort).toBe('high');
   await page.reload();
-  await page.getByRole('button', { name: /Queued effort from draft/ }).click();
+  await page.locator('.sidebar').getByRole('button', { name: /Queued effort from draft/ }).click();
   await expect(effort(page)).toHaveAccessibleName('Effort: High');
 });
 
@@ -100,6 +100,6 @@ test('an effort stepped with the arrow keys is kept when the page reloads at onc
   const stepped = await effort(page).getAttribute('aria-label');
   expect(stepped).toMatch(/^Effort: (Low|Medium|High)$/);
   await page.reload();
-  await page.getByRole('button', { name: /Queued effort reload/ }).click();
+  await page.locator('.sidebar').getByRole('button', { name: /Queued effort reload/ }).click();
   await expect(effort(page)).toHaveAccessibleName(stepped!);
 });

@@ -230,11 +230,6 @@
   padding: 0;
 }
 
-/* Keyboard focus shows up to two lines of a long title; hover and the accessible name carry it in full. */
-.row.open:has(.row-main:focus-visible) {
-  height: auto;
-  min-height: 44px;
-}
 /* Renaming edits the title in place. */
 .row.renaming .row-actions {
   display: none;
