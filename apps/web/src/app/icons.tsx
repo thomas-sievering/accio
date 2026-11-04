@@ -1,162 +1,377 @@
+// UI icons vendored from https://iconmcp.com (MIT, copyright 2026 UI8).
+// SVG geometry is committed here; fetching icons is a development-only operation.
+// See THIRD_PARTY_NOTICES.md. Keep new UI icons on the same 16-unit outline grid.
 const base = {
   width: 16,
   height: 16,
-  viewBox: '0 0 24 24',
+  viewBox: '0 0 16 16',
   fill: 'none',
   stroke: 'currentColor',
-  strokeWidth: 2,
+  strokeWidth: 1.33,
   strokeLinecap: 'round' as const,
   strokeLinejoin: 'round' as const,
   'aria-hidden': true,
 };
 
+// IconMCP: user
 export const User = () => (
   <svg {...base}>
-    <circle cx="12" cy="8" r="4" />
-    <path d="M5 21v-2a7 7 0 0 1 14 0v2" />
+    <circle cx="8" cy="5" r="2.75" />
+    <path d="M2.75 13.75 C3.3 11.15 5.4 9.5 8 9.5 C10.6 9.5 12.7 11.15 13.25 13.75" />
   </svg>
 );
+
+// IconMCP: check
 export const Check = () => (
   <svg {...base}>
-    <path d="M20 6 9 17l-5-5" />
+    <path d="M2.75 8.5 L6.25 12 L13.25 4.5" />
   </svg>
 );
+
+// IconMCP: plus
 export const Plus = () => (
   <svg {...base}>
-    <path d="M12 5v14M5 12h14" />
+    <line x1="8" y1="2.75" x2="8" y2="13.25" />
+    <line x1="2.75" y1="8" x2="13.25" y2="8" />
   </svg>
 );
+
+// IconMCP: close
 export const Close = () => (
   <svg {...base}>
-    <path d="M18 6 6 18M6 6l12 12" />
+    <line x1="3.75" y1="3.75" x2="12.25" y2="12.25" />
+    <line x1="12.25" y1="3.75" x2="3.75" y2="12.25" />
   </svg>
 );
-export const Queue = () => <svg {...base}><path d="M4 6h12M4 12h8M4 18h8M18 12v8m-4-4h8" /></svg>;
-export const Ship = () => <svg {...base}><path d="M12 15V3m-5 5 5-5 5 5M4 14v6h16v-6" /></svg>;
-export const Archive = () => <svg {...base}><rect x="3" y="3" width="18" height="5" rx="1" /><path d="M5 8v12h14V8m-10 4h6" /></svg>;
-/** An open pull request: two branches, the second still pointing back. */
-export const PullRequest = () => <svg {...base}><circle cx="6" cy="6" r="2.6" /><circle cx="18" cy="18" r="2.6" /><path d="M6 8.6V21" /><path d="M12.5 6H16a2 2 0 0 1 2 2v7.4" /></svg>;
-export const Merge = () => <svg {...base}><circle cx="6" cy="6" r="2.6" /><circle cx="18" cy="18" r="2.6" /><path d="M6 21V8.6" /><path d="M6 9a9 9 0 0 0 9.4 9" /></svg>;
-export const Alert = () => <svg {...base}><circle cx="12" cy="12" r="9" /><path d="M12 8v4.5M12 16h.01" /></svg>;
-export const Play = () => <svg {...base}><path d="m7 4 14 8-14 8Z" /></svg>;
+
+// IconMCP: list-plus
+export const Queue = () => (
+  <svg {...base}>
+    <circle cx="2.75" cy="2.75" r="0.878" fill="currentColor" stroke="none" />
+    <circle cx="2.75" cy="6.25" r="0.878" fill="currentColor" stroke="none" />
+    <circle cx="2.75" cy="9.75" r="0.878" fill="currentColor" stroke="none" />
+    <line x1="6" y1="2.75" x2="13.25" y2="2.75" />
+    <line x1="6" y1="6.25" x2="13.25" y2="6.25" />
+    <line x1="6" y1="9.75" x2="7.75" y2="9.75" />
+    <line x1="11.75" y1="9.75" x2="11.75" y2="13.75" />
+    <line x1="9.75" y1="11.75" x2="13.75" y2="11.75" />
+  </svg>
+);
+
+// IconMCP: upload
+export const Ship = () => (
+  <svg {...base}>
+    <line x1="8" y1="9.25" x2="8" y2="2.25" />
+    <path d="M4.75 5.5 L8 2.25 L11.25 5.5" />
+    <path d="M2.5 10.5 L2.5 12 C2.5 12.828 3.172 13.5 4 13.5 L12 13.5 C12.828 13.5 13.5 12.828 13.5 12 L13.5 10.5" />
+  </svg>
+);
+
+// IconMCP: archive
+export const Archive = () => (
+  <svg {...base}>
+    <rect x="1.75" y="2.75" width="12.5" height="3.5" rx="1" />
+    <path d="M2.75 6.25 L2.75 11.25 C2.75 12.355 3.645 13.25 4.75 13.25 L11.25 13.25 C12.355 13.25 13.25 12.355 13.25 11.25 L13.25 6.25" />
+    <line x1="6.5" y1="9" x2="9.5" y2="9" />
+  </svg>
+);
+
+// IconMCP: git-pull-request
+export const PullRequest = () => (
+  <svg {...base}>
+    <circle cx="4.25" cy="4" r="1.75" />
+    <circle cx="11.75" cy="12" r="1.75" />
+    <line x1="4.25" y1="5.75" x2="4.25" y2="14" />
+    <path d="M8 4 L9.875 4 C10.911 4 11.75 4.839 11.75 5.875 L11.75 10.25" />
+    <path d="M10 2 L8 4 L10 6" />
+  </svg>
+);
+
+// IconMCP: git-merge
+export const Merge = () => (
+  <svg {...base}>
+    <circle cx="4.75" cy="4.25" r="1.75" />
+    <circle cx="11.75" cy="11.25" r="1.75" />
+    <line x1="4.75" y1="6" x2="4.75" y2="14" />
+    <path d="M4.75 6 A5.25 5.25 0 0 0 10 11.25" />
+  </svg>
+);
+
+// IconMCP: alert-circle
+export const Alert = () => (
+  <svg {...base}>
+    <circle cx="8" cy="8" r="6" />
+    <line x1="8" y1="5.25" x2="8" y2="8.75" />
+    <circle cx="8" cy="11.15" r="0.878" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+// IconMCP: play
+export const Play = () => (
+  <svg {...base}>
+    <path d="M6.537 3.728 L11.924 7.156 C12.542 7.549 12.542 8.451 11.924 8.844 L6.537 12.272 C5.871 12.696 5 12.217 5 11.428 L5 4.572 C5 3.783 5.871 3.304 6.537 3.728 Z" />
+  </svg>
+);
+
+// IconMCP: arrow-left
 export const ArrowLeft = () => (
   <svg {...base}>
-    <path d="M19 12H5M12 19l-7-7 7-7" />
+    <g transform="rotate(180 8 8)">
+      <line x1="2.75" y1="8" x2="13.25" y2="8" />
+      <path d="M8.5 3.25 L13.25 8 L8.5 12.75" />
+    </g>
   </svg>
 );
+
+// IconMCP: users
 export const Users = () => (
   <svg {...base}>
-    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-    <circle cx="9" cy="7" r="4" />
-    <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+    <circle cx="6" cy="5.25" r="2.5" />
+    <path d="M1.75 13.5 C2.25 11.25 3.9 9.75 6 9.75 C8.1 9.75 9.75 11.25 10.25 13.5" />
+    <path d="M10.25 2.85 A2.5 2.5 0 0 1 10.25 7.65" />
+    <path d="M11.75 10 C12.9 10.5 13.7 11.8 14 13.5" />
   </svg>
 );
+
+// IconMCP: layers
 export const Layers = () => (
   <svg {...base}>
-    <path d="m12 2 10 5-10 5L2 7z" />
-    <path d="m2 17 10 5 10-5M2 12l10 5 10-5" />
+    <path d="M8.381 2.206 L12.701 4.547 C13.26 4.849 13.26 5.651 12.701 5.953 L8.381 8.294 C8.143 8.422 7.857 8.422 7.619 8.294 L3.299 5.953 C2.74 5.651 2.74 4.849 3.299 4.547 L7.619 2.206 C7.857 2.078 8.143 2.078 8.381 2.206 Z" />
+    <path d="M2 8 L8 11.25 L14 8" />
+    <path d="M2 10.75 L8 14 L14 10.75" />
   </svg>
 );
+
+// IconMCP: more-horizontal
 export const More = () => (
   <svg {...base}>
-    <circle cx="5" cy="12" r="1" />
-    <circle cx="12" cy="12" r="1" />
-    <circle cx="19" cy="12" r="1" />
+    <circle cx="3.25" cy="8" r="0.878" fill="currentColor" stroke="none" />
+    <circle cx="8" cy="8" r="0.878" fill="currentColor" stroke="none" />
+    <circle cx="12.75" cy="8" r="0.878" fill="currentColor" stroke="none" />
   </svg>
 );
+
+// IconMCP: folder-plus
 export const FolderPlus = () => (
   <svg {...base}>
-    <path d="M12 10v6M9 13h6" />
-    <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
+    <path d="M7.5 12.75 L4.25 12.75 C3.145 12.75 2.25 11.855 2.25 10.75 L2.25 5.25 C2.25 4.145 3.145 3.25 4.25 3.25 L5.33 3.25 C5.914 3.25 6.469 3.505 6.849 3.948 L7.151 4.302 C7.531 4.745 8.086 5 8.67 5 L12.5 5 C13.19 5 13.75 5.56 13.75 6.25 L13.75 7.5" />
+    <line x1="11.75" y1="9.75" x2="11.75" y2="13.75" />
+    <line x1="9.75" y1="11.75" x2="13.75" y2="11.75" />
   </svg>
 );
+
+// IconMCP: chevron-right
 export const Chevron = () => (
   <svg {...base}>
-    <path d="m9 18 6-6-6-6" />
+    <path d="M5.875 3.75 L10.125 8 L5.875 12.25" />
   </svg>
 );
+
+// IconMCP: chevron-down
 export const ChevronDown = () => (
   <svg {...base} width={12} height={12}>
-    <path d="m6 9 6 6 6-6" />
+    <g transform="rotate(90 8 8)">
+      <path d="M5.875 3.75 L10.125 8 L5.875 12.25" />
+    </g>
   </svg>
 );
+
+// IconMCP: arrow-up
 export const ArrowUp = () => (
-  <svg {...base} strokeWidth={2.4}>
-    <path d="M12 19V5M5 12l7-7 7 7" />
+  <svg {...base}>
+    <g transform="rotate(-90 8 8)">
+      <line x1="2.75" y1="8" x2="13.25" y2="8" />
+      <path d="M8.5 3.25 L13.25 8 L8.5 12.75" />
+    </g>
   </svg>
 );
+
+// IconMCP: stop
 export const StopSquare = () => (
   <svg {...base} fill="currentColor" stroke="none">
-    <rect x="6" y="6" width="12" height="12" rx="2" />
+    <rect x="3" y="3" width="10" height="10" rx="1.5" />
   </svg>
 );
+
+// IconMCP: clock
 export const Clock = () => (
   <svg {...base}>
-    <circle cx="12" cy="12" r="9" />
-    <path d="M12 7v5l3 2" />
+    <circle cx="8" cy="8" r="6" />
+    <path d="M8 4.75 L8 8 L10.5 9.5" />
   </svg>
 );
+
+// IconMCP: undo
 export const Undo = () => (
   <svg {...base}>
-    <path d="M9 14 4 9l5-5" />
-    <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
+    <path d="M2.75 6.5 H9.75 A3.5 3.5 0 0 1 9.75 13.5 H6.25" />
+    <path d="M6 3.25 L2.75 6.5 L6 9.75" />
   </svg>
 );
+
+// IconMCP: search
 export const Search = () => (
   <svg {...base}>
-    <circle cx="11" cy="11" r="7" />
-    <path d="m20 20-3.5-3.5" />
+    <circle cx="7" cy="7" r="4.75" />
+    <line x1="10.5" y1="10.5" x2="13.75" y2="13.75" />
   </svg>
 );
+
+// IconMCP: edit
 export const SquarePen = () => (
   <svg {...base}>
-    <path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-    <path d="M18.4 2.6a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4Z" />
+    <path d="M10.957 3.457 L12.543 5.043 C12.933 5.433 12.933 6.067 12.543 6.457 L5.793 13.207 C5.605 13.395 5.351 13.5 5.086 13.5 L2.5 13.5 L2.5 10.914 C2.5 10.649 2.605 10.395 2.793 10.207 L9.543 3.457 C9.933 3.067 10.567 3.067 10.957 3.457 Z" />
+    <line x1="8.75" y1="4.25" x2="11.75" y2="7.25" />
   </svg>
 );
+
+// IconMCP: filter
 export const ListFilter = () => (
   <svg {...base}>
-    <path d="M3 6h18M7 12h10M10 18h4" />
+    <path d="M4.346 3 L11.654 3 C12.495 3 12.96 3.975 12.431 4.629 L9.723 7.975 C9.579 8.153 9.5 8.375 9.5 8.604 L9.5 11.382 C9.5 12.125 8.718 12.609 8.053 12.276 L7.053 11.776 C6.714 11.607 6.5 11.261 6.5 10.882 L6.5 8.604 C6.5 8.375 6.421 8.153 6.277 7.975 L3.569 4.629 C3.04 3.975 3.505 3 4.346 3 Z" />
   </svg>
 );
+
+// IconMCP: settings
 export const Settings = () => (
   <svg {...base}>
-    <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-    <circle cx="12" cy="12" r="3" />
+    <path d="M6.663 3.269 L6.631 2.646 C6.611 2.246 6.93 1.91 7.33 1.91 L8.67 1.91 C9.07 1.91 9.389 2.246 9.369 2.646 L9.337 3.269 C9.324 3.532 9.459 3.779 9.686 3.911 L10.698 4.495 C10.926 4.626 11.208 4.619 11.428 4.476 L11.953 4.137 C12.289 3.92 12.739 4.028 12.939 4.375 L13.609 5.535 C13.809 5.882 13.678 6.326 13.322 6.508 L12.766 6.793 C12.532 6.912 12.385 7.153 12.385 7.416 L12.385 8.584 C12.385 8.847 12.532 9.088 12.766 9.207 L13.322 9.492 C13.678 9.674 13.809 10.118 13.609 10.465 L12.939 11.625 C12.739 11.972 12.289 12.08 11.953 11.863 L11.428 11.524 C11.208 11.381 10.926 11.374 10.698 11.505 L9.686 12.089 C9.459 12.221 9.324 12.468 9.337 12.731 L9.369 13.354 C9.389 13.754 9.07 14.09 8.67 14.09 L7.33 14.09 C6.93 14.09 6.611 13.754 6.631 13.354 L6.663 12.731 C6.676 12.468 6.541 12.221 6.314 12.089 L5.302 11.505 C5.074 11.374 4.792 11.381 4.572 11.524 L4.047 11.863 C3.711 12.08 3.261 11.972 3.061 11.625 L2.391 10.465 C2.191 10.118 2.322 9.674 2.678 9.492 L3.234 9.207 C3.468 9.088 3.615 8.847 3.615 8.584 L3.615 7.416 C3.615 7.153 3.468 6.912 3.234 6.793 L2.678 6.508 C2.322 6.326 2.191 5.882 2.391 5.535 L3.061 4.375 C3.261 4.028 3.711 3.92 4.047 4.137 L4.572 4.476 C4.792 4.619 5.074 4.626 5.302 4.495 L6.314 3.911 C6.541 3.779 6.676 3.532 6.663 3.269 Z" />
+    <circle cx="8" cy="8" r="2" />
   </svg>
 );
+
+// IconMCP: network
 export const Hub = () => (
   <svg {...base}>
-    <circle cx="12" cy="12" r="3" />
-    <circle cx="4" cy="5" r="2" />
-    <circle cx="20" cy="5" r="2" />
-    <circle cx="12" cy="21" r="1.5" />
-    <path d="m5.6 6.3 4.2 3.5M18.4 6.3l-4.2 3.5M12 15v4.5" />
+    <circle cx="8" cy="8" r="1.75" />
+    <circle cx="3.5" cy="3.5" r="1.5" />
+    <circle cx="12.5" cy="3.5" r="1.5" />
+    <circle cx="3.5" cy="12.5" r="1.5" />
+    <circle cx="12.5" cy="12.5" r="1.5" />
+    <line x1="6.75" y1="6.75" x2="4.56" y2="4.56" />
+    <line x1="9.25" y1="6.75" x2="11.44" y2="4.56" />
+    <line x1="6.75" y1="9.25" x2="4.56" y2="11.44" />
+    <line x1="9.25" y1="9.25" x2="11.44" y2="11.44" />
   </svg>
 );
+
+// IconMCP: monitor
 export const Monitor = () => (
   <svg {...base}>
-    <rect x="2" y="3" width="20" height="14" rx="2" />
-    <path d="M8 21h8M12 17v4" />
+    <rect x="1.75" y="2.5" width="12.5" height="8.5" rx="2" />
+    <line x1="8" y1="11" x2="8" y2="13.5" />
+    <line x1="5.25" y1="13.5" x2="10.75" y2="13.5" />
   </svg>
 );
+
+// IconMCP: scroll
 export const ScrollText = () => (
   <svg {...base}>
-    <path d="M15 12h-5M15 8h-5M19 17V5a2 2 0 0 0-2-2H4" />
-    <path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3" />
+    <path d="M4.5 10.5 V4 A2 2 0 0 1 6.5 2 H12 A1.75 1.75 0 0 1 12 5.5 H11.5 V12 A2 2 0 0 1 9.5 14 H4 A1.75 1.75 0 0 1 4 10.5 Z" />
+    <line x1="6.75" y1="6.75" x2="9.25" y2="6.75" />
+    <line x1="6.75" y1="9.5" x2="9.25" y2="9.5" />
   </svg>
 );
+
+// IconMCP: refresh
 export const Refresh = () => (
   <svg {...base}>
-    <path d="M21 12a9 9 0 1 1-2.64-6.36L21 8" />
-    <path d="M21 3v5h-5" />
+    <path d="M13.75 8 A5.75 5.75 0 1 1 8 2.25 C9.6 2.25 11.1 2.9 12.25 4 L13.75 5.5" />
+    <path d="M13.75 2.25 L13.75 5.5 L10.5 5.5" />
   </svg>
 );
+
+// IconMCP: folder
 export const Folder = () => (
   <svg {...base}>
-    <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
+    <path d="M4.25 3.25 L5.33 3.25 C5.914 3.25 6.469 3.505 6.849 3.948 L7.151 4.302 C7.531 4.745 8.086 5 8.67 5 L11.75 5 C12.855 5 13.75 5.895 13.75 7 L13.75 10.75 C13.75 11.855 12.855 12.75 11.75 12.75 L4.25 12.75 C3.145 12.75 2.25 11.855 2.25 10.75 L2.25 5.25 C2.25 4.145 3.145 3.25 4.25 3.25 Z" />
   </svg>
 );
+
+// IconMCP: star
+export const Star = ({ filled = false }: { filled?: boolean }) => (
+  <svg {...base} width={14} height={14} fill={filled ? 'currentColor' : 'none'}>
+    <path d="M8.454 3.234 L9.646 5.819 C9.719 5.977 9.869 6.085 10.041 6.106 L12.868 6.441 C13.291 6.491 13.461 7.015 13.148 7.305 L11.059 9.237 C10.931 9.355 10.874 9.531 10.908 9.702 L11.462 12.493 C11.546 12.912 11.1 13.235 10.728 13.027 L8.244 11.637 C8.092 11.552 7.908 11.552 7.756 11.637 L5.272 13.027 C4.9 13.235 4.454 12.912 4.538 12.493 L5.092 9.702 C5.126 9.531 5.069 9.355 4.941 9.237 L2.852 7.305 C2.539 7.015 2.709 6.491 3.132 6.441 L5.959 6.106 C6.131 6.085 6.281 5.977 6.354 5.819 L7.546 3.234 C7.725 2.847 8.275 2.847 8.454 3.234 Z" />
+  </svg>
+);
+
+// IconMCP: key
+export const Key = () => (
+  <svg {...base}>
+    <circle cx="5" cy="11" r="3" />
+    <line x1="7.12" y1="8.88" x2="13.5" y2="2.5" />
+    <line x1="11.5" y1="4.5" x2="13.25" y2="6.25" />
+    <line x1="9.25" y1="6.75" x2="10.75" y2="8.25" />
+  </svg>
+);
+
+// IconMCP: minus-circle
+export const MinusCircle = () => (
+  <svg {...base}>
+    <circle cx="8" cy="8" r="6" />
+    <line x1="5.25" y1="8" x2="10.75" y2="8" />
+  </svg>
+);
+
+// IconMCP: sidebar-right
+export const PanelRight = () => (
+  <svg {...base}>
+    <rect x="2.25" y="2.75" width="11.5" height="10.5" rx="2" />
+    <line x1="10" y1="2.75" x2="10" y2="13.25" />
+  </svg>
+);
+
+// IconMCP: bar-chart
+export const Limits = () => (
+  <svg {...base}>
+    <rect x="2.25" y="8.5" width="2" height="5" rx="0.6" />
+    <rect x="7" y="2.5" width="2" height="11" rx="0.6" />
+    <rect x="11.75" y="5.5" width="2" height="8" rx="0.6" />
+  </svg>
+);
+
+// IconMCP: wrench
+export const Wrench = () => (
+  <svg {...base}>
+    <path d="M8.63 9.13 A3.75 3.75 0 0 0 13.7 4.28 L11.42 6.56 L9.44 4.58 L11.72 2.3 A3.75 3.75 0 0 0 6.87 7.37 L2.83 11.41 A1.25 1.25 0 0 0 4.59 13.17 Z" />
+  </svg>
+);
+
+// IconMCP: plug
+export const Plug = () => (
+  <svg {...base}>
+    <path d="M4 5.5 H12 V8 A4 4 0 0 1 4 8 Z" />
+    <line x1="6" y1="2" x2="6" y2="5.5" />
+    <line x1="10" y1="2" x2="10" y2="5.5" />
+    <line x1="8" y1="12" x2="8" y2="14.25" />
+  </svg>
+);
+
+// IconMCP: book-open
+export const BookOpen = () => (
+  <svg {...base}>
+    <path d="M8 4 C6.5 3 4.5 2.75 2 2.75 V12.25 C4.5 12.25 6.5 12.5 8 13.5 C9.5 12.5 11.5 12.25 14 12.25 V2.75 C11.5 2.75 9.5 3 8 4 Z" />
+    <line x1="8" y1="4" x2="8" y2="13.5" />
+  </svg>
+);
+
+// IconMCP: target
+export const Target = () => (
+  <svg {...base}>
+    <circle cx="8" cy="8" r="6" />
+    <circle cx="8" cy="8" r="3.25" />
+    <circle cx="8" cy="8" r="0.878" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+// IconMCP: pause
+export const Pause = () => (
+  <svg {...base}>
+    <rect x="3.5" y="2.75" width="3" height="10.5" rx="0.8" />
+    <rect x="9.5" y="2.75" width="3" height="10.5" rx="0.8" />
+  </svg>
+);
+
 /** Brand marks for model providers; filled, so they skip the stroke defaults. Anthropic's models show the Claude mark (from Simple Icons) in Claude's orange. */
 export const ProviderLogo = ({ providerId }: { providerId: string }) => providerId === 'anthropic' ? (
   <svg width={14} height={14} viewBox="0 0 24 24" fill="#d97757" aria-hidden>
@@ -167,66 +382,12 @@ export const ProviderLogo = ({ providerId }: { providerId: string }) => provider
     <path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z" />
   </svg>
 ) : null;
-export const Star = ({ filled = false }: { filled?: boolean }) => (
-  <svg {...base} width={14} height={14} fill={filled ? 'currentColor' : 'none'}>
-    <path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z" />
-  </svg>
-);
-export const Key = () => (
-  <svg {...base}>
-    <circle cx="7.5" cy="15.5" r="4.5" />
-    <path d="m10.7 12.3 9.3-9.3M17 6l3 3M14.5 8.5l2 2" />
-  </svg>
-);
-export const MinusCircle = () => (
-  <svg {...base}>
-    <circle cx="12" cy="12" r="9" />
-    <path d="M8 12h8" />
-  </svg>
-);
+
 /** The Owl: accio's agent that works across every thread. From Lucide Lab (ISC licence). */
 export const Owl = () => (
-  <svg {...base}>
+  <svg {...base} viewBox="0 0 24 24" strokeWidth={2}>
     <ellipse cx="12" cy="9" rx="8" ry="7" />
     <path d="M12 9a4 4 0 1 1 8 0v12h-4C9.4 21 4 15.6 4 9a4 4 0 1 1 8 0v1M8 9h.01M16 9h.01" />
     <path d="M20 21a3.9 3.9 0 1 1 0-7.8m-10 6.2V22m4-1.15V22" />
-  </svg>
-);
-export const PanelRight = () => (
-  <svg {...base}>
-    <rect x="3" y="3" width="18" height="18" rx="2" />
-    <path d="M15 3v18" />
-  </svg>
-);
-export const Limits = () => (
-  <svg {...base}>
-    <path d="M6 20v-6M12 20V4M18 20V10" />
-  </svg>
-);
-export const Wrench = () => (
-  <svg {...base}>
-    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76Z" />
-  </svg>
-);
-export const Plug = () => (
-  <svg {...base}>
-    <path d="M12 22v-5M9 8V2M15 8V2M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z" />
-  </svg>
-);
-export const BookOpen = () => (
-  <svg {...base}>
-    <path d="M12 7v14M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3Z" />
-  </svg>
-);
-export const Target = () => (
-  <svg {...base}>
-    <circle cx="12" cy="12" r="9" />
-    <circle cx="12" cy="12" r="5" />
-    <circle cx="12" cy="12" r="1" />
-  </svg>
-);
-export const Pause = () => (
-  <svg {...base}>
-    <path d="M9 5v14M15 5v14" />
   </svg>
 );
