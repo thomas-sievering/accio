@@ -954,3 +954,5 @@ div.model-picker-empty b { color: var(--ink); font-weight: 500; }
 .editable-thread-title:hover { background: var(--hover); }
 .thread-title-form { display: flex; flex-direction: row; align-items: center; gap: 6px; min-width: 0; -webkit-app-region: no-drag; }
 .thread-title-form input { min-width: 100px; width: 260px; max-width: 35vw; }
+.model-name { overflow: hidden; text-overflow: ellipsis; }
+.model-version { margin-left: 0.35em; color: var(--muted); }

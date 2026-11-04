@@ -5,6 +5,7 @@ import { useTooltip } from '../app/Tooltip';
 import { Check, ProviderLogo, Star } from '../app/icons';
 import { EffortWord, effortSteps } from './EffortControl';
 import { useSteps, useWheelSteps } from './steps';
+import { prettyModelName } from './modelName';
 
 /**
  * GLOSSARY: Effort. One chip for what a thread runs: the model and a muted effort word.
@@ -201,7 +202,7 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
           return <div className={`model-picker-row${isSelected ? ' selected' : ''}${m.limited ? ' limited' : ''}`} key={key} title={m.limited ? usedUpText(m.limited) : undefined}>
             <button type="button" data-model-choice aria-pressed={isSelected} onClick={() => void choose(choice)}>
               {/* Favourites mix providers, so each row carries its provider's logo instead of the full name. */}
-              <span className="model-picker-name">{activeTab === 'favorites' && <ProviderLogo providerId={m.providerId} />}{short(m.name)}</span>
+              <span className="model-picker-name">{activeTab === 'favorites' && <ProviderLogo providerId={m.providerId} />}<PrettyName name={m.name} /></span>
               {m.limited && <small className="model-picker-limited">{usedUpText(m.limited)}</small>}
             </button>
             <button type="button" className="model-star" title={isFavorite ? 'Remove from favourites' : 'Add to favourites'}
@@ -216,6 +217,12 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
       {error && <p className="error model-picker-error" role="alert">{error}</p>}
     </div>
   </span>;
+}
+
+/** "Opus" with its version muted beside it. */
+function PrettyName({ name }: { name: string }) {
+  const pretty = prettyModelName(name);
+  return <span className="model-name">{pretty.name}{pretty.version && <span className="model-version">{pretty.version}</span>}</span>;
 }
 
 /** "Fable's weekly limit is used up · resets Thu 13:00" */
