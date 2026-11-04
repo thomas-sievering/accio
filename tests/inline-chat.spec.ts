@@ -7,6 +7,57 @@ import { join, resolve } from 'node:path';
 const require = createRequire(import.meta.url);
 const token = 'isolated-chat-test-token';
 
+for (const submit of ['Enter', 'Send'] as const) {
+  test(`first ${submit} shows the message before thread startup completes and recovers a failed start`, async ({ page, baseURL }, testInfo) => {
+    let release: (() => void) | undefined;
+    let starts = 0;
+    await page.routeWebSocket('**/ws?*', socket => {
+      const server = socket.connectToServer();
+      socket.onMessage(message => {
+        const request = JSON.parse(String(message));
+        if (request.method !== 'threads.start') { server.send(message); return; }
+        starts++;
+        release = starts === 1
+          ? () => socket.send(JSON.stringify({ type: 'response', id: request.id, ok: false, error: 'Startup unavailable. Try again.' }))
+          : () => server.send(message);
+      });
+    });
+    await page.goto(`${baseURL}/#token=${token}`);
+    await page.locator('.sidebar').getByRole('button', { name: 'New thread', exact: true }).click();
+    await page.getByRole('option', { name: 'No project', exact: true }).click();
+    if (await page.getByRole('combobox', { name: 'Search profiles' }).isVisible()) await page.getByRole('option', { name: 'Personal', exact: true }).click();
+    const input = page.locator('.composer textarea');
+    const text = `First ${submit} startup feedback`;
+    await input.fill(text);
+    const send = async () => {
+      if (submit === 'Enter') await input.press('Enter');
+      else await page.getByRole('button', { name: 'Send', exact: true }).click();
+    };
+    await send();
+    const pending = page.locator('.draft-starting');
+    await expect(pending.locator('.msg.user')).toHaveText(text);
+    await expect(pending.getByRole('status')).toHaveText('Starting thread…');
+    await expect(input).toBeHidden();
+    // Enter again while startup is held cannot create a duplicate thread.
+    await page.keyboard.press('Enter');
+    expect(starts).toBe(1);
+    await page.screenshot({ path: testInfo.outputPath('first-send-starting.png') });
+    release!();
+    await expect(page.locator('.composer-error')).toHaveText('Startup unavailable. Try again.');
+    await expect(input).toBeVisible();
+    await expect(input).toHaveValue(text);
+    await send();
+    await expect(pending.getByRole('status')).toBeVisible();
+    expect(starts).toBe(2);
+    release!();
+    await expect(pending).toHaveCount(0);
+    await expect(page.locator('.messages .msg.user')).toHaveText(text);
+    await expect(page.locator('.composer textarea')).toHaveValue('');
+    await page.reload();
+    await expect(page.locator('.messages .msg.user')).toHaveText(text);
+  });
+}
+
 test('Enter steers, Ctrl changes Send and queues; queued edits are held until saved', async ({ page, baseURL }, testInfo) => {
   await page.goto(`${baseURL}/#token=${token}`);
   await page.locator('.sidebar').getByRole('button', { name: /Inline chat fixture/ }).click();
@@ -307,7 +358,7 @@ test('a choice shows screenshots full size and sends the pick with feedback', as
   await page.getByRole('button', { name: 'Close limits', exact: true }).click();
   await expect(page.locator('.composer-chip')).toContainText('C · Grouped by provider');
   await page.getByRole('textbox').fill('but without the toggles');
-  await page.getByRole('button', { name: 'Send' }).click();
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
 
   await expect(page.getByText('Got it: I pick C ("Grouped by provider") for "Which Accounts layout?".')).toBeVisible();
   const sent = page.locator('.msg.user').last();

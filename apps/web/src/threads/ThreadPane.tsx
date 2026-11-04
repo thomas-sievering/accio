@@ -108,11 +108,21 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
   const machine = machines?.find((m) => m.id === machineId);
   const unavailable = !machine?.connected;
   const remote = !!machine && !machine.thisMachine;
+  const [starting, setStarting] = useState<string>();
 
   return (
     <>
       <PaneHeader title="New thread" {...place} />
-      <div className="hero">
+      {starting !== undefined && <div className="transcript-scroll draft-starting" aria-busy="true">
+        <div className="messages"><div className="thread">
+          <div className="msg user">{starting}</div>
+          <div className="draft-starting-status" role="status">
+            <span className="typing" aria-hidden="true"><i /><i /><i /></span>
+            Starting thread…
+          </div>
+        </div></div>
+      </div>}
+      <div className="hero" hidden={starting !== undefined}>
         <h1>{checkoutId ? `What should we build in ${place.project?.name ?? 'this checkout'}?` : 'What should we build?'}</h1>
         <ThreadNotice profile={place.profile} model={model} onOpenProfile={onOpenProfile} />
         {remote && <p className="note" role="status">Running threads on another machine is not available yet. Choose this machine to start a thread.</p>}
@@ -120,9 +130,18 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
         <Composer
           target="draft"
           draftId={`new:${checkoutId}:${profileId ?? ''}`}
-          disabled={!place.profile || !accountForModel(place.profile, model)?.signedIn || unavailable || remote}
+          disabled={starting !== undefined || !place.profile || !accountForModel(place.profile, model)?.signedIn || unavailable || remote}
           placeholder={`Ask ${model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}
-          onSend={async (text) => select((await client.call('threads.start', checkoutId ? { checkoutId, text, model, machineId } : { profileId: profileId!, text, model, machineId })).id)}
+          onSend={async (text) => {
+            setStarting(text);
+            try {
+              const thread = await client.call('threads.start', checkoutId ? { checkoutId, text, model, machineId } : { profileId: profileId!, text, model, machineId });
+              select(thread.id);
+            } finally {
+              // Keep the composer mounted so a failed start restores its draft and error.
+              setStarting(undefined);
+            }
+          }}
           toolbar={<>
             <ModelPicker profileId={place.profile?.id} value={model} onChange={async (model) => setChoice({ checkoutId, profileId: place.profile?.id, model })} />
             {place.profile && <LimitsIndicator active={active} account={accountForModel(place.profile, model)} onOpen={() => onOpenLimits(place.profile!.id)} />}

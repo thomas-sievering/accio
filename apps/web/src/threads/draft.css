@@ -8,6 +8,19 @@
   margin: auto;
   padding-bottom: 8vh;
 }
+.hero[hidden] { display: none; }
+.draft-starting-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.draft-starting { animation: draft-starting-in 120ms ease-out; }
+@keyframes draft-starting-in { from { opacity: 0.6; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .draft-starting, .draft-starting .typing i { animation: none; }
+}
 .hero h1 {
   margin: 0 0 26px;
   font-size: 30px;
