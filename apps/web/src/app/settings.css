@@ -298,3 +298,87 @@
 .naming-preview select { max-width: 350px; }
 .naming-model, .naming-preview .field, .naming-instructions { margin: 0; }
 .naming-model select { max-width: 280px; }
+
+/* A profile's accounts at one provider, in order of use. */
+.profile-accounts {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.profile-accounts-label {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.profile-account-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  list-style: none;
+}
+.profile-account {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 6px 8px 6px 10px;
+}
+.profile-account + .profile-account {
+  border-top: 1px solid var(--line);
+}
+.profile-account-mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  color: var(--ink);
+}
+.profile-account-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  gap: 1px;
+}
+.profile-account-text b {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.profile-account-text small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.profile-account-tag {
+  flex: none;
+  padding: 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--green) 45%, transparent);
+  border-radius: 6px;
+  color: var(--green);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+.profile-account .row-action {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: var(--dim);
+}
+.profile-account .row-action:hover {
+  background: var(--active);
+  color: var(--ink);
+}
+.profile-account .row-action svg {
+  width: 14px;
+  height: 14px;
+}

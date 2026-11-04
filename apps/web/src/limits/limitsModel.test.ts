@@ -45,6 +45,15 @@ describe('limitsLayout', () => {
     expect(side!.entries[0]).toMatchObject({ sharedWith: [] });
   });
 
+  it('marks which of several accounts at a provider the profile uses', () => {
+    const out = { ...account('out'), signedIn: false };
+    const p: ProfileView = { id: 'p', name: 'p', providers: [provider('anthropic', [out, team, own]), provider('openai', [gpt])] };
+    expect(limitsLayout([p], 'p')[0]!.entries.map((e) => `${e.account.id}:${e.role}`)).toEqual(['out:standby', 'team:inUse', 'own:standby', 'gpt:only']);
+    // The hub's choice wins over the order.
+    const chosen: ProfileView = { ...p, providers: [{ ...provider('anthropic', [out, team, own]), inUseId: 'own' }] };
+    expect(limitsLayout([chosen], 'p')[0]!.entries.map((e) => e.role)).toEqual(['standby', 'standby', 'inUse']);
+  });
+
   it('skips providers with no selected account regardless of availability', () => {
     const p: ProfileView = { id: 'p', name: 'p', providers: [provider('anthropic', []), provider('openai', [], false)] };
     expect(limitsLayout([p], 'p')[0]!.entries).toEqual([]);

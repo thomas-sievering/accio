@@ -48,3 +48,23 @@ it('keeps legacy credentials readable when conversion persistence fails', async 
   expect(await retry.ensureProfile('work')).toBe('kept-key');
   expect(await retry.accessToken('work')).toBe('token');
 });
+
+it('turns single-account selections into ordered account lists, keeping each provider', async () => {
+  home = await mkdtemp(join(tmpdir(), 'accio-accounts-migration-'));
+  await mkdir(join(home, 'hub'));
+  const openai = { credentialId: 'c', email: 'gpt@example.com', plan: null, models: [] };
+  await writeFile(join(home, 'hub', 'profiles.json'), JSON.stringify({
+    profiles: [{ id: 'work', accessKey: 'work-key', accountId: 'claude', openaiAccountId: 'gpt' }, { id: 'personal', accessKey: 'personal-key', accountId: null }],
+    accounts: [{ id: 'claude', name: 'Claude', account }, { id: 'gpt', name: 'GPT', providerId: 'openai', account: null, openai }],
+  }));
+  const hub = new Hub(home);
+  await hub.load();
+  expect(hub.selectedAccounts('work', 'anthropic').map((a) => a.id)).toEqual(['claude']);
+  expect(hub.selectedAccounts('work', 'openai').map((a) => a.id)).toEqual(['gpt']);
+  expect(hub.selectedAccounts('personal', 'anthropic')).toEqual([]);
+  expect(JSON.parse(await readFile(join(home, 'hub', 'profiles.json'), 'utf8')).profiles).toEqual([
+    { id: 'work', accessKey: 'work-key', accountIds: ['claude', 'gpt'] },
+    { id: 'personal', accessKey: 'personal-key', accountIds: [] },
+  ]);
+  await hub.close();
+});

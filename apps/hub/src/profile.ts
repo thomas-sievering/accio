@@ -1,13 +1,18 @@
 import type { ProfileView, SaveProfileParams } from '@accio/protocol';
 import { PROVIDERS, type SharedProfile } from './sharedSettings.js';
-import type { Hub } from './hub.js';
+import type { AccountSelection, Hub } from './hub.js';
 import { SignInError } from './claudeOAuth.js';
 
 export function profileViews(profiles: readonly SharedProfile[], hub: Hub): ProfileView[] {
-  return profiles.map((p) => ({ ...p, providers: PROVIDERS.map((provider) => {
-    const account = hub.selectedAccount(p.id, provider.id);
-    return { ...provider, accounts: account ? [account] : [] };
-  }) }));
+  return profiles.map((p) => ({ ...p, providers: PROVIDERS.map((provider) => ({ ...provider, accounts: hub.selectedAccounts(p.id, provider.id), inUseId: hub.accountIdInUse(p.id, provider.id) })) }));
+}
+
+/** The accounts a save selects per provider; the ordered form wins over the single-account one. */
+export function accountSelection(req: SaveProfileParams): AccountSelection {
+  const single = (id: string | null | undefined) => id === undefined ? undefined : id === null ? [] : [id];
+  const selection: AccountSelection = { anthropic: req.accountIds?.anthropic ?? single(req.accountId), openai: req.accountIds?.openai ?? single(req.openaiAccountId) };
+  for (const key of Object.keys(selection) as (keyof AccountSelection)[]) if (!selection[key]) delete selection[key];
+  return selection;
 }
 
 export function saveSharedProfile(profiles: readonly SharedProfile[], req: SaveProfileParams) {

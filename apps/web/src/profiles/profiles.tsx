@@ -1,5 +1,5 @@
 import { createContext, useContext, type ReactNode } from 'react';
-import { DEFAULT_MODEL, type AccountView, type ProfileView, type ModelSelection } from '@accio/protocol';
+import { DEFAULT_MODEL, accountInUse, type AccountView, type ProfileView, type ModelSelection, type ProviderId } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { useLive, useLocalState } from '../app/useLive';
 
@@ -31,14 +31,36 @@ export function useProfiles(): ProfilesState {
   return s;
 }
 
+/**
+ * The account a profile's turns use at a provider: its first signed-in one, or
+ * else its first, signed out, so notices can name it. Null when none is selected.
+ */
+export function profileAccount(profile: ProfileView, providerId: ProviderId) {
+  const provider = profile.providers.find((p) => p.id === providerId);
+  return accountInUse(provider) ?? provider?.accounts[0] ?? null;
+}
+
 /** The account Claude Code uses for this profile. */
 export function claudeAccount(profile: ProfileView) {
-  return profile.providers.find((p) => p.id === 'anthropic')?.accounts[0] ?? null;
+  return profileAccount(profile, 'anthropic');
 }
 
 export function accountForModel(profile: ProfileView, model: ModelSelection) {
-  return profile.providers.find((p) => p.id === (model.harnessId === 'codex' ? 'openai' : 'anthropic'))?.accounts[0] ?? null;
+  return profileAccount(profile, model.harnessId === 'codex' ? 'openai' : 'anthropic');
 }
+/** Each provider's selected account ids, in order of use. */
+export type AccountSelection = Record<ProviderId, string[]>;
+
+export function selectionOf(profile?: ProfileView): AccountSelection {
+  const ids = (id: ProviderId) => profile?.providers.find((p) => p.id === id)?.accounts.map((a) => a.id) ?? [];
+  return { anthropic: ids('anthropic'), openai: ids('openai') };
+}
+
+/** The ordered selection, plus each provider's first account for hubs from before ordered accounts. */
+export function profileSave(id: string | undefined, name: string, selection: AccountSelection) {
+  return { id, name, accountIds: selection, accountId: selection.anthropic[0] ?? null, openaiAccountId: selection.openai[0] ?? null };
+}
+
 export function hasSignedInAccount(profile: ProfileView) {
   return profile.providers.some((p) => p.available && p.accounts.some((a) => a.signedIn));
 }

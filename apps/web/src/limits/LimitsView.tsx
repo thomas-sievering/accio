@@ -1,5 +1,5 @@
-import { useEffect, useRef, type KeyboardEvent } from 'react';
-import type { ProfileProviderView } from '@accio/protocol';
+import { useEffect, useRef, type KeyboardEvent, type ReactNode } from 'react';
+import type { ProfileProviderView, ProfileView } from '@accio/protocol';
 import { Close, Limits, ProviderLogo, Refresh } from '../app/icons';
 import { useProfiles } from '../profiles/profiles';
 import { AccountLimitsCard, limitsCardId } from './AccountLimits';
@@ -81,7 +81,8 @@ export function LimitsView({ scope, onScope, onClose, onOpenAccount }: {
               {scope !== 'all' && <h2 id={`limits-profile-${profile.id}`} className="visually-hidden">{profile.name}</h2>}
               {entries.length === 0 && <p className="limits-intro">No accounts selected for this profile.</p>}
               {entries.map((entry) => (
-                <Entry key={`${entry.provider.id}:${entry.account.id}`} entry={entry} onOpenAccount={onOpenAccount} />
+                <Entry key={`${entry.provider.id}:${entry.account.id}`} entry={entry} onOpenAccount={onOpenAccount}
+                  usage={<Usage entry={entry} profile={profile} />} />
               ))}
             </section>
           ))}
@@ -91,12 +92,12 @@ export function LimitsView({ scope, onScope, onClose, onOpenAccount }: {
   );
 }
 
-function Entry({ entry, onOpenAccount }: {
-  entry: LimitsEntry; onOpenAccount: (id: string) => void;
+function Entry({ entry, usage, onOpenAccount }: {
+  entry: LimitsEntry; usage: ReactNode; onOpenAccount: (id: string) => void;
 }) {
   const label = providerLabel(entry.provider);
   if (entry.kind === 'account') {
-    return <AccountLimitsCard account={entry.account} providerLabel={label} sharedWith={entry.sharedWith} onOpenAccount={() => onOpenAccount(entry.account.id)} />;
+    return <AccountLimitsCard account={entry.account} providerLabel={label} sharedWith={entry.sharedWith} usage={usage} onOpenAccount={() => onOpenAccount(entry.account.id)} />;
   }
   if (entry.kind === 'reference') {
     const show = () => {
@@ -112,10 +113,21 @@ function Entry({ entry, onOpenAccount }: {
           <b>{entry.account.name}</b>
           <small>Shared with {entry.shownUnder.name}. One allowance, shown under {entry.shownUnder.name}.</small>
         </div>
+        {usage}
         <button type="button" className="ghost" onClick={show}>Show limits</button>
       </div>
     );
   }
+}
+
+/**
+ * Among several accounts at a provider, the one the hub chose for this
+ * profile's next request: the one whose weekly allowance resets soonest,
+ * skipping accounts at 5% or less.
+ */
+function Usage({ entry, profile }: { entry: LimitsEntry; profile: ProfileView }) {
+  if (entry.role !== 'inUse') return null;
+  return <span className="limits-tag in-use" title={`${profile.name} uses this ${entry.provider.accountName} now: its weekly allowance resets soonest among those with more than 5% left.`}>In use</span>;
 }
 
 /** Profiles as a single-choice group; arrow keys move between them as in a tab list. */

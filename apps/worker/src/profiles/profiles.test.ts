@@ -124,7 +124,7 @@ describe('profiles slice', () => {
     expect(claudeAccount((await c.call('profiles.list', {}))[0]!)?.id).toBe(first.id);
     expect(c.events.filter((e) => e.event === 'profiles.changed')).toHaveLength(eventCount);
     const stored = JSON.parse(await readFile(join(t.home, 'hub', 'profiles.json'), 'utf8'));
-    expect(stored.profiles[0].accountId).toBe(first.id);
+    expect(stored.profiles[0].accountIds).toEqual([first.id]);
     await expect(c.call('profiles.delete', { id: profile.id })).rejects.toThrow('Hub request failed');
     expect((await c.call('profiles.list', {}))[0]?.name).toBe('Personal');
     vi.restoreAllMocks();

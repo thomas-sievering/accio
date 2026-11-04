@@ -8,11 +8,18 @@ import { JsonFile } from '@accio/persistence';
 import { Hub } from './hub.js';
 import { startHubProxy } from './proxy.js';
 
-/** Anthropic's token endpoint, faked: every code or refresh yields a new numbered token. */
+/**
+ * Anthropic's token and usage endpoints, faked: every code or refresh yields a
+ * new numbered token, and `usage` holds what each token's account reports.
+ */
 function fakeAnthropicAuth() {
   let n = 0;
   const grants: string[] = [];
+  const usage: Record<string, unknown> = {};
   const f: Fetch = async (url, init) => {
+    if (String(url) === 'https://api.anthropic.com/api/oauth/usage') {
+      return Response.json(usage[new Headers(init?.headers).get('authorization')!.slice('Bearer '.length)] ?? {});
+    }
     if (String(url) !== CLAUDE_OAUTH.tokenUrl) return fetch(url, init);
     const body = JSON.parse(String(init?.body));
     grants.push(body.grant_type);
@@ -25,17 +32,23 @@ function fakeAnthropicAuth() {
       account: { uuid: body.code === 'job' ? 'claude-job' : 'claude-me', email_address: 'me@example.com' },
     });
   };
-  return { f, grants };
+  return { f, grants, usage };
 }
 
 /** Anthropic's API, faked: records what arrives and streams a reply. */
 async function fakeAnthropicApi() {
   const seen: { url: string; headers: IncomingHttpHeaders; body: string }[] = [];
+  /** Tokens whose account has run out of allowance. */
+  const limited = new Set<string>();
   let rejectNext = 0;
   const server = createServer(async (req, res) => {
     let body = '';
     for await (const c of req) body += c;
     seen.push({ url: req.url ?? '', headers: req.headers, body });
+    if (limited.has(req.headers.authorization?.slice('Bearer '.length) ?? '')) {
+      res.writeHead(429, { 'content-type': 'application/json' }).end('{"type":"error","error":{"type":"rate_limit_error"}}');
+      return;
+    }
     if (rejectNext > 0) {
       rejectNext--;
       res.writeHead(401, { 'content-type': 'application/json' }).end('{"type":"error"}');
@@ -50,6 +63,7 @@ async function fakeAnthropicApi() {
   return {
     url: `http://127.0.0.1:${port}`,
     seen,
+    limited,
     rejectNextWith401: (count = 1) => (rejectNext = count),
     close: () => new Promise<void>((r) => server.close(() => r())),
   };
@@ -207,14 +221,14 @@ describe('hub', () => {
     let preparing!: () => void;
     const ready = new Promise<void>((r) => { preparing = r; });
     const wait = new Promise<void>((r) => { release = r; });
-    const save = hub.configureProfile('personal', account.id, async () => { preparing(); await wait; });
+    const save = hub.configureProfile('personal', { anthropic: [account.id] }, async () => { preparing(); await wait; });
     await ready;
     const deletion = hub.deleteAccount(account.id);
     const result = expect(deletion).rejects.toThrow(/profiles/);
     release();
     await save;
     await result;
-    expect(hub.selectedAccount('personal')?.id).toBe(account.id);
+    expect(hub.selectedAccounts('personal', 'anthropic').map((a) => a.id)).toEqual([account.id]);
     await hub.removeProfile('personal');
     await hub.deleteAccount(account.id);
     expect(hub.accountViews()).toEqual([]);
@@ -279,7 +293,8 @@ describe('hub', () => {
     release();
     expect(await token).toBeNull();
     expect(await removed).toBeNull();
-    expect(hub.selectedAccount('work')?.signedIn).toBe(false);
+    expect(hub.selectedAccounts('work', 'anthropic').map((a) => a.signedIn)).toEqual([false]);
+    expect(hub.selectedAccount('work')).toBeNull();
 
     entered = new Promise<void>((r) => { refreshing = r; });
     wait = new Promise<void>((r) => { release = r; });
@@ -298,11 +313,74 @@ describe('hub', () => {
     expect(await hub.accessToken('work')).toBe(fresh);
   });
 
+  it('uses the account whose weekly allowance resets soonest, and moves on when it runs out', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    cleanup.push(async () => vi.useRealTimers());
+    const { hub, auth, api, call } = await setup();
+    const later = await hub.saveAccount('Later');
+    const sooner = await hub.saveAccount('Sooner');
+    await hub.configureProfile('personal', { anthropic: [later.id, sooner.id] }, async () => {});
+    const key = await hub.ensureProfile('personal');
+    await hub.completeAccountSignIn(hub.beginAccountSignIn(later.id).signInId, 'good');
+    await hub.completeAccountSignIn(hub.beginAccountSignIn(sooner.id).signInId, 'good');
+    const at = (hours: number) => new Date(Date.now() + hours * 3_600_000).toISOString();
+    const report = (session: number, weeklyResetHours: number) => ({ five_hour: { utilization: session, resets_at: at(2) }, seven_day: { utilization: 30, resets_at: at(weeklyResetHours) } });
+    auth.usage['token-1'] = report(10, 100);
+    auth.usage['token-2'] = report(10, 30);
+    await hub.refreshLimits();
+    expect(hub.selectedAccount('personal')?.id).toBe(sooner.id);
+    expect((await call(key)).status).toBe(200);
+
+    // Sooner is refused for limits: the hub reads its limits again and the same request moves to Later.
+    api.limited.add('token-2');
+    auth.usage['token-2'] = report(97, 30);
+    vi.setSystemTime(Date.now() + 10_000);
+    const response = await call(key);
+    expect(response.status).toBe(200);
+    expect(api.seen.map((r) => r.headers.authorization)).toEqual(['Bearer token-2', 'Bearer token-2', 'Bearer token-1']);
+    expect(hub.selectedAccount('personal')?.id).toBe(later.id);
+
+    // Once Sooner's 5-hour window resets, it is preferred again.
+    vi.setSystemTime(Date.now() + 2 * 3_600_000);
+    expect(hub.selectedAccount('personal')?.id).toBe(sooner.id);
+  });
+
+  it('routes a profile to its first signed-in account per provider, in the order chosen', async () => {
+    const { hub } = await setup();
+    const first = await hub.saveAccount('First');
+    const second = await hub.saveAccount('Second');
+    const gpt = await hub.saveAccount('GPT', undefined, 'openai');
+    const signIn = async (id: string) => hub.completeAccountSignIn(hub.beginAccountSignIn(id).signInId, 'good');
+    await hub.configureProfile('personal', { anthropic: [first.id, second.id, first.id], openai: [gpt.id] }, async () => {});
+    expect(hub.selectedAccounts('personal', 'anthropic').map((a) => a.name)).toEqual(['First', 'Second']);
+    expect(await hub.accessToken('personal')).toBeNull();
+
+    await signIn(second.id);
+    const secondToken = await hub.accessToken('personal');
+    expect(hub.selectedAccount('personal')?.id).toBe(second.id);
+    await signIn(first.id);
+    const firstToken = await hub.accessToken('personal');
+    expect(firstToken).not.toBe(secondToken);
+    expect(hub.selectedAccount('personal')?.id).toBe(first.id);
+
+    // Putting an account first switches to it; one provider's order leaves the other's alone.
+    await hub.configureProfile('personal', { anthropic: [second.id, first.id] }, async () => {});
+    expect(await hub.accessToken('personal')).toBe(secondToken);
+    expect(hub.selectedAccounts('personal', 'openai').map((a) => a.id)).toEqual([gpt.id]);
+    await hub.signOutAccount(second.id);
+    expect(await hub.accessToken('personal')).toBe(firstToken);
+
+    await expect(hub.configureProfile('personal', { anthropic: [gpt.id] }, async () => {})).rejects.toThrow(/anthropic/);
+    await expect(hub.deleteAccount(second.id)).rejects.toThrow(/profiles/);
+    await hub.configureProfile('personal', { anthropic: [first.id] }, async () => {});
+    await hub.deleteAccount(second.id);
+  });
+
 });
 
 /** Selects a Claude account for a profile, creating the profile if needed. */
 function selectAccount(hub: Hub, profileId: string, accountId: string) {
-  return hub.configureProfile(profileId, accountId, async () => {});
+  return hub.configureProfile(profileId, { anthropic: [accountId] }, async () => {});
 }
 
 async function beginForProfile(hub: Hub, profileId: string) {

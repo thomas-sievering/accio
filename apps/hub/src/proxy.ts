@@ -49,8 +49,9 @@ export async function startHubProxy({ hub, host, port, upstream = ANTHROPIC_API,
     if (!profile) return sendError(res, 401, 'authentication_error', 'Unknown accio hub key');
     if (req.url?.startsWith('/openai/')) return handleOpenAI(req, res, profile.id);
 
-    let token = await hub.accessToken(profile.id);
-    if (!token) return sendError(res, 401, 'authentication_error', `accio profile ${profile.id} is not signed in with Claude`);
+    hub.noteRequest(profile.id, 'anthropic');
+    let access = await hub.claudeAccess(profile.id);
+    if (!access) return sendError(res, 401, 'authentication_error', `accio profile ${profile.id} is not signed in with Claude`);
 
     const body = await readBody(req);
     const send = (accessToken: string) =>
@@ -60,13 +61,18 @@ export async function startHubProxy({ hub, host, port, upstream = ANTHROPIC_API,
         body: body.length ? new Uint8Array(body) : undefined,
       });
 
-    let upstreamRes = await send(token);
+    let upstreamRes = await send(access.token);
     if (upstreamRes.status === 401) {
       // The token may have been revoked or rotated early: refresh once and retry.
       await upstreamRes.body?.cancel();
-      token = await hub.accessToken(profile.id, { force: true });
-      if (!token) return sendError(res, 401, 'authentication_error', 'This profile is no longer signed in');
-      upstreamRes = await send(token!);
+      access = await hub.claudeAccess(profile.id, true);
+      if (!access) return sendError(res, 401, 'authentication_error', 'This profile is no longer signed in');
+      upstreamRes = await send(access.token);
+    }
+    if (upstreamRes.status === 429 && await hub.recheckAfterLimit(profile.id, 'anthropic', access.accountId)) {
+      // This account ran out; the request moves to the profile's next account once.
+      const next = await hub.claudeAccess(profile.id);
+      if (next) { await upstreamRes.body?.cancel(); upstreamRes = await send(next.token); }
     }
 
     const headers: Record<string, string> = {};
@@ -81,6 +87,8 @@ export async function startHubProxy({ hub, host, port, upstream = ANTHROPIC_API,
   async function handleOpenAI(req: IncomingMessage, res: ServerResponse, profileId: string) {
     const path = req.url?.split('?')[0];
     if (req.method !== 'POST' || !['/openai/responses', '/openai/responses/compact'].includes(path ?? '')) return sendError(res, 404, 'invalid_request_error', 'Unknown Codex endpoint');
+    hub.noteRequest(profileId, 'openai');
+    const used = hub.accountIdInUse(profileId, 'openai');
     let credentials = await hub.openaiCredentials(profileId);
     if (!credentials) return sendError(res, 401, 'authentication_error', 'Select a signed-in ChatGPT account for this profile');
     const body = await readBody(req);
@@ -104,6 +112,10 @@ export async function startHubProxy({ hub, host, port, upstream = ANTHROPIC_API,
       credentials = await hub.openaiCredentials(profileId, true);
       if (!credentials) return sendError(res, 401, 'authentication_error', 'This profile is no longer signed in');
       response = await send(credentials);
+    }
+    if (response.status === 429 && used && await hub.recheckAfterLimit(profileId, 'openai', used)) {
+      const next = await hub.openaiCredentials(profileId);
+      if (next) { await response.body?.cancel(); response = await send(next); }
     }
     const headers: Record<string, string> = {};
     response.headers.forEach((value, key) => { if (!DROP_RESPONSE.has(key) && key !== 'set-cookie') headers[key] = value; });

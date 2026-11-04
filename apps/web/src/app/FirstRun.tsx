@@ -161,7 +161,7 @@ function SetUpAccount({ profile, onAddProject, addedProject, onBack }: { profile
     if (account) return setSigningIn(true);
     void run(async () => {
       const id = selected || (await client.call('accounts.save', { name: `${profile.name} ${provider.name}`, providerId })).id;
-      await client.call('profiles.save', { id: profile.id, name: profile.name, ...(providerId === 'openai' ? { openaiAccountId: id } : { accountId: id }) });
+      await client.call('profiles.save', { id: profile.id, name: profile.name, accountIds: { [providerId]: [id] }, ...(providerId === 'openai' ? { openaiAccountId: id } : { accountId: id }) });
       setSigningIn(true);
     });
   };

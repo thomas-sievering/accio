@@ -1,13 +1,13 @@
 import { useState, type FormEvent } from 'react';
-import type { ProfileView } from '@accio/protocol';
+import { accountInUse, type AccountView, type ProfileView } from '@accio/protocol';
 import { useClient } from '../app/connection';
-import { Plus, User } from '../app/icons';
+import { ArrowUp, Close, Plus, ProviderLogo, User } from '../app/icons';
 import { SettingLink, SettingsFooter, SettingsSection } from '../app/Settings';
 import { useAction } from '../app/useAction';
 import { ResourcePicker } from '../resources/ResourcePicker';
 import { Field, focusFirstInvalid } from '../resources/Field';
 import { toggled, useResources } from '../resources/resources';
-import { claudeAccount, hasSignedInAccount, useProfiles } from './profiles';
+import { hasSignedInAccount, profileSave, selectionOf, useProfiles } from './profiles';
 
 /** Profiles select accounts configured in Accounts settings. */
 export function ProfilesSettings({
@@ -45,8 +45,8 @@ export function ProfilesSettings({
 function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: ProfileView; onSaved: (p: ProfileView) => void; onDone: () => void; onOpenSecrets?: (profileId: string) => void }) {
   const client = useClient();
   const { accounts } = useProfiles();
-  const [accountId, setAccountId] = useState(profile ? claudeAccount(profile)?.id ?? '' : '');
-  const [openaiAccountId, setOpenAIAccountId] = useState(profile?.providers.find((p) => p.id === 'openai')?.accounts[0]?.id ?? '');
+  const initial = selectionOf(profile);
+  const [selection, setSelection] = useState(initial);
   const [name, setName] = useState(profile?.name ?? '');
   const { state: resources } = useResources();
   // Skill choices wait here until Save, keyed by skill id.
@@ -57,14 +57,14 @@ function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: Pr
     const skill = resources?.skills.find((s) => s.id === id);
     return skill && profile && skill.scope.profileIds.includes(profile.id) !== on ? [{ skill, on }] : [];
   });
-  const dirty = profile ? skillChanges.length > 0 || name !== profile.name || accountId !== (claudeAccount(profile)?.id ?? '') || openaiAccountId !== (profile.providers.find((p) => p.id === 'openai')?.accounts[0]?.id ?? '') : !!(name || accountId || openaiAccountId);
+  const dirty = profile ? skillChanges.length > 0 || name !== profile.name || JSON.stringify(selection) !== JSON.stringify(initial) : !!(name || selection.anthropic.length || selection.openai.length);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setTouched(true);
     if (!name.trim()) return focusFirstInvalid(e.currentTarget);
     const saved = await run(async () => {
-      const p = await client.call('profiles.save', { id: profile?.id, name, accountId: accountId || null, openaiAccountId: openaiAccountId || null });
+      const p = await client.call('profiles.save', profileSave(profile?.id, name, selection));
       for (const { skill, on } of skillChanges) await client.call('skills.setScope', { id: skill.id, scope: { ...skill.scope, profileIds: toggled(skill.scope.profileIds, p.id, on) } });
       return p;
     });
@@ -82,24 +82,13 @@ function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: Pr
           <Field label="Name" error={touched && !name.trim() && 'Enter a name for the profile.'}>
             {(p) => <input {...p} value={name} onChange={(e) => setName(e.target.value)} placeholder="personal, work…" autoFocus={!profile} required />}
           </Field>
-          <label className="field">
-            <span>Anthropic · Claude account</span>
-            <select value={accountId} onChange={(e) => setAccountId(e.target.value)} disabled={!accounts}>
-              <option value="">No account selected</option>
-              {accounts?.filter((a) => a.providerId === 'anthropic').map((a) => (
-                <option key={a.id} value={a.id}>{a.name}{a.email ? ` · ${a.email}` : ''}{a.signedIn ? '' : ' · Signed out'}</option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            <span>OpenAI · ChatGPT account</span>
-            <select value={openaiAccountId} onChange={(e) => setOpenAIAccountId(e.target.value)} disabled={!accounts}>
-              <option value="">No account selected</option>
-              {accounts?.filter((a) => a.providerId === 'openai').map((a) => <option key={a.id} value={a.id}>{a.name}{a.email ? ` · ${a.email}` : ''}{a.signedIn ? '' : ' · Signed out'}</option>)}
-            </select>
-          </label>
+          {PROVIDERS.map((provider) => (
+            <ProviderAccounts key={provider.id} provider={provider} accounts={accounts} selected={selection[provider.id]}
+              inUseId={profile && accountInUse(profile.providers.find((p) => p.id === provider.id))?.id}
+              onChange={(ids) => setSelection((s) => ({ ...s, [provider.id]: ids }))} />
+          ))}
           {error && <p className="error">{error}</p>}
-          <small className="hint">Accounts are set up in Settings / Accounts.{profile && onOpenSecrets && <> <button type="button" className="link" onClick={() => onOpenSecrets(profile.id)}>Saved secrets</button></>}</small>
+          <small className="hint">Accounts are set up in Settings / Accounts. With several at a provider, accio uses the signed-in one whose weekly allowance resets soonest, skipping any with 5% or less left until that resets; higher accounts win ties.{profile && onOpenSecrets && <> <button type="button" className="link" onClick={() => onOpenSecrets(profile.id)}>Saved secrets</button></>}</small>
         </div>
       </SettingsSection>
       {profile && (
@@ -112,5 +101,63 @@ function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: Pr
       )}
       <SettingsFooter remove={profile && { name: profile.name, run: remove, consequence: 'Its accounts stay; only the profile goes.' }} busy={busy} onCancel={onDone} saveLabel={profile ? 'Save' : 'Add profile'} saveDisabled={busy || !accounts || (!!profile && !dirty)} dirty={dirty && !busy} />
     </form>
+  );
+}
+
+const PROVIDERS = [
+  { id: 'anthropic', label: 'Anthropic · Claude accounts', account: 'Claude account' },
+  { id: 'openai', label: 'OpenAI · ChatGPT accounts', account: 'ChatGPT account' },
+] as const;
+
+/** One provider's accounts for a profile, in order of use, with the others offered to add. */
+function ProviderAccounts({ provider, accounts, selected, inUseId, onChange }: {
+  provider: (typeof PROVIDERS)[number];
+  accounts: AccountView[] | undefined;
+  selected: string[];
+  /** The saved profile's account in use, as the hub chose it. */
+  inUseId?: string;
+  onChange: (ids: string[]) => void;
+}) {
+  const own = accounts?.filter((a) => a.providerId === provider.id) ?? [];
+  const chosen = selected.flatMap((id) => own.filter((a) => a.id === id));
+  const rest = own.filter((a) => !selected.includes(a.id));
+  const add = `Add ${chosen.length ? 'another ' : ''}${provider.account}`;
+  const moveUp = (i: number) => onChange(selected.map((id, j) => j === i - 1 ? selected[i]! : j === i ? selected[i - 1]! : id));
+  return (
+    <div className="profile-accounts">
+      <span className="profile-accounts-label">{provider.label}</span>
+      {chosen.length > 0 && (
+        <ol className="profile-account-list" aria-label={provider.label}>
+          {chosen.map((a, i) => (
+            <li key={a.id} className="profile-account">
+              <span className="profile-account-mark"><ProviderLogo providerId={a.providerId} /></span>
+              <span className="profile-account-text">
+                <b>{a.name}</b>
+                <small>{a.signedIn ? a.email ?? 'Signed in' : 'Signed out'}</small>
+              </span>
+              {chosen.length > 1 && a.id === inUseId && <span className="profile-account-tag">In use</span>}
+              {i > 0 && (
+                <button type="button" className="row-action" title={`Move ${a.name} up`} aria-label={`Move ${a.name} up`} onClick={() => moveUp(i)}>
+                  <ArrowUp />
+                </button>
+              )}
+              <button type="button" className="row-action" title={`Remove ${a.name}`} aria-label={`Remove ${a.name}`} onClick={() => onChange(selected.filter((id) => id !== a.id))}>
+                <Close />
+              </button>
+            </li>
+          ))}
+        </ol>
+      )}
+      {chosen.length === 0 && <small className="hint">No {provider.account} selected.</small>}
+      {rest.length > 0 && (
+        <label className="field">
+          <span className="visually-hidden">{add}</span>
+          <select value="" onChange={(e) => e.target.value && onChange([...selected, e.target.value])} disabled={!accounts}>
+            <option value="">{add}…</option>
+            {rest.map((a) => <option key={a.id} value={a.id}>{a.name}{a.email ? ` · ${a.email}` : ''}{a.signedIn ? '' : ' · Signed out'}</option>)}
+          </select>
+        </label>
+      )}
+    </div>
   );
 }

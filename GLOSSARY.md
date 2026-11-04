@@ -35,7 +35,7 @@ _Avoid_: Config, fleet, machine settings (for settings stored on the hub)
 ## Profiles
 
 **Profile**:
-A named side of your life that threads run under, such as "personal" or "work". You choose which profiles exist, and they are defined on the hub. It selects named accounts configured separately on the hub and reaches only those accounts through the hub. An account may be selected by several profiles. Currently each profile selects one Claude account and one ChatGPT account independently.
+A named side of your life that threads run under, such as "personal" or "work". You choose which profiles exist, and they are defined on the hub. It selects named accounts configured separately on the hub and reaches only those accounts through the hub. An account may be selected by several profiles. Each profile selects any number of Claude and ChatGPT accounts, in order per provider, and the hub picks the account in use among them.
 _Avoid_: Account, environment, identity
 
 **Profile folder**:
@@ -68,6 +68,9 @@ _Avoid_: Instructions, preamble, custom prompt
 
 **Account**:
 One login at a provider, such as a personal Anthropic account. It has a custom name, is set up independently, and can be selected by profiles. An account at Anthropic is called a Claude account; an account at OpenAI is called a ChatGPT account.
+
+**Account in use**:
+The account a profile's next request uses at a provider, which the hub chooses among the signed-in accounts it selects there. It skips accounts with 5% or less left in any window until that window resets, and otherwise prefers the account whose weekly allowance resets soonest; the profile's order breaks ties. It can change during a thread.
 _Avoid_: Login, sign-in (as a noun for the account), subscription, provider instance
 
 **Sign-in**:
@@ -93,7 +96,7 @@ A durable conversation with a harness, optionally attached to a project's checko
 _Avoid_: Chat, session, agent, conversation
 
 **Turn**:
-Work by the harness until it finishes or is interrupted, started by a user message, Resume or a delivery request. Each turn uses the profile's selected account for that harness's provider. Steering can add messages during the same turn.
+Work by the harness until it finishes or is interrupted, started by a user message, Resume or a delivery request. Each turn uses the profile's account in use for that harness's provider. Steering can add messages during the same turn.
 _Avoid_: Run, request
 
 **Queued message**:

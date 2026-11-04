@@ -34,7 +34,8 @@ const app = await startApp({ home, host: '127.0.0.1', port: Number(process.env.A
     if (who === 'empty') return Response.json({ five_hour: null, seven_day: null });
     const reset = new Date(Date.now() + (who === 'expired' ? -10_000 : 3600_000)).toISOString();
     const session = { utilization: who === 'unknown' ? null : who === 'expired' ? 100 : who === 'work' ? 33 : 48, resets_at: reset };
-    const weekly = { utilization: who === 'work' ? 100 : 28, resets_at: new Date(Date.now() + 2 * 86_400_000).toISOString() };
+    // 'expired' resets its week a day sooner, so a profile with both it and 'shared' prefers it.
+    const weekly = { utilization: who === 'work' ? 100 : 28, resets_at: new Date(Date.now() + (who === 'expired' ? 1 : 2) * 86_400_000).toISOString() };
     return Response.json({ five_hour: session, seven_day: weekly,
       seven_day_breakdown: { fable: null },
       limits: [
