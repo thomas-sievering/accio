@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useClient } from '../app/connection';
 import { useLive } from '../app/useLive';
 import { accountForModel, defaultModel, useProfiles } from '../profiles/profiles';
+import { ProfileLabel } from '../profiles/ProfileLabel';
 import { LimitsIndicator } from '../limits/LimitsIndicator';
 import { ProjectMark } from '../projects/ProjectMark';
 import { ProjectCrumbMenu } from '../projects/ProjectCrumbMenu';
@@ -172,6 +173,7 @@ function PaneHeader(props: {
   titleEditor?: ReactNode;
   checkout?: CheckoutView;
   project?: ProjectView;
+  profile?: { id: string };
   actions?: ReactNode;
 }) {
   const { checkout, project } = props;
@@ -189,6 +191,7 @@ function PaneHeader(props: {
         <span className="faint" aria-hidden="true">/</span>
         {props.titleEditor ?? <b title={props.title}>{props.title}</b>}
       </div>
+      <ProfileLabel profileId={props.profile?.id} />
       {props.actions}
     </header>
   );

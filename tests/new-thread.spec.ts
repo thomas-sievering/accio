@@ -4,6 +4,44 @@ import { TestClient } from '../apps/worker/src/testing/testApp.js';
 const token = 'isolated-chat-test-token';
 const effort = (page: Page) => page.getByRole('button', { name: /^Effort:/ });
 
+test('pane headers show their profile only while multiple profiles exist', async ({ page, baseURL }, info) => {
+  await freshDraft(page, baseURL);
+  await expect(page.locator('.main-top:visible .profile-label')).toHaveCount(0);
+  const button = (name: string) => page.getByRole('button', { name, exact: true });
+  await button('Settings').click();
+  await page.locator('.sidebar nav').getByRole('button', { name: 'Profiles', exact: true }).click();
+  await page.getByRole('button', { name: /^Add profile/ }).click();
+  await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Header work');
+  await button('Add profile').click();
+  await button('Cancel').click();
+  await button('Back').click();
+  await expect(page.locator('.main-top:visible .profile-label')).toHaveText('Personal');
+
+  await button('New thread').first().click();
+  await page.getByRole('option', { name: 'No project', exact: true }).click();
+  await page.getByRole('option', { name: 'Header work', exact: true }).click();
+  await expect(page.locator('.main-top:visible .profile-label')).toHaveText('Header work');
+
+  await page.locator('.sidebar').getByRole('button', { name: /Inline chat fixture/ }).click();
+  await expect(page.locator('.main-top:visible .profile-label')).toHaveText('Personal');
+  await page.screenshot({ path: info.outputPath('thread-profile.png') });
+  await button('New thread').first().click();
+  await page.getByRole('option', { name: /delivery-project/ }).click();
+  await expect(page.locator('.main-top:visible .profile-label')).toHaveText('Personal');
+  await page.locator('.thread-project-link:visible').click();
+  await page.getByRole('menuitem', { name: 'Dashboard', exact: true }).click();
+  await expect(page.locator('.main-top:visible .profile-label')).toHaveText('Personal');
+  await page.screenshot({ path: info.outputPath('project-profile.png') });
+
+  await button('Settings').click();
+  await page.locator('.sidebar nav').getByRole('button', { name: 'Profiles', exact: true }).click();
+  await page.getByRole('button', { name: 'Header work No account selected', exact: true }).click();
+  await button('Delete').click();
+  await button('Delete Header work').click();
+  await button('Back').click();
+  await expect(page.locator('.main-top:visible .profile-label')).toHaveCount(0);
+});
+
 test('keyboard focus visibly reveals a complete title without moving adjacent rows', async ({ page, baseURL }, info) => {
   await page.setViewportSize({ width: 900, height: 700 });
   await freshDraft(page, baseURL);
