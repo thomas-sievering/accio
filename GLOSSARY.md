@@ -55,7 +55,7 @@ How hard a model thinks before it answers, such as low, medium or high. Each mod
 _Avoid_: Thinking level, reasoning effort, thinking budget
 
 **Accio tools**:
-Tools accio gives every harness, such as offer_choice. Each machine serves them to its own harnesses over MCP, under the name `accio`; each turn may use them only while it runs.
+Tools accio gives every harness, such as offer_choice. Each machine serves them to its own harnesses over MCP, under the name `accio`; each turn may use them only while it runs. Some are offered only to the turns that need them, such as shipped_note to a delivery turn or project_settings to a Project setup thread.
 _Avoid_: Accio MCP, custom tools, plugins
 
 **Built-in tools**:
@@ -156,7 +156,7 @@ What a delivery changed and what to try, written by the delivery turn through th
 _Avoid_: Release note, summary, receipt
 
 **Changelog**:
-Every change delivered on a machine, newest first, each with its shipped note, target, PR and revision. It opens from the sidebar footer, following the sidebar's project and profile filters, or for one project from the project name in a thread's header. It can be searched and opens each change's thread while that thread exists. Entries outlive later deliveries, Archive and deletion of their thread; changes delivered before notes existed are listed by thread title.
+Every change delivered on a machine, newest first, each with its shipped note, target, PR and revision. It opens from the sidebar footer, following the sidebar's project and profile filters, or for one project from the project name in a thread's header or the project dashboard's Recently shipped. It can be searched and opens each change's thread while that thread exists. Entries outlive later deliveries, Archive and deletion of their thread; changes delivered before notes existed are listed by thread title.
 _Avoid_: History, activity, release log
 
 **Delivery policy**:
@@ -179,8 +179,12 @@ The app a project runs on one machine from its default branch, in a detached che
 _Avoid_: Owned preview (for a thread's app), dev server, deployment
 
 **Project dashboard**:
-A project's page, opened through Dashboard in the menu on the project name in a thread's header: the project app's controls, the project's active and recently settled threads, its commits (the default branch's history, the running commit marked) and the app's logs.
+A project's page, opened through Dashboard in the menu on the project name in a thread's header: the project app's controls with its logs, the project's threads grouped as Needs you, Working and Snoozed, Recently shipped (the default branch's newest commits, each joined to its Changelog entry and expanding to its things to try, thread and PR, the running commit marked, with a link to the project's full Changelog) and its settled threads, folded.
 _Avoid_: Project settings (for this page), overview
+
+**Project setup thread**:
+A thread started by **Set up with agent** on a project dashboard without a start command. Its agent finds the project app's setup and start commands, tries them, and saves them through the project_settings accio tool, which only this thread's running turns are offered. Nothing starts afterwards until you press Start.
+_Avoid_: Onboarding, auto-config
 
 **Shelf**:
 A group of threads in the sidebar apart from the open list: Working, Snoozed and Settled. Working holds threads in progress without you: a running turn, or a delivery GitHub is carrying. A thread comes back to the top of the open list when it finishes or needs you, such as for a secret, a review or a manual merge.

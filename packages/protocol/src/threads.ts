@@ -11,6 +11,8 @@ import type { SecretRequestItem } from './secrets.js';
  */
 export type ThreadView = {
   repairToolId?: string;
+  /** GLOSSARY: Project setup thread. Started from the dashboard to find and save the project app's commands. */
+  projectSetup?: boolean;
   /** The hub that owns this thread's profile; immutable across view switches. */
   hubId?: string;
   id: string;
@@ -221,6 +223,7 @@ const Start = z.union([
   z.object({ checkoutId: z.string().min(1), ...StartCommon }),
   z.object({ profileId: z.string().min(1), ...StartCommon }),
 ]);
+const ProjectSetup = z.object({ projectId: z.string().min(1) });
 const SetModel = z.object({ threadId: z.string(), model: ModelSelection });
 /** GLOSSARY: Goal. The status bar's controls; setting one goes through `/goal` in a message. */
 const GoalAction = z.object({ threadId: z.string(), action: z.enum(['pause', 'resume', 'clear']) });
@@ -240,6 +243,8 @@ export const threadMethods = {
   'threads.list': method<z.ZodObject<{}>, ThreadView[]>(z.object({})),
   /** Creates a thread in a checkout and sends its first message: a thread exists only once something was said. */
   'threads.start': method<typeof Start, ThreadView>(Start),
+  /** GLOSSARY: Project setup thread. Starts one in the project's checkout; it saves its findings through the project_settings accio tool. */
+  'threads.setUpProject': method<typeof ProjectSetup, ThreadView>(ProjectSetup),
   'threads.transcript': method<typeof ThreadId, TranscriptItem[]>(ThreadId),
   /** Items and cursor captured together; subscribe before requesting, then ignore events through this cursor. */
   'threads.observe': method<typeof ThreadId, TranscriptSnapshot>(ThreadId),

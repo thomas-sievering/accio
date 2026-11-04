@@ -1,4 +1,4 @@
-import type { ChangelogEntry } from '@accio/protocol';
+import type { ChangelogEntry, CommitView } from '@accio/protocol';
 
 /**
  * GLOSSARY: Changelog. The entries the sidebar's filters allow, as for threads: a project
@@ -40,4 +40,15 @@ export function byDay(entries: readonly ChangelogEntry[], now: Date): { day: str
     else groups.push({ day, entries: [e] });
   }
   return groups;
+}
+
+/**
+ * The Changelog entry that delivered a commit on the default branch: the same revision
+ * (either may be abbreviated), or else the PR a squash merge names at the end of its subject.
+ */
+export function entryForCommit(c: CommitView, entries: readonly ChangelogEntry[]): ChangelogEntry | undefined {
+  const sameRevision = entries.find((e) => e.revision && (c.sha.startsWith(e.revision) || e.revision.startsWith(c.sha)));
+  if (sameRevision) return sameRevision;
+  const pr = Number(c.subject.match(/\(#(\d+)\)\s*$/)?.[1]);
+  return pr > 0 ? entries.find((e) => e.pullRequest?.number === pr) : undefined;
 }

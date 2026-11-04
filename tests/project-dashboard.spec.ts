@@ -45,8 +45,9 @@ test('the project dashboard starts the app from main, follows new commits, and l
     await expect(page.getByRole('heading', { name: 'dashboard-project' })).toBeVisible();
     await expect(page.locator('.dashboard-rows .row-title', { hasText: 'Delivery follow-up' })).toBeVisible();
 
-    // No start command yet: the dashboard leads to the project's settings.
-    await page.getByRole('button', { name: 'Set start command' }).click();
+    // No start command yet: an agent can set it up, or you enter it in the project's settings.
+    await expect(page.getByRole('button', { name: 'Set up with agent' })).toBeVisible();
+    await page.getByRole('button', { name: 'Enter manually' }).click();
     await page.getByRole('textbox', { name: 'Start command' }).fill('node server.cjs');
     await page.getByRole('textbox', { name: 'Setup command' }).fill('node -e "require(\'fs\').writeFileSync(\'setup-ran.txt\', \'yes\')"');
     await page.getByRole('button', { name: 'Save', exact: true }).click();
@@ -69,11 +70,11 @@ test('the project dashboard starts the app from main, follows new commits, and l
     // The thread's own checkout is untouched; the app runs from a checkout of its own.
     expect(await git(folder, 'status', '--porcelain')).toBe('');
 
-    await page.getByRole('tab', { name: 'Commits' }).click();
+    // Recently shipped sits on the page itself; the app's logs open inside its card.
     await expect(page.locator('.changelog li').first()).toContainText('Serve v2');
     await expect(page.locator('.changelog li.running')).toContainText('Serve v2');
     await expect(page.locator('.changelog li')).toHaveCount(2);
-    await page.getByRole('tab', { name: 'Logs' }).click();
+    await page.getByRole('button', { name: 'Logs', exact: true }).click();
     await expect(page.locator('.app-logs')).toContainText('$ node server.cjs');
     await page.screenshot({ path: info.outputPath('project-dashboard.png') });
 
@@ -82,10 +83,16 @@ test('the project dashboard starts the app from main, follows new commits, and l
     await expect(page.getByRole('button', { name: 'Start', exact: true })).toBeVisible();
 
     // Opening a thread from the dashboard leaves it.
-    await page.getByRole('tab', { name: 'Threads' }).click();
     await page.locator('.dashboard-rows .row-main').first().click();
     await expect(page.getByRole('heading', { name: 'dashboard-project' })).toHaveCount(0);
     await expect(page.getByText('Fresh workspace ready.', { exact: true })).toBeVisible();
+
+    // Recently shipped leads on to the project's full Changelog.
+    await page.locator('.thread-project-link', { hasText: 'dashboard-project' }).click();
+    await page.getByRole('menuitem', { name: 'Dashboard', exact: true }).click();
+    await page.getByRole('button', { name: 'Open changelog' }).click();
+    await expect(page.getByRole('heading', { name: 'Changelog' })).toBeVisible();
+    await expect(page.getByText('Nothing shipped yet.')).toBeVisible();
   } finally {
     await client.call('projectApps.stop', { projectId: checkout.projectId }).catch(() => {});
     await client.call('checkouts.remove', { id: checkout.id, deleteThreads: true }).catch(() => {});

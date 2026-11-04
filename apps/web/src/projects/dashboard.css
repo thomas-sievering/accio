@@ -1,8 +1,8 @@
-/* Project dashboard: the project app's controls, then threads, changelog and logs. */
+/* Project dashboard: the project app's controls and logs, threads by state, recently shipped, settled. */
 .dashboard-page {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 24px;
   width: min(760px, calc(100% - 32px));
   margin: 0 auto;
   padding: 24px 0 64px;
@@ -49,18 +49,47 @@
 .app-note.warn { color: var(--amber); }
 .app-note.error { color: var(--red); }
 .app-auto { color: var(--muted); font-size: 12.5px; cursor: pointer; }
-.dashboard-tabs {
+.dashboard-section {
   display: flex;
-  gap: 14px;
-  border-bottom: 1px solid var(--line);
+  flex-direction: column;
 }
 .dashboard-heading {
-  margin: 18px 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px;
   color: var(--dim);
   font-size: 12px;
   font-weight: 600;
 }
-.dashboard-empty { color: var(--dim); }
+.dashboard-count {
+  color: var(--faint, var(--dim));
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+.dashboard-empty { margin: 0; color: var(--dim); }
+/* Settled: folded by default, opened by its heading. */
+.dashboard-fold > summary {
+  width: fit-content;
+  cursor: pointer;
+  list-style: none;
+}
+.dashboard-fold > summary::-webkit-details-marker { display: none; }
+.dashboard-fold > summary:hover { color: var(--muted); }
+.dashboard-fold > summary svg {
+  width: 12px;
+  height: 12px;
+  transform: rotate(-90deg);
+  transition: transform 120ms ease;
+}
+.dashboard-fold[open] > summary svg { transform: none; }
+.dashboard-more {
+  align-self: flex-start;
+  height: 28px;
+  margin-top: 6px;
+  padding: 0 10px;
+  font-size: 12px;
+}
 .changelog {
   display: flex;
   flex-direction: column;
@@ -68,23 +97,38 @@
   padding: 0;
   list-style: none;
 }
-.changelog li {
+.changelog li + li { border-top: 1px solid var(--line); }
+.changelog-commit {
   display: flex;
   align-items: baseline;
   gap: 10px;
-  padding: 7px 4px;
-  border-bottom: 1px solid var(--line);
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
   font-size: 13px;
+  text-align: start;
 }
-.changelog-subject {
+button.changelog-commit { cursor: pointer; }
+button.changelog-commit:hover { background: var(--hover, var(--active)); }
+.changelog-text {
+  display: flex;
   flex: 1;
+  flex-direction: column;
+  gap: 2px;
   min-width: 0;
+}
+.changelog-subject, .changelog-note {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.changelog li .dim { flex: none; font-size: 12px; }
-.changelog-running { color: var(--green); font-size: 12px; }
+.changelog-note { color: var(--muted); font-size: 12px; }
+.changelog-commit .dim { flex: none; font-size: 12px; }
+.changelog-running { flex: none; color: var(--green); font-size: 12px; }
 .app-logs {
   max-height: 60vh;
   margin: 0;
@@ -98,4 +142,53 @@
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
+}
+.app-hint {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dashboard-heading .spacer { flex: 1; }
+.dashboard-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 400;
+  cursor: pointer;
+}
+.dashboard-link:hover { color: var(--ink); text-decoration: underline; }
+/* One fixed slot so the times line up whether or not a commit expands. */
+.changelog-chevron {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 12px;
+  align-self: center;
+  color: var(--dim);
+}
+.changelog-chevron svg { width: 12px; height: 12px; transition: transform 120ms ease; }
+.changelog li.expanded .changelog-chevron svg { transform: rotate(180deg); }
+.changelog-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 2px 10px 10px 72px;
+  font-size: 12.5px;
+}
+.changelog-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.changelog-actions .ghost {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 10px;
+  font-size: 12px;
+  text-decoration: none;
 }
