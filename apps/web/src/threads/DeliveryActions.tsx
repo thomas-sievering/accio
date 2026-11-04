@@ -100,13 +100,14 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
         {!receipt && summary && (summary.added > 0 || summary.removed > 0) && <DiffPill summary={summary} />}
         {/* Line changes stay left; delivery state and actions sit right, beside the composer's send. */}
         <span className="delivery-spacer" aria-hidden="true" />
-        {status?.phase === 'queued' || status?.phase === 'paused' ? <span className={`delivery-split delivery-queued${status.phase === 'queued' ? ' delivery-sparkly' : ''}`}>
-          {status.phase === 'queued' && <span className="delivery-sparkles" aria-hidden="true">
+        {status?.phase === 'queued' || status?.phase === 'paused' || status?.phase === 'shipping' ? <span className={`delivery-split delivery-queued${status.phase === 'paused' ? '' : ' delivery-sparkly'}${status.phase === 'shipping' ? ' delivery-shipping' : ''}`}>
+          {/* One element from queued to shipping, so the sparkles carry on instead of restarting. */}
+          {status.phase !== 'paused' && <span className="delivery-sparkles" aria-hidden="true">
             {Array.from({ length: 9 }, (_, i) => <i key={i} />)}
           </span>}
-            <span role="status"><StatusGlyphIcon glyph={status.glyph} tone={status.tone} />{status.label}</span>
-          {status.canCancel && <button disabled={busy} aria-label="Cancel queued delivery" title="Cancel queued delivery" onClick={() => call('threads.cancelDelivery')}><Close /></button>}
-        </span> : status?.phase === 'shipping' ? <span className="delivery-pill delivery-queued" role="status"><StatusGlyphIcon glyph={status.glyph} tone={status.tone} />{status.label}…</span>
+          <span role="status" key={status.phase} className="delivery-swap"><StatusGlyphIcon glyph={status.glyph} tone={status.tone} />{status.label}{status.phase === 'shipping' && '…'}</span>
+          {status.canCancel && status.phase !== 'shipping' && <button disabled={busy} aria-label="Cancel queued delivery" title="Cancel queued delivery" onClick={() => call('threads.cancelDelivery')}><Close /></button>}
+        </span>
         : status && status.phase !== 'superseded' && <span className={`delivery-split delivery-status tone-${status.tone}`} role="status" title={receipt ? 'Workspace retained' : undefined}>
           {status.pullRequest
             ? <a href={status.pullRequest.url} target="_blank" rel="noreferrer" title={`Open PR #${status.pullRequest.number}`}>{statusBody}</a>

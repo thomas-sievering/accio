@@ -57,8 +57,42 @@
   22% { opacity: .95; transform: translateY(-1px) scale(1.15) rotate(0deg); }
   42% { opacity: .45; transform: translateY(-3px) scale(.7) rotate(20deg); }
 }
+/* Without the cancel button the label is the last child; it keeps its own padding. */
+.delivery-sparkly > [role="status"]:last-child { border-left: 0; padding-inline: 11px; }
+/* The label changes in place; the new one settles in rather than snapping. */
+.delivery-swap { animation: delivery-swap .45s cubic-bezier(.2, .8, .2, 1) both; }
+@keyframes delivery-swap {
+  from { opacity: 0; filter: blur(3px); transform: translateY(4px); }
+}
+/* Shipping is the same celebration, livelier: faster stars, a shimmer passing through, and a bloom as it starts. */
+.delivery-sparkly { transition: border-color .5s ease, box-shadow .5s ease; }
+.delivery-shipping {
+  border-color: color-mix(in srgb, #c4b5fd 85%, var(--line-2));
+  box-shadow: 0 0 16px #c4b5fd24, inset 0 0 10px #c4b5fd10;
+  animation: delivery-bloom .9s ease-out;
+}
+.delivery-shipping::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: linear-gradient(100deg, transparent 30%, #f6d99a26 45%, #c4b5fd33 50%, #b8dfff26 55%, transparent 70%) 130% 0 / 250% 100% no-repeat;
+  animation: delivery-shimmer 2.4s ease-in-out infinite;
+  pointer-events: none;
+}
+.delivery-shipping .delivery-sparkles i { animation-duration: 2.2s; }
+@keyframes delivery-bloom {
+  0% { box-shadow: 0 0 0 0 #c4b5fd00, inset 0 0 8px #c4b5fd08; }
+  35% { box-shadow: 0 0 22px 3px #c4b5fd55, inset 0 0 14px #f6d99a22; }
+  100% { box-shadow: 0 0 16px #c4b5fd24, inset 0 0 10px #c4b5fd10; }
+}
+@keyframes delivery-shimmer {
+  to { background-position: -30% 0; }
+}
 @media (prefers-reduced-motion: reduce) {
   .delivery-sparkles i { animation: none; opacity: .6; }
+  .delivery-swap, .delivery-shipping, .delivery-shipping::before { animation: none; }
 }
 .delivery-added, .delivery-complete > svg { color: var(--green); }
 .delivery-removed { color: var(--red); }
