@@ -184,21 +184,24 @@
   font-size: 11px;
   line-height: 14px;
 }
-/* When narrow, the project name (with its separator) gives way before the status does. */
+/* Idle rows read "project · Ready"; the project gives way before the short status does. */
 .row-project-name {
   flex: 0 1 auto;
-  min-width: min(10ch, 100%);
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .row-project.with-state > .row-project-name::after {
-  content: ' ·';
+  content: ' \00b7';
 }
-/* The status gives way first: the project name keeps a readable minimum. */
 .row-state {
   display: flex;
-  flex: 0 100 auto;
+  flex: 0 0 auto;
   min-width: 0;
+}
+/* A delivery row shows its status alone, at full width. */
+.row-project.delivery .row-state {
+  flex: 0 1 auto;
 }
 .row-state-label {
   min-width: 0;
@@ -225,15 +228,12 @@
   padding: 0;
 }
 
-/* Keyboard focus shows a long title in full (two lines) since it has no tooltip. */
+/* Keyboard focus shows a long title in full, since a native tooltip only appears on hover. */
 .row.open:has(.row-main:focus-visible) {
   height: auto;
   min-height: 44px;
 }
 .row.open .row-main:focus-visible .row-title {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
   white-space: normal;
   overflow-wrap: anywhere;
 }
@@ -241,6 +241,11 @@
 .row.renaming .row-actions {
   display: none;
 }
+.header-rename {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.header-rename input,
 .row-rename input {
   width: 100%;
   min-width: 0;
@@ -406,10 +411,6 @@
   background: var(--raised-2);
   color: var(--ink);
   white-space: pre-wrap;
-}
-.msg.user.resume {
-  color: var(--muted);
-  font-style: italic;
 }
 .msg.assistant {
   align-self: stretch;
@@ -764,8 +765,9 @@
 .model-trigger:disabled { cursor: default; opacity: 0.6; }
 .model-trigger { min-width: 0; white-space: nowrap; }
 .model-trigger > span { overflow: hidden; text-overflow: ellipsis; }
-.effort-trigger { display: inline-flex; align-items: center; padding: 5px 6px; border-radius: 6px; flex: none; }
-.effort-trigger:hover:not(:disabled) { background: var(--hover); }
+.effort-trigger { display: inline-flex; align-items: center; padding: 5px 8px; border-radius: 6px; flex: none; color: var(--muted); font-size: 13px; }
+.effort-trigger:hover:not(:disabled) { background: var(--hover); color: var(--ink); }
+.effort-trigger:hover:not(:disabled) .effort-word { color: inherit; }
 .effort-trigger:disabled { cursor: default; opacity: 0.6; }
 .effort-menu .menu-item { justify-content: space-between; }
 .model-trigger svg { fill: currentColor; }
@@ -814,7 +816,7 @@ div.model-picker-empty b { color: var(--ink); font-weight: 500; }
 .model-picker-error { grid-column: 1 / -1; margin: 0; padding: 10px 12px; border-top: 1px solid var(--line); }
 
 /* GLOSSARY: Effort. Quiet text at rest; the word rolls with a spring when changed. */
-.effort-word { display: inline-grid; position: relative; overflow: hidden; color: var(--muted); font-size: 11px; line-height: 20px; margin-left: 2px; text-align: left; }
+.effort-word { display: inline-grid; position: relative; overflow: hidden; color: var(--muted); font-size: 13px; line-height: 20px; text-align: left; }
 .effort-word > span { grid-area: 1 / 1; }
 .effort-word-size { visibility: hidden; }
 .effort-word-out { opacity: 0; }

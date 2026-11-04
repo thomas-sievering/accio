@@ -32,8 +32,10 @@ export function layoutTranscript(items: TranscriptItem[], runningTurn?: string):
   return blocks;
 }
 
-function layoutTurn(turn: TranscriptItem[], running: boolean): TranscriptBlock[] {
-  const finished = turn.at(-1)?.kind === 'finished' ? turn.at(-1) as Extract<TranscriptItem, { kind: 'finished' }> : undefined;
+function layoutTurn(items: TranscriptItem[], running: boolean): TranscriptBlock[] {
+  // The duration marker may arrive before late messages (a resumed turn's media); it still closes the turn.
+  const finished = items.find((item): item is Extract<TranscriptItem, { kind: 'finished' }> => item.kind === 'finished');
+  const turn = finished ? [...items.filter((item) => item !== finished), finished] : items;
   // Mid-turn corrections belong in the visible conversation, in their original order.
   // The duration still heads the turn, and a running turn keeps its live line at the end.
   if (turn.some(item => item.kind === 'user' && item.steered)) {

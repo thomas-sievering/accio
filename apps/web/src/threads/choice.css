@@ -68,13 +68,14 @@
   border-radius: 50%;
   background: #000a;
   border: 1px solid var(--line-2);
-  color: transparent;
-  opacity: 0;
+  color: var(--muted);
+  opacity: 0.7;
   transition: opacity 0.12s;
 }
 .choice-check svg { width: 15px; height: 15px; stroke-width: 3; }
 .choice-frame:hover .choice-check,
-.choice-check:focus-visible { opacity: 1; color: var(--muted); }
+.choice-check:focus-visible { opacity: 1; color: var(--ink); }
+.choice-check:focus-visible { outline: 2px solid var(--ink-strong); outline-offset: 2px; }
 .choice-check:hover { color: var(--ink-strong); }
 .choice-option.selected .choice-check {
   opacity: 1;

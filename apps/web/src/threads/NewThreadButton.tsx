@@ -58,7 +58,7 @@ export function NewThreadButton({ className = 'side-icon', label }: { className?
       <div className="new-thread-picker" id={id} popover="auto" ref={menu}
         onToggle={(e) => { if (e.newState === 'open') go(''); }}>
         <div className="picker-search">
-          <button aria-label={step ? 'Back to projects' : 'Close'} onClick={() => step ? go('') : menu.current?.hidePopover()}><ArrowLeft /></button>
+          {step && <button aria-label="Back to projects" onClick={() => go('')}><ArrowLeft /></button>}
           <input ref={search} autoFocus placeholder="Search..." value={query} role="combobox"
             aria-label={step === 'profiles' ? 'Search profiles' : 'Search projects'} aria-expanded="true"
             aria-controls={`${id}-list`} aria-activedescendant={filtered.length ? `${id}-option-${selected}` : undefined}

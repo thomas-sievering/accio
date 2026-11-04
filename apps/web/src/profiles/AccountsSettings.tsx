@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import type { AccountView, ProviderId } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { SettingLink, SettingsFooter, SettingsSection, StatusPill } from '../app/Settings';
-import { Field } from '../resources/Field';
+import { Field, focusFirstInvalid } from '../resources/Field';
 import { Plus, ProviderLogo } from '../app/icons';
 import { useAction } from '../app/useAction';
 import { AccountLimits } from '../limits/AccountLimits';
@@ -43,7 +43,7 @@ function AccountForm({ account, providerId, onSaved, onDone }: { account?: Accou
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setTouched(true);
-    if (!name.trim()) return;
+    if (!name.trim()) return focusFirstInvalid(e.currentTarget);
     const saved = await run(() => client.call('accounts.save', { id: account?.id, name, providerId }));
     if (saved) onSaved(saved);
   };
@@ -53,8 +53,8 @@ function AccountForm({ account, providerId, onSaved, onDone }: { account?: Accou
   return <form className="settings-profile-form" onSubmit={submit} noValidate>
     <SettingsSection>
       <div className="setting-form">
-        <Field label="Account name" error={touched && !name.trim() && 'Name required'} hint="A name you choose. Your provider identity stays visible below.">
-          {(p) => <input {...p} value={name} onChange={(e) => setName(e.target.value)} placeholder="Team account 1, Family account..." maxLength={80} autoFocus={!account} required />}
+        <Field label="Account name" error={touched && !name.trim() && 'Name required'}>
+          {(p) => <input {...p} value={name} onChange={(e) => setName(e.target.value)} placeholder="A name you choose, such as Team account 1" maxLength={80} autoFocus={!account} required />}
         </Field>
         {error && <p className="error">{error}</p>}
       </div>

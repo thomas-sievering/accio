@@ -288,3 +288,14 @@
   padding: 0 10px;
   font-size: 12.5px;
 }
+
+/* A source's counts, then its repository path cut in the middle when the row is narrow. */
+.source-line {
+  display: flex;
+  gap: 0.4em;
+  min-width: 0;
+}
+.source-line > span:first-child {
+  flex: none;
+  white-space: nowrap;
+}

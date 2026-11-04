@@ -62,8 +62,10 @@ function Shell() {
   useAppEvent('settings.open', setSettings);
   useAppEvent('project.open', ({ id }) => setSheet({ kind: 'project', id }));
   const [panelWanted, togglePanel] = usePanelOpen();
-  // The panel belongs to an open thread or draft: home and onboarding have none.
-  const hasPane = !!(thread || draft);
+  const [limits, setLimits] = useState<{ scope: LimitsScope; navigation: number } | null>(null);
+  const limitsOpen = limits !== null && limits.navigation === navigation;
+  // The panel belongs to an open thread or draft: home, onboarding and Limits have none.
+  const hasPane = !!(thread || draft) && !limitsOpen;
   const panelOpen = panelWanted && hasPane;
   const narrow = useNarrow();
   const overlay = panelOpen && narrow;
@@ -91,9 +93,7 @@ function Shell() {
   const openSecrets = useCallback((profileId: string) => setSettings({ section: 'secrets', profileId }), []);
   const openAccount = (accountId: string) => setSettings({ section: 'accounts', accountId });
   // Limits cover the main pane until a thread or draft is opened; settings opened from them return here.
-  const [limits, setLimits] = useState<{ scope: LimitsScope; navigation: number } | null>(null);
   const limitsReturnFocus = useRef<HTMLElement | null>(null);
-  const limitsOpen = limits !== null && limits.navigation === navigation;
   const closeLimits = useCallback(() => {
     setLimits(null);
     requestAnimationFrame(() => {
@@ -143,7 +143,7 @@ function Shell() {
     <>
       {settings && <Settings route={settings} onRoute={setSettings} onClose={closeSettings} onOpenThread={openThread} />}
       <div className={`layout${panelOpen ? ' with-panel' : ''}`} hidden={settings !== null}>
-        <aside className="sidebar">
+        <aside className="sidebar" inert={overlay}>
           <div className="side-controls drag">
             <div className="side-tools">
               {!settingUp && <ThreadSearch />}

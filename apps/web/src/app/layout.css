@@ -71,7 +71,8 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  padding: 8px 10px 16px;
+  padding: 8px 10px 24px;
+  scroll-padding-block-end: 24px;
 }
 .side-controls {
   flex: none;
@@ -119,15 +120,6 @@
 }
 .thread-filter:has(+ .menu:popover-open) {
   background: var(--hover);
-}
-.filter-dot {
-  position: absolute;
-  top: 4px;
-  right: 3px;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--green);
 }
 .side-search {
   display: flex;
@@ -300,7 +292,7 @@
   .panel-scrim {
     position: absolute;
     inset-block: 0;
-    inset-inline: var(--sidebar-w, 272px) 0;
+    inset-inline: 0;
     z-index: 3;
     background: #0006;
   }

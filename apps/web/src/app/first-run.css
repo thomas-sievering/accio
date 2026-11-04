@@ -3,7 +3,7 @@
   display: flex;
   flex-direction: column;
   width: min(440px, calc(100% - 32px));
-  margin: auto;
+  margin: 14vh auto 0;
   padding-bottom: 10vh;
 }
 .first-run-kicker {

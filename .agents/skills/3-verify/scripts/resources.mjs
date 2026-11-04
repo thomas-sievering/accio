@@ -33,7 +33,6 @@ export default async function journey({ page, runDir, home, fixture, action, cap
   await action('tools/settings: empty state, preset, validation and machine-wide save', async () => {
     await button('Settings').click();
     await nav('Tools').click();
-    await page.getByText('No tools yet', { exact: true }).waitFor();
     await page.getByRole('button', { name: /^Add tool / }).click();
     await button('Use preset').click();
     assert.equal(await textbox('npm package').inputValue(), '@playwright/cli');
@@ -74,7 +73,6 @@ export default async function journey({ page, runDir, home, fixture, action, cap
 
   await action('mcp/settings: bearer server available everywhere, token never shown', async () => {
     await nav('MCP servers').click();
-    await page.getByText('No MCP servers yet', { exact: true }).waitFor();
     await page.getByRole('button', { name: /^Add MCP server / }).click();
     await textbox('Name').fill('Linear (work)');
     await textbox('Server URL').fill('not a url');
@@ -138,7 +136,6 @@ export default async function journey({ page, runDir, home, fixture, action, cap
 
   await action('skills/settings: add a Git source; skills start optional', async () => {
     await nav('Skills').click();
-    await page.getByText('No skill sources yet', { exact: true }).waitFor();
     await page.getByRole('button', { name: /^Add skill source / }).click();
     await textbox('Name').fill('Verify skills');
     await textbox('Git URL').fill(source);

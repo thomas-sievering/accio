@@ -108,19 +108,22 @@ export default async function smoke({ page, runDir, home, fixture, action, captu
     assert(projects.checkouts.some((c) => c.path.toLowerCase() === fixture.toLowerCase()));
   });
   await action('projects/settings: reopen project settings and check duplicate protection', async () => {
-    // Filter appears only once setup is done; Settings / Projects reaches the same dialog.
+    // Filter appears only once setup is done; Settings / Projects opens the same form as a detail page.
     await button('Settings').click();
     await section('Projects').click();
     await page.getByRole('main').getByRole('button', { name: /^verify-project/ }).click();
     // The checkout path is cut in the middle to fit; its tooltip holds the full path.
-    await page.getByRole('dialog').getByTitle(fixture, { exact: true }).first().waitFor();
+    await page.getByRole('main').getByTitle(fixture, { exact: true }).first().waitFor();
     await capture('projects-persisted');
-    await page.getByRole('button', { name: 'Close', exact: true }).click();
+    await button('Cancel').click();
     await button('Back').click();
     await button('Add project').click();
     await page.getByRole('textbox', { name: 'Folder', exact: true }).fill(fixture);
     await page.getByText('This folder is already added.', { exact: true }).waitFor();
-    assert(await button('Add').isDisabled());
+    // Add stays pressable; with a folder already added it does nothing and the note stays.
+    await button('Add').click();
+    await page.getByText('This folder is already added.', { exact: true }).waitFor();
+    assert(await page.getByRole('dialog').isVisible());
     await button('Cancel').click();
   });
   await capture('final');

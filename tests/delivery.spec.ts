@@ -76,7 +76,8 @@ test('CI wait shows current job and step, refreshes, survives reload and clears 
   await page.getByRole('button', { name: 'Ship', exact: true }).click();
   const status = page.locator('.delivery-row [role="status"]');
   await expect(status).toContainText('CI · image · Build image · step 2 of 4');
-  await expect(page.locator('.row-project').filter({ hasText: 'CI · image · Build image' })).toBeVisible();
+  await expect(page.locator('.row-project').filter({ hasText: 'CI · step 2/4' })).toBeVisible();
+  await expect(page.locator('.row.active .row-main')).toHaveAttribute('title', /CI · image · Build image · step 2 of 4/);
   await page.getByText('CI details · 1 of 2 checks complete', { exact: true }).click();
   await expect(page.getByRole('link', { name: 'image ↗', exact: true })).toHaveAttribute('href', 'https://github.com/test/fixture/actions/runs/10/job/20');
   await expect(page.locator('.delivery-progress')).toContainText('Last checked');
@@ -147,10 +148,12 @@ test('Ship menu, queued cancellation, owned preview, delivery, Archive and follo
   await expect(actions.getByRole('status')).toContainText('Shipped to main', { timeout: 20_000 });
   await expect(page.getByText('Ship to main when ready.', { exact: true })).toHaveCount(1);
   // Verified direct delivery settles automatically, keeps the conversation selected and retains its workspace.
-  await expect(actions).toContainText('Settled');
-  await expect(actions).toContainText('Workspace retained');
+  await expect(actions.getByRole('button', { name: 'Reopen', exact: true })).toBeVisible();
+  await expect(actions.locator('.delivery-settled')).toHaveCount(0);
+  await expect(actions.locator('.delivery-status')).toHaveAttribute('title', 'Workspace retained');
   await expect(page.locator('.composer textarea')).toHaveAttribute('placeholder', 'Send a message to reopen this thread…');
-  await expect(page.locator('.row.settled.active')).toContainText('main');
+  await expect(page.locator('.row.settled.active')).toContainText('Shipped');
+  await expect(page.locator('.row.settled.active .row-main')).toHaveAttribute('title', /Shipped to main/);
   // The outcome is said once, by the chip; the transcript carries no receipt line.
   await expect(actions.locator('.delivery-rev')).toHaveText(/^[0-9a-f]{7}$/);
   await expect(page.locator('.thread .notice')).toHaveCount(0);

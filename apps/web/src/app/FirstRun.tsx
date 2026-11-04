@@ -5,7 +5,7 @@ import { Monitor, ProviderLogo } from './icons';
 import { useAction } from './useAction';
 import { hasSignedInAccount, useProfiles } from '../profiles/profiles';
 import { SignIn } from '../profiles/SignIn';
-import { AddProjectForm } from '../projects/AddProjectSheet';
+import { AddProjectForm, AddProjectSheet } from '../projects/AddProjectSheet';
 import { useProjects } from '../projects/projects';
 import { PairHubForm } from '../hub/PairHubForm';
 
@@ -31,6 +31,7 @@ export function FirstRun() {
     (state?.checkouts.length ?? 0) > 0,
   ];
   const current = steps.findIndex((done) => !done);
+  const [addingProject, setAddingProject] = useState(false);
 
   return (
     <div className="first-run">
@@ -46,6 +47,8 @@ export function FirstRun() {
           <SetUpAccount key={unsigned.id} profile={unsigned} />
         </Screen>
       )}
+      {current === 2 && (state?.projects.length ?? 0) === 0 && <button type="button" className="link first-run-back" onClick={() => setAddingProject(true)}>Set up a project first</button>}
+      {addingProject && <AddProjectSheet onClose={() => setAddingProject(false)} />}
       {current === 2 && (state?.projects.length ?? 0) > 0 && <p className="first-run-sub" role="status">Added {state!.projects.map((p) => p.name).join(', ')}.</p>}
       {current === 3 && (
         <Screen title="Add your first project" sub="Point Accio at a folder with code in it.">
@@ -119,14 +122,10 @@ function AddProfile() {
   };
   return (
     <form onSubmit={submit} className="field" noValidate>
-      <span className="row-input">
-        <input value={name} onChange={(e) => { setName(e.target.value); setMissing(false); }} placeholder="personal, work…" aria-label="Profile name" aria-invalid={missing} aria-describedby={missing ? 'profile-name-error' : undefined} autoFocus />
-        <button type="submit" className="ghost primary" disabled={busy}>
-          Continue
-        </button>
-      </span>
-      {missing && <p className="error" id="profile-name-error" role="alert">Name required</p>}
+      <input value={name} onChange={(e) => { setName(e.target.value); setMissing(false); }} placeholder="personal, work…" aria-label="Profile name" aria-invalid={missing} aria-describedby={missing ? 'profile-name-error' : undefined} autoFocus />
+      {missing && <small className="error" id="profile-name-error" role="alert">Name required</small>}
       {error && <p className="error">{error}</p>}
+      <button type="submit" className="ghost primary first-run-next" disabled={busy}>Continue</button>
     </form>
   );
 }

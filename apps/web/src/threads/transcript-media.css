@@ -139,6 +139,9 @@
 }
 .media-actions button:hover, .media-error button:hover { color: var(--ink-strong); background: var(--hover); }
 .media-actions button:focus-visible, .media-error button:focus-visible { color: var(--ink-strong); background: var(--hover); outline: 2px solid var(--line-2); outline-offset: -2px; }
+/* Inside a tool result the generic .tool button style must not enlarge the caption. */
+.tool .media-actions button, .tool .media-error button { display: inline-flex; height: 24px; padding: 0 8px; gap: 0; font-size: 12px; }
+.tool .media-actions button:hover, .tool .media-error button:hover { color: var(--ink-strong); }
 .media-placeholder {
   display: inline-flex;
   flex-direction: column;

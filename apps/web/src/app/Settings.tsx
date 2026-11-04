@@ -11,6 +11,7 @@ import { ToolsSettings } from '../tools/ToolsSettings';
 import { McpSettings } from '../mcp/McpSettings';
 import { SkillsSettings } from '../skills/SkillsSettings';
 import { ProjectsSettings } from '../projects/ProjectsSettings';
+import { useProjects } from '../projects/projects';
 import { useResources } from '../resources/resources';
 import { ArrowLeft, BookOpen, Chevron, Hub, Folder, IdCard, Key, Layers, Monitor, Plug, ScrollText, Users, Wrench } from './icons';
 import { useClient } from './connection';
@@ -51,6 +52,7 @@ const LABEL = Object.fromEntries(GROUPS.flatMap((g) => g.items.map((i) => [i.id,
 export function Settings({ route, onRoute, onClose, onOpenThread }: { route: SettingsRoute; onRoute: (r: SettingsRoute) => void; onClose: () => void; onOpenThread: (threadId: string) => void }) {
   const { profiles, accounts } = useProfiles();
   const { state: resources } = useResources();
+  const { state: projectState } = useProjects();
   const profileId = route.section === 'profiles' ? route.profileId : undefined;
   const accountId = route.section === 'accounts' ? route.accountId : undefined;
   const accountLabel = accountId === 'new' || accountId === 'new-openai' ? 'New account' : accounts?.find((a) => a.id === accountId)?.name;
@@ -68,9 +70,10 @@ export function Settings({ route, onRoute, onClose, onOpenThread }: { route: Set
   const machines = useLive(() => client.call('machines.list', {}), 'machines.changed');
   const machineLabel = route.section === 'machines' && route.machineId ? machines?.find((m) => m.id === route.machineId)?.name : undefined;
   const hubLabel = route.section === 'hub' && route.hubId ? 'Add hub' : undefined;
-  const detailLabel = profileLabel || accountLabel || secretLabel || resourceLabel || machineLabel || hubLabel;
+  const projectLabel = route.section === 'projects' && route.projectId ? projectState?.projects.find((p) => p.id === route.projectId)?.name : undefined;
+  const detailLabel = projectLabel || profileLabel || accountLabel || secretLabel || resourceLabel || machineLabel || hubLabel;
 
-  const inDetail = !!(profileId || accountId || toolId || mcpId || sourceId || (route.section === 'secrets' && route.secretId) || (route.section === 'machines' && route.machineId) || (route.section === 'hub' && route.hubId));
+  const inDetail = !!(profileId || accountId || toolId || mcpId || sourceId || (route.section === 'secrets' && route.secretId) || (route.section === 'machines' && route.machineId) || (route.section === 'hub' && route.hubId) || (route.section === 'projects' && route.projectId));
   // Escape goes up one level and leaves Settings only from a top-level page; an open inline confirmation takes it first (useEscape).
   const escape = useRef<() => void>(() => undefined);
   escape.current = () => (inDetail ? onRoute(backTo) : onClose());
@@ -168,6 +171,7 @@ export function useEscape(active: boolean, cancel: () => void) {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       e.stopPropagation();
+      e.preventDefault();
       latest.current();
     };
     window.addEventListener('keydown', onKey, true);

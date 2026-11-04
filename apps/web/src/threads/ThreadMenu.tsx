@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState, type FormEvent,
 import type { ThreadView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { useAction } from '../app/useAction';
+import { focusMenuItem, onMenuKeyDown } from '../ui/menuKeys';
 import { placeOf } from './shelves';
 import { snoozeThread } from './SnoozeNotice';
 import { useThreads, type ThreadActions } from './threads';
@@ -106,7 +107,9 @@ export function ThreadMenuProvider({ children }: { children: ReactNode }) {
   const menu = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (open) menu.current?.showPopover();
+    if (!open) return;
+    menu.current?.showPopover();
+    focusMenuItem(menu.current);
   }, [open]);
 
   const show = (thread: ThreadView, x: number, y: number) => setOpen({ thread, x, y });
@@ -124,6 +127,7 @@ export function ThreadMenuProvider({ children }: { children: ReactNode }) {
           role="menu"
           style={{ left: Math.min(open.x, window.innerWidth - 230), top: Math.min(open.y, window.innerHeight - 220) }}
           onToggle={(e) => e.newState === 'closed' && setOpen(undefined)}
+          onKeyDown={onMenuKeyDown}
         >
           <ThreadMenuItems key={open.thread.id} thread={t} close={() => menu.current?.hidePopover()}
             onRename={() => setRenaming(t.id)} before={<div className="menu-label">{t.title}</div>} />
@@ -135,8 +139,13 @@ export function ThreadMenuProvider({ children }: { children: ReactNode }) {
 
 /** The row's title line while renaming: Enter saves, Escape or leaving the field keeps the old title. */
 export function RowRename({ thread }: { thread: ThreadView }) {
-  const client = useClient();
   const [, setRenaming] = useRenaming();
+  return <TitleEdit thread={thread} className="row-rename" onDone={() => setRenaming(undefined)} />;
+}
+
+/** An in-place title field, shared by the sidebar row and the thread header. */
+export function TitleEdit({ thread, className, onDone }: { thread: ThreadView; className: string; onDone: () => void }) {
+  const client = useClient();
   const [title, setTitle] = useState(thread.title);
   const { run } = useAction();
   const input = useRef<HTMLInputElement>(null);
@@ -144,15 +153,15 @@ export function RowRename({ thread }: { thread: ThreadView }) {
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     const next = title.trim();
-    if (!next || next === thread.title) return setRenaming(undefined);
-    if ((await run(async () => (await client.call('threads.rename', { threadId: thread.id, title: next }), true))) === true) setRenaming(undefined);
+    if (!next || next === thread.title) return onDone();
+    if ((await run(async () => (await client.call('threads.rename', { threadId: thread.id, title: next }), true))) === true) onDone();
   };
   return (
-    <form className="row-rename" onSubmit={submit}>
+    <form className={className} onSubmit={submit}>
       <input ref={input} value={title} autoFocus maxLength={120} aria-label="Thread title"
         onChange={(e) => setTitle(e.target.value)}
-        onBlur={() => setRenaming(undefined)}
-        onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Escape') setRenaming(undefined); }} />
+        onBlur={onDone}
+        onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Escape') onDone(); }} />
     </form>
   );
 }

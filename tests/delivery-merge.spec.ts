@@ -21,9 +21,13 @@ test('review-only PR stays visible until an external merge, then settles without
   await page.getByRole('button', { name: 'Prepare for review', exact: true }).click();
   const actions = page.locator('.delivery-actions');
   await expect(actions).toContainText('Waiting for merge');
-  await expect(actions).toContainText('Prepared for review; merge manually');
-  await expect(actions.getByRole('button', { name: 'Stop automatic follow-ups', exact: true })).toBeVisible();
-  await expect(page.locator('.row.active')).toContainText('Waiting for merge');
+  // The chip already says it waits for a merge; the caption only says when it was checked.
+  await expect(actions).not.toContainText('Prepared for review; merge manually');
+  await expect(actions).toContainText('checked just now');
+  await expect(actions.getByRole('button', { name: 'Stop watching PR', exact: true })).toBeVisible();
+  // The sidebar has room for a short word; the row's title keeps the full status.
+  await expect(page.locator('.row.active')).toContainText('Review');
+  await expect(page.locator('.row.active .row-main')).toHaveAttribute('title', /Waiting for merge · #123/);
   await expect(page.locator('.row.active')).toContainText('#123');
   await expect(page.locator('.row.active .row-working')).toHaveCount(0);
   await page.locator('.row.active').screenshot({ path: info.outputPath('waiting-sidebar.png') });
@@ -53,13 +57,14 @@ test('review-only PR stays visible until an external merge, then settles without
     await writeFile(metadata.reviewHostFile, JSON.stringify({ ...merged, checks: 'SUCCESS' }));
     await actions.getByRole('button', { name: 'Check now', exact: true }).click();
     await expect(actions).toContainText('Merged into main');
-    await expect(actions).toContainText('Workspace retained');
+    await expect(actions.locator('.delivery-status')).toHaveAttribute('title', 'Workspace retained');
     await expect(actions.getByRole('button', { name: 'Reopen', exact: true })).toBeVisible();
     await expect(actions.getByRole('button', { name: 'Archive', exact: true })).toBeEnabled();
     await expect(page.locator('.composer textarea')).toHaveAttribute('placeholder', 'Send a message to reopen this thread…');
     const shelf = page.getByRole('button', { name: /^Settled/ });
     if (await shelf.getAttribute('aria-expanded') === 'false') await shelf.click();
-    await expect(page.locator('.shelf .row.active')).toContainText(/Merged into .*#123/);
+    await expect(page.locator('.shelf .row.active')).toContainText(/Merged\s·\s#123/);
+    await expect(page.locator('.shelf .row.active .row-main')).toHaveAttribute('title', /Merged into main · #123/);
     await expect(actions).toContainText('Merged into main');
     await expect(page.locator('.thread .notice')).toHaveCount(0);
     await page.locator('.shelf .row.active').screenshot({ path: info.outputPath('merged-sidebar.png') });
@@ -90,7 +95,7 @@ test('stopping review follow-ups retains PR tracking and prevents later failed c
   await page.getByRole('button', { name: 'Prepare for review', exact: true }).click();
   const actions = page.locator('.delivery-actions');
   await expect(actions).toContainText('Waiting for merge');
-  await actions.getByRole('button', { name: 'Stop automatic follow-ups', exact: true }).click();
+  await actions.getByRole('button', { name: 'Stop watching PR', exact: true }).click();
   await expect(actions).toContainText('Automatic follow-ups stopped · still tracking #123');
   await expect(actions.getByRole('link', { name: /#123/ })).toBeVisible();
   const metadata = JSON.parse(await readFile(resolve('out', `chat-test-${new URL(baseURL!).port}.json`), 'utf8'));

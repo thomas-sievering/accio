@@ -1,4 +1,4 @@
-import { useId, useState, type KeyboardEvent } from 'react';
+import { useId, useRef, useState, type KeyboardEvent } from 'react';
 import { SecretSlot, type ProfileView, type ProjectView, type SecretSummary } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { Plus } from '../app/icons';
@@ -7,6 +7,7 @@ import { useAction } from '../app/useAction';
 import { useProfiles } from '../profiles/profiles';
 import { useProjects } from '../projects/projects';
 import { accessLabel, useSecretList, useSecretStore, type SecretStore } from './secrets';
+import { focusFirstInvalid } from '../resources/Field';
 import { safeError, valueInputProps, valueProblem } from './secretValue';
 
 /** Where Secrets settings is open: a profile's list, a new secret, or one secret's edit or replace form. */
@@ -33,6 +34,8 @@ export function SecretsSettings({ route, onRoute }: { route: SecretsRoute; onRou
 
   return (
     <div className="settings-profile-form secrets-page">
+      {!formOpen && <p className="note">Tokens and keys a profile’s threads can use. Values can be replaced, never shown.</p>}
+
       {!formOpen && (
         <label className="field secrets-profile">
           <span>Profile</span>
@@ -42,8 +45,6 @@ export function SecretsSettings({ route, onRoute }: { route: SecretsRoute; onRou
           </select>
         </label>
       )}
-
-      {!formOpen && <p className="note">Tokens and keys a profile’s threads can use. Values can be replaced, never shown.</p>}
 
       {!profile ? <p className="note">That profile no longer exists. Choose another.</p>
         : store?.available === false && <p className="note" role="status">Saved secrets are unavailable{store.reason ? `: ${store.reason}` : '.'} Threads can still use a secret once.</p>}
@@ -96,7 +97,7 @@ function SecretList({ profile, secrets, error, retry, canWrite, projectName, onA
             </div>
           ) : sorted.length === 0 ? (
             <div className="setting">
-              <p className="note">No saved secrets for {profile.name}. When a thread asks for a token, you can use it once or save it here for this profile’s projects.</p>
+              <p className="note">No saved secrets for {profile.name}.</p>
             </div>
           ) : sorted.map((s) => (
             <SecretRow key={s.id} secret={s} access={accessLabel(s, profile.name, projectName)} canWrite={canWrite} onEdit={() => onEdit(s.id)} onReplace={() => onReplace(s.id)} />
@@ -181,18 +182,20 @@ function SecretForm({ profile: initial, profiles, projects: allProjects, store, 
   const ready = !busy && !storeDown;
   // Empty fields are reported when Save is pressed, not by a dead button.
   const [tried, setTried] = useState(false);
-  const problem = editsMetadata && !name.trim() ? 'Enter a name for the secret.'
-    : editsMetadata && !slot.trim() ? 'Enter a purpose key.'
-      : editsMetadata && !slotOk ? 'Use letters, numbers and . _ : / - only in the purpose key, starting with a letter or number.'
-        : writesValue && !value.length ? 'Paste the secret’s value.'
-          : undefined;
+  const problems = {
+    name: editsMetadata && !name.trim() ? 'Enter a name for the secret.' : undefined,
+    slot: editsMetadata && !slot.trim() ? 'Enter a purpose key.' : editsMetadata && !slotOk ? 'Use letters, numbers and . _ : / - only, starting with a letter or number.' : undefined,
+    value: writesValue && !value.length ? 'Paste the secret’s value.' : tooLarge,
+  };
+  const problem = Object.values(problems).some(Boolean);
+  const form = useRef<HTMLDivElement>(null);
   // Projects that were removed stay in the list until unticked, so saving never narrows access silently.
   const listed: { id: string; name: string }[] = [...projects, ...chosen.filter((id) => !projects.some((p) => p.id === id)).map((id) => ({ id, name: 'Removed project' }))];
 
   const submit = async () => {
     if (!ready) return;
     setTried(true);
-    if (problem || tooLarge) return;
+    if (problem) return focusFirstInvalid(form.current);
     setBusy(true);
     setError(undefined);
     const typed = value;
@@ -237,7 +240,7 @@ function SecretForm({ profile: initial, profiles, projects: allProjects, store, 
   const toggle = (id: string, on: boolean) => setChosen((c) => on ? [...c.filter((x) => x !== id), id] : c.filter((x) => x !== id));
 
   return (
-    <div className="settings-profile-form" onKeyDown={onKeyDown}>
+    <div className="settings-profile-form" ref={form} onKeyDown={onKeyDown}>
       <SettingsSection>
         <div className="setting-form">
           {editsMetadata ? <>
@@ -250,15 +253,14 @@ function SecretForm({ profile: initial, profiles, projects: allProjects, store, 
             </label>
             <label className="field" htmlFor={nameId}>
               <span>Name</span>
-              <input id={nameId} type="text" autoComplete="off" value={name} maxLength={160} onChange={(e) => setName(e.target.value)} placeholder="Cloudflare Pages deploy" autoFocus={creating} required />
+              <input id={nameId} type="text" autoComplete="off" value={name} maxLength={160} onChange={(e) => setName(e.target.value)} placeholder="Cloudflare Pages deploy" autoFocus={creating} aria-invalid={tried && problems.name ? true : undefined} required />
+              {tried && problems.name && <small className="error">{problems.name}</small>}
             </label>
             <label className="field" htmlFor={slotId}>
               <span>Purpose key</span>
-              <input id={slotId} type="text" autoComplete="off" spellCheck={false} value={slot} maxLength={160} onChange={(e) => setSlot(e.target.value)} placeholder="cloudflare.pages.deploy:docs" aria-invalid={slot && !slotOk ? true : undefined} required />
-              <small className="hint">
-                {slot && !slotOk ? 'Use letters, numbers and . _ : / - only, starting with a letter or number.'
-                  : 'Use the purpose shown by the requesting thread, such as cloudflare.pages.deploy:docs. Threads in allowed projects that ask for it get the secret without asking again.'}
-              </small>
+              <input id={slotId} type="text" autoComplete="off" spellCheck={false} value={slot} maxLength={160} onChange={(e) => setSlot(e.target.value)} placeholder="cloudflare.pages.deploy:docs" aria-invalid={(slot && !slotOk) || (tried && problems.slot) ? true : undefined} required />
+              {(slot && !slotOk) || (tried && problems.slot) ? <small className="error">{problems.slot}</small>
+                : <small className="hint">Use the purpose shown by the requesting thread, such as cloudflare.pages.deploy:docs. Threads in allowed projects that ask for it get the secret without asking again.</small>}
             </label>
             <fieldset className="secret-scope-choice">
               <legend>Projects that can use it</legend>
@@ -292,15 +294,16 @@ function SecretForm({ profile: initial, profiles, projects: allProjects, store, 
             <label className="field" htmlFor={valueId}>
               <span>{replace ? 'New value' : 'Value'}</span>
               <input id={valueId} className="secret-input" {...valueInputProps} placeholder="Paste secret" value={value} readOnly={busy}
-                aria-invalid={tooLarge ? true : undefined} autoFocus={!!replace} onChange={(e) => { setValue(e.target.value); setError(undefined); }} />
-              <small className="hint">{tooLarge ?? (replace
-                ? 'Replaces the stored value. Threads get the new one from their next request; the old value is not shown.'
-                : 'Stored on the Hub. It can be replaced later but never shown again.')}</small>
+                aria-invalid={tooLarge || (tried && problems.value) ? true : undefined} autoFocus={!!replace} onChange={(e) => { setValue(e.target.value); setError(undefined); }} />
+              {tooLarge || (tried && problems.value) ? <small className="error">{tooLarge ?? problems.value}</small>
+                : <small className="hint">{replace
+                  ? 'Replaces the stored value. Threads get the new one from their next request; the old value is not shown.'
+                  : 'Stored on the Hub. It can be replaced later but never shown again.'}</small>}
             </label>
           ) : (
             <p className="note">The value is not shown. <button type="button" className="link" onClick={onReplace} disabled={store?.available === false}>Replace value</button></p>
           )}
-          {(tried && problem) || error ? <p className="error" role="alert">{(tried && problem) || error}</p> : null}
+          {error && <p className="error" role="alert">{error}</p>}
           {storeDown && <p className="note">Saving values is unavailable right now.</p>}
         </div>
       </SettingsSection>

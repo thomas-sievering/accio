@@ -3,9 +3,10 @@ import type { ThreadView, ToolDetails, TranscriptItem } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { More } from '../app/icons';
 import { useAction } from '../app/useAction';
+import { focusMenuItem, onMenuKeyDown } from '../ui/menuKeys';
 import { ThreadMenuItems } from './ThreadMenu';
 
-export function ThreadActionsMenu({ thread, items }: { thread: ThreadView; items?: TranscriptItem[] }) {
+export function ThreadActionsMenu({ thread, items, onRename }: { thread: ThreadView; items?: TranscriptItem[]; onRename?: () => void }) {
   const client = useClient();
   const id = useId();
   const { busy, error, run, clear } = useAction();
@@ -39,8 +40,9 @@ export function ThreadActionsMenu({ thread, items }: { thread: ThreadView; items
       <More />
     </button>
     <div id={id} ref={menu} className="menu thread-actions-menu" popover="auto" role="menu" aria-label="Thread actions"
-      onToggle={(e) => { if (e.newState === 'open') { clear(); setCopied(false); setOpened((n) => n + 1); } }}>
-      <ThreadMenuItems key={opened} thread={thread} close={() => menu.current?.hidePopover()} before={<>
+      onKeyDown={onMenuKeyDown}
+      onToggle={(e) => { if (e.newState === 'open') { clear(); setCopied(false); setOpened((n) => n + 1); focusMenuItem(menu.current); } }}>
+      <ThreadMenuItems key={opened} thread={thread} close={() => menu.current?.hidePopover()} onRename={onRename} before={<>
         <button className="menu-item" role="menuitem" disabled={!items || busy} onClick={copy}>
           <span className="menu-text">{busy ? 'Copying…' : 'Copy as Markdown'}</span>
         </button>

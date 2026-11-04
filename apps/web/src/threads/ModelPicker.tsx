@@ -153,7 +153,19 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
         }}>
         <EffortWord key={modelKey(current)} steps={effort.steps} index={stepper.shown} />
       </button>
-      <div id={effortId} ref={effortMenu} popover="auto" className="menu effort-menu" role="menu" aria-label="Effort" style={effortPosition}>
+      <div id={effortId} ref={effortMenu} popover="auto" className="menu effort-menu" role="menu" aria-label="Effort" style={effortPosition}
+        onToggle={(event) => {
+          if (event.newState === 'open') requestAnimationFrame(() => (effortMenu.current?.querySelector<HTMLButtonElement>('[aria-checked="true"]') ?? effortMenu.current?.querySelector<HTMLButtonElement>('button'))?.focus());
+          else if (effortMenu.current?.contains(document.activeElement) || document.activeElement === document.body) effortTrigger.current?.focus();
+        }}
+        onKeyDown={(event) => {
+          if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+          event.preventDefault();
+          const items = [...(effortMenu.current?.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]') ?? [])];
+          const current = items.indexOf(document.activeElement as HTMLButtonElement);
+          const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (current + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+          items[next]?.focus();
+        }}>
         {effort.steps.map((step, i) => <button type="button" key={step.label} role="menuitemradio" className="menu-item" aria-checked={i === stepper.shown}
           onClick={() => { stepper.commit(i); effortMenu.current?.hidePopover(); }}>
           <span>{step.label}</span><span className="model-picker-check" aria-hidden>{i === stepper.shown && <Check />}</span>

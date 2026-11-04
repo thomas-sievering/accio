@@ -5,7 +5,7 @@ import { Plus, User } from '../app/icons';
 import { SettingLink, SettingsFooter, SettingsSection } from '../app/Settings';
 import { useAction } from '../app/useAction';
 import { ResourcePicker } from '../resources/ResourcePicker';
-import { Field } from '../resources/Field';
+import { Field, focusFirstInvalid } from '../resources/Field';
 import { toggled, useResources } from '../resources/resources';
 import { claudeAccount, hasSignedInAccount, useProfiles } from './profiles';
 
@@ -31,7 +31,7 @@ export function ProfilesSettings({
   if (current) return <ProfileForm key={current.id} profile={current} onSaved={onBack} onDone={onBack} onOpenSecrets={onOpenSecrets} />;
 
   return (<>
-    <p className="note">The sides of your life threads run under, such as personal or work. Each uses the accounts you select.</p>
+    <p className="note">A profile groups the accounts and projects for one side of your life, such as personal or work.</p>
     <SettingsSection>
       {profiles.map((p) => (
         <SettingLink key={p.id} icon={<User />} title={p.name} warn={!hasSignedInAccount(p)} onClick={() => onOpen(p.id)}
@@ -62,7 +62,7 @@ function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: Pr
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setTouched(true);
-    if (!name.trim()) return;
+    if (!name.trim()) return focusFirstInvalid(e.currentTarget);
     const saved = await run(async () => {
       const p = await client.call('profiles.save', { id: profile?.id, name, accountId: accountId || null, openaiAccountId: openaiAccountId || null });
       for (const { skill, on } of skillChanges) await client.call('skills.setScope', { id: skill.id, scope: { ...skill.scope, profileIds: toggled(skill.scope.profileIds, p.id, on) } });
@@ -78,7 +78,7 @@ function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: Pr
     <form className="settings-profile-form" onSubmit={submit} noValidate>
       <SettingsSection>
         <div className="setting-form">
-          <Field label="Name" error={touched && !name.trim() && 'Name required'} hint="Shared on the hub. Set profile folders under Machines.">
+          <Field label="Name" error={touched && !name.trim() && 'Name required'}>
             {(p) => <input {...p} value={name} onChange={(e) => setName(e.target.value)} placeholder="personal, work…" autoFocus={!profile} required />}
           </Field>
           {error && <p className="error">{error}</p>}
@@ -102,12 +102,12 @@ function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: Pr
               {accounts?.filter((a) => a.providerId === 'openai').map((a) => <option key={a.id} value={a.id}>{a.name}{a.email ? ` · ${a.email}` : ''}{a.signedIn ? '' : ' · Signed out'}</option>)}
             </select>
           </label>
-          <small className="hint">Set up and name accounts in Settings / Accounts. Choose one account per provider for this profile.</small>
+          <small className="hint">Accounts are set up in Settings / Accounts.</small>
         </div>
       </SettingsSection>
       {profile && onOpenSecrets && (
-        <SettingsSection title="Secrets">
-          <SettingLink title="Saved secrets" description="Tokens this profile’s threads can use, managed in Settings / Secrets." onClick={() => onOpenSecrets(profile.id)} />
+        <SettingsSection>
+          <SettingLink title="Saved secrets" onClick={() => onOpenSecrets(profile.id)} />
         </SettingsSection>
       )}
       {profile && (
@@ -118,7 +118,7 @@ function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: Pr
           </div>
         </SettingsSection>
       )}
-      <SettingsFooter remove={profile && { name: profile.name, run: remove }} busy={busy} onCancel={onDone} saveLabel={profile ? 'Save' : 'Add profile'} saveDisabled={busy || !accounts || !dirty} />
+      <SettingsFooter remove={profile && { name: profile.name, run: remove, consequence: 'Its accounts stay; only the profile goes.' }} busy={busy} onCancel={onDone} saveLabel={profile ? 'Save' : 'Add profile'} saveDisabled={busy || !accounts || !dirty} />
     </form>
   );
 }

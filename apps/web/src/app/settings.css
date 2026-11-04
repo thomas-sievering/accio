@@ -100,6 +100,11 @@
 .setting-link:hover {
   background: var(--hover);
 }
+.setting-link:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
+  border-radius: 8px;
+}
 .setting-link > svg {
   flex: none;
   color: var(--dim);
@@ -117,7 +122,6 @@
 .setting-text small {
   color: var(--muted);
   font-size: 12.5px;
-  max-width: 62ch;
 }
 .setting-value {
   display: flex;
@@ -151,7 +155,7 @@
 .settings-profile-form {
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 22px;
 }
 .settings-actions {
   position: sticky;

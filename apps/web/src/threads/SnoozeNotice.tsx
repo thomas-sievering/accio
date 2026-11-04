@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { emitAppEvent, useAppEvent } from '../app/appEvents';
-import { nextMorning } from './shelves';
+import { nextMorning, wakeText } from './shelves';
 import { useThreads, type ThreadActions } from './threads';
 
 /** Snoozes a thread and tells the sidebar, which says when it will wake. */
@@ -23,7 +23,7 @@ export function SnoozeNotice() {
   return (
     <div className="snooze-notice" role="status">
       {note && when && <>
-        <span>Snoozed until {when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+        <span>Snoozed until {wakeText(when, new Date())}</span>
         <button onClick={() => { setNote(undefined); void act.reopen(note.threadId).catch((e: Error) => console.error(e.message)); }}>Undo</button>
       </>}
     </div>

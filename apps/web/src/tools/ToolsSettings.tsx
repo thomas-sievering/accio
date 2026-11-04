@@ -2,12 +2,12 @@ import { useState, type FormEvent, type ReactNode } from 'react';
 import { ToolDefinition, type MachineView, type ToolStatus } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { Plus, Wrench } from '../app/icons';
-import { SettingLink, SettingRow, SettingsFooter, SettingsSection } from '../app/Settings';
+import { SettingLink, SettingsFooter, SettingsSection } from '../app/Settings';
 import { useAction } from '../app/useAction';
 import { useLive } from '../app/useLive';
 import { hasSignedInAccount, useProfiles } from '../profiles/profiles';
 import { LoadError, slugId, useDraft, useResources } from '../resources/resources';
-import { Field } from '../resources/Field';
+import { Field, focusFirstInvalid } from '../resources/Field';
 import { readiness, ToolStatusCard } from './ToolStatusCard';
 
 /** `npm view @playwright/cli version` on 2026-11-03. Editable before saving. */
@@ -36,7 +36,6 @@ export function ToolsSettings({ toolId, onOpen, onBack, onOpenThread }: { toolId
     <>
       <p className="note">Managed npm tools. Accio installs each tool’s exact version into its own folder on every machine, checks it, and adds it to every thread’s PATH on that machine. A failed check starts a repair thread.</p>
       <SettingsSection>
-        {state.tools.length === 0 && <SettingRow title="No tools yet" description="Start with the Playwright CLI preset, or add any npm package with an executable." />}
         {[...state.tools].sort((a, b) => a.name.localeCompare(b.name)).map((t) => {
           const status = state.toolStatuses.find((s) => s.toolId === t.id && s.machineId === here?.id);
           const r = readiness(here, status);
@@ -102,7 +101,7 @@ function ToolForm({ tool, taken, onSaved, onDone, after }: { tool?: ToolDefiniti
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setTouched(true);
-    if (invalid) return;
+    if (invalid) return focusFirstInvalid(e.currentTarget);
     const saved = await run(() => client.call('tools.save', {
       ...value,
       id: tool?.id ?? slugId(value.name, taken),
@@ -169,7 +168,7 @@ function ToolForm({ tool, taken, onSaved, onDone, after }: { tool?: ToolDefiniti
       </SettingsSection>
       {after}
       {error && <p className="error" role="alert">{error}</p>}
-      <SettingsFooter remove={tool && { name: tool.name, run: remove }} busy={busy} onCancel={onDone} saveLabel={tool ? 'Save' : 'Add tool'} saveDisabled={busy || (!!tool && !changed) || (touched && invalid)} />
+      <SettingsFooter remove={tool && { name: tool.name, run: remove }} busy={busy} onCancel={onDone} saveLabel={tool ? 'Save' : 'Add tool'} saveDisabled={busy || (!!tool && !changed)} />
     </form>
   );
 }

@@ -7,6 +7,7 @@ import { DeliveryProgress } from './DeliveryProgress';
 import { StatusGlyphIcon } from './StatusMark';
 import { checkedAgo, deliveryStatus, statusText } from './status';
 import { useThreads } from './threads';
+import { wakeText } from './shelves';
 
 /** Delivery intent stays on the server, including when this view is closed or disconnected. */
 export function DeliveryActions({ thread, project, canRun }: { thread: ThreadView; project?: ProjectView; canRun: boolean }) {
@@ -23,7 +24,6 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
   const [position, setPosition] = useState<CSSProperties>({});
   const { now } = useThreads();
   const delivery = thread.delivery;
-  const shipWhenDone = delivery?.status === 'queued' && thread.status === 'running';
   const archived = !!thread.workspace?.releasedAt;
   const target = delivery?.baseBranch ?? summary?.baseBranch ?? 'default branch';
 
@@ -64,8 +64,9 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
   };
 
   const settled = !!thread.settledAt;
-  // A settled thread always has its state row, even when it never had a workspace.
-  if (!thread.workspace && !settled) return null;
+  const snoozedUntil = !settled && thread.snoozedUntil && new Date(thread.snoozedUntil) > now ? new Date(thread.snoozedUntil) : undefined;
+  // A settled or snoozed thread always has its state row, even when it never had a workspace.
+  if (!thread.workspace && !settled && !snoozedUntil) return null;
   const status = thread.workspace ? deliveryStatus(thread) : undefined;
   const call = (method: 'threads.cancelDelivery' | 'threads.checkDelivery' | 'threads.archive' | 'threads.reopen') =>
     void run(async () => { await client.call(method, { threadId: thread.id }); });
@@ -74,11 +75,14 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
   const offerShip = (!status || status.canShip) && !nothingToShip;
   const receipt = status?.phase === 'delivered';
   const age = checkedAgo(status?.checkedAt, now);
-  const hint = archived ? undefined : receipt ? 'Workspace retained'
+  // The chip already says "Waiting for merge · #123"; a review request only adds when it was last checked.
+  const reviewWait = thread.delivery?.mode === 'review' && status?.phase === 'waiting' && !status.followUpsStopped;
+  const hint = archived || receipt ? undefined
     : settled ? undefined
     : status?.phase === 'queued' || status?.phase === 'shipping' ? undefined
-    : [status?.detail, status && ['waiting', 'integrated', 'unavailable'].includes(status.phase) ? age : undefined].filter(Boolean).join(' · ') || undefined;
+    : [reviewWait ? undefined : status?.detail, status && ['waiting', 'integrated', 'unavailable'].includes(status.phase) ? age : undefined].filter(Boolean).join(' · ') || undefined;
   const statusName = status && statusText(status.label, status.pullRequest);
+  const hasChip = !!thread.workspace && (archived || (!!status && status.phase !== 'superseded'));
   const statusBody = status && <>
     <StatusGlyphIcon glyph={status.glyph} tone={status.tone} />
     {statusName}
@@ -91,12 +95,11 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
         {!receipt && summary && (summary.added > 0 || summary.removed > 0) && <span className="delivery-pill delivery-diff" title={`${summary.files} changed ${summary.files === 1 ? 'file' : 'files'}`} aria-label={`${summary.added} lines added, ${summary.removed} lines removed`}>
           <span className="delivery-added">+{summary.added}</span><span className="delivery-removed">−{summary.removed}</span>
         </span>}
-        {status?.phase === 'queued' || status?.phase === 'paused' ? <span className={`delivery-split delivery-queued${shipWhenDone ? ' delivery-armed' : ''}`}>
-          {shipWhenDone && <span className="delivery-sparkles" aria-hidden="true"><i /><i /><i /><i /><i /></span>}
-          <span role="status"><StatusGlyphIcon glyph={status.glyph} tone={status.tone} />{status.label}</span>
+        {status?.phase === 'queued' || status?.phase === 'paused' ? <span className={`delivery-split delivery-queued`}>
+            <span role="status"><StatusGlyphIcon glyph={status.glyph} tone={status.tone} />{status.label}</span>
           {status.canCancel && <button disabled={busy} aria-label="Cancel queued delivery" title="Cancel queued delivery" onClick={() => call('threads.cancelDelivery')}><Close /></button>}
         </span> : status?.phase === 'shipping' ? <span className="delivery-pill delivery-queued" role="status"><StatusGlyphIcon glyph={status.glyph} tone={status.tone} />{status.label}…</span>
-        : status && status.phase !== 'superseded' && <span className={`delivery-split delivery-status tone-${status.tone}`} role="status">
+        : status && status.phase !== 'superseded' && <span className={`delivery-split delivery-status tone-${status.tone}`} role="status" title={receipt ? 'Workspace retained' : undefined}>
           {status.pullRequest
             ? <a href={status.pullRequest.url} target="_blank" rel="noreferrer" title={`Open PR #${status.pullRequest.number}`}>{statusBody}</a>
             : <span>{statusBody}</span>}
@@ -107,11 +110,13 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
           <button ref={trigger} popoverTarget={id} disabled={busy || !summary?.available || !!thread.queuedMessages?.length} aria-label="Shipping options" aria-haspopup="menu"><ChevronDown /></button>
         </span>}
         {status?.canCheck && <button className="delivery-pill" disabled={busy} onClick={() => call('threads.checkDelivery')}><Refresh />Check now</button>}
-        {status?.canStopFollowUps && <button className="delivery-pill" disabled={busy} title="Keep tracking the PR without starting the agent again" onClick={() => call('threads.cancelDelivery')}><StopSquare />Stop automatic follow-ups</button>}
+        {status?.canStopFollowUps && <button className="delivery-pill" disabled={busy} title="Keep tracking the PR without starting the agent again" onClick={() => call('threads.cancelDelivery')}><StopSquare />Stop watching PR</button>}
         {status?.canCancel && status.phase !== 'queued' && <button className="delivery-pill" disabled={busy} onClick={() => call('threads.cancelDelivery')}><Close />Cancel delivery</button>}
       </>}
-      {settled && <span className="delivery-settled">Settled</span>}
+      {settled && !hasChip && <span className="delivery-settled">Settled</span>}
+      {snoozedUntil && <span className="delivery-settled">Snoozed until {wakeText(snoozedUntil, now)}</span>}
       {settled && <button className="delivery-pill" disabled={busy} onClick={() => call('threads.reopen')}><Undo />Reopen</button>}
+      {snoozedUntil && <button className="delivery-pill" disabled={busy} onClick={() => call('threads.reopen')}><Undo />Wake now</button>}
       {!archived && (receipt || settled) && thread.workspace && <button className="delivery-pill" disabled={busy || thread.status === 'running'} title="Frees the workspace, keeps this thread" onClick={() => call('threads.archive')}>
         <Archive />{busy ? 'Archiving…' : 'Archive'}
       </button>}

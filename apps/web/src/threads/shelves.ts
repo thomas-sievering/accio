@@ -45,3 +45,12 @@ export function nextMorning(now: Date): Date {
   if (d.getTime() - now.getTime() < 3_600_000) d.setDate(d.getDate() + 1);
   return d;
 }
+
+/** "tomorrow 09:00", "Thu 09:00", or just the time when it is later today. */
+export function wakeText(when: Date, now: Date): string {
+  const time = when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (when.toDateString() === now.toDateString()) return time;
+  const tomorrow = new Date(now);
+  tomorrow.setDate(now.getDate() + 1);
+  return `${when.toDateString() === tomorrow.toDateString() ? 'tomorrow' : when.toLocaleDateString([], { weekday: 'short' })} ${time}`;
+}

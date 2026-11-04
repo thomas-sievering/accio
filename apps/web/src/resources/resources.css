@@ -208,9 +208,6 @@
   flex: 0 1 160px;
   min-width: 120px;
 }
-.field input[aria-invalid='true'] {
-  border-color: var(--red);
-}
 .field small.error {
   font-size: 12px;
 }

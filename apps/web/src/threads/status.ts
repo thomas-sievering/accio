@@ -182,6 +182,22 @@ export function threadStatus(t: ThreadView, { needsSecret = false }: { needsSecr
   return { label: turnLabels[t.status], tone: t.status === 'idle' ? 'ready' : t.status, glyph: 'dot', showLabel: true };
 }
 
+/**
+ * The few words a sidebar row has room for; the full status stays in the row's title.
+ * "Waiting for merge" reads as Review and live CI as its step, so a narrow row never cuts a phrase.
+ */
+export function shortStatus(label: string): string {
+  const step = label.match(/^CI\b.*step (\d+) of (\d+)/);
+  if (step) return `CI · step ${step[1]}/${step[2]}`;
+  if (label.startsWith('CI')) return 'CI';
+  if (label === 'Waiting for merge') return 'Review';
+  if (label.startsWith('Waiting for ')) return label.slice('Waiting for '.length).replace(/^./, (c) => c.toUpperCase());
+  if (label.startsWith('Shipped to ')) return 'Shipped';
+  if (label.startsWith('Merged into ')) return 'Merged';
+  if (label.startsWith('Merged · ') || label.startsWith('Pushed · ')) return 'Checking';
+  return label;
+}
+
 /** Readable status for titles and accessible names, with the PR number when one exists. */
 export function statusText(label: string, pr?: { number: number }): string {
   return pr ? `${label} · #${pr.number}` : label;

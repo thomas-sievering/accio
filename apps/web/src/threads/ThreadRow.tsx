@@ -4,7 +4,7 @@ import { ProjectMark } from '../projects/ProjectMark';
 import { useProjects } from '../projects/projects';
 import { useNeedsSecret } from '../secrets/pendingSecrets';
 import { StatusGlyphIcon } from './StatusMark';
-import { statusText, threadStatus } from './status';
+import { shortStatus, statusText, threadStatus } from './status';
 import { RowRename, useRenaming, useThreadMenu } from './ThreadMenu';
 import { snoozeThread } from './SnoozeNotice';
 import type { ShelfPlace } from './shelves';
@@ -27,7 +27,11 @@ export function ThreadRow({ thread: t, place }: { thread: ThreadView; place: She
   const renaming = renamingId === t.id;
   const onContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
-    openMenu(t, e.clientX, e.clientY);
+    // Shift+F10 and the menu key report no pointer: open under the row instead.
+    if (e.clientX === 0 && e.clientY === 0) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      openMenu(t, rect.left + 24, rect.bottom);
+    } else openMenu(t, e.clientX, e.clientY);
   };
 
   const actions = (
@@ -36,6 +40,8 @@ export function ThreadRow({ thread: t, place }: { thread: ThreadView; place: She
         <button
           key={a.label}
           className="row-action"
+          // Pointer shortcuts only; the keyboard reaches the same actions through the row menu (Shift+F10).
+          tabIndex={-1}
           title={a.title}
           aria-label={a.label}
           onClick={() => void (a.run === 'snooze' ? snoozeThread(act, t.id) : act[a.run](t.id)).catch((e: Error) => console.error(e.message))}
@@ -58,10 +64,11 @@ export function ThreadRow({ thread: t, place }: { thread: ThreadView; place: She
         {t.projectId ? <ProjectMark id={t.projectId} /> : <span className="no-project-mark" />}
         <span className="row-name">
           {renaming ? <RowRename thread={t} /> : <span className="row-title">{t.title}</span>}
-          <span className={`row-project${showState ? ' with-state' : ''}`}>
-            <span className="row-project-name">{project ?? 'No project'}</span>
+          {/* A delivery status takes the whole line: the project mark already names the project. */}
+          <span className={`row-project${showState ? ' with-state' : ''}${delivery && showState ? ' delivery' : ''}`}>
+            {!(delivery && showState) && <span className="row-project-name">{project ?? 'No project'}</span>}
             {showState && <span className={`row-state tone-${status.tone}`}>
-              <span className="row-state-label">{status.label}</span>
+              <span className="row-state-label">{delivery ? shortStatus(status.label) : status.label}</span>
               {delivery?.pullRequest && <span className="row-state-pr">&nbsp;· #{delivery.pullRequest.number}</span>}
             </span>}
           </span>

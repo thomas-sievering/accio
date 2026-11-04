@@ -8,7 +8,7 @@ import { useProfiles } from '../profiles/profiles';
 import { useProjects } from '../projects/projects';
 import { isOptional, LoadError, scopeSummary, shortRevision, slugId, useResources } from '../resources/resources';
 import { ScopeEditor } from '../resources/ScopeEditor';
-import { Field } from '../resources/Field';
+import { Field, focusFirstInvalid } from '../resources/Field';
 import { MidPath } from '../projects/MidPath';
 
 const activeRevision = (state: ResourcesState, sourceId: string) => state.skills.find((s) => s.sourceId === sourceId)?.revision;
@@ -27,13 +27,12 @@ export function SkillsSettings({ sourceId, onOpen, onBack }: { sourceId?: string
         Skills come from Git repositories. A new skill is optional until you enable it for everything, a profile, or a project. Enabled skills are synced: threads read them from the hub’s copy at the revision you applied.
       </p>
       <SettingsSection>
-        {state.sources.length === 0 && <SettingRow title="No skill sources yet" description="Add a Git repository with one or more SKILL.md files." />}
         {[...state.sources].sort((a, b) => a.name.localeCompare(b.name)).map((s) => {
           const skills = state.skills.filter((k) => k.sourceId === s.id);
           const enabled = skills.filter((k) => !isOptional(k.scope)).length;
           const rev = activeRevision(state, s.id);
           return (
-            <SettingLink key={s.id} icon={<BookOpen />} title={s.name} description={<>{skills.length} skill{skills.length === 1 ? '' : 's'} · {enabled} enabled, {skills.length - enabled} optional · {s.url}</>} onClick={() => onOpen(s.id)}>
+            <SettingLink key={s.id} icon={<BookOpen />} title={s.name} description={<span className="source-line"><span>{skills.length} skill{skills.length === 1 ? '' : 's'} · {enabled} enabled, {skills.length - enabled} optional ·</span><MidPath text={s.url} /></span>} onClick={() => onOpen(s.id)}>
               {rev && <code className="revision" title={rev}>{shortRevision(rev)}</code>}
             </SettingLink>
           );
@@ -60,7 +59,7 @@ function AddSource({ taken, onAdded, onCancel }: { taken: string[]; onAdded: (s:
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setTouched(true);
-    if (invalid) return;
+    if (invalid) return focusFirstInvalid(e.currentTarget);
     const saved = await run(() => client.call('skills.addSource', { id: slugId(name, taken), name: name.trim(), url: url.trim(), ref: ref.trim() || 'HEAD' }));
     if (saved) onAdded(saved);
   };
@@ -82,7 +81,7 @@ function AddSource({ taken, onAdded, onCancel }: { taken: string[]; onAdded: (s:
         </div>
       </SettingsSection>
       {error && <p className="error" role="alert">{error}</p>}
-      <SettingsFooter busy={busy} onCancel={onCancel} saveLabel={busy ? 'Adding…' : 'Add source'} saveDisabled={busy || (touched && invalid)} />
+      <SettingsFooter busy={busy} onCancel={onCancel} saveLabel={busy ? 'Adding…' : 'Add source'} saveDisabled={busy} />
     </form>
   );
 }

@@ -15,6 +15,7 @@ import { DeliveryActions } from './DeliveryActions';
 import { ModelPicker } from './ModelPicker';
 import { ThreadNotice } from './ThreadNotice';
 import { ThreadActionsMenu } from './ThreadActionsMenu';
+import { TitleEdit } from './ThreadMenu';
 import { Transcript } from './Transcript';
 import { useReportPendingSecrets } from '../secrets/pendingSecrets';
 import { useThreads, useTranscript } from './threads';
@@ -36,6 +37,8 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
   useReportPendingSecrets(thread.id, items);
   const running = thread.status === 'running';
   const [savingModel, setSavingModel] = useState(false);
+  // The header's Rename edits the title where it is shown.
+  const [renaming, setRenaming] = useState(false);
   const lastTurn = items?.findLast((item) => item.kind === 'user')?.turnId;
   const blocked = thread.status === 'failed' || thread.status === 'interrupted';
   const notices = blocked ? items?.filter((item) => item.kind === 'notice' && item.turnId === lastTurn) : undefined;
@@ -51,7 +54,8 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
 
   return (
     <>
-      <PaneHeader title={thread.title} {...place} checkout={thread.workspace && !thread.workspace.releasedAt && place.checkout ? { ...place.checkout, path: thread.workspace.path } : place.checkout} actions={<ThreadActionsMenu key={thread.id} thread={thread} items={items} />} />
+      <PaneHeader title={thread.title} {...place} checkout={thread.workspace && !thread.workspace.releasedAt && place.checkout ? { ...place.checkout, path: thread.workspace.path } : place.checkout} renaming={renaming && <TitleEdit thread={thread} className="header-rename" onDone={() => setRenaming(false)} />}
+        actions={<ThreadActionsMenu key={thread.id} thread={thread} items={items} onRename={() => setRenaming(true)} />} />
       {visibleItems ? <PendingPick.Provider value={{ pick, setPick, enabled: !running }}>
         <Transcript threadId={thread.id} items={visibleItems} working={running} onOpenSecrets={onOpenSecrets} />
       </PendingPick.Provider> : (
@@ -144,6 +148,8 @@ function PaneHeader(props: {
   checkout?: CheckoutView;
   project?: ProjectView;
   actions?: ReactNode;
+  /** Replaces the title while it is being edited. */
+  renaming?: ReactNode;
 }) {
   const { checkout, project } = props;
   return (
@@ -158,7 +164,7 @@ function PaneHeader(props: {
           </span>
         </span>
         <span className="faint" aria-hidden="true">/</span>
-        <b title={props.title}>{props.title}</b>
+        {props.renaming || <b title={props.title}>{props.title}</b>}
       </div>
       {props.actions}
     </header>

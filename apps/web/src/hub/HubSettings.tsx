@@ -16,6 +16,7 @@ export function HubSettings({ adding, onAdd, onBack }: { adding?: boolean; onAdd
   if (!hubs.length) return <SettingsSection><PairHubForm /></SettingsSection>;
   if (adding) return <PairHubForm onCancel={onBack} />;
   return <>
+    <p className="note">Hubs keep your profiles, accounts and threads. This device uses one at a time.</p>
     <SettingsSection>
       {hubs.map((hub) => <SettingRow key={hub.id} icon={<Hub />} title={hub.name} description={confirming === hub.id ? 'You will be disconnected from this hub.' : hub.url}>
         {confirming === hub.id ? <>

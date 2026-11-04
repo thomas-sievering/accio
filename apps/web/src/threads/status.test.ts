@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { DeliveryPullRequest, ThreadDelivery, ThreadView } from '@accio/protocol';
-import { autoSettled, checkedAgo, deliveryStatus, statusText, threadStatus } from './status';
+import { autoSettled, checkedAgo, deliveryStatus, shortStatus, statusText, threadStatus } from './status';
 
 const pr = (extra: Partial<DeliveryPullRequest> = {}): DeliveryPullRequest => ({
   host: 'github.com', repository: 'acme/app', number: 123, url: 'https://github.com/acme/app/pull/123',
@@ -195,5 +195,16 @@ describe('checkedAgo', () => {
     expect(checkedAgo('2026-11-03T11:59:20Z', now)).toBe('checked just now');
     expect(checkedAgo('2026-11-03T11:56:00Z', now)).toBe('checked 4m ago');
     expect(checkedAgo('2026-11-03T09:00:00Z', now)).toBe('checked 3h ago');
+  });
+
+  it('shortens delivery statuses to what a sidebar row has room for', () => {
+    expect(shortStatus('CI · image · Build image · step 2 of 4')).toBe('CI · step 2/4');
+    expect(shortStatus('CI · Checks finishing')).toBe('CI');
+    expect(shortStatus('Waiting for merge')).toBe('Review');
+    expect(shortStatus('Waiting for checks')).toBe('Checks');
+    expect(shortStatus('Shipped to main')).toBe('Shipped');
+    expect(shortStatus('Merged into main')).toBe('Merged');
+    expect(shortStatus('Merged · checking main')).toBe('Checking');
+    expect(shortStatus('Ships when done')).toBe('Ships when done');
   });
 });

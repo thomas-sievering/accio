@@ -2,10 +2,10 @@ import { useEffect, useState, type FormEvent } from 'react';
 import type { McpDefinition, McpView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { Plug, Plus } from '../app/icons';
-import { SettingLink, SettingRow, SettingsFooter, SettingsSection, StatusPill } from '../app/Settings';
+import { SettingLink, SettingsFooter, SettingsSection, StatusPill } from '../app/Settings';
 import { useAction } from '../app/useAction';
 import { LoadError, slugId, useDraft, useResources } from '../resources/resources';
-import { Field } from '../resources/Field';
+import { Field, focusFirstInvalid } from '../resources/Field';
 import { mcpDefinition } from './mcp';
 
 const blank = (): McpDefinition => ({ id: '', name: '', transport: 'http', url: '', command: '', args: [], auth: 'none', oauthClientId: undefined });
@@ -23,7 +23,6 @@ export function McpSettings({ mcpId, onOpen, onBack }: { mcpId?: string; onOpen:
     <>
       <p className="note">Remote (HTTP) servers are reached through the hub, which holds their tokens; machines never see them. Local (stdio) servers run as a command on the machine running the thread.</p>
       <SettingsSection>
-        {state.mcps.length === 0 && <SettingRow title="No MCP servers yet" />}
         {[...state.mcps].sort((a, b) => a.name.localeCompare(b.name)).map((m) => (
           <SettingLink key={m.id} icon={<Plug />} title={m.name} description={m.transport === 'http' ? m.url : [m.command, ...m.args].join(' ')} onClick={() => onOpen(m.id)}>
             <McpPill mcp={m} />
@@ -56,7 +55,7 @@ function McpForm({ mcp, taken, onSaved, onDone }: { mcp?: McpView; taken: string
   const { value, dirty, set, reset } = useDraft<McpDefinition>(mcp ? mcpDefinition(mcp) : blank());
   const [argsText, setArgsText] = useState<string>();
   const [touched, setTouched] = useState(false);
-  const { busy, error, run } = useAction();
+  const { busy, error, run, clear } = useAction();
   const http = value.transport === 'http';
   const args = (argsText ?? value.args.join('\n')).split(/\r?\n/).map((a) => a.trim()).filter(Boolean);
   const changed = dirty || (argsText !== undefined && JSON.stringify(args) !== JSON.stringify(mcp?.args ?? []));
@@ -72,7 +71,7 @@ function McpForm({ mcp, taken, onSaved, onDone }: { mcp?: McpView; taken: string
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setTouched(true);
-    if (invalid) return;
+    if (invalid) return focusFirstInvalid(e.currentTarget);
     const def: McpDefinition = http
       ? { id: mcp?.id ?? slugId(value.name, taken), name: value.name.trim(), transport: 'http', url: value.url!.trim(), args: [], auth: value.auth, oauthClientId: value.auth === 'oauth' ? value.oauthClientId?.trim() || undefined : undefined }
       : { id: mcp?.id ?? slugId(value.name, taken), name: value.name.trim(), transport: 'stdio', command: value.command!.trim(), args, auth: 'none' };
@@ -94,11 +93,11 @@ function McpForm({ mcp, taken, onSaved, onDone }: { mcp?: McpView; taken: string
             <fieldset className="segmented" aria-label="Transport">
               <legend>Transport</legend>
               <label className={http ? 'on' : ''}>
-                <input type="radio" name="transport" checked={http} onChange={() => set('transport', 'http')} />
+                <input type="radio" name="transport" checked={http} onChange={() => { set('transport', 'http'); setTouched(false); clear(); }} />
                 <span><b>Remote (HTTP)</b><small>Through the hub, which holds the credentials</small></span>
               </label>
               <label className={!http ? 'on' : ''}>
-                <input type="radio" name="transport" checked={!http} onChange={() => { set('transport', 'stdio'); set('auth', 'none'); }} />
+                <input type="radio" name="transport" checked={!http} onChange={() => { set('transport', 'stdio'); set('auth', 'none'); setTouched(false); clear(); }} />
                 <span><b>Local command (stdio)</b><small>Runs on the machine running the thread</small></span>
               </label>
             </fieldset>
@@ -141,7 +140,7 @@ function McpForm({ mcp, taken, onSaved, onDone }: { mcp?: McpView; taken: string
       </form>
       {mcp && mcp.transport === 'http' && mcp.auth !== 'none' && <McpCredentials key={`${mcp.id}:${mcp.auth}:${mcp.url}`} mcp={mcp} />}
       {error && <p className="error" role="alert">{error}</p>}
-      <SettingsFooter remove={mcp && { name: mcp.name, run: remove, consequence: mcp.transport === 'http' && mcp.auth !== 'none' ? 'Its saved sign-in goes too.' : undefined }} busy={busy} onCancel={onDone} saveLabel={mcp ? 'Save' : 'Add MCP server'} saveForm="mcp-form" saveDisabled={busy || (!!mcp && !changed) || (touched && invalid)} />
+      <SettingsFooter remove={mcp && { name: mcp.name, run: remove, consequence: mcp.transport === 'http' && mcp.auth !== 'none' ? 'Its saved sign-in goes too.' : undefined }} busy={busy} onCancel={onDone} saveLabel={mcp ? 'Save' : 'Add MCP server'} saveForm="mcp-form" saveDisabled={busy || (!!mcp && !changed)} />
     </div>
   );
 }
