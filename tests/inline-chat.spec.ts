@@ -258,7 +258,8 @@ test('a running turn shows what it says as it goes and its latest calls behind o
   const live = page.locator('.turn-work.live');
   const status = live.getByRole('status');
   // What it says before a call shows right away, above the live line.
-  await expect(status).toHaveText('Running ls -la');
+  await expect(status).toHaveText('Running command');
+  await expect(live).not.toContainText('ls -la');
   await expect(page.locator('.msg.assistant', { hasText: 'I’ll look around the folder first.' })).toBeVisible();
   await expect(live.locator('.turn-work-elapsed')).toHaveText(/^(<1s|\d+s)$/);
   await expect(live.locator('.tool')).toHaveCount(0);
@@ -270,6 +271,11 @@ test('a running turn shows what it says as it goes and its latest calls behind o
   await expect(status).toHaveText('Searching TODO');
   await expect(page.locator('.msg.assistant', { hasText: 'Now checking for open TODOs.' })).toBeVisible();
   await expect(live.locator('.tool-summary')).toHaveText(['TODO']);
+  const earlierCalls = page.locator('.tool-group').filter({ has: page.locator('.tool-group-toggle') });
+  await expect(earlierCalls.locator('.tool-group-toggle')).toHaveAttribute('aria-expanded', 'false');
+  await expect(earlierCalls.locator('.tool')).toHaveCount(0);
+  await earlierCalls.locator('.tool-group-toggle').click();
+  await expect(earlierCalls.locator('.tool-summary')).toHaveText(['ls -la', 'README.md']);
   await page.screenshot({ path: test.info().outputPath('running-turn.png') });
 
   await expect(page.getByText('Explored the folder.')).toBeVisible();
@@ -283,6 +289,20 @@ test('a running turn shows what it says as it goes and its latest calls behind o
   await expect(work.locator('.msg.assistant')).toHaveText(['I’ll look around the folder first.', 'Now checking for open TODOs.']);
   await work.locator('.turn-work-toggle').click();
   await expect(work.locator('.tool')).toHaveCount(0);
+});
+
+test('a stopped single call stays behind a summary until expanded', async ({ page, baseURL }) => {
+  await openChat(page, baseURL!);
+  await page.locator('textarea').fill('explore tools');
+  await page.locator('textarea').press('Enter');
+  await expect(page.locator('.turn-work.live [role="status"]')).toHaveText('Searching TODO');
+  await page.locator('.composer').getByRole('button', { name: 'Stop', exact: true }).click();
+  await expect(page.locator('.turn-work.live')).toHaveCount(0);
+  const calls = page.locator('.tool-group').last();
+  await expect(calls.locator('.tool-group-toggle')).toHaveText('Ran 1 search');
+  await expect(calls.locator('.tool')).toHaveCount(0);
+  await calls.locator('.tool-group-toggle').click();
+  await expect(calls.locator('.tool-summary')).toHaveText('TODO');
 });
 
 test('reading position stays put through updates and jump-to-latest restores following', async ({ page, baseURL }) => {
@@ -334,14 +354,14 @@ test('running sub-agents show their latest step, then fold into ordinary Agent r
   const input = page.locator('.composer textarea');
   await input.fill('Sub-agent fixture'); await input.press('Enter');
   // The live line names what the newest sub-agent is doing now.
-  await expect(page.locator('.turn-work-activity')).toHaveText(/^Running agent: Review the transcript diff · Running git diff$/);
+  await expect(page.locator('.turn-work-activity')).toHaveText(/^Running agent: Review the transcript diff · Running command$/);
   await page.locator('.turn-work-activity').click();
   const rows = page.locator('.tool.running');
   await expect(rows).toHaveCount(2);
   await expect(rows.filter({ hasText: 'Find where deliveries retry' }).locator('.tool-step')).toHaveText('Reading delivery.ts');
-  await expect(rows.filter({ hasText: 'Review the transcript diff' }).locator('.tool-step')).toHaveText('Running git diff');
+  await expect(rows.filter({ hasText: 'Review the transcript diff' }).locator('.tool-step')).toHaveText('Running command');
   await page.screenshot({ path: testInfo.outputPath('subagents-running.png') });
-  await expect(rows.filter({ hasText: 'Find where deliveries retry' }).locator('.tool-step')).toHaveText('Running pnpm test delivery', { timeout: 10_000 });
+  await expect(rows.filter({ hasText: 'Find where deliveries retry' }).locator('.tool-step')).toHaveText('Running command', { timeout: 10_000 });
   await expect(page.getByText('Both sub-agents reported back.')).toBeVisible({ timeout: 15_000 });
   await expect(page.locator('.tool-step')).toHaveCount(0);
 });

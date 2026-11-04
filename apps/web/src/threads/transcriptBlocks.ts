@@ -124,9 +124,10 @@ function describeLive(item: ToolItem): string {
   return item.step ? `${describeActivity(item)} · ${describeActivity(item.step)}` : describeActivity(item);
 }
 
-/** "Running pnpm test", "Reading README.md", "Using linear · get_issue". */
+/** Top-level activity keeps shell commands behind the work fold. */
 export function describeActivity(item: Pick<ToolItem, 'name' | 'summary'>): string {
   const kind = kinds[item.name] ?? 'other';
+  if (kind === 'run') return 'Running command';
   if (kind === 'other') return `${doing.other} ${toolLabel(item.name)}`;
   return item.summary ? `${doing[kind]} ${toolSummary(item)}` : `${doing[kind]}…`;
 }

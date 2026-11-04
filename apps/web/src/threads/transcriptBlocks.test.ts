@@ -11,7 +11,7 @@ it('cleans legacy shell rows and live activity without changing other tool summa
   const summary = String.raw`"C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'Get-Content long…`;
   const shell = { ...tool('shell', 'Shell'), summary };
   expect(toolSummary(shell)).toBe('Get-Content long…');
-  expect(describeActivity(shell)).toBe('Running Get-Content long…');
+  expect(describeActivity(shell)).toBe('Running command');
   expect(toolSummary({ ...shell, name: 'Read' })).toBe(summary);
   expect(shell.summary).toBe(summary);
 });
@@ -81,7 +81,7 @@ describe('layoutTranscript', () => {
   it('folds a running turn behind what it is doing now, with the same id it keeps once done', () => {
     const items = [ask('q'), tool('1', 'Read', 't1'), { ...tool('2', 'Bash', 't1', 'running'), summary: 'pnpm test' }];
     const [, work] = layoutTranscript(items, 't1');
-    expect(work).toMatchObject({ kind: 'work', id: 't1:work', live: true, activity: 'Running pnpm test', startedAt: '2026-11-03T12:00:00Z' });
+    expect(work).toMatchObject({ kind: 'work', id: 't1:work', live: true, activity: 'Running command', startedAt: '2026-11-03T12:00:00Z' });
     expect(shape(layoutTranscript(items, 't1'))).toEqual(['q', { work: [['1', '2']] }]);
     expect(layoutTranscript([...items, say('a'), done()])[1]).toMatchObject({ id: 't1:work', live: false });
   });
@@ -127,6 +127,18 @@ describe('describeTools', () => {
 });
 
 describe('describeActivity', () => {
+  it.each(['Bash', 'Shell', 'BashOutput', 'KillShell'])('keeps %s command text out of collapsed activity', (name) => {
+    expect(describeActivity({ name, summary: 'pnpm build >/dev/null 2>&1; pnpm exec playwright test' })).toBe('Running command');
+  });
+
+  it('keeps shell steps out of collapsed agent activity and steered turns', () => {
+    const agent: ToolItem = { ...tool('agent', 'Agent', 't1', 'running'), summary: 'Review changes', step: { name: 'Bash', summary: 'git diff' } };
+    expect(layoutTranscript([ask('q'), agent], 't1')[1]).toMatchObject({ activity: 'Running agent: Review changes · Running command' });
+    const correction: TranscriptItem = { kind: 'user', id: 'steer', turnId: 't1', text: 'continue', at: '', steered: true };
+    expect(layoutTranscript([ask('q'), correction, { ...tool('shell', 'Shell', 't1', 'running'), summary: 'pnpm test' }], 't1').at(-1))
+      .toMatchObject({ activity: 'Running command' });
+  });
+
   it('names what a running call is doing', () => {
     expect(describeActivity({ ...tool('1', 'Read'), summary: 'README.md' })).toBe('Reading README.md');
     expect(describeActivity({ ...tool('1', 'Grep'), summary: 'TODO' })).toBe('Searching TODO');
