@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useProfiles } from '../profiles/profiles';
-import { Plus } from '../app/icons';
 import { SettingLink, SettingsSection } from '../app/Settings';
 import { AddProjectSheet } from './AddProjectSheet';
 import { ProjectForm } from './ProjectForm';
@@ -21,7 +20,7 @@ export function ProjectsSettings({ projectId, onOpen, onRoute }: { projectId?: s
   return (
     <>
       <p className="note">Each project belongs to one profile.</p>
-      <SettingsSection>
+      <SettingsSection add={{ label: 'Add project', onClick: () => setAdding(true) }}>
         {projects.map((p) => {
           const checkouts = checkoutsOf(p.id).length;
           return (
@@ -30,7 +29,6 @@ export function ProjectsSettings({ projectId, onOpen, onRoute }: { projectId?: s
               onClick={() => onOpen(p.id)} />
           );
         })}
-        <SettingLink icon={<Plus />} title="Add project" chevron={false} onClick={() => setAdding(true)} />
       </SettingsSection>
       {adding && <AddProjectSheet onClose={() => setAdding(false)} />}
     </>

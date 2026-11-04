@@ -1,4 +1,4 @@
-import { Fragment, createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { Children, Fragment, createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { HubSettings } from '../hub/HubSettings';
 import { MachineSettings } from '../machine/MachineSettings';
 import { HarnessesSettings } from '../harnesses/HarnessesSettings';
@@ -14,7 +14,7 @@ import { SkillsSettings } from '../skills/SkillsSettings';
 import { ProjectsSettings } from '../projects/ProjectsSettings';
 import { useProjects } from '../projects/projects';
 import { useResources } from '../resources/resources';
-import { ArrowLeft, BookOpen, Chevron, Folder, Hub, IdCard, Key, Layers, Limits, Monitor, Plug, ScrollText, Users, Wrench } from './icons';
+import { ArrowLeft, BookOpen, Chevron, Folder, Hub, IdCard, Key, Layers, Limits, Monitor, Plug, Plus, ScrollText, Users, Wrench } from './icons';
 import { useClient } from './connection';
 import { useLive } from './useLive';
 import { SidebarResizer } from './Resizer';
@@ -221,11 +221,13 @@ export function useEscape(active: boolean, cancel: () => void) {
 }
 
 /** A titled group of settings, drawn as one card. */
-export function SettingsSection({ title, children }: { title?: string; children: ReactNode }) {
+/** A titled card of rows. `add` puts a dashed "+ label" slot under the card, so adding never reads as another row. */
+export function SettingsSection({ title, add, children }: { title?: string; add?: { label: string; disabled?: boolean; onClick: () => void }; children?: ReactNode }) {
   return (
     <section className="settings-section">
       {title && <h2>{title}</h2>}
-      <div className="settings-card">{children}</div>
+      {Children.toArray(children).length > 0 && <div className="settings-card">{children}</div>}
+      {add && <button type="button" className="settings-add" disabled={add.disabled} onClick={add.onClick}><span className="menu-icon"><Plus /></span>{add.label}</button>}
     </section>
   );
 }

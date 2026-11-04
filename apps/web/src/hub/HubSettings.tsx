@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useHubs } from '../app/connection';
-import { Hub, Plus } from '../app/icons';
+import { Hub } from '../app/icons';
 import { SettingRow, SettingsSection, StatusPill, useEscape } from '../app/Settings';
 import { useAction } from '../app/useAction';
 import { PairHubForm } from './PairHubForm';
@@ -19,7 +19,7 @@ export function HubSettings({ adding, onAdd, onBack }: { adding?: boolean; onAdd
   if (adding) return <PairHubForm onCancel={onBack} />;
   return <>
     <p className="note">Hubs keep your profiles, accounts and threads. This device uses one at a time.</p>
-    <SettingsSection>
+    <SettingsSection add={onAdd && { label: 'Add hub', onClick: onAdd }}>
       {hubs.map((hub) => <SettingRow key={hub.id} icon={<Hub />} title={hub.name} description={confirming === hub.id ? 'You will be disconnected from this hub.' : hub.url}>
         {confirming === hub.id ? <>
           <button type="button" className="ghost" disabled={busy} autoFocus onClick={() => setConfirming(undefined)}>Cancel</button>
@@ -31,10 +31,6 @@ export function HubSettings({ adding, onAdd, onBack }: { adding?: boolean; onAdd
         </>}
       </SettingRow>)}
       {current?.error && <div className="setting-form"><p className="error" role="status">{current.error}</p></div>}
-      {onAdd && <button type="button" className="setting setting-link" onClick={onAdd}>
-        <span className="menu-icon"><Plus /></span>
-        <span className="setting-text"><b>Add hub</b><small>Pair this device with another hub by address and one-time code.</small></span>
-      </button>}
     </SettingsSection>
     {current && <SettingsSection title="Pair another device">
       <div className="setting-form">

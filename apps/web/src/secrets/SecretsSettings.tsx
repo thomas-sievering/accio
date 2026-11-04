@@ -1,7 +1,6 @@
 import { useId, useRef, useState, type KeyboardEvent } from 'react';
 import { SecretSlot, type ProfileView, type ProjectView, type SecretSummary } from '@accio/protocol';
 import { useClient } from '../app/connection';
-import { Plus } from '../app/icons';
 import { SettingsFooter, SettingsSection, useEscape } from '../app/Settings';
 import { useAction } from '../app/useAction';
 import { useProfiles } from '../profiles/profiles';
@@ -88,8 +87,7 @@ function SecretList({ profile, secrets, error, retry, canWrite, projectName, onA
   const sorted = secrets?.slice().sort((a, b) => a.name.localeCompare(b.name));
   return (
     <>
-      <section className="settings-section">
-        <div className="settings-card">
+      <SettingsSection add={{ label: 'Add secret', disabled: !canWrite, onClick: onAdd }}>
           {!sorted ? (
             <div className="setting">
               {error ? <><p className="error grow" role="alert">Could not load secrets: {error}</p><button type="button" className="ghost" onClick={retry}>Retry</button></>
@@ -102,12 +100,7 @@ function SecretList({ profile, secrets, error, retry, canWrite, projectName, onA
           ) : sorted.map((s) => (
             <SecretRow key={s.id} secret={s} access={accessLabel(s, profile.name, projectName)} canWrite={canWrite} onEdit={() => onEdit(s.id)} onReplace={() => onReplace(s.id)} />
           ))}
-          <button type="button" className="setting setting-link" disabled={!canWrite} onClick={onAdd}>
-            <span className="menu-icon"><Plus /></span>
-            <span className="setting-text"><b>Add secret</b></span>
-          </button>
-        </div>
-      </section>
+      </SettingsSection>
     </>
   );
 }

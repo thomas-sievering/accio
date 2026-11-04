@@ -1,7 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import type { ResourceScope, ResourcesState, SkillEntry, SkillSource } from '@accio/protocol';
 import { useClient } from '../app/connection';
-import { BookOpen, Plus } from '../app/icons';
+import { BookOpen } from '../app/icons';
 import { SettingLink, SettingRow, SettingsFooter, SettingsSection } from '../app/Settings';
 import { useAction } from '../app/useAction';
 import { useProfiles } from '../profiles/profiles';
@@ -26,7 +26,7 @@ export function SkillsSettings({ sourceId, onOpen, onBack }: { sourceId?: string
       <p className="note">
         Skills come from Git repositories. A new skill is optional until you enable it for everything, a profile, or a project. Enabled skills are synced: threads read them from the hub’s copy at the revision you applied.
       </p>
-      <SettingsSection>
+      <SettingsSection add={{ label: 'Add skill source', onClick: () => onOpen('new') }}>
         {[...state.sources].sort((a, b) => a.name.localeCompare(b.name)).map((s) => {
           const skills = state.skills.filter((k) => k.sourceId === s.id);
           const enabled = skills.filter((k) => !isOptional(k.scope)).length;
@@ -37,7 +37,6 @@ export function SkillsSettings({ sourceId, onOpen, onBack }: { sourceId?: string
             </SettingLink>
           );
         })}
-        <SettingLink icon={<Plus />} title="Add skill source" description="Cloned on the hub; every SKILL.md inside becomes a skill." chevron={false} onClick={() => onOpen('new')} />
       </SettingsSection>
     </>
   );

@@ -85,6 +85,35 @@
   background: var(--panel);
   overflow: clip;
 }
+.settings-card + .settings-add {
+  margin-top: 8px;
+}
+.settings-add {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  padding: 10px 16px;
+  border: 1px dashed var(--line-2);
+  border-radius: 12px;
+  color: var(--muted);
+  text-align: start;
+}
+.settings-add:disabled {
+  opacity: 0.5;
+}
+.settings-add:hover:not(:disabled) {
+  border-color: var(--dim);
+  color: var(--ink);
+  background: var(--hover);
+}
+.settings-add:hover:not(:disabled) .menu-icon {
+  color: var(--ink);
+}
+.settings-add:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
 .setting {
   display: flex;
   align-items: center;

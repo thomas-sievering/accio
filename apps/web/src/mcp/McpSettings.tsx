@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import type { McpDefinition, McpView } from '@accio/protocol';
 import { useClient } from '../app/connection';
-import { Plug, Plus } from '../app/icons';
+import { Plug } from '../app/icons';
 import { SettingLink, SettingsFooter, SettingsSection, StatusPill } from '../app/Settings';
 import { useAction } from '../app/useAction';
 import { LoadError, slugId, useDraft, useResources } from '../resources/resources';
@@ -22,13 +22,12 @@ export function McpSettings({ mcpId, onOpen, onBack }: { mcpId?: string; onOpen:
   return (
     <>
       <p className="note">Remote (HTTP) servers are reached through the hub, which holds their tokens; machines never see them. Local (stdio) servers run as a command on the machine running the thread.</p>
-      <SettingsSection>
+      <SettingsSection add={{ label: 'Add MCP server', onClick: () => onOpen('new') }}>
         {[...state.mcps].sort((a, b) => a.name.localeCompare(b.name)).map((m) => (
           <SettingLink key={m.id} icon={<Plug />} title={m.name} description={m.transport === 'http' ? m.url : [m.command, ...m.args].join(' ')} onClick={() => onOpen(m.id)}>
             <McpPill mcp={m} />
           </SettingLink>
         ))}
-        <SettingLink icon={<Plus />} title="Add MCP server" description="Connect a remote service or run a local MCP server." chevron={false} onClick={() => onOpen('new')} />
       </SettingsSection>
     </>
   );
