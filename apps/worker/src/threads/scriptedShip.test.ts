@@ -1,4 +1,4 @@
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { ThreadView } from '@accio/protocol';
@@ -172,6 +172,29 @@ it('cancels a running test, publishes nothing and clears the request', async () 
   expect(harness.runs).toHaveLength(1);
   expect(await git(origin, 'rev-parse', 'main')).toBe(before);
   await expect(stat(join(thread.workspace!.path, '.git'))).resolves.toBeDefined();
+});
+
+it('runs a scripted ship cut off by a restart again once accio is back', async () => {
+  const { c, origin, checkout, runs } = await setup(working('hold.txt', 'wait\n'));
+  const thread = await c.call('threads.start', { checkoutId: checkout.id, text: 'slow tests' });
+  await wait(c, thread.id, x => x.status === 'idle');
+  await c.call('threads.deliver', { threadId: thread.id, mode: 'ship' });
+  await wait(c, thread.id, x => x.delivery?.step?.name === 'verify');
+  await expect.poll(runs).toBe(1);
+  await t.stop({ keepHome: true });
+  const stored = JSON.parse(await readFile(join(t.home, 'threads.json'), 'utf8'));
+  expect(stored[0].delivery).toMatchObject({ status: 'queued' });
+  expect(stored[0].delivery.startedAt).toBeUndefined();
+
+  await rm(join(thread.workspace!.path, 'hold.txt'));
+  const harness = new FakeHarness();
+  t = await startTestApp({ harness }, t.home);
+  const next = await t.connect();
+  await t.app.threads.continueAfterRestart();
+  await expect.poll(async () => (await next.call('threads.list', {}))[0]?.delivery?.status, { timeout: 20_000 }).toBe('delivered');
+  expect(harness.runs).toHaveLength(0);
+  expect(await runs()).toBe(2);
+  await expect(git(origin, 'show', 'main:hold.txt')).rejects.toThrow();
 });
 
 it('rebases and tests again when the target moves before the push', async () => {

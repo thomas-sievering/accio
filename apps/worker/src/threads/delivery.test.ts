@@ -2,7 +2,8 @@ import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import { JsonFile } from '@accio/persistence';
-import { FakeHarness, gate, replyWith } from '../testing/fakeHarness.js';
+import { FakeHarness, gate, replyWith, SESSION } from '../testing/fakeHarness.js';
+import { RESTART_NOTICE, RESUME_PROMPT } from './thread.js';
 import { startTestApp, type TestClient } from '../testing/testApp.js';
 import { DeliveryGit, DeliveryPending, deliveryPrompt } from './delivery.js';
 import { git } from '../git.js';
@@ -386,6 +387,57 @@ it('retains queued intent across restart and requires explicit resume before pub
   await next.call('threads.resume', { threadId: thread.id });
   await wait(next, thread.id, x => x.status === 'idle' && x.delivery?.status === 'delivered');
   expect(resumed.runs).toHaveLength(2);
+});
+
+it('continues a delivery turn cut off by a restart on its session, without asking for Ship again', async () => {
+  const started = gate();
+  const harness = new FakeHarness(async function* (run) {
+    if (!run.prompt.startsWith('Deliver the current task')) return yield* replyWith('built');
+    yield { type: 'system', subtype: 'init', session_id: SESSION };
+    started.release();
+    await new Promise<void>(r => run.signal.addEventListener('abort', () => r(), { once: true }));
+  });
+  const { c, checkout } = await setup(harness);
+  const thread = await c.call('threads.start', { checkoutId: checkout.id, text: 'work' });
+  await wait(c, thread.id);
+  await c.call('threads.deliver', { threadId: thread.id, mode: 'ship' });
+  await started.opened;
+  await t.stop({ keepHome: true });
+  const resumed = new FakeHarness(async function* (run) {
+    if (run.prompt === RESUME_PROMPT) await publish(run.cwd);
+    yield* replyWith('done');
+  });
+  t = await startTestApp({ harness: resumed }, t.home);
+  const next = await t.connect();
+  await wait(next, thread.id, x => x.status === 'idle' && x.delivery?.status === 'delivered');
+  expect(resumed.runs).toHaveLength(1);
+  expect(resumed.runs[0]).toMatchObject({ prompt: RESUME_PROMPT, sessionId: SESSION });
+  const notices = (await next.call('threads.transcript', { threadId: thread.id })).flatMap(i => i.kind === 'notice' ? [i.text] : []);
+  expect(notices).toContain(RESTART_NOTICE);
+  expect(notices.some(text => text === 'Stopped.' || text.startsWith('Delivery paused'))).toBe(false);
+});
+
+it('still pauses delivery on an explicit Stop', async () => {
+  const started = gate();
+  const harness = new FakeHarness(async function* (run) {
+    if (!run.prompt.startsWith('Deliver the current task')) return yield* replyWith('built');
+    yield { type: 'system', subtype: 'init', session_id: SESSION };
+    started.release();
+    await new Promise<void>(r => run.signal.addEventListener('abort', () => r(), { once: true }));
+  });
+  const { c, checkout } = await setup(harness);
+  const thread = await c.call('threads.start', { checkoutId: checkout.id, text: 'work' });
+  await wait(c, thread.id);
+  await c.call('threads.deliver', { threadId: thread.id, mode: 'ship' });
+  await started.opened;
+  await c.call('threads.stop', { threadId: thread.id });
+  await wait(c, thread.id, x => x.status === 'interrupted' && x.delivery?.status === 'blocked');
+  await t.stop({ keepHome: true });
+  const resumed = new FakeHarness();
+  t = await startTestApp({ harness: resumed }, t.home);
+  await t.connect();
+  await t.app.threads.continueAfterRestart();
+  expect(resumed.runs).toHaveLength(0);
 });
 
 it('enforces review-only instructions and verifies PR/check state rather than treating an open PR as delivered', async () => {

@@ -47,7 +47,7 @@ Add one field to the project's delivery settings, next to the preview command: *
 ### Interruptions
 
 - **Cancel** during a scripted run kills the running step's process tree, aborts an in-progress rebase and leaves the delivery cancelled, as today.
-- **Restart** during a scripted run: on startup, abort any in-progress rebase in owned worktrees whose delivery was `running`, then mark the delivery blocked with the existing "request Ship again" message.
+- **Restart** during a scripted run: the request goes back to queued and the script runs again once accio is back. A run is safe to repeat: if its push already landed, the rebase and push are no-ops. A rebase left in progress by a crash hands over to the agent.
 - The scripted run holds the thread's lifecycle lock, so sending a message waits for it or is rejected, as during a delivery turn today.
 
 ## What this gives up

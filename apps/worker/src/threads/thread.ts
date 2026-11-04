@@ -101,16 +101,30 @@ export function endTurn(thread: Thread, outcome: TurnOutcome, now: string): Thre
   return { ...thread, status, updatedAt: now, resumeAfterRestart: outcome === 'interrupted' ? thread.resumeAfterRestart : undefined };
 }
 
+/** What a turn cut off by accio shutting down says, so it does not read as an explicit Stop. */
+export const RESTART_NOTICE = 'Interrupted: accio stopped while this turn was running. It continues when accio starts again.';
+
 /**
  * On startup no turn can still be running: the process that ran it is gone.
  * Recover their status before starting a fresh turn on the saved session.
- * Delivery remains an explicit action, including queued publishing intent.
+ * A Ship cut off this way stays requested and continues too: a delivery turn
+ * resumes with the rest, and a scripted ship, which ran without a turn, runs again.
  */
 export function recoverAfterRestart(threads: readonly Thread[]): { threads: Thread[]; interrupted: Thread[] } {
   const interrupted = threads.filter((t) => t.status === 'running');
-  const next = threads.map((t) => (t.status === 'running' ? { ...t, status: 'interrupted' as const,
-    resumeAfterRestart: t.resumeAfterRestart !== false && !!t.sessionId && !t.delivery,
-  } : t));
+  const next = threads.map((t): Thread => {
+    if (t.status === 'running') {
+      const resumeAfterRestart = t.resumeAfterRestart !== false && !!t.sessionId;
+      const delivery = t.delivery?.status === 'running' ? resumeAfterRestart
+        ? { ...t.delivery, status: 'queued' as const }
+        : { ...t.delivery, status: 'blocked' as const, detail: 'Delivery was interrupted. Check the conversation and request Ship again to continue safely.' }
+        : t.delivery;
+      return { ...t, status: 'interrupted', resumeAfterRestart, delivery };
+    }
+    // Running without a turn is a scripted ship. Clearing its start runs the script again.
+    if (t.delivery?.status === 'running') return { ...t, delivery: { ...t.delivery, status: 'queued', startedAt: undefined, step: undefined } };
+    return t;
+  });
   return { threads: next, interrupted };
 }
 
