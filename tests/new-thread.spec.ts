@@ -47,6 +47,8 @@ test('keyboard focus visibly reveals a complete title without moving adjacent ro
   await freshDraft(page, baseURL);
   await page.locator('.composer textarea').fill('Queued title tooltip');
   await page.locator('.composer textarea').press('Enter');
+  // Wait until the completed turn leaves Working; that move remounts its row.
+  await expect(page.locator('.sidebar nav > .rows .row-main').filter({ hasText: 'Queued title tooltip' })).toBeVisible();
   const row = page.locator('.row-main').filter({ hasText: 'Queued title tooltip' });
   await row.focus();
   await page.keyboard.press('Shift+F10');
@@ -55,8 +57,13 @@ test('keyboard focus visibly reveals a complete title without moving adjacent ro
   await page.getByRole('textbox', { name: 'Thread title', exact: true }).fill(title);
   await page.getByRole('textbox', { name: 'Thread title', exact: true }).press('Enter');
   const renamed = page.locator('.row-main').filter({ hasText: title });
+  // Other journeys share this fixture server and can leave many rows before this one.
+  // Filter through the UI so keyboard traversal has a stable starting list.
+  const search = page.getByRole('searchbox', { name: 'Search threads', exact: true });
+  await search.fill(title);
+  await expect(page.locator('.row-main')).toHaveCount(1);
   const before = await renamed.boundingBox();
-  await page.getByRole('searchbox', { name: 'Search threads', exact: true }).focus();
+  await search.focus();
   for (let i = 0; i < 12 && !(await renamed.evaluate(el => el === document.activeElement)); i++) await page.keyboard.press('Tab');
   await expect(renamed).toBeFocused();
   const tip = page.getByRole('tooltip');
@@ -68,7 +75,12 @@ test('keyboard focus visibly reveals a complete title without moving adjacent ro
   await expect(tip).toContainText('Effort:');
   await page.mouse.move(899, 5);
   await page.getByRole('searchbox', { name: 'Search threads', exact: true }).focus();
+  // A long search scrolls its text horizontally; blurring it resets that scroll.
+  // That unrelated input scroll must not dismiss the row's keyboard tooltip.
+  await expect.poll(() => search.evaluate(el => el.scrollLeft)).toBeGreaterThan(0);
   await renamed.focus();
+  await expect.poll(() => search.evaluate(el => el.scrollLeft)).toBe(0);
+  await expect(renamed).toBeFocused();
   await expect(tip).toHaveText(title);
   await page.screenshot({ path: info.outputPath('full-title-keyboard.png') });
   await page.keyboard.press('Escape');

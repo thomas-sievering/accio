@@ -39,14 +39,19 @@ export function useTooltip(text: string, clippedSelector?: string) {
       e.stopPropagation();
       hide();
     };
+    const scroll = (e: Event) => {
+      // Inputs can emit a delayed scroll when blur resets their text offset.
+      // Only scrolling an ancestor can move this tooltip's anchor.
+      if (e.target === document || e.target === window || (e.target instanceof Element && e.target.contains(anchor))) hide();
+    };
     document.addEventListener('keydown', escape, true);
     window.addEventListener('resize', hide);
-    window.addEventListener('scroll', hide, true);
+    window.addEventListener('scroll', scroll, true);
     return () => {
       cancelLeave();
       document.removeEventListener('keydown', escape, true);
       window.removeEventListener('resize', hide);
-      window.removeEventListener('scroll', hide, true);
+      window.removeEventListener('scroll', scroll, true);
     };
   }, [anchor, text]);
   return {

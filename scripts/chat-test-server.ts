@@ -24,14 +24,22 @@ let deliveryFeature = 0;
 // The delivery verification boundary supplies deterministic CI snapshots; Git publication stays real.
 const verifyDelivery = DeliveryGit.prototype.verify;
 const ciPolls = new Map<string, number>();
+const ciFailures = new Set<string>();
 DeliveryGit.prototype.verify = async function(workspace, delivery, observed) {
   if (ciPolls.has(workspace.path)) {
     const poll = (ciPolls.get(workspace.path) ?? 0) + 1;
     ciPolls.set(workspace.path, poll);
+    // Observe the real publication before substituting the remote CI result.
+    await verifyDelivery.call(this, workspace, delivery, observed);
+    if (ciFailures.has(workspace.path) && poll > 1) throw new DeliveryPending('Checks are failing: browser tests (failure).', true, 'checks', {
+      revision: await git(workspace.path, 'rev-parse', 'HEAD'), updatedAt: new Date().toISOString(), checks: [
+        { name: 'browser tests', status: 'failure', url: 'https://github.com/test/fixture/actions/runs/10/job/20' },
+      ],
+    });
     if (poll < 3) throw new DeliveryPending('Waiting for checks to finish.', false, 'checks', {
       revision: await git(workspace.path, 'rev-parse', 'HEAD'), updatedAt: new Date().toISOString(), checks: [
         { name: 'verify', status: 'success' },
-        { name: 'image', status: 'in_progress', url: 'https://github.com/test/fixture/actions/runs/10/job/20', step: { name: poll === 1 ? 'Build image' : 'Push image', current: poll === 1 ? 2 : 3, total: 4 } },
+        { name: 'image', status: 'in_progress', url: 'https://github.com/test/fixture/actions/runs/10/job/20', step: { name: poll === 1 ? 'Run xvfb-run --auto-servernum pnpm exec playwright test --project=chromium --project=firefox --project=webkit tests/delivery.spec.ts tests/delivery-merge.spec.ts' : 'Push image', current: poll === 1 ? 2 : 3, total: 4 } },
       ],
     });
   }
@@ -96,9 +104,10 @@ const harness = new FakeHarness(async function* (run) {
     yield* replyWith(`Done with ${which}.`, `sub-${which}`);
     return;
   }
-  if (run.prompt === 'Build CI progress fixture') {
+  if (run.prompt === 'Build CI progress fixture' || run.prompt === 'Build CI failure fixture') {
     ciPolls.set(run.cwd, 0);
-    await writeFile(join(run.cwd, 'ci-fixture.txt'), 'CI progress');
+    if (run.prompt === 'Build CI failure fixture') ciFailures.add(run.cwd);
+    await writeFile(join(run.cwd, 'ci-fixture.txt'), run.prompt);
     yield* replyWith('CI fixture ready.');
     return;
   }

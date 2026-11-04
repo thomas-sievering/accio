@@ -37,6 +37,8 @@ test('narrow panel wraps focus in both directions without a blank or background 
   const accounts = page.locator('.sidebar nav').getByRole('button', { name: 'Accounts', exact: true });
   await accounts.focus();
   await page.keyboard.press('Tab');
+  await expect(page.locator('.sidebar nav').getByRole('button', { name: 'Limits', exact: true })).toBeFocused();
+  await page.keyboard.press('Tab');
   await expect(page.locator('.sidebar nav').getByRole('button', { name: 'Secrets', exact: true })).toBeFocused();
 });
 

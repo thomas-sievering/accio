@@ -103,7 +103,8 @@ test('stopping review follow-ups retains PR tracking and prevents later failed c
   await writeFile(metadata.reviewHostFile, JSON.stringify({ ...host, checks: 'FAILURE' }));
   await actions.getByRole('button', { name: 'Check now', exact: true }).click();
   await expect(actions).toContainText('Needs attention');
-  await expect(actions).toContainText('Automatic follow-ups stopped. PR observation continues.');
+  await expect(actions).toContainText('Checks are failing:');
+  await expect(actions).toContainText('Automatic fixes are stopped.');
   await expect(page.getByRole('button', { name: 'Stop', exact: true })).toHaveCount(0);
   await actions.screenshot({ path: info.outputPath('follow-ups-stopped.png') });
   const client = await TestClient.open(`${baseURL!.replace('http:', 'ws:')}/ws?token=isolated-chat-test-token`);
