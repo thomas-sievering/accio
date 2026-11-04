@@ -19,6 +19,7 @@ import { ThreadNotice } from './ThreadNotice';
 import { ThreadActionsMenu } from './ThreadActionsMenu';
 import { EditableTitle } from './EditableTitle';
 import { Transcript } from './Transcript';
+import { CacheUsage } from './CacheUsage';
 import { useReportPendingSecrets } from '../secrets/pendingSecrets';
 import { useThreads, useTranscript } from './threads';
 
@@ -85,6 +86,7 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
             finally { setSavingModel(false); }
           }} />
           {place.profile && <LimitsIndicator active={active} account={accountForModel(place.profile, thread.model)} onOpen={() => onOpenLimits(place.profile!.id)} />}
+          <CacheUsage items={items ?? []} />
         </>}
       />
     </>

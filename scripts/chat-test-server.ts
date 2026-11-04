@@ -46,6 +46,16 @@ const subagentSteps: Record<string, [string, Record<string, string>][]> = {
 };
 const goalTurns = new Map<string, number>();
 const harness = new FakeHarness(async function* (run) {
+  if (run.prompt === 'Cache usage fixture') {
+    const message = { id: 'cache-response', content: [{ type: 'text' as const, text: 'Cache usage recorded.' }],
+      usage: { input_tokens: 100, cache_read_input_tokens: 800, cache_creation_input_tokens: 100,
+        cache_creation: { ephemeral_1h_input_tokens: 100, ephemeral_5m_input_tokens: 0 } } };
+    yield { type: 'stream_event', parent_tool_use_id: null, session_id: SESSION, event: { type: 'message_start', message } };
+    yield { type: 'assistant', parent_tool_use_id: null, session_id: SESSION, uuid: 'cache-fragment', message };
+    yield { type: 'assistant', parent_tool_use_id: null, session_id: SESSION, uuid: 'cache-fragment', message };
+    yield { type: 'result', subtype: 'success', is_error: false, session_id: SESSION };
+    return;
+  }
   // GLOSSARY: Goal. "/goal fixture …" works for three turns, then reports achieved; "/goal blocked fixture" reports blocked first.
   const goal = /Goal for this thread: (.+)/.exec(run.resourceInstructions ?? '')?.[1];
   if (goal?.includes('fixture')) {

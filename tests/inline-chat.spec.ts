@@ -7,6 +7,28 @@ import { join, resolve } from 'node:path';
 const require = createRequire(import.meta.url);
 const token = 'isolated-chat-test-token';
 
+test('Claude cache usage shows provider accounting once and survives reopening', async ({ page, baseURL }, testInfo) => {
+  await page.goto(`${baseURL}/#token=${token}`);
+  await page.locator('.sidebar').getByRole('button', { name: 'New thread', exact: true }).click();
+  await page.getByRole('option', { name: 'No project', exact: true }).click();
+  if (await page.getByRole('combobox', { name: 'Search profiles' }).isVisible()) await page.getByRole('option', { name: 'Personal', exact: true }).click();
+  await expect(page.locator('.cache-usage')).toHaveCount(0);
+  await page.locator('.composer textarea').fill('Cache usage fixture');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect(page.getByText('Cache usage recorded.', { exact: true })).toBeVisible();
+  await expect(page.locator('.composer .stop')).toHaveCount(0);
+  const stat = page.locator('.cache-usage');
+  await expect(stat.locator('summary')).toHaveText('Cache 80%');
+  await stat.locator('summary').click();
+  await expect(stat.locator('dd')).toHaveText(['800', '100', '100', '100']);
+  await expect(stat).toContainText('excludes subagents and title generation');
+  await page.screenshot({ path: testInfo.outputPath('cache-usage.png') });
+  await page.reload();
+  await expect(stat.locator('summary')).toHaveText('Cache 80%');
+  await stat.locator('summary').click();
+  await expect(stat.locator('dd')).toHaveText(['800', '100', '100', '100']);
+});
+
 for (const submit of ['Enter', 'Send'] as const) {
   test(`first ${submit} shows the message before thread startup completes and recovers a failed start`, async ({ page, baseURL }, testInfo) => {
     let release: (() => void) | undefined;

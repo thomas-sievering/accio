@@ -10,6 +10,29 @@ const result = (content: unknown, is_error = false): HarnessMessage => ({ type: 
 const toolChanges = (changes: TranscriptChange[]) => changes.filter((change): change is Extract<TranscriptChange, { type: 'tool' }> => change.type === 'tool');
 
 describe('TurnTranscript', () => {
+  it('reconciles streamed cache accounting and repeated SDK fragments per response', () => {
+    const t = new TurnTranscript('t1');
+    const usage = { input_tokens: 100, cache_read_input_tokens: 800, cache_creation_input_tokens: 100,
+      cache_creation: { ephemeral_1h_input_tokens: 100, ephemeral_5m_input_tokens: 0 } };
+    const changes = t.accept(stream({ type: 'message_start', message: { id: 'm1', usage } }));
+    expect(changes).toMatchObject([{ type: 'item', item: { kind: 'usage', id: 't1:usage:m1', usage: {
+      inputTokens: 100, cacheReadTokens: 800, cacheWriteTokens: 100, cacheWrite1hTokens: 100,
+    } } }]);
+    const envelope = { ...assistant([{ type: 'text', text: 'hello' }]), message: { id: 'm1', content: [{ type: 'text' as const, text: 'hello' }], usage } };
+    expect(t.accept(envelope).filter(c => c.type === 'item' && c.item.kind === 'usage')).toEqual([]);
+    expect(t.accept({ ...envelope, uuid: 'another-fragment' }).filter(c => c.type === 'item' && c.item.kind === 'usage')).toEqual([]);
+    expect(t.accept({ ...envelope, message: { ...envelope.message, usage: { ...usage, input_tokens: 120 } } })).toMatchObject([
+      { type: 'item', item: { id: 't1:usage:m1', usage: { inputTokens: 120 } } },
+    ]);
+    expect(t.accept({ ...envelope, parent_tool_use_id: 'subagent' })).toEqual([]);
+  });
+
+  it('does not invent cache accounting when usage is absent, incomplete or invalid', () => {
+    const t = new TurnTranscript('t1');
+    for (const usage of [undefined, {}, { input_tokens: 1 }, { input_tokens: 1, cache_read_input_tokens: -1, cache_creation_input_tokens: 0 }]) {
+      expect(t.accept(stream({ type: 'message_start', message: { id: 'm1', usage } }))).toEqual([]);
+    }
+  });
   it('shortens shell summaries before clipping and preserves the full input', () => {
     const t = new TurnTranscript('t1');
     const script = 'Get-Content ' + 'a'.repeat(220);
@@ -333,6 +356,11 @@ describe('harnessEnv', () => {
       CLAUDE_CONFIG_DIR: '/accio/profiles/hrc/claude',
       ANTHROPIC_BASE_URL: 'http://127.0.0.1:47322',
       ANTHROPIC_AUTH_TOKEN: 'accio-hrc-key',
+      CLAUDE_CODE_PROMPT_CACHE_TTL: '1h',
     });
+  });
+
+  it('keeps an explicit main-conversation cache duration', () => {
+    expect(harnessEnv({ CLAUDE_CODE_PROMPT_CACHE_TTL: '5m' }, hrc, '/config').CLAUDE_CODE_PROMPT_CACHE_TTL).toBe('5m');
   });
 });
