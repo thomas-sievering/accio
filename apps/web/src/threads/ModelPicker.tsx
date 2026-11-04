@@ -155,7 +155,9 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
       </button>
       <div id={effortId} ref={effortMenu} popover="auto" className="menu effort-menu" role="menu" aria-label="Effort" style={effortPosition}>
         {effort.steps.map((step, i) => <button type="button" key={step.label} role="menuitemradio" className="menu-item" aria-checked={i === stepper.shown}
-          onClick={() => { stepper.settle(i); effortMenu.current?.hidePopover(); }}>{step.label}</button>)}
+          onClick={() => { stepper.commit(i); effortMenu.current?.hidePopover(); }}>
+          <span>{step.label}</span><span className="model-picker-check" aria-hidden>{i === stepper.shown && <Check />}</span>
+        </button>)}
       </div>
     </>}
     <div id={id} ref={panel} popover="auto" className="model-picker" style={position} role="dialog" aria-label="Choose a model" onKeyDown={move}

@@ -187,18 +187,18 @@
 /* When narrow, the project name (with its separator) gives way before the status does. */
 .row-project-name {
   flex: 0 1 auto;
-  min-width: 0;
+  min-width: min(10ch, 100%);
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .row-project.with-state > .row-project-name::after {
   content: ' ·';
 }
-/* The status never shares the squeeze (even a fraction would ellipsize it); it truncates only past the full width. */
+/* The status gives way first: the project name keeps a readable minimum. */
 .row-state {
   display: flex;
-  flex: none;
-  max-width: 100%;
+  flex: 0 100 auto;
+  min-width: 0;
 }
 .row-state-label {
   min-width: 0;
@@ -215,26 +215,6 @@
   height: 11px;
   stroke-width: 2.4;
 }
-/* Shelved rows keep their delivery outcome beside the title, including on hover. */
-.row-badge {
-  display: inline-flex;
-  flex: 0 1 auto;
-  align-items: center;
-  gap: 3px;
-  min-width: 0;
-  max-width: 50%;
-  overflow: hidden;
-  font-size: 11.5px;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-.row-badge svg {
-  flex: none;
-  width: 11px;
-  height: 11px;
-  stroke-width: 2.4;
-}
 .row.open .row-status {
   position: absolute;
   inset-inline-end: 8px;
@@ -243,6 +223,37 @@
   position: absolute;
   inset-inline-end: 4px;
   padding: 0;
+}
+
+/* Keyboard focus shows a long title in full (two lines) since it has no tooltip. */
+.row.open:has(.row-main:focus-visible) {
+  height: auto;
+  min-height: 44px;
+}
+.row.open .row-main:focus-visible .row-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+/* Renaming edits the title in place. */
+.row.renaming .row-actions {
+  display: none;
+}
+.row-rename input {
+  width: 100%;
+  min-width: 0;
+  height: 17px;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--blue);
+  border-radius: 0;
+  outline: 0;
+  background: none;
+  color: var(--ink-strong);
+  font: inherit;
+  line-height: 17px;
 }
 
 /* Snoozed and Settled shelves, below the list inside the sidebar's scroll region. */
@@ -373,7 +384,7 @@
 /* Transcript (botbot's chat column) */
 .messages {
   --chat-width: 760px;
-  --message-width: 720px;
+  --message-width: 100%;
   flex: 1;
   overflow-y: auto;
   padding: 12px 16px 24px;
@@ -401,9 +412,9 @@
   font-style: italic;
 }
 .msg.assistant {
-  align-self: flex-start;
+  align-self: stretch;
   min-width: 0;
-  width: min(var(--message-width), 92%);
+  max-width: 100%;
 }
 .msg.assistant > :first-child {
   margin-top: 0;
@@ -453,10 +464,9 @@
 
 .tool {
   position: relative;
-  align-self: flex-start;
+  align-self: stretch;
   min-width: 0;
-  width: min(var(--message-width), 92%);
-  max-width: min(var(--message-width), 92%);
+  max-width: 100%;
 }
 .tool button {
   display: flex;
@@ -659,7 +669,7 @@
 }
 .notice {
   align-self: center;
-  max-width: min(var(--message-width), 92%);
+  max-width: 100%;
   padding: 4px 10px;
   font-size: 12.5px;
   color: var(--muted);
@@ -757,6 +767,8 @@
 .effort-trigger { display: inline-flex; align-items: center; padding: 5px 6px; border-radius: 6px; flex: none; }
 .effort-trigger:hover:not(:disabled) { background: var(--hover); }
 .effort-trigger:disabled { cursor: default; opacity: 0.6; }
+.effort-menu .menu-item { justify-content: space-between; }
+.model-trigger svg { fill: currentColor; }
 .menu.effort-menu { position: fixed; inset: auto; position-area: none; position-try-fallbacks: none; width: 160px; margin: 0; }
 .model-picker {
   position: fixed;

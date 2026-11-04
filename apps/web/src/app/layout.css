@@ -296,6 +296,14 @@
   .layout.with-panel .resizer-right {
     display: none;
   }
+  /* Dims the covered thread; clicking it closes the panel. */
+  .panel-scrim {
+    position: absolute;
+    inset-block: 0;
+    inset-inline: var(--sidebar-w, 272px) 0;
+    z-index: 3;
+    background: #0006;
+  }
   .layout.with-panel .main-top {
     padding-inline-end: calc(var(--caption) + 48px);
   }

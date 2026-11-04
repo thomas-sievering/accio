@@ -82,3 +82,11 @@
   width: 30px;
   color: var(--muted);
 }
+/* Delete asks once more: Cancel beside the destructive item. */
+.menu-confirm {
+  display: flex;
+  gap: 4px;
+}
+.menu-confirm .menu-item {
+  justify-content: center;
+}

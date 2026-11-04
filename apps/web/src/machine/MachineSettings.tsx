@@ -25,7 +25,7 @@ export function MachineSettings({ machineId, onOpen, onBack, onOpenThread }: { m
         {machines.length === 0 && <SettingRow title="No machines connected yet" />}
         {machines.map((m) => (
           <button key={m.id} className="setting setting-link" onClick={() => onOpen(m.id)}>
-            <Monitor />
+            <span className="menu-icon"><Monitor /></span>
             <span className="setting-text">
               <b>{m.name}{m.thisMachine ? ' (this machine)' : ''}</b>
               <small>{m.platform} · {m.harnesses.length} harness{m.harnesses.length === 1 ? '' : 'es'}</small>

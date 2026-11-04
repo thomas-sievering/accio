@@ -8,7 +8,7 @@ import { TestClient } from '../apps/server/src/testing/testApp.js';
 const exec = promisify(execFile);
 const git = async (cwd: string, ...args: string[]) => (await exec('git', ['-C', cwd, ...args], { windowsHide: true })).stdout.trim();
 
-test('review-only PR stays visible until an external merge, then settles with a durable receipt and can be reopened', async ({ page, baseURL }, info) => {
+test('review-only PR stays visible until an external merge, then settles without a transcript receipt and can be reopened', async ({ page, baseURL }, info) => {
   test.setTimeout(60_000);
   await page.goto(`${baseURL}/#token=isolated-chat-test-token`);
   await page.getByRole('button', { name: 'New thread', exact: true }).first().click();
@@ -59,8 +59,9 @@ test('review-only PR stays visible until an external merge, then settles with a 
     await expect(page.locator('.composer textarea')).toHaveAttribute('placeholder', 'Send a message to reopen this thread…');
     const shelf = page.getByRole('button', { name: /^Settled/ });
     if (await shelf.getAttribute('aria-expanded') === 'false') await shelf.click();
-    await expect(page.locator('.shelf .row.active')).toContainText('Merged #123');
-    await expect(page.getByText(/PR #123 merged into main/)).toBeVisible();
+    await expect(page.locator('.shelf .row.active')).toContainText(/Merged into .*#123/);
+    await expect(actions).toContainText('Merged into main');
+    await expect(page.locator('.thread .notice')).toHaveCount(0);
     await page.locator('.shelf .row.active').screenshot({ path: info.outputPath('merged-sidebar.png') });
     await actions.screenshot({ path: info.outputPath('merged-delivery.png') });
     const saved = (await client.call('threads.list', {})).find(t => t.id === thread.id)!;
@@ -72,7 +73,7 @@ test('review-only PR stays visible until an external merge, then settles with a 
     await expect(actions.getByRole('button', { name: 'Reopen', exact: true })).toHaveCount(0);
     expect((await client.call('threads.list', {})).find(t => t.id === thread.id)!.settledAt).toBeNull();
     const items = await client.call('threads.transcript', { threadId: thread.id });
-    expect(items.filter(item => item.kind === 'notice' && item.id.endsWith(':completed'))).toHaveLength(1);
+    expect(items.filter(item => item.kind === 'notice' && item.id.endsWith(':completed'))).toHaveLength(0);
     expect(items.filter(item => item.kind === 'user' && item.delivery === 'review')).toHaveLength(1);
   } finally { client.close(); }
 });

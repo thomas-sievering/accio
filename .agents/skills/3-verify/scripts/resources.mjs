@@ -44,7 +44,7 @@ export default async function journey({ page, runDir, home, fixture, action, cap
     await textbox('Version').fill('0.1.23');
     assert.equal(await page.getByRole('checkbox').count(), 0);
     await button('Add tool').click();
-    await page.getByRole('heading', { name: 'Playwright CLI', exact: true }).waitFor();
+    await page.getByRole('main').getByRole('navigation').getByText('Playwright CLI', { exact: true }).waitFor();
     await page.getByRole('group', { name: /\(this machine\): Ready$/ }).waitFor({ timeout: 180_000 });
     const tool = (await resources()).tools.find((t) => t.id === 'playwright-cli');
     assert(!('scope' in tool));
@@ -61,7 +61,7 @@ export default async function journey({ page, runDir, home, fixture, action, cap
     await textbox('Version').fill('0.0.1');
     await textbox('Executable').fill('accio-missing');
     await button('Add tool').click();
-    await page.getByRole('heading', { name: 'Broken tool', exact: true }).waitFor();
+    await page.getByRole('main').getByRole('navigation').getByText('Broken tool', { exact: true }).waitFor();
     await page.getByRole('group', { name: /\(this machine\): Needs attention$/ }).waitFor({ timeout: 180_000 });
     await page.getByText(/^No repair thread: Sign in to a provider/).waitFor();
     assert(await button('Start repair thread').isEnabled());
@@ -82,7 +82,7 @@ export default async function journey({ page, runDir, home, fixture, action, cap
     await textbox('Server URL').fill('https://example.invalid/mcp');
     await page.getByRole('combobox', { name: 'Authentication' }).selectOption('bearer');
     await button('Add MCP server').click();
-    await page.getByRole('heading', { name: 'Linear (work)', exact: true }).waitFor();
+    await page.getByRole('main').getByRole('navigation').getByText('Linear (work)', { exact: true }).waitFor();
     await textbox('Bearer token').fill('verify-secret-token');
     await button('Save token').click();
     await page.getByText(/A token is saved on the hub/).waitFor();
@@ -102,7 +102,7 @@ export default async function journey({ page, runDir, home, fixture, action, cap
     await textbox('Server URL').fill('https://example.invalid/mcp');
     await page.getByRole('combobox', { name: 'Authentication' }).selectOption('oauth');
     await button('Add MCP server').click();
-    await page.getByRole('heading', { name: 'Linear (personal)', exact: true }).waitFor();
+    await page.getByRole('main').getByRole('navigation').getByText('Linear (personal)', { exact: true }).waitFor();
     await page.getByText(/Signed out\. Threads can’t use/).waitFor();
     await button('Sign in').click();
     const alert = page.getByRole('alert');
@@ -119,7 +119,7 @@ export default async function journey({ page, runDir, home, fixture, action, cap
     await textbox('Command').fill('node');
     await page.getByRole('textbox', { name: 'Arguments, one per line' }).fill('-e\nprocess.stdin.resume()');
     await button('Add MCP server').click();
-    await page.getByRole('heading', { name: 'Local echo', exact: true }).waitFor();
+    await page.getByRole('main').getByRole('navigation').getByText('Local echo', { exact: true }).waitFor();
     const m = (await resources()).mcps.find((x) => x.name === 'Local echo');
     assert.deepEqual(m.args, ['-e', 'process.stdin.resume()']);
     assert.equal(m.auth, 'none');
@@ -143,7 +143,7 @@ export default async function journey({ page, runDir, home, fixture, action, cap
     await textbox('Name').fill('Verify skills');
     await textbox('Git URL').fill(source);
     await button('Add source').click();
-    await page.getByRole('heading', { name: 'Verify skills', exact: true }).waitFor({ timeout: 60_000 });
+    await page.getByRole('main').getByRole('navigation').getByText('Verify skills', { exact: true }).waitFor({ timeout: 60_000 });
     await page.getByText('First description').waitFor();
     await page.getByText('Optional', { exact: true }).waitFor();
   });

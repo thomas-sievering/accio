@@ -141,7 +141,7 @@ function McpForm({ mcp, taken, onSaved, onDone }: { mcp?: McpView; taken: string
       </form>
       {mcp && mcp.transport === 'http' && mcp.auth !== 'none' && <McpCredentials key={`${mcp.id}:${mcp.auth}:${mcp.url}`} mcp={mcp} />}
       {error && <p className="error" role="alert">{error}</p>}
-      <SettingsFooter remove={mcp && { name: mcp.name, run: remove, consequence: 'Its saved sign-in goes too.' }} busy={busy} onCancel={onDone} saveLabel={mcp ? 'Save' : 'Add MCP server'} saveForm="mcp-form" saveDisabled={busy || (!!mcp && !changed) || (touched && invalid)} />
+      <SettingsFooter remove={mcp && { name: mcp.name, run: remove, consequence: mcp.transport === 'http' && mcp.auth !== 'none' ? 'Its saved sign-in goes too.' : undefined }} busy={busy} onCancel={onDone} saveLabel={mcp ? 'Save' : 'Add MCP server'} saveForm="mcp-form" saveDisabled={busy || (!!mcp && !changed) || (touched && invalid)} />
     </div>
   );
 }

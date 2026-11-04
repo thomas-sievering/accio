@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { HubSettings } from '../hub/HubSettings';
 import { MachineSettings } from '../machine/MachineSettings';
 import { HarnessesSettings } from '../harnesses/HarnessesSettings';
@@ -10,8 +10,9 @@ import { SecretsSettings, type SecretsRoute } from '../secrets/SecretsSettings';
 import { ToolsSettings } from '../tools/ToolsSettings';
 import { McpSettings } from '../mcp/McpSettings';
 import { SkillsSettings } from '../skills/SkillsSettings';
+import { ProjectsSettings } from '../projects/ProjectsSettings';
 import { useResources } from '../resources/resources';
-import { ArrowLeft, BookOpen, Chevron, Hub, IdCard, Key, Layers, Monitor, Plug, ScrollText, Users, Wrench } from './icons';
+import { ArrowLeft, BookOpen, Chevron, Hub, Folder, IdCard, Key, Layers, Monitor, Plug, ScrollText, Users, Wrench } from './icons';
 import { useClient } from './connection';
 import { useLive } from './useLive';
 import { SidebarResizer } from './Resizer';
@@ -19,7 +20,7 @@ import { HubSelector } from '../hub/HubSelector';
 
 /** Where Settings is open. `profileId` opens one profile ('new' to add one). */
 export type SettingsRoute = { section: 'profiles'; profileId?: string } | { section: 'accounts'; accountId?: string } | ({ section: 'secrets' } & SecretsRoute) | { section: 'hub'; hubId?: string } | { section: 'harnesses' } | { section: 'systemPrompt' } | { section: 'machines'; machineId?: string }
-  | { section: 'tools'; toolId?: string } | { section: 'mcps'; mcpId?: string } | { section: 'skills'; sourceId?: string };
+  | { section: 'tools'; toolId?: string } | { section: 'mcps'; mcpId?: string } | { section: 'skills'; sourceId?: string } | { section: 'projects'; projectId?: string };
 type Section = SettingsRoute['section'];
 
 const GROUPS: { label?: string; items: { id: Section; label: string; icon: ReactNode }[] }[] = [
@@ -35,6 +36,7 @@ const GROUPS: { label?: string; items: { id: Section; label: string; icon: React
     { id: 'tools', label: 'Tools', icon: <Wrench /> },
     { id: 'mcps', label: 'MCP servers', icon: <Plug /> },
     { id: 'skills', label: 'Skills', icon: <BookOpen /> },
+    { id: 'projects', label: 'Projects', icon: <Folder /> },
   ] },
   {
     label: 'Connections',
@@ -68,15 +70,21 @@ export function Settings({ route, onRoute, onClose, onOpenThread }: { route: Set
   const hubLabel = route.section === 'hub' && route.hubId ? 'Add hub' : undefined;
   const detailLabel = profileLabel || accountLabel || secretLabel || resourceLabel || machineLabel || hubLabel;
 
+  const inDetail = !!(profileId || accountId || toolId || mcpId || sourceId || (route.section === 'secrets' && route.secretId) || (route.section === 'machines' && route.machineId) || (route.section === 'hub' && route.hubId));
+  // Escape goes up one level and leaves Settings only from a top-level page; an open inline confirmation takes it first (useEscape).
+  const escape = useRef<() => void>(() => undefined);
+  escape.current = () => (inDetail ? onRoute(backTo) : onClose());
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // Escape inside a field only leaves the field.
       const t = e.target;
-      if (e.key === 'Escape' && !(t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement)) onClose();
+      // A sheet over Settings (project settings) takes Escape itself.
+      if (document.querySelector('dialog[open]')) return;
+      if (e.key === 'Escape' && !(t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement)) escape.current();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, []);
 
   return (
     <div className="layout">
@@ -142,12 +150,29 @@ export function Settings({ route, onRoute, onClose, onOpenThread }: { route: Set
             {route.section === 'tools' && <ToolsSettings key={toolId ?? ''} toolId={toolId} onOpen={(id) => onRoute({ section: 'tools', toolId: id })} onBack={() => onRoute({ section: 'tools' })} onOpenThread={onOpenThread} />}
             {route.section === 'mcps' && <McpSettings key={mcpId ?? ''} mcpId={mcpId} onOpen={(id) => onRoute({ section: 'mcps', mcpId: id })} onBack={() => onRoute({ section: 'mcps' })} />}
             {route.section === 'skills' && <SkillsSettings key={sourceId ?? ''} sourceId={sourceId} onOpen={(id) => onRoute({ section: 'skills', sourceId: id })} onBack={() => onRoute({ section: 'skills' })} />}
+            {route.section === 'projects' && <ProjectsSettings projectId={route.projectId} onOpen={(projectId) => onRoute({ section: 'projects', projectId })} onRoute={onRoute} />}
             {route.section === 'machines' && <MachineSettings machineId={route.machineId} onOpen={(machineId) => onRoute({ section: 'machines', machineId })} onBack={() => onRoute({ section: 'machines' })} onOpenThread={onOpenThread} />}
           </div>
         </div>
       </main>
     </div>
   );
+}
+
+/** While `active` (an inline confirmation is open), Escape cancels it and goes no further: this capture listener runs before Settings' own Escape handling. */
+export function useEscape(active: boolean, cancel: () => void) {
+  const latest = useRef(cancel);
+  latest.current = cancel;
+  useEffect(() => {
+    if (!active) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      latest.current();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [active]);
 }
 
 /** A titled group of settings, drawn as one card. */
@@ -166,9 +191,10 @@ export function StatusPill({ tone, children }: { tone?: 'ok' | 'bad' | 'warn' | 
 }
 
 /** One setting: what it is on the left, its value or control on the right. */
-export function SettingRow({ title, description, children }: { title: ReactNode; description?: ReactNode; children?: ReactNode }) {
+export function SettingRow({ icon, title, description, children }: { icon?: ReactNode; title: ReactNode; description?: ReactNode; children?: ReactNode }) {
   return (
     <div className="setting">
+      {icon && <span className="menu-icon">{icon}</span>}
       <div className="setting-text">
         <b>{title}</b>
         {description && <small>{description}</small>}
@@ -204,7 +230,7 @@ export function SettingLink({ icon, title, description, warn, chevron = true, on
 
 /**
  * The one footer of every settings detail page: Delete on the left (it asks inline, naming what it deletes),
- * Cancel and Save on the right. Without `saveLabel` the page has nothing to save and offers Back.
+ * Cancel and Save on the right. Without `saveLabel` the page has nothing to save and offers Done.
  * Delete stays visible but disabled, with `blocked` as its reason, when the thing is in use.
  */
 export function SettingsFooter({ remove, busy, onCancel, saveLabel, saveDisabled, saveForm, onSave }: {
@@ -219,6 +245,7 @@ export function SettingsFooter({ remove, busy, onCancel, saveLabel, saveDisabled
   onSave?: () => void;
 }) {
   const [confirming, setConfirming] = useState(false);
+  useEscape(confirming, () => setConfirming(false));
   return (
     <footer className="settings-actions">
       {remove && (confirming ? (
@@ -236,7 +263,7 @@ export function SettingsFooter({ remove, busy, onCancel, saveLabel, saveDisabled
       <span className="spacer" />
       {!confirming && (
         <>
-          <button type="button" className="ghost" disabled={busy} onClick={onCancel}>{saveLabel ? 'Cancel' : 'Back'}</button>
+          <button type="button" className="ghost" disabled={busy} onClick={onCancel}>{saveLabel ? 'Cancel' : 'Done'}</button>
           {saveLabel && (
             <button type={onSave ? 'button' : 'submit'} form={onSave ? undefined : saveForm} className="ghost primary" disabled={saveDisabled} onClick={onSave}>{saveLabel}</button>
           )}

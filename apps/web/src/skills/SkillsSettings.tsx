@@ -9,6 +9,7 @@ import { useProjects } from '../projects/projects';
 import { isOptional, LoadError, scopeSummary, shortRevision, slugId, useResources } from '../resources/resources';
 import { ScopeEditor } from '../resources/ScopeEditor';
 import { Field } from '../resources/Field';
+import { MidPath } from '../projects/MidPath';
 
 const activeRevision = (state: ResourcesState, sourceId: string) => state.skills.find((s) => s.sourceId === sourceId)?.revision;
 
@@ -118,7 +119,7 @@ function SourceDetail({ source, state, onDeleted }: { source: SkillSource; state
   return (
     <>
       <SettingsSection>
-        <SettingRow title="Repository"><code>{source.url}</code></SettingRow>
+        <SettingRow title="Repository"><MidPath text={source.url} /></SettingRow>
         <SettingRow title="Follows"><code>{source.ref}</code></SettingRow>
         <SettingRow title="Active revision" description="Threads get skills from this revision until you apply another.">
           {active ? <code title={active}>{shortRevision(active)}</code> : <span className="dim">None</span>}

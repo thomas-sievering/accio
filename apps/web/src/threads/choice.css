@@ -1,7 +1,7 @@
 /* A choice: bare screenshots in a row, as in Krea and ChatGPT; picks show as an outline and a tick. */
 .choice {
   align-self: stretch;
-  max-width: var(--message-width);
+  max-width: 100%;
   padding: 0 12px;
 }
 .choice-question {
@@ -63,8 +63,8 @@
   right: 6px;
   display: grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   background: #000a;
   border: 1px solid var(--line-2);
@@ -72,7 +72,7 @@
   opacity: 0;
   transition: opacity 0.12s;
 }
-.choice-check svg { width: 13px; height: 13px; stroke-width: 3; }
+.choice-check svg { width: 15px; height: 15px; stroke-width: 3; }
 .choice-frame:hover .choice-check,
 .choice-check:focus-visible { opacity: 1; color: var(--muted); }
 .choice-check:hover { color: var(--ink-strong); }

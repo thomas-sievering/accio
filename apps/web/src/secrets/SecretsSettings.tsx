@@ -2,7 +2,7 @@ import { useId, useState, type KeyboardEvent } from 'react';
 import { SecretSlot, type ProfileView, type ProjectView, type SecretSummary } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { Plus } from '../app/icons';
-import { SettingsFooter, SettingsSection } from '../app/Settings';
+import { SettingsFooter, SettingsSection, useEscape } from '../app/Settings';
 import { useAction } from '../app/useAction';
 import { useProfiles } from '../profiles/profiles';
 import { useProjects } from '../projects/projects';
@@ -40,9 +40,10 @@ export function SecretsSettings({ route, onRoute }: { route: SecretsRoute; onRou
             {!profile && <option value="">Choose a profile</option>}
             {profiles.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
-          <small className="hint">Secrets belong to one profile and are only offered to its threads.</small>
         </label>
       )}
+
+      {!formOpen && <p className="note">Tokens and keys a profile’s threads can use. Values can be replaced, never shown.</p>}
 
       {!profile ? <p className="note">That profile no longer exists. Choose another.</p>
         : store?.available === false && <p className="note" role="status">Saved secrets are unavailable{store.reason ? `: ${store.reason}` : '.'} Threads can still use a secret once.</p>}
@@ -102,11 +103,10 @@ function SecretList({ profile, secrets, error, retry, canWrite, projectName, onA
           ))}
           <button type="button" className="setting setting-link" disabled={!canWrite} onClick={onAdd}>
             <span className="menu-icon"><Plus /></span>
-            <span className="setting-text"><b>Add secret</b><small>A token or key this profile’s threads can use.</small></span>
+            <span className="setting-text"><b>Add secret</b></span>
           </button>
         </div>
       </section>
-      <p className="secrets-note">Values can be replaced but never shown again. Deleting removes Accio’s copy; revoke the token at the service too.</p>
     </>
   );
 }
@@ -114,6 +114,7 @@ function SecretList({ profile, secrets, error, retry, canWrite, projectName, onA
 function SecretRow({ secret: s, access, canWrite, onEdit, onReplace }: { secret: SecretSummary; access: string; canWrite: boolean; onEdit: () => void; onReplace: () => void }) {
   const client = useClient();
   const [confirming, setConfirming] = useState(false);
+  useEscape(confirming, () => setConfirming(false));
   const { busy, error, run } = useAction();
   const remove = () => void run(() => client.call('secrets.delete', { id: s.id }));
   return (
@@ -177,12 +178,21 @@ function SecretForm({ profile: initial, profiles, projects: allProjects, store, 
   const slotOk = SecretSlot.safeParse(slot).success;
   const tooLarge = valueProblem(value);
   const storeDown = writesValue && store?.available === false;
-  const ready = !busy && !storeDown && (!editsMetadata || (name.trim() && slotOk)) && (!writesValue || (value.length > 0 && !tooLarge));
+  const ready = !busy && !storeDown;
+  // Empty fields are reported when Save is pressed, not by a dead button.
+  const [tried, setTried] = useState(false);
+  const problem = editsMetadata && !name.trim() ? 'Enter a name for the secret.'
+    : editsMetadata && !slot.trim() ? 'Enter a purpose key.'
+      : editsMetadata && !slotOk ? 'Use letters, numbers and . _ : / - only in the purpose key, starting with a letter or number.'
+        : writesValue && !value.length ? 'Paste the secret’s value.'
+          : undefined;
   // Projects that were removed stay in the list until unticked, so saving never narrows access silently.
   const listed: { id: string; name: string }[] = [...projects, ...chosen.filter((id) => !projects.some((p) => p.id === id)).map((id) => ({ id, name: 'Removed project' }))];
 
   const submit = async () => {
     if (!ready) return;
+    setTried(true);
+    if (problem || tooLarge) return;
     setBusy(true);
     setError(undefined);
     const typed = value;
@@ -290,7 +300,7 @@ function SecretForm({ profile: initial, profiles, projects: allProjects, store, 
           ) : (
             <p className="note">The value is not shown. <button type="button" className="link" onClick={onReplace} disabled={store?.available === false}>Replace value</button></p>
           )}
-          {error && <p className="error" role="alert">{error}</p>}
+          {(tried && problem) || error ? <p className="error" role="alert">{(tried && problem) || error}</p> : null}
           {storeDown && <p className="note">Saving values is unavailable right now.</p>}
         </div>
       </SettingsSection>

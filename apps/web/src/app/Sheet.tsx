@@ -7,7 +7,11 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
   const titleId = useId();
   useEffect(() => {
     const d = ref.current;
-    if (d && !d.open) d.showModal();
+    if (d && !d.open) {
+      d.showModal();
+      // React's autoFocus runs before the dialog opens, so a sheet names its first field here.
+      d.querySelector<HTMLElement>('[data-autofocus]')?.focus();
+    }
   }, []);
   return (
     <dialog

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { SkillContext } from '@accio/protocol';
 import { McpPanel } from '../mcp/McpPanel';
 import { SkillsPanel } from '../skills/SkillsPanel';
@@ -13,6 +13,16 @@ export function usePanelOpen() {
   const [open, setOpen] = useState(() => localStorage.getItem(KEY) === '1');
   const toggle = () => setOpen((was) => { localStorage.setItem(KEY, was ? '0' : '1'); return !was; });
   return [open, toggle] as const;
+}
+
+const NARROW = '(max-width: 1100px)';
+
+/** Whether the window is narrow enough for the side panel to overlay the thread instead of splitting it. */
+export function useNarrow() {
+  return useSyncExternalStore(
+    (notify) => { const q = window.matchMedia(NARROW); q.addEventListener('change', notify); return () => q.removeEventListener('change', notify); },
+    () => window.matchMedia(NARROW).matches,
+  );
 }
 
 /** Sits just left of the window's own caption buttons, whichever pane is showing. */
@@ -33,7 +43,7 @@ const TAB_KEY = 'accio.panelTab';
  * The right-hand side panel: what sits beside the open thread or draft, one tab
  * at a time. The tab strip sits under the caption row, clear of its buttons.
  */
-export function SidePanel() {
+export function SidePanel({ overlay = false }: { overlay?: boolean }) {
   const { threads, selectedId, draft } = useThreads();
   const [tab, setTab] = useState<Tab>(() => (localStorage.getItem(TAB_KEY) === 'mcp' ? 'mcp' : 'skills'));
   const tabRefs = useRef<Partial<Record<Tab, HTMLButtonElement | null>>>({});
@@ -43,6 +53,8 @@ export function SidePanel() {
     ? draft.checkoutId ? { checkoutId: draft.checkoutId, ...(draft.profileId ? { profileId: draft.profileId } : {}) } : draft.profileId ? { profileId: draft.profileId } : undefined
     : thread ? { threadId: thread.id } : undefined;
   const key = context ? JSON.stringify(context) : '';
+  // An overlay takes focus with it when it opens.
+  useEffect(() => { if (overlay) tabRefs.current[tab]?.focus(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const select = (next: Tab, focus = false) => {
     setTab(next);
     localStorage.setItem(TAB_KEY, next);

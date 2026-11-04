@@ -107,9 +107,9 @@ test('MCP tab lists every MCP server, flags sign-in and opens settings', async (
   await expect(mcp.getByRole('heading', { name: 'Servers 2' })).toBeVisible();
   await expect(row('docs-search')).toContainText('Remote');
   await expect(row('docs-search')).toContainText('https://mcp.example.test/docs');
-  await expect(mcp.getByRole('button', { name: 'docs-search: sign in' })).toBeVisible();
+  await expect(row('docs-search')).toContainText('Signed out');
   await expect(row('local-db')).toContainText('db-mcp --readonly');
-  await expect(row('local-db').getByRole('button', { name: /sign in/ })).toHaveCount(0);
+  await expect(row('local-db')).not.toContainText('Signed out');
   await page.screenshot({ path: testInfo.outputPath('mcp-panel.png') });
 
   // Arrow keys move between tabs, and the choice is remembered.

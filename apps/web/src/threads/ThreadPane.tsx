@@ -1,6 +1,6 @@
 import type { CheckoutView, ChoicePick, ProjectView, ThreadView } from '@accio/protocol';
 import { type ModelSelection } from '@accio/protocol';
-import { useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { useClient } from '../app/connection';
 import { useLive } from '../app/useLive';
 import { accountForModel, defaultModel, useProfiles } from '../profiles/profiles';
@@ -40,7 +40,8 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
   const blocked = thread.status === 'failed' || thread.status === 'interrupted';
   const notices = blocked ? items?.filter((item) => item.kind === 'notice' && item.turnId === lastTurn) : undefined;
   const detail = notices?.map((item) => 'text' in item ? item.text : '').join(' ') || undefined;
-  const visibleItems = blocked ? items?.filter((item) => item.kind !== 'notice' || item.turnId !== lastTurn) : items;
+  // The delivery chip says where it shipped; older threads still hold a receipt notice for it.
+  const visibleItems = useMemo(() => items?.filter((item) => item.kind !== 'notice' || !/^delivery:.*:completed$/.test(item.id) && !(blocked && item.turnId === lastTurn)), [items, blocked, lastTurn]);
   // The option ticked for the next message; it belongs to this thread only.
   const [pending, setPending] = useState<{ threadId: string; pick: ChoicePick }>();
   const pick = pending?.threadId === thread.id ? pending.pick : undefined;
@@ -104,7 +105,8 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
   const machineId = chosenMachineId ?? local?.id;
   const machine = machines?.find((m) => m.id === machineId);
   const online = machines?.filter((m) => m.connected) ?? [];
-  const unavailable = !machine?.connected;
+  // Until the list loads, a send goes to this machine, as the server does without a machine id.
+  const unavailable = !!machines && !machine?.connected;
   const remote = !!machine && !machine.thisMachine;
 
   return (

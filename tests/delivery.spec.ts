@@ -147,10 +147,13 @@ test('Ship menu, queued cancellation, owned preview, delivery, Archive and follo
   await expect(actions.getByRole('status')).toContainText('Shipped to main', { timeout: 20_000 });
   await expect(page.getByText('Ship to main when ready.', { exact: true })).toHaveCount(1);
   // Verified direct delivery settles automatically, keeps the conversation selected and retains its workspace.
-  await expect(actions).toContainText('Thread settled · Workspace retained');
+  await expect(actions).toContainText('Settled');
+  await expect(actions).toContainText('Workspace retained');
   await expect(page.locator('.composer textarea')).toHaveAttribute('placeholder', 'Send a message to reopen this thread…');
   await expect(page.locator('.row.settled.active')).toContainText('main');
-  await expect(page.getByText(/^Shipped to main · [0-9a-f]{7}$/)).toHaveCount(1);
+  // The outcome is said once, by the chip; the transcript carries no receipt line.
+  await expect(actions.locator('.delivery-rev')).toHaveText(/^[0-9a-f]{7}$/);
+  await expect(page.locator('.thread .notice')).toHaveCount(0);
   await expect(actions.getByRole('button', { name: 'Reopen', exact: true })).toBeVisible();
   await expect(actions.getByRole('button', { name: 'Archive', exact: true })).toBeEnabled();
   await page.screenshot({ path: testInfo.outputPath('ship-delivered.png') });

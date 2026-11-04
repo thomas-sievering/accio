@@ -46,6 +46,7 @@ export function FirstRun() {
           <SetUpAccount key={unsigned.id} profile={unsigned} />
         </Screen>
       )}
+      {current === 2 && (state?.projects.length ?? 0) > 0 && <p className="first-run-sub" role="status">Added {state!.projects.map((p) => p.name).join(', ')}.</p>}
       {current === 3 && (
         <Screen title="Add your first project" sub="Point Accio at a folder with code in it.">
           <AddProjectForm />
@@ -140,17 +141,25 @@ function SetUpAccount({ profile }: { profile: ProfileView }) {
   const client = useClient();
   const { accounts } = useProfiles();
   const [selected, setSelected] = useState('');
-  const [providerId, setProviderId] = useState<'anthropic' | 'openai'>('anthropic');
+  const started = profile.providers.find((p) => p.accounts.length > 0);
+  const [providerId, setProviderId] = useState<'anthropic' | 'openai'>(started?.id ?? 'anthropic');
+  // Signing in comes after picking; Back returns to the pick to change provider.
+  const [signingIn, setSigningIn] = useState(!!started);
   const { busy, error, run } = useAction();
   const account = profile.providers.find((p) => p.id === providerId)?.accounts[0];
-  if (account) return <SignIn account={account} />;
+  if (account && signingIn) return <>
+    <SignIn account={account} />
+    <button type="button" className="link first-run-back" onClick={() => setSigningIn(false)}>Back</button>
+  </>;
   const provider = providers.find((p) => p.id === providerId)!;
   const existing = accounts?.filter((a) => a.providerId === providerId) ?? [];
   const submit = (e: FormEvent) => {
     e.preventDefault();
+    if (account) return setSigningIn(true);
     void run(async () => {
       const id = selected || (await client.call('accounts.save', { name: `${profile.name} ${provider.name}`, providerId })).id;
       await client.call('profiles.save', { id: profile.id, name: profile.name, ...(providerId === 'openai' ? { openaiAccountId: id } : { accountId: id }) });
+      setSigningIn(true);
     });
   };
   return <form className="field" onSubmit={submit}>

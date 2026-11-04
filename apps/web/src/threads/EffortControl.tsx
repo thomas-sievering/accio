@@ -20,7 +20,7 @@ export function effortSteps(model: ModelView, value: string | undefined) {
 
 /** A little rolling spring on changes; reserve the labels' width so the chip stays still. */
 export function EffortWord({ steps, index }: { steps: Step<string | undefined>[]; index: number }) {
-  const label = steps[index]?.label.toLowerCase() ?? 'auto';
+  const label = steps[index]?.label ?? 'Auto';
   const incoming = useRef<HTMLSpanElement>(null);
   const outgoing = useRef<HTMLSpanElement>(null);
   const previous = useRef({ label, index });
@@ -45,7 +45,7 @@ export function EffortWord({ steps, index }: { steps: Step<string | undefined>[]
   }, [label, index]);
 
   return <span className="effort-word" aria-hidden>
-    {steps.map((step) => <span className="effort-word-size" key={step.label}>{step.label.toLowerCase()}</span>)}
+    {steps.map((step) => <span className="effort-word-size" key={step.label}>{step.label}</span>)}
     <span ref={outgoing} className="effort-word-out" />
     <span ref={incoming} className="effort-word-current">{label}</span>
   </span>;

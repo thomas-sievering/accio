@@ -20,21 +20,38 @@ export function useSteps<T>(steps: Step<T>[], index: number, onChange: (value: T
   const [pending, setPending] = useState<number>();
   const [bump, setBump] = useState(0);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  useEffect(() => () => clearTimeout(timer.current), []);
+  /** The save waiting for scrolling to settle, so leaving the page cannot drop it. */
+  const flush = useRef<() => void>(undefined);
+  useEffect(() => {
+    const leave = () => flush.current?.();
+    window.addEventListener('pagehide', leave);
+    return () => { window.removeEventListener('pagehide', leave); clearTimeout(timer.current); };
+  }, []);
   const shown = pending ?? index;
 
+  const save = async (to: number) => {
+    clearTimeout(timer.current);
+    flush.current = undefined;
+    const step = steps[to];
+    // An unavailable level can be looked at on the slider but not chosen.
+    if (!step || step.unavailable || to === index) { setPending(undefined); return; }
+    try { await onChange(step.value); }
+    catch (err) { onError((err as Error).message); }
+    finally { setPending(undefined); }
+  };
+  /** Previews a level at once and saves it once scrolling settles. */
   const settle = (to: number) => {
     setPending(to);
     onError(undefined);
     clearTimeout(timer.current);
-    timer.current = setTimeout(async () => {
-      const step = steps[to];
-      // An unavailable level can be looked at on the slider but not chosen.
-      if (!step || step.unavailable || to === index) { setPending(undefined); return; }
-      try { await onChange(step.value); }
-      catch (err) { onError((err as Error).message); }
-      finally { setPending(undefined); }
-    }, SAVE_AFTER_MS);
+    flush.current = () => void save(to);
+    timer.current = setTimeout(() => void save(to), SAVE_AFTER_MS);
+  };
+  /** Saves a level picked outright, such as from a menu, without waiting. */
+  const commit = (to: number) => {
+    setPending(to);
+    onError(undefined);
+    void save(to);
   };
   /** One level up or down, passing over unavailable ones; from no level, up starts at the lowest. */
   const step = (by: number) => {
@@ -44,7 +61,7 @@ export function useSteps<T>(steps: Step<T>[], index: number, onChange: (value: T
     setBump((n) => n + 1);
     settle(to);
   };
-  return { shown, settle, step, bump };
+  return { shown, settle, commit, step, bump };
 }
 
 /** Steps on the mouse wheel over `target`. React's onWheel is passive, so the page would scroll too; this listens directly. */

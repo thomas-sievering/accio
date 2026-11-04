@@ -70,3 +70,4 @@
 .delivery-progress li { margin: 4px 0; overflow-wrap: anywhere; }
 .delivery-progress li > span:last-child { margin-left: 8px; }
 .delivery-progress small { color: var(--dim); }
+.delivery-settled { padding: 0 4px; color: var(--muted); font-size: 12.5px; }

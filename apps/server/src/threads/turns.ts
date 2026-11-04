@@ -255,7 +255,6 @@ export class Turns {
         state.running.delete(thread.id);
         await state.updateDurably(thread.id, t => deps.deliveries.settleDelivered(endTurn(t.delivery?.status === 'running'
           ? { ...t, delivery: { ...t.delivery, status: 'waiting' } } : t, outcome ?? 'failed', now())));
-        await deps.deliveries.receipt(thread.id);
         deps.deliveries.scheduleCheck(thread.id);
         // Every turn spends the account's allowance, so a model it used up is marked as soon as possible.
         deps.profiles.refreshLimits(thread.profileId, providerOf(thread.model.harnessId));

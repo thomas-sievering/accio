@@ -23,7 +23,14 @@ describe('layoutTranscript', () => {
   it('keeps mid-turn steering and responses visible in conversation order', () => {
     const correction: TranscriptItem = { kind: 'user', id: 'steer', turnId: 't1', text: 'use helper', at: '', steered: true };
     expect(shape(layoutTranscript([ask('q'), tool('1'), correction, say('a'), done()])))
-      .toEqual(['q', ['1'], 'steer', 'a', 't1:finished']);
+      .toEqual(['q', 't1:finished', ['1'], 'steer', 'a']);
+  });
+  it('keeps the live line at the end of a running turn after a steer', () => {
+    const correction: TranscriptItem = { kind: 'user', id: 'steer', turnId: 't1', text: 'use helper', at: '', steered: true };
+    const blocks = layoutTranscript([ask('q'), tool('1'), correction], 't1');
+    expect(shape(blocks)).toEqual(['q', ['1'], 'steer', { work: [] }]);
+    expect(blocks.at(-1)).toMatchObject({ kind: 'work', live: true, activity: 'Working', startedAt: '2026-11-03T12:00:00Z' });
+    expect(shape(layoutTranscript([ask('q'), tool('1'), correction], undefined))).toEqual(['q', ['1'], 'steer']);
   });
   it('lays out a running turn in full, joining consecutive calls', () => {
     expect(shape(layoutTranscript([ask('q'), say('a'), tool('1'), tool('2'), say('b'), tool('3')]))).toEqual(['q', 'a', ['1', '2'], 'b', ['3']]);
@@ -64,7 +71,7 @@ describe('layoutTranscript', () => {
   });
 
   it('keeps the plain finished divider when a turn did no work', () => {
-    expect(shape(layoutTranscript([ask('q'), say('a'), done()]))).toEqual(['q', 'a', 't1:finished']);
+    expect(shape(layoutTranscript([ask('q'), say('a'), done()]))).toEqual(['q', 't1:finished', 'a']);
   });
 
   it('folds everything when a turn ends without an answer', () => {

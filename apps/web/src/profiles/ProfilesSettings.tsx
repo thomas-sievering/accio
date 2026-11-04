@@ -30,15 +30,16 @@ export function ProfilesSettings({
   const current = profileId ? profiles.find((p) => p.id === profileId) : undefined;
   if (current) return <ProfileForm key={current.id} profile={current} onSaved={onBack} onDone={onBack} onOpenSecrets={onOpenSecrets} />;
 
-  return (
+  return (<>
+    <p className="note">The sides of your life threads run under, such as personal or work. Each uses the accounts you select.</p>
     <SettingsSection>
       {profiles.map((p) => (
         <SettingLink key={p.id} icon={<User />} title={p.name} warn={!hasSignedInAccount(p)} onClick={() => onOpen(p.id)}
           description={p.providers.flatMap((provider) => provider.accounts.map((a) => `${a.name}${a.signedIn ? '' : ' · Signed out'}`)).join(', ') || 'No account selected'} />
       ))}
-      <SettingLink icon={<Plus />} title="Add profile" description="A side of your life threads run under, such as personal or work." chevron={false} onClick={() => onOpen('new')} />
+      <SettingLink icon={<Plus />} title="Add profile" chevron={false} onClick={() => onOpen('new')} />
     </SettingsSection>
-  );
+  </>);
 }
 
 function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: ProfileView; onSaved: (p: ProfileView) => void; onDone: () => void; onOpenSecrets?: (profileId: string) => void }) {

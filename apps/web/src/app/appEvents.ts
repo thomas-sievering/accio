@@ -15,6 +15,8 @@ export type AppEvents = {
   'settings.open': SettingsRoute;
   /** Open a project's settings, such as from the thread header's project name. */
   'project.open': { id: string };
+  /** A thread was snoozed until a time (ISO); the sidebar says so briefly. */
+  'thread.snoozed': { threadId: string; until: string };
 };
 
 const prefix = 'accio:';

@@ -21,7 +21,8 @@ import { Close, FolderPlus, Limits, Settings as Gear } from './icons';
 import { ScopeMenu } from './ScopeMenu';
 import { SidebarResizer } from './Resizer';
 import { Settings, type SettingsRoute } from './Settings';
-import { PanelToggle, SidePanel, usePanelOpen } from './SidePanel';
+import { PanelToggle, SidePanel, useNarrow, usePanelOpen } from './SidePanel';
+import { SnoozeNotice } from '../threads/SnoozeNotice';
 
 type OpenSheet = { kind: 'addProject' } | { kind: 'project'; id: string } | null;
 
@@ -60,7 +61,25 @@ function Shell() {
   const closeSettings = useCallback(() => setSettings(null), []);
   useAppEvent('settings.open', setSettings);
   useAppEvent('project.open', ({ id }) => setSheet({ kind: 'project', id }));
-  const [panelOpen, togglePanel] = usePanelOpen();
+  const [panelWanted, togglePanel] = usePanelOpen();
+  // The panel belongs to an open thread or draft: home and onboarding have none.
+  const hasPane = !!(thread || draft);
+  const panelOpen = panelWanted && hasPane;
+  const narrow = useNarrow();
+  const overlay = panelOpen && narrow;
+  const dismissOverlay = useCallback(() => {
+    togglePanel();
+    document.querySelector<HTMLElement>('.panel-toggle')?.focus();
+  }, [togglePanel]);
+  useEffect(() => {
+    if (!overlay) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented || document.querySelector(':popover-open')) return;
+      dismissOverlay();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [overlay, dismissOverlay]);
   const openThread = (id: string) => {
     select(id);
     setSettings(null);
@@ -93,9 +112,19 @@ function Shell() {
   const settingUp = !!profiles && !!state && !setUp;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'n' || settings || settingUp) return;
-      e.preventDefault();
-      document.querySelector<HTMLButtonElement>('.side-tools [aria-label="New thread"]')?.click();
+      if (settings || settingUp || e.shiftKey || e.altKey) return;
+      const key = e.key.toLowerCase();
+      if ((e.ctrlKey || e.metaKey) && key === 'n') {
+        e.preventDefault();
+        document.querySelector<HTMLButtonElement>('.side-tools [aria-label="New thread"]')?.click();
+        return;
+      }
+      // Ctrl+K anywhere, or "/" outside a text field, jumps to the sidebar search.
+      const typing = e.target instanceof HTMLElement && e.target.closest('input, textarea, select, [contenteditable]');
+      if (((e.ctrlKey || e.metaKey) && key === 'k') || (e.key === '/' && !e.ctrlKey && !e.metaKey && !typing)) {
+        e.preventDefault();
+        document.querySelector<HTMLInputElement>('.side-search input')?.focus();
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -135,6 +164,7 @@ function Shell() {
           <nav className="side-body" onKeyDown={onRowKeys}>
             <ThreadList />
           </nav>
+          <SnoozeNotice />
           <footer className="side-foot">
             <button className="side-icon" title="Settings" aria-label="Settings" onClick={() => setSettings({ section: 'accounts' })}>
               <Gear />
@@ -147,7 +177,7 @@ function Shell() {
           </footer>
         </aside>
         <SidebarResizer />
-        <div className="main" role="main">
+        <div className="main" role="main" inert={overlay}>
           {limitsOpen && !settings && (
             <LimitsView scope={limits.scope} onScope={(scope) => setLimits({ scope, navigation })} onClose={closeLimits}
               onOpenAccount={openAccount} />
@@ -166,8 +196,9 @@ function Shell() {
             )}
           </div>
         </div>
-        {panelOpen && <SidePanel />}
-        <PanelToggle open={panelOpen} onToggle={togglePanel} />
+        {overlay && <div className="panel-scrim" onClick={dismissOverlay} />}
+        {panelOpen && <SidePanel overlay={overlay} />}
+        {hasPane && <PanelToggle open={panelOpen} onToggle={togglePanel} />}
         {sheet?.kind === 'addProject' && <AddProjectSheet onClose={close} />}
         {openProject && <ProjectSheet project={openProject} onClose={close} onOpenSettings={(route) => { close(); setSettings(route); }} />}
       </div>

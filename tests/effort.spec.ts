@@ -14,14 +14,14 @@ test('scrolling over the model chip changes effort; clicking it lists the models
   await openThread(page);
   // Claude Code reports no default level, so the lowest step leaves it to Claude Code.
   await expect(effort(page)).toHaveAccessibleName('Effort: Auto');
-  await expect(effort(page).locator('.effort-word-current')).toHaveText('auto');
+  await expect(effort(page).locator('.effort-word-current')).toHaveText('Auto');
   const initialWidth = (await effort(page).boundingBox())!.width;
 
   await effort(page).hover();
   await page.mouse.wheel(0, -50);
   await page.mouse.wheel(0, -50);
   await expect(effort(page)).toHaveAccessibleName('Effort: Medium');
-  await expect(effort(page).locator('.effort-word-current')).toHaveText('medium');
+  await expect(effort(page).locator('.effort-word-current')).toHaveText('Medium');
   expect((await effort(page).boundingBox())!.width).toBe(initialWidth);
   await page.mouse.wheel(0, 50);
   await expect(effort(page)).toHaveAccessibleName('Effort: Low');
@@ -34,7 +34,7 @@ test('scrolling over the model chip changes effort; clicking it lists the models
   await effort(page).focus();
   await page.keyboard.press('ArrowUp');
   await expect(effort(page)).toHaveAccessibleName('Effort: High');
-  await expect(effort(page).locator('.effort-word-current')).toHaveText('high');
+  await expect(effort(page).locator('.effort-word-current')).toHaveText('High');
   expect(await effort(page).locator('.effort-word').evaluate((el) => el.getAnimations({ subtree: true }).length)).toBeGreaterThan(0);
   await page.waitForTimeout(800);
 
@@ -58,8 +58,8 @@ test('effort changes immediately without animation with reduced motion', async (
   await openThread(page);
   await effort(page).focus();
   for (let i = 0; i < 6; i++) await page.keyboard.press('ArrowDown');
-  await expect(effort(page).locator('.effort-word-current')).toHaveText('auto');
+  await expect(effort(page).locator('.effort-word-current')).toHaveText('Auto');
   await page.keyboard.press('ArrowUp');
-  await expect(effort(page).locator('.effort-word-current')).toHaveText('low');
+  await expect(effort(page).locator('.effort-word-current')).toHaveText('Low');
   expect(await effort(page).locator('.effort-word').evaluate((el) => el.getAnimations({ subtree: true }).length)).toBe(0);
 });

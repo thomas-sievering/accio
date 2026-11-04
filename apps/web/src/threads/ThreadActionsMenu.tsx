@@ -1,14 +1,18 @@
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import type { ThreadView, ToolDetails, TranscriptItem } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { More } from '../app/icons';
 import { useAction } from '../app/useAction';
+import { ThreadMenuItems } from './ThreadMenu';
 
 export function ThreadActionsMenu({ thread, items }: { thread: ThreadView; items?: TranscriptItem[] }) {
   const client = useClient();
   const id = useId();
   const { busy, error, run, clear } = useAction();
   const [copied, setCopied] = useState(false);
+  const menu = useRef<HTMLDivElement>(null);
+  // A fresh set of items each time the menu opens, so a half-done rename or delete never lingers.
+  const [opened, setOpened] = useState(0);
 
   const copy = () => void run(async () => {
     if (!items) return;
@@ -34,13 +38,16 @@ export function ThreadActionsMenu({ thread, items }: { thread: ThreadView; items
     <button className="row-action thread-actions-trigger" popoverTarget={id} aria-label="Thread actions" title="Thread actions" aria-haspopup="menu">
       <More />
     </button>
-    <div id={id} className="menu thread-actions-menu" popover="auto" role="menu" aria-label="Thread actions"
-      onToggle={(e) => { if (e.newState === 'open') { clear(); setCopied(false); } }}>
-      <button className="menu-item" role="menuitem" disabled={!items || busy} onClick={copy} title="Copy the full thread to clipboard">
-        <span className="menu-text">{busy ? 'Copying…' : 'Copy'}</span>
-      </button>
-      {copied && <p className="thread-copy-status" role="status">Copied to clipboard</p>}
-      {error && <p className="error menu-error" role="alert">Could not copy thread: {error}</p>}
+    <div id={id} ref={menu} className="menu thread-actions-menu" popover="auto" role="menu" aria-label="Thread actions"
+      onToggle={(e) => { if (e.newState === 'open') { clear(); setCopied(false); setOpened((n) => n + 1); } }}>
+      <ThreadMenuItems key={opened} thread={thread} close={() => menu.current?.hidePopover()} before={<>
+        <button className="menu-item" role="menuitem" disabled={!items || busy} onClick={copy}>
+          <span className="menu-text">{busy ? 'Copying…' : 'Copy as Markdown'}</span>
+        </button>
+        {copied && <p className="thread-copy-status" role="status">Copied to clipboard</p>}
+        {error && <p className="error menu-error" role="alert">Could not copy thread: {error}</p>}
+        <hr />
+      </>} />
     </div>
   </>;
 }

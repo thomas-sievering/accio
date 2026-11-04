@@ -5,7 +5,8 @@ import { useProjects } from '../projects/projects';
 import { useNeedsSecret } from '../secrets/pendingSecrets';
 import { StatusGlyphIcon } from './StatusMark';
 import { statusText, threadStatus } from './status';
-import { useThreadMenu } from './ThreadMenu';
+import { RowRename, useRenaming, useThreadMenu } from './ThreadMenu';
+import { snoozeThread } from './SnoozeNotice';
 import type { ShelfPlace } from './shelves';
 import { useThreads, type ThreadActions } from './threads';
 
@@ -17,11 +18,13 @@ export function ThreadRow({ thread: t, place }: { thread: ThreadView; place: She
   const { selectedId, select, now, act } = useThreads();
   const { state } = useProjects();
   const project = state?.projects.find((p) => p.id === t.projectId)?.name;
-  // Open rows show the project mark and the spinning status; shelved rows are one line.
+  // Every row has the same layout; only open rows carry the live status mark.
   const open = place === 'open';
   // Only a running turn can wait on a secret.
   const needsSecret = (useNeedsSecret(t.id) || t.needsSecret === true) && t.status === 'running' && open;
   const openMenu = useThreadMenu();
+  const [renamingId] = useRenaming();
+  const renaming = renamingId === t.id;
   const onContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     openMenu(t, e.clientX, e.clientY);
@@ -35,7 +38,7 @@ export function ThreadRow({ thread: t, place }: { thread: ThreadView; place: She
           className="row-action"
           title={a.title}
           aria-label={a.label}
-          onClick={() => void act[a.run](t.id).catch((e: Error) => console.error(e.message))}
+          onClick={() => void (a.run === 'snooze' ? snoozeThread(act, t.id) : act[a.run](t.id)).catch((e: Error) => console.error(e.message))}
         >
           {a.icon}
         </button>
@@ -45,35 +48,31 @@ export function ThreadRow({ thread: t, place }: { thread: ThreadView; place: She
   const status = threadStatus(t, { needsSecret });
   const statusLine = statusText(status.label, status.delivery?.pullRequest);
   const delivery = status.delivery;
-  // Shelved rows are one line: a delivery outcome stays visible as a badge, also on hover.
-  const badge = !open && delivery && <span className={`row-badge tone-${delivery.tone}`} title={statusText(delivery.label, delivery.pullRequest)}>
-    <StatusGlyphIcon glyph={delivery.glyph} tone={delivery.tone} />{delivery.badge}
-  </span>;
-  const className = `row${open ? ' open' : ''}${t.id === selectedId ? ' active' : ''}${place === 'settled' ? ' settled' : ''}`;
+  // Shelved rows say nothing of an idle turn; a delivery outcome stays visible.
+  const showState = status.showLabel && (open || !!delivery);
+  const className = `row open${t.id === selectedId ? ' active' : ''}${place === 'settled' ? ' settled' : ''}`;
+  const Main = renaming ? 'div' : 'button';
   return (
-    <div className={className} onContextMenu={onContextMenu}>
-      <button className="row-main" onClick={() => select(t.id)} title={`${t.title} · ${project ?? 'No project'}${status.showLabel ? ` · ${statusLine}` : ''}`} aria-current={t.id === selectedId ? 'page' : undefined}>
-        {open && (t.projectId ? <ProjectMark id={t.projectId} /> : <span className="no-project-mark" />)}
+    <div className={`${className}${renaming ? ' renaming' : ''}`} onContextMenu={onContextMenu}>
+      <Main className="row-main" {...(renaming ? {} : { onClick: () => select(t.id), title: `${t.title} · ${project ?? 'No project'}${showState ? ` · ${statusLine}` : ''}`, 'aria-current': t.id === selectedId ? 'page' as const : undefined })}>
+        {t.projectId ? <ProjectMark id={t.projectId} /> : <span className="no-project-mark" />}
         <span className="row-name">
-          <span className="row-title">{t.title}</span>
-          {open ? <span className={`row-project${status.showLabel ? ' with-state' : ''}`}>
+          {renaming ? <RowRename thread={t} /> : <span className="row-title">{t.title}</span>}
+          <span className={`row-project${showState ? ' with-state' : ''}`}>
             <span className="row-project-name">{project ?? 'No project'}</span>
-            {status.showLabel && <span className={`row-state tone-${status.tone}`}>
+            {showState && <span className={`row-state tone-${status.tone}`}>
               <span className="row-state-label">{status.label}</span>
               {delivery?.pullRequest && <span className="row-state-pr">&nbsp;· #{delivery.pullRequest.number}</span>}
             </span>}
-          </span> : project && <span className="row-project">{project}</span>}
-        </span>
-        {badge}
-        {open && <span className="row-status">
-          <span className="row-meta">{timeAgo(t.updatedAt, now)}</span>
-          <span className={`row-mark tone-${status.tone}`} role="img" aria-label={statusLine}>
-            <StatusGlyphIcon glyph={status.glyph} tone={status.tone} />
           </span>
-        </span>}
-        {place === 'snoozed' && t.snoozedUntil && <span className="row-meta">{wakeLabel(t.snoozedUntil, now)}</span>}
-        {place === 'settled' && t.settledAt && <span className="row-meta">{timeAgo(t.settledAt, now)}</span>}
-      </button>
+        </span>
+        <span className="row-status">
+          <span className="row-meta">{meta(t, place, now)}</span>
+          {open && <span className={`row-mark tone-${status.tone}`} role="img" aria-label={statusLine}>
+            <StatusGlyphIcon glyph={status.glyph} tone={status.tone} />
+          </span>}
+        </span>
+      </Main>
       {actions}
     </div>
   );
@@ -90,6 +89,12 @@ function hoverActions(t: ThreadView, place: ShelfPlace): HoverAction[] {
     { label: 'Snooze', title: 'Snooze until morning', icon: <Clock />, run: 'snooze' },
     { label: 'Settle', title: 'Settle', icon: <Check />, run: 'settle' },
   ];
+}
+
+function meta(t: ThreadView, place: ShelfPlace, now: Date): string {
+  if (place === 'snoozed' && t.snoozedUntil) return wakeLabel(t.snoozedUntil, now);
+  if (place === 'settled' && t.settledAt) return timeAgo(t.settledAt, now);
+  return timeAgo(t.updatedAt, now);
 }
 
 function timeAgo(iso: string, now: Date): string {

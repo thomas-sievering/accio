@@ -52,7 +52,7 @@ export function LimitsView({ scope, onScope, onClose, onOpenAccount }: {
       </header>
       <div className="settings-scroll">
         <div className="limits-page">
-          <ScopePicker scope={scope} onScope={onScope} />
+          {(profiles?.length ?? 0) > 1 && <ScopePicker scope={scope} onScope={onScope} />}
           {disconnected && <p className="limits-banner" role="status">Not connected to Accio’s server. Values below are last known and update once it reconnects.</p>}
           {!disconnected && loadError && (
             <div className="limits-banner error" role="alert">

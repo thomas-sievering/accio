@@ -83,7 +83,7 @@ export function NewThreadButton({ className = 'side-icon', label }: { className?
               ref={(node) => { if (index === selected) node?.scrollIntoView({ block: 'nearest' }); }}
               onMouseMove={() => setActiveId(c.id)} onClick={c.pick}>
               {c.projectId ? <ProjectMark id={c.projectId} size={16} /> : <span className="no-project-mark" />}
-              <span className="menu-text"><b>{c.name}</b>{c.detail && <small>{c.detail}</small>}</span>
+              <span className="menu-text"><b>{c.name}</b>{c.detail && index === selected && <small>{c.detail}</small>}</span>
               {c.next && <Chevron />}
             </button>
           ))}

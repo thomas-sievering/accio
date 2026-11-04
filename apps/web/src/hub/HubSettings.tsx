@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useHubs } from '../app/connection';
-import { Plus } from '../app/icons';
-import { SettingRow, SettingsSection, StatusPill } from '../app/Settings';
+import { Hub, Plus } from '../app/icons';
+import { SettingRow, SettingsSection, StatusPill, useEscape } from '../app/Settings';
 import { useAction } from '../app/useAction';
 import { PairHubForm } from './PairHubForm';
 
@@ -9,16 +9,23 @@ import { PairHubForm } from './PairHubForm';
 export function HubSettings({ adding, onAdd, onBack }: { adding?: boolean; onAdd?: () => void; onBack?: () => void } = {}) {
   const { hubs, selectedId, select, root } = useHubs();
   const [pairing, setPairing] = useState<{ code: string; expiresAt: number }>();
+  const [confirming, setConfirming] = useState<string>();
   const { busy, error, run } = useAction();
+  useEscape(!!confirming, () => setConfirming(undefined));
   const current = hubs.find((h) => h.id === selectedId);
   if (!hubs.length) return <SettingsSection><PairHubForm /></SettingsSection>;
   if (adding) return <PairHubForm onCancel={onBack} />;
   return <>
     <SettingsSection>
-      {hubs.map((hub) => <SettingRow key={hub.id} title={hub.name} description={hub.url}>
-        <StatusPill tone={hub.status === 'connected' ? 'ok' : hub.error ? 'bad' : undefined}>{hub.status === 'connected' ? 'Connected' : hub.status === 'connecting' ? 'Connecting' : 'Offline'}</StatusPill>
-        {hub.id !== selectedId && <button type="button" className="ghost" onClick={() => select(hub.id)}>Use hub</button>}
-        <button type="button" className="ghost" disabled={busy || hub.running > 0} onClick={() => run(() => root.call('hubs.remove', { id: hub.id }))}>Remove</button>
+      {hubs.map((hub) => <SettingRow key={hub.id} icon={<Hub />} title={hub.name} description={confirming === hub.id ? 'You will be disconnected from this hub.' : hub.url}>
+        {confirming === hub.id ? <>
+          <button type="button" className="ghost danger" disabled={busy} autoFocus onClick={() => void run(async () => { await root.call('hubs.remove', { id: hub.id }); setConfirming(undefined); })}>Remove {hub.name}</button>
+          <button type="button" className="ghost" disabled={busy} onClick={() => setConfirming(undefined)}>Cancel</button>
+        </> : <>
+          <StatusPill tone={hub.status === 'connected' ? 'ok' : hub.error ? 'bad' : undefined}>{hub.status === 'connected' ? 'Connected' : hub.status === 'connecting' ? 'Connecting' : 'Offline'}</StatusPill>
+          {hub.id !== selectedId && <button type="button" className="ghost" onClick={() => select(hub.id)}>Use hub</button>}
+          <button type="button" className="ghost" disabled={busy || hub.running > 0} title={hub.running > 0 ? 'Threads are running on this hub.' : undefined} onClick={() => setConfirming(hub.id)}>Remove</button>
+        </>}
       </SettingRow>)}
       {current?.error && <div className="setting-form"><p className="error" role="status">{current.error}</p></div>}
       {onAdd && <button type="button" className="setting setting-link" onClick={onAdd}>

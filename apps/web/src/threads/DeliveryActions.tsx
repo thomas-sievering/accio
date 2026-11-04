@@ -63,19 +63,19 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
     });
   };
 
-  if (!thread.workspace) return null;
-  const status = deliveryStatus(thread);
+  const settled = !!thread.settledAt;
+  // A settled thread always has its state row, even when it never had a workspace.
+  if (!thread.workspace && !settled) return null;
+  const status = thread.workspace ? deliveryStatus(thread) : undefined;
   const call = (method: 'threads.cancelDelivery' | 'threads.checkDelivery' | 'threads.archive' | 'threads.reopen') =>
     void run(async () => { await client.call(method, { threadId: thread.id }); });
-  const settled = !!thread.settledAt;
   // A fresh request is offered with no delivery, after new work, or when a person must act.
   const nothingToShip = !!summary && summary.files === 0;
   const offerShip = (!status || status.canShip) && !nothingToShip;
   const receipt = status?.phase === 'delivered';
   const age = checkedAgo(status?.checkedAt, now);
-  const hint = archived ? undefined : receipt
-    ? settled ? 'Thread settled · Workspace retained' : delivery?.keepOpen ? 'Kept open · Workspace retained' : 'Workspace retained'
-    : settled && !['queued', 'shipping'].includes(status?.phase ?? '') ? 'Thread settled'
+  const hint = archived ? undefined : receipt ? 'Workspace retained'
+    : settled ? undefined
     : status?.phase === 'queued' || status?.phase === 'shipping' ? undefined
     : [status?.detail, status && ['waiting', 'integrated', 'unavailable'].includes(status.phase) ? age : undefined].filter(Boolean).join(' · ') || undefined;
   const statusName = status && statusText(status.label, status.pullRequest);
@@ -87,7 +87,7 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
 
   return <div className="delivery-actions">
     <div className="delivery-row" aria-label="Delivery actions">
-      {archived ? <span className="delivery-pill delivery-complete"><Check />Archived · history kept</span> : <>
+      {!thread.workspace ? null : archived ? <span className="delivery-pill delivery-complete"><Check />Archived · history kept</span> : <>
         {!receipt && summary && (summary.added > 0 || summary.removed > 0) && <span className="delivery-pill delivery-diff" title={`${summary.files} changed ${summary.files === 1 ? 'file' : 'files'}`} aria-label={`${summary.added} lines added, ${summary.removed} lines removed`}>
           <span className="delivery-added">+{summary.added}</span><span className="delivery-removed">−{summary.removed}</span>
         </span>}
@@ -109,13 +109,12 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
         {status?.canCheck && <button className="delivery-pill" disabled={busy} onClick={() => call('threads.checkDelivery')}><Refresh />Check now</button>}
         {status?.canStopFollowUps && <button className="delivery-pill" disabled={busy} title="Keep tracking the PR without starting the agent again" onClick={() => call('threads.cancelDelivery')}><StopSquare />Stop automatic follow-ups</button>}
         {status?.canCancel && status.phase !== 'queued' && <button className="delivery-pill" disabled={busy} onClick={() => call('threads.cancelDelivery')}><Close />Cancel delivery</button>}
-        {(receipt || settled) && <>
-          {settled && <button className="delivery-pill" disabled={busy} onClick={() => call('threads.reopen')}><Undo />Reopen</button>}
-          <button className="delivery-pill" disabled={busy || thread.status === 'running'} title="Frees the workspace, keeps this thread" onClick={() => call('threads.archive')}>
-            <Archive />{busy ? 'Archiving…' : 'Archive'}
-          </button>
-        </>}
       </>}
+      {settled && <span className="delivery-settled">Settled</span>}
+      {settled && <button className="delivery-pill" disabled={busy} onClick={() => call('threads.reopen')}><Undo />Reopen</button>}
+      {!archived && (receipt || settled) && thread.workspace && <button className="delivery-pill" disabled={busy || thread.status === 'running'} title="Frees the workspace, keeps this thread" onClick={() => call('threads.archive')}>
+        <Archive />{busy ? 'Archiving…' : 'Archive'}
+      </button>}
       {!archived && summary?.previewAvailable && <button className="delivery-pill" disabled={busy} onClick={openApp}><Play />Open app</button>}
     </div>
     {hint && <p className={`delivery-hint tone-${status?.tone ?? 'ready'}`} role={status?.phase === 'attention' || status?.phase === 'closed' ? 'alert' : undefined}

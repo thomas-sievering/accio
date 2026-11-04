@@ -61,7 +61,7 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
   await createAccount('Team Claude', 'work');
   await createAccount('Shared ChatGPT', undefined, true);
   await settings('Profiles');
-  await page.getByRole('button', { name: /^Add profile / }).click();
+  await page.getByRole('button', { name: /^Add profile/ }).click();
   await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Work');
   await button('Add profile').click();
   await button('Cancel').click();
@@ -71,10 +71,7 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
   await button('Limits').click();
   await expect(button('Limits')).toHaveCount(1);
   await expect(button('Limits')).toHaveAttribute('aria-pressed', 'true');
-  await button('Side panel').click();
-  await expect(page.getByRole('complementary', { name: 'Side panel', exact: true })).toBeVisible();
   await expect(page.getByRole('radiogroup', { name: 'Profile' })).toBeVisible();
-  await button('Side panel').click();
   await expect(page.getByRole('radio', { name: 'All profiles' })).toHaveAttribute('aria-checked', 'true');
   await expect(page.locator('.limits-card')).toHaveCount(3);
   await expect(page.getByText('Shared with Personal. One allowance, shown under Personal.', { exact: true })).toBeVisible();

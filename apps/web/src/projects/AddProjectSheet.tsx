@@ -71,7 +71,7 @@ export function AddProjectForm({ onAdded, onCancel }: { onAdded?: () => void; on
         <label className="field">
           <span>Folder</span>
           <span className="row-input">
-            <input value={path} onChange={(e) => setPath(e.target.value)} placeholder="S:\my-repo" autoFocus spellCheck={false} />
+            <input value={path} onChange={(e) => setPath(e.target.value)} placeholder="S:\my-repo" autoFocus data-autofocus spellCheck={false} />
             {window.accioDesktop && (
               <button type="button" className="ghost" onClick={browse}>
                 Browse…

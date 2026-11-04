@@ -55,7 +55,6 @@ export function ResourcePicker({ context, staged }: { context: Context; staged?:
         const items = q ? g.items.filter((i) => `${i.name} ${i.detail}`.toLowerCase().includes(q)) : g.items;
         return (
           <div key={g.title} className="resource-group" role="group" aria-label={g.title}>
-            <span className="scope-list-label">{g.title}</span>
             {g.items.length === 0 && <small className="hint">{g.empty}</small>}
             {g.items.length > 0 && items.length === 0 && <small className="hint">No matches.</small>}
             {items.map((i) => (

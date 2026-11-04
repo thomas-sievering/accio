@@ -7,28 +7,52 @@ import { useProfiles } from '../profiles/profiles';
 import { useThreads } from '../threads/threads';
 import { useProjects } from './projects';
 import { FolderLink } from './FolderLink';
+import { MenuSelect } from './MenuSelect';
+import { MidPath } from './MidPath';
 import { ResourcePicker } from '../resources/ResourcePicker';
+import { projectKey, toggled, useResources } from '../resources/resources';
 import type { SettingsRoute } from '../app/Settings';
 
 /**
- * A project's profile and its checkouts on this machine. A checkout is removed only after a second, explicit click
- * (which also deletes its threads).
+ * A project's profile, delivery and skills, staged until Save like the rest of settings, and its checkouts on this machine.
+ * A checkout is removed only after a second, explicit click (which also deletes its threads).
  */
 export function ProjectSheet({ project, onClose, onOpenSettings }: { project: ProjectView; onClose: () => void; onOpenSettings: (route: SettingsRoute) => void }) {
   const client = useClient();
   const { profiles = [] } = useProfiles();
   const { checkoutsOf } = useProjects();
   const { threads = [] } = useThreads();
+  const { state: resources } = useResources();
   const threadCount = threads.filter((t) => t.projectId === project.id).length;
   const { busy, error, run } = useAction();
   const [confirming, setConfirming] = useState<string>();
+  const [profileId, setProfileId] = useState(project.profileId);
   const [policy, setPolicy] = useState(project.deliveryPolicy ?? 'direct');
   const [previewCommand, setPreviewCommand] = useState(project.previewCommand ?? '');
+  // Skill choices wait here until Save, keyed by skill id.
+  const [skills, setSkills] = useState<Record<string, boolean>>({});
+  const key = projectKey(project);
+  const skillChanges = Object.entries(skills).flatMap(([id, on]) => {
+    const skill = resources?.skills.find((s) => s.id === id);
+    return skill && skill.scope.projectKeys.includes(key) !== on ? [{ skill, on }] : [];
+  });
+  const deliveryChanged = policy !== (project.deliveryPolicy ?? 'direct') || previewCommand !== (project.previewCommand ?? '');
+  const dirty = profileId !== project.profileId || deliveryChanged || skillChanges.length > 0;
 
   const remove = (checkoutId: string) =>
     run(async () => {
       await client.call('checkouts.remove', { id: checkoutId, deleteThreads: confirming === checkoutId });
     }).finally(() => setConfirming(undefined));
+
+  const save = async () => {
+    const done = await run(async () => {
+      if (profileId !== project.profileId) await client.call('projects.setProfile', { projectId: project.id, profileId });
+      if (deliveryChanged) await client.call('projects.setDelivery', { projectId: project.id, deliveryPolicy: policy, previewCommand });
+      for (const { skill, on } of skillChanges) await client.call('skills.setScope', { id: skill.id, scope: { ...skill.scope, projectKeys: toggled(skill.scope.projectKeys, key, on) } });
+      return true;
+    });
+    if (done) onClose();
+  };
 
   return (
     <Sheet title={project.name} onClose={onClose}>
@@ -37,58 +61,35 @@ export function ProjectSheet({ project, onClose, onOpenSettings }: { project: Pr
           <div>
             <span className="dim">Repository</span> {project.repoKey ?? 'no git remote'}
           </div>
-          {profiles.length === 1 && (
-            <div>
-              <span className="dim">Profile</span> {profiles[0]!.name}
-            </div>
-          )}
         </div>
-        {profiles.length > 1 ? (
-          <label className="field">
+        {profiles.length > 1 && (
+          <div className="field">
             <span>Profile</span>
-            <select
-              value={project.profileId}
-              disabled={busy || threadCount > 0}
-              onChange={(e) => run(() => client.call('projects.setProfile', { projectId: project.id, profileId: e.target.value }))}
-            >
-              {profiles.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
-            </select>
-            <small className="hint">
-              {threadCount > 0
-                ? `Fixed while the project has threads (${threadCount}): each thread keeps the profile it started with.`
-                : 'You can change it while the project has no threads.'}
-            </small>
-          </label>
-        ) : null}
-        <label className="field">
+            <MenuSelect label="Profile" value={profileId} disabled={busy || threadCount > 0} onChange={setProfileId} options={profiles.map((a) => ({ value: a.id, label: a.name }))} />
+            {threadCount > 0 && <small className="hint">Fixed while the project has threads ({threadCount}): each thread keeps the profile it started with.</small>}
+          </div>
+        )}
+        <div className="field">
           <span>Ship changes</span>
-          <select value={policy} disabled={busy} onChange={e => setPolicy(e.target.value as typeof policy)}>
-            <option value="direct">Directly to the default branch</option>
-            <option value="pull-request">Through a pull request</option>
-          </select>
-        </label>
+          <MenuSelect label="Ship changes" value={policy} disabled={busy} onChange={setPolicy} options={[
+            { value: 'direct', label: 'Directly to the default branch' },
+            { value: 'pull-request', label: 'Through a pull request' },
+          ]} />
+        </div>
         <label className="field">
           <span>Preview command</span>
           <input value={previewCommand} onChange={e => setPreviewCommand(e.target.value)} placeholder="pnpm dev --port {port}" />
           <small className="hint">Optional. Runs in the thread’s worktree with its own PORT and app state. Use {'{port}'} where the command needs its assigned port.</small>
         </label>
-        {(policy !== (project.deliveryPolicy ?? 'direct') || previewCommand !== (project.previewCommand ?? '')) && <button className="primary" disabled={busy} onClick={() => void run(() => client.call('projects.setDelivery', { projectId: project.id, deliveryPolicy: policy, previewCommand }))}>Save delivery settings</button>}
         <div className="field">
           <span>Checkouts on this machine</span>
-          <div className="list">
+          <div className="checkouts">
             {checkoutsOf(project.id).map((c) => {
               const count = threads.filter((t) => t.checkoutId === c.id).length;
               return (
-                <div key={c.id} className="list-row static">
-                  <FolderLink path={c.path} className="grow path-link">
-                    <span className="path-mid" title={c.path}>
-                      <span className="path-head">{c.path.slice(0, -14)}</span>
-                      <span className="path-tail">{c.path.slice(-14)}</span>
-                    </span>
+                <div key={c.id} className="checkout-row">
+                  <FolderLink path={c.path} className="path-link">
+                    <MidPath text={c.path} />
                   </FolderLink>
                   {confirming === c.id ? (
                     <>
@@ -109,12 +110,9 @@ export function ProjectSheet({ project, onClose, onOpenSettings }: { project: Pr
             })}
           </div>
         </div>
-        {error && <p className="error">{error}</p>}
         <div className="field">
-          <small className="hint">
-            Turn on what this project needs, for every checkout and thread of it. Things on everywhere or for its profile are inherited. Changes save immediately.
-          </small>
-          <ResourcePicker context={{ kind: 'project', project }} />
+          <span>Skills</span>
+          <ResourcePicker context={{ kind: 'project', project }} staged={{ values: skills, set: (id, on) => setSkills((s) => ({ ...s, [id]: on })) }} />
           <span className="signin-links">
             <button type="button" className="link" onClick={() => onOpenSettings({ section: 'tools' })}>Tools</button>
             <span aria-hidden="true">·</span>
@@ -123,7 +121,13 @@ export function ProjectSheet({ project, onClose, onOpenSettings }: { project: Pr
             <button type="button" className="link" onClick={() => onOpenSettings({ section: 'skills' })}>Skills</button>
           </span>
         </div>
+        {error && <p className="error">{error}</p>}
       </div>
+      <footer className="sheet-foot">
+        <span className="spacer" />
+        <button type="button" className="ghost" disabled={busy} onClick={onClose}>Cancel</button>
+        <button type="button" className="ghost primary" disabled={busy || !dirty} onClick={() => void save()}>Save</button>
+      </footer>
     </Sheet>
   );
 }
