@@ -44,4 +44,3 @@ export const RELAY_THREAD_METHODS = [
   'threads.goal', 'threads.setModel', 'threads.snooze', 'threads.settle', 'threads.reopen',
   'threads.rename', 'threads.regenerateTitle', 'threads.previewTitle', 'threads.delete', 'threads.readNote',
 ] as const satisfies readonly MethodName[];
-export type RelayThreadMethod = typeof RELAY_THREAD_METHODS[number];

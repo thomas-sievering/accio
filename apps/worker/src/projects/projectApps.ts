@@ -1,12 +1,12 @@
 import { execFile, fork, spawn, type ChildProcess } from 'node:child_process';
 import { appendFile, mkdir, open, readFile, stat, writeFile } from 'node:fs/promises';
-import { createConnection, createServer } from 'node:net';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { CommitView, ProjectAppView, ProjectChangelog } from '@accio/protocol';
 import { JsonFile } from '@accio/persistence';
 import { git, maybeGit } from '../git.js';
+import { freePort, listening, portFree } from '../ports.js';
 import { samePath } from '../paths.js';
 import type { Broadcast, Router } from '../rpc/router.js';
 import { UserError } from '../rpc/router.js';
@@ -480,27 +480,4 @@ function killTree(child: ChildProcess) {
   if (!child.pid || child.exitCode !== null) return;
   if (process.platform === 'win32') execFile('taskkill', ['/pid', String(child.pid), '/t', '/f'], { windowsHide: true }, () => {});
   else try { process.kill(-child.pid, 'SIGTERM'); } catch { child.kill(); }
-}
-
-function listening(port: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const socket = createConnection({ host: '127.0.0.1', port });
-    const finish = (connected: boolean) => { socket.destroy(); resolve(connected); };
-    socket.once('connect', () => finish(true)); socket.once('error', () => finish(false)); socket.setTimeout(300, () => finish(false));
-  });
-}
-
-async function portFree(port: number): Promise<boolean> {
-  const server = createServer();
-  const ok = await new Promise<boolean>((resolve) => { server.once('error', () => resolve(false)); server.listen(port, '127.0.0.1', () => resolve(true)); });
-  if (ok) await new Promise<void>((resolve) => server.close(() => resolve()));
-  return ok;
-}
-
-async function freePort(): Promise<number> {
-  const server = createServer();
-  await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
-  const port = (server.address() as { port: number }).port;
-  await new Promise<void>((resolve) => server.close(() => resolve()));
-  return port;
 }
