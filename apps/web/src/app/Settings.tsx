@@ -3,6 +3,7 @@ import { HubSettings } from '../hub/HubSettings';
 import { MachineSettings } from '../machine/MachineSettings';
 import { HarnessesSettings } from '../harnesses/HarnessesSettings';
 import { SystemPromptSettings } from '../harnesses/SystemPromptSettings';
+import { NamingSettings } from '../threads/NamingSettings';
 import { AccountsSettings } from '../profiles/AccountsSettings';
 import { ProfilesSettings } from '../profiles/ProfilesSettings';
 import { useProfiles } from '../profiles/profiles';
@@ -17,7 +18,7 @@ import { HubSelector } from '../hub/HubSelector';
 
 /** Where Settings is open. `profileId` opens one profile ('new' to add one). */
 export type SettingsRoute = { section: 'profiles'; profileId?: string } | { section: 'accounts'; accountId?: string } | ({ section: 'secrets' } & SecretsRoute) | { section: 'hub' } | { section: 'harnesses'; harnessId?: string } | { section: 'systemPrompt' } | { section: 'machines'; machineId?: string }
-  | { section: 'tools'; toolId?: string } | { section: 'mcps'; mcpId?: string } | { section: 'skills'; sourceId?: string };
+  | { section: 'naming' } | { section: 'tools'; toolId?: string } | { section: 'mcps'; mcpId?: string } | { section: 'skills'; sourceId?: string };
 type Section = SettingsRoute['section'];
 
 const GROUPS: { label?: string; items: { id: Section; label: string; icon: ReactNode }[] }[] = [
@@ -27,6 +28,7 @@ const GROUPS: { label?: string; items: { id: Section; label: string; icon: React
     { id: 'profiles', label: 'Profiles', icon: <Users /> },
     { id: 'harnesses', label: 'Harnesses', icon: <Layers /> },
     { id: 'systemPrompt', label: 'System prompt', icon: <ScrollText /> },
+    { id: 'naming', label: 'Thread naming', icon: <ScrollText /> },
     { id: 'machines', label: 'Machines', icon: <Monitor /> },
   ] },
   { label: 'Tools and skills', items: [
@@ -134,6 +136,7 @@ export function Settings({ route, onRoute, onClose, onOpenThread }: { route: Set
             {route.section === 'hub' && <HubSettings />}
             {route.section === 'harnesses' && <HarnessesSettings harnessId={route.harnessId} onOpen={(harnessId) => onRoute({ section: 'harnesses', harnessId })} onBack={() => onRoute({ section: 'harnesses' })} />}
             {route.section === 'systemPrompt' && <SystemPromptSettings />}
+            {route.section === 'naming' && <NamingSettings />}
             {route.section === 'tools' && <ToolsSettings key={toolId ?? ''} toolId={toolId} onOpen={(id) => onRoute({ section: 'tools', toolId: id })} onBack={() => onRoute({ section: 'tools' })} onOpenThread={onOpenThread} />}
             {route.section === 'mcps' && <McpSettings key={mcpId ?? ''} mcpId={mcpId} onOpen={(id) => onRoute({ section: 'mcps', mcpId: id })} onBack={() => onRoute({ section: 'mcps' })} />}
             {route.section === 'skills' && <SkillsSettings key={sourceId ?? ''} sourceId={sourceId} onOpen={(id) => onRoute({ section: 'skills', sourceId: id })} onBack={() => onRoute({ section: 'skills' })} />}

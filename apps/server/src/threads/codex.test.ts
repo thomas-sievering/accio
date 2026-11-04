@@ -8,7 +8,25 @@ import { harnessEnv } from './harnessEnv.js';
 import { codexEvents, codexHarness } from './codex.js';
 
 let home: string | undefined;
-afterEach(async () => { vi.useRealTimers(); if (home) await rm(home, { recursive: true, force: true }); home = undefined; });
+afterEach(async () => { vi.useRealTimers(); vi.unstubAllGlobals(); if (home) await rm(home, { recursive: true, force: true }); home = undefined; });
+
+it('names with a tool-free Responses request and handles fragmented streaming output', async () => {
+  const encoder = new TextEncoder();
+  const event = 'data: ' + JSON.stringify({ type: 'response.output_text.delta', delta: '{"title":"Login redirects"}' }) + '\n\n';
+  const fetchMock = vi.fn(async () => new Response(new ReadableStream({ start(controller) {
+    controller.enqueue(encoder.encode(event.slice(0, 15)));
+    controller.enqueue(encoder.encode(event.slice(15) + 'data: {"type":"response.completed"}\r\n\r\n'));
+    controller.close();
+  } })));
+  vi.stubGlobal('fetch', fetchMock);
+  const factory = vi.fn();
+  const result = await codexHarness(factory).generateText!({ cwd: 'isolated', prompt: 'Name this', model: 'small-mini', effort: 'low', env: { ACCIO_OPENAI_URL: 'http://localhost/openai', ACCIO_OPENAI_KEY: 'profile-key' }, signal: new AbortController().signal });
+  expect(result).toBe('{"title":"Login redirects"}');
+  const [url, options] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+  expect(url).toBe('http://localhost/openai/responses');
+  expect(JSON.parse(String(options.body))).toMatchObject({ model: 'small-mini', tools: [], reasoning: { effort: 'low' }, store: false });
+  expect(factory).not.toHaveBeenCalled();
+});
 
 it('steers the expected native Codex turn and unregisters when it completes', async () => {
   home = await mkdtemp(join(tmpdir(), 'accio-steer-codex-'));

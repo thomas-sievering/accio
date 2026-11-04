@@ -10,6 +10,44 @@ import { ACCIO_MCP_SERVER } from '../tools/tools.js';
 /** Codex runs on this machine. Only the profile's scoped proxy key reaches it. */
 export function codexHarness(factory: CodexFactory = startCodex): Harness {
   return {
+    async generateText({ prompt, model, effort, env, signal }) {
+      // A Responses request avoids starting an agent with shell or repository access.
+      const response = await fetch(`${env.ACCIO_OPENAI_URL}/responses`, {
+        method: 'POST', signal, redirect: 'error',
+        headers: { authorization: `Bearer ${env.ACCIO_OPENAI_KEY}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ model, stream: true, store: false,
+          instructions: 'You name conversations. Return only the requested JSON.',
+          input: [{ role: 'user', content: [{ type: 'input_text', text: prompt }] }],
+          tools: [], ...(effort ? { reasoning: { effort } } : {}), text: { verbosity: 'low' },
+        }),
+      });
+      if (!response.ok || !response.body) { await response.body?.cancel(); throw new Error('Title generation provider is unavailable'); }
+      let buffer = '';
+      let text = '';
+      let size = 0;
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      try {
+        for (;;) {
+          const chunk = await reader.read();
+          if (chunk.done) break;
+          size += chunk.value.length;
+          if (size > 128_000) throw new Error('Title response exceeded its limit');
+          buffer += decoder.decode(chunk.value, { stream: true });
+          const lines = buffer.split('\n'); buffer = lines.pop()!;
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const data = line.slice(6).trim();
+            if (data === '[DONE]') continue;
+            const event = JSON.parse(data);
+            if (event.type === 'response.output_text.delta') text += event.delta;
+            if (event.type === 'response.failed' || event.type === 'error' || event.type === 'response.incomplete') throw new Error('Title generation failed');
+            if (event.type === 'response.completed') return text || event.response?.output?.flatMap((item: any) => item.content ?? []).map((part: any) => part.text ?? '').join('') || '';
+          }
+        }
+        throw new Error('Title response was interrupted');
+      } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
+    },
     async *run({ cwd, prompt, sessionId, model, effort, modelName, env, tools, signal, resourceInstructions, mcps, requestSecret, secretPurposes, registerSteer, toolsOff = [] }) {
       if (signal.aborted) return;
       const home = env.CODEX_HOME;

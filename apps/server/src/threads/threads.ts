@@ -39,6 +39,7 @@ import { Previews } from './previews.js';
 import { ThreadState } from './state.js';
 import { Turns } from './turns.js';
 import { registerThreadSkills } from './threadSkills.js';
+import { ThreadNaming } from './naming.js';
 
 /** Threads on this machine, their transcripts, and the turns running in them. */
 export class Threads {
@@ -55,6 +56,7 @@ export class Threads {
   private previews: Previews;
   private deliveries: Deliveries;
   private turns: Turns;
+  private naming: ThreadNaming;
   private restartCandidates = new Set<string>();
 
   constructor(
@@ -70,6 +72,7 @@ export class Threads {
     deliveryHosting?: DeliveryHosting,
   ) {
     this.state = new ThreadState(home, projects, broadcast, (threadId) => this.secrets.hasPending(threadId));
+    this.naming = new ThreadNaming(this.state, profiles, models, harnesses);
     this.previews = new Previews(home);
     this.assets = new ThreadAssets(home, (threadId) => this.state.list.some((thread) => thread.id === threadId));
     this.content = new ThreadContent(home, this.assets);
@@ -82,7 +85,7 @@ export class Threads {
       withLifecycle: (threadId, action) => this.withLifecycle(threadId, action),
     }, deliveryHosting);
     this.turns = new Turns(this.state, { profiles, projects, models, machines, harnesses, secrets: this.secrets, content: this.content, deliveries: this.deliveries, tools,
-      resources: () => this.resources, toolsOff: (harnessId) => builtinToolsOff(harnessId, this.toolOverrides?.()[harnessId]), onRepairFinished: (toolId) => this.onRepairFinished?.(toolId) });
+      resources: () => this.resources, toolsOff: (harnessId) => builtinToolsOff(harnessId, this.toolOverrides?.()[harnessId]), onWorkFinished: id => this.naming.refine(id), onRepairFinished: (toolId) => this.onRepairFinished?.(toolId) });
     projects.onRemoveThreads((id) => this.deleteThreads(this.state.list.filter((t) => t.checkoutId === id)));
     projects.onCheckInUse((checkoutId) => this.countUsing((t) => t.checkoutId === checkoutId));
     projects.onCheckProjectInUse((projectId) => this.countUsing((t) => t.projectId === projectId));
@@ -276,7 +279,18 @@ export class Threads {
       .on('threads.snooze', ({ threadId, until }) => organize(threadId, t => snooze(t, until)))
       .on('threads.settle', ({ threadId }) => organize(threadId, t => settle(t, now())))
       .on('threads.reopen', ({ threadId }) => organize(threadId, t => reopen({ ...t, ...(t.delivery ? { delivery: { ...t.delivery, keepOpen: true } } : {}) })))
-      .on('threads.rename', async ({ threadId, title }) => toView(await state.update(threadId, (t) => ({ ...t, title }))))
+      .on('threads.rename', async ({ threadId, title }) => {
+        this.naming.cancel(threadId);
+        return toView(await state.updateDurably(threadId, t => ({ ...t, title, titleManual: true, titleNeedsRefinement: false })));
+      })
+      .on('threads.regenerateTitle', async ({ threadId }) => {
+        await this.naming.regenerate(threadId);
+        return toView(state.require(threadId));
+      })
+      .on('threads.previewTitle', async ({ threadId, instructions, model }) => {
+        const result = await this.naming.preview(threadId, { automatic: true, instructions, model });
+        return { title: result.title };
+      })
       .on('threads.delete', async ({ threadId }) => {
         await this.deleteThreads([state.require(threadId)]);
         return null;
@@ -337,6 +351,7 @@ export class Threads {
           } else await this.deleteThreads([state.require(thread.id)]);
           throw err;
         }
+        this.naming.initial(thread.id);
         return toView(state.require(thread.id));
       } finally {
         release();
@@ -445,6 +460,7 @@ export class Threads {
     const saved = state.commit(state.list.filter((t) => !ids.has(t.id)));
     const writes = state.transcripts.forget(ids);
     for (const id of ids) {
+      this.naming.cancel(id);
       state.starting.delete(id);
       this.deliveries.clearCheck(id);
     }
@@ -460,6 +476,7 @@ export class Threads {
   async close() {
     const { state } = this;
     state.closing = true;
+    await this.naming.close();
     this.deliveries.close();
     // Persist intent before aborting. An already-aborted controller belongs to an explicit Stop.
     state.list = state.list.map(t => t.resumeAfterRestart !== false && state.running.has(t.id) && !state.running.get(t.id)!.signal.aborted && t.sessionId && !t.delivery

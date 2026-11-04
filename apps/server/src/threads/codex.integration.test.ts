@@ -21,6 +21,25 @@ describe('Codex and ChatGPT accounts', () => {
     return { profile, account, login };
   }
 
+  it('generates a title through the profile proxy with an independently selected model', async () => {
+    const fake = new FakeCodex();
+    const requests: { headers: Headers; body: any }[] = [];
+    t = await startTestApp({ codexFactory: fake.factory, openaiFetch: async (_url, init) => {
+      requests.push({ headers: new Headers(init?.headers), body: JSON.parse(new TextDecoder().decode(init?.body as Uint8Array)) });
+      return new Response('data: ' + JSON.stringify({ type: 'response.completed', response: { output: [{ content: [{ type: 'output_text', text: '{"title":"Fix login redirects"}' }] }] } }) + '\n\n', { headers: { 'content-type': 'text/event-stream' } });
+    } });
+    const c = await t.connect();
+    const { profile } = await signIn(c, fake);
+    await c.call('threadNaming.save', { automatic: true, model: { harnessId: 'codex', modelId: 'test-fast', effort: 'low' }, instructions: '' });
+    const thread = await c.call('threads.start', { profileId: profile.id, model: codex, text: 'Fix the login redirects' });
+    await c.waitFor('threads.changed', list => list.some(item => item.id === thread.id && item.title === 'Fix login redirects'));
+    expect(requests).toHaveLength(1);
+    expect(requests[0]!.headers.get('chatgpt-account-id')).toBe('Personal');
+    expect(requests[0]!.body).toMatchObject({ model: 'test-fast', tools: [], reasoning: { effort: 'low' }, store: false });
+    expect((await c.call('threads.list', {}))[0]!.model).toEqual(codex);
+    expect((await c.call('threads.transcript', { threadId: thread.id })).filter(item => item.kind === 'user')).toHaveLength(1);
+  });
+
   it('signs in, streams text and tools, and resumes the same Codex session after restart', async () => {
     const fake = new FakeCodex();
     t = await startTestApp({ codexFactory: fake.factory });

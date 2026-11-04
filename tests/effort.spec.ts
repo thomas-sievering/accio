@@ -4,7 +4,7 @@ const token = 'isolated-chat-test-token';
 const chip = (page: Page) => page.getByRole('button', { name: /^Select model:/ });
 
 async function openThread(page: Page) {
-  await page.getByRole('button', { name: /Choice fixture/ }).click();
+  await page.locator('.sidebar').getByRole('button', { name: /Choice fixture/ }).click();
   await expect(chip(page)).toBeEnabled();
 }
 

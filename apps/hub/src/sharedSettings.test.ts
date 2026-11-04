@@ -27,12 +27,14 @@ it('preserves concurrent settings from different slices and reloads them', async
     settings.renameMachine('here', 'My desktop'),
     settings.setProfileFolders('here', 'work', ['/work']),
     settings.setModelFavorite('work', { ...model, modelId: 'two' }, true),
+    settings.setThreadNaming({ automatic: false, model: { harnessId: 'claudeCode', modelId: 'haiku' }, instructions: 'Use sentence case' }),
   ]);
   const reloaded = new SharedSettings(home);
   await reloaded.load();
   expect(reloaded.profiles()).toEqual([{ id: 'work', name: 'Work renamed' }, { id: 'personal', name: 'Personal' }]);
   expect(reloaded.machine('here')).toMatchObject({ name: 'My desktop', profileFolders: { work: ['/work'] } });
   expect(reloaded.modelFavorites('work')).toEqual([model, { ...model, modelId: 'two' }]);
+  expect(reloaded.threadNaming()).toEqual({ automatic: false, model: { harnessId: 'claudeCode', modelId: 'haiku' }, instructions: 'Use sentence case' });
 });
 
 it('does not publish failed settings or notify observers and recovers its queue', async () => {

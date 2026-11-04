@@ -17,6 +17,7 @@ import { MachinePicker } from './MachinePicker';
 import { ModelPicker } from './ModelPicker';
 import { ThreadNotice } from './ThreadNotice';
 import { ThreadActionsMenu } from './ThreadActionsMenu';
+import { EditableTitle } from './EditableTitle';
 import { Transcript } from './Transcript';
 import { useReportPendingSecrets } from '../secrets/pendingSecrets';
 import { useThreads, useTranscript } from './threads';
@@ -52,7 +53,7 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
 
   return (
     <>
-      <PaneHeader title={thread.title} {...place} checkout={thread.workspace && !thread.workspace.releasedAt && place.checkout ? { ...place.checkout, path: thread.workspace.path } : place.checkout} actions={<ThreadActionsMenu key={thread.id} thread={thread} items={items} />} />
+      <PaneHeader title={thread.title} titleEditor={<EditableTitle key={thread.id} thread={thread} />} {...place} checkout={thread.workspace && !thread.workspace.releasedAt && place.checkout ? { ...place.checkout, path: thread.workspace.path } : place.checkout} actions={<ThreadActionsMenu key={thread.id} thread={thread} items={items} />} />
       {visibleItems ? <PendingPick.Provider value={{ pick, setPick, enabled: !running }}>
         <Transcript threadId={thread.id} items={visibleItems} working={running} onOpenSecrets={onOpenSecrets} />
       </PendingPick.Provider> : (
@@ -138,6 +139,7 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
 /** A compact project / thread breadcrumb; hover the project to see its checkout path. */
 function PaneHeader(props: {
   title: string;
+  titleEditor?: ReactNode;
   checkout?: CheckoutView;
   project?: ProjectView;
   actions?: ReactNode;
@@ -153,7 +155,7 @@ function PaneHeader(props: {
           </span>
         </span>
         <span className="faint" aria-hidden="true">/</span>
-        <b title={props.title}>{props.title}</b>
+        {props.titleEditor ?? <b title={props.title}>{props.title}</b>}
       </div>
       {props.actions}
     </header>

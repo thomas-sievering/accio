@@ -81,6 +81,9 @@ export function ThreadMenuProvider({ children }: { children: ReactNode }) {
                 <span className="menu-text">Rename…</span>
               </button>
               {running && item('Stop', 'stop')}
+              <button className="menu-item" role="menuitem" disabled={busy} onClick={() => done(() => client.call('threads.regenerateTitle', { threadId: t.id }))}>
+                <span className="menu-text">{busy ? 'Generating…' : 'Regenerate title'}</span>
+              </button>
               {place === 'snoozed' ? item('Wake now', 'reopen') : item('Snooze until morning', 'snooze')}
               {place === 'settled' ? item('Reopen', 'reopen') : item('Settle', 'settle')}
               <hr />
