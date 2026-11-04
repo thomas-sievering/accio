@@ -25,7 +25,7 @@ The process on a machine that runs harnesses, executes turns and provides access
 _Avoid_: Server (for the role), machine (for the process), agent, sub-agent
 
 **Relay**:
-The hub passing messages between workers on different machines, so you can read and drive a thread from any client. The thread stays on its worker's machine; nothing is copied. Each client lists every machine's threads together, with the owning machine's name on the others. While that machine is offline its threads stay listed from the last list it sent, greyed and read-only. Images, files and Open app on another machine's thread, and starting a thread there, are not relayed yet. See the [relay plan](docs/plans/thread-relay.md).
+The hub passing messages between workers on different machines, so you can read and drive a thread from any client. The thread stays on its worker's machine; nothing is copied. Each client lists every machine's threads together, with the owning machine's name on the others. While that machine is offline its threads stay listed from the last list it sent, greyed and read-only. A new thread can start on another machine that has a checkout of the same repository, or on any machine for No project. Images, files and Open app on another machine's thread are not relayed yet. See the [relay plan](docs/plans/thread-relay.md).
 _Avoid_: Sync (for threads), tunnel
 
 **Shared settings**:

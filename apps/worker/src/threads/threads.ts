@@ -363,7 +363,7 @@ export class Threads {
         const machine = this.machines.views().find((m) => m.id === machineId);
         if (!machine) throw new UserError('No such machine');
         if (!machine.connected) throw new UserError('This machine is offline');
-        if (!machine.thisMachine) throw new UserError('Running threads on another machine is not available yet');
+        if (!machine.thisMachine) throw new UserError(`Update accio on ${machine.name} to start threads there.`);
       }
       state.assertOpen();
       const checkout = 'checkoutId' in input ? this.projects.checkout(input.checkoutId) : undefined;
