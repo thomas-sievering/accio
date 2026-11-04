@@ -42,6 +42,7 @@ async function createWindow(ready: Ready) {
     height: 840,
     backgroundColor: '#18191d',
     title: process.env.ACCIO_WINDOW_TITLE ?? 'accio',
+    icon: join(here, '../icon.ico'),
     autoHideMenuBar: true,
     // Same chrome as botbot: native caption buttons over a hidden title bar.
     titleBarStyle: 'hidden',
@@ -82,6 +83,10 @@ ipcMain.handle('accio:open-folder', async (event, path: unknown) => {
   const error = await shell.openPath(path);
   if (error) throw new Error(error);
 });
+
+// Its own taskbar group on Windows, so the accio icon isn't merged into another Electron app's;
+// a `pnpm try` window keeps a separate group from the real one.
+if (process.platform === 'win32') app.setAppUserModelId(process.env.ACCIO_WINDOW_TITLE ? `accio.${process.env.ACCIO_WINDOW_TITLE}` : 'accio');
 
 app.whenReady().then(async () => {
   try {
