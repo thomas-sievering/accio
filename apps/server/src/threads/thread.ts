@@ -4,11 +4,11 @@ import { DEFAULT_MODEL } from '@accio/protocol';
 import { UserError } from '../rpc/router.js';
 
 /** A thread as stored: what clients see, plus the harness session it continues. */
-export type Thread = ThreadView & { sessionId: string | null; organizationVersion?: number; resumeAfterRestart?: boolean };
+export type Thread = ThreadView & { sessionId: string | null; organizationVersion?: number; resumeAfterRestart?: boolean; titleManual?: boolean; titleNeedsRefinement?: boolean };
 
 export const NEW_THREAD_TITLE = 'New thread';
 
-export function toView({ sessionId: _s, organizationVersion: _o, resumeAfterRestart: _r, ...view }: Thread): ThreadView {
+export function toView({ sessionId: _s, organizationVersion: _o, resumeAfterRestart: _r, titleManual: _m, titleNeedsRefinement: _n, ...view }: Thread): ThreadView {
   return view;
 }
 
@@ -74,7 +74,7 @@ export function startTurn(thread: Thread, firstText: string, now: string): Threa
     ...reopen(thread),
     status: 'running',
     resumeAfterRestart: undefined,
-    title: thread.title === NEW_THREAD_TITLE ? titleFrom(firstText) : thread.title,
+    title: thread.title === NEW_THREAD_TITLE && !thread.titleManual ? titleFrom(firstText) : thread.title,
     updatedAt: now,
   };
 }

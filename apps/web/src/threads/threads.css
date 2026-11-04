@@ -911,3 +911,7 @@ div.model-picker-empty b { color: var(--ink); font-weight: 500; }
 .goal-bar button svg { width: 13px; height: 13px; }
 .goal-bar .error { margin: 0; }
 .goal-continue { align-self: center; color: var(--dim); font-size: 12px; }
+.editable-thread-title { font: inherit; font-weight: 600; color: inherit; background: none; border: 0; padding: 3px 5px; border-radius: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; -webkit-app-region: no-drag; }
+.editable-thread-title:hover { background: var(--hover); }
+.thread-title-form { display: flex; flex-direction: row; align-items: center; gap: 6px; min-width: 0; -webkit-app-region: no-drag; }
+.thread-title-form input { min-width: 100px; width: 260px; max-width: 35vw; }

@@ -175,6 +175,7 @@ const PickInput = z.object({ choiceId: z.string().min(1).max(512), option: z.int
 const Send = z.object({ threadId: z.string(), text: z.string().trim(), pick: PickInput.optional(), mode: z.enum(['steer', 'queue']).optional() })
   .refine((send) => send.text.length > 0 || send.pick, { message: 'Write a message or pick an option' });
 const Rename = z.object({ threadId: z.string(), title: z.string().trim().min(1).max(120) });
+const PreviewTitle = z.object({ threadId: z.string(), instructions: z.string().trim().max(2000), model: ModelSelection.nullable() });
 const ToolDetailRequest = z.object({ threadId: z.string(), itemId: z.string().min(1).max(512) });
 const AssetRequest = z.object({ threadId: z.string(), assetId: z.string().uuid(), download: z.boolean().optional() });
 const FileRequest = z.object({ threadId: z.string(), path: z.string().min(1).max(4096) });
@@ -215,6 +216,8 @@ export const threadMethods = {
   /** Takes a thread off the Snoozed or Settled shelf. Sending a message does the same. */
   'threads.reopen': method<typeof ThreadId, ThreadView>(ThreadId),
   'threads.rename': method<typeof Rename, ThreadView>(Rename),
+  'threads.regenerateTitle': method<typeof ThreadId, ThreadView>(ThreadId),
+  'threads.previewTitle': method<typeof PreviewTitle, { title: string }>(PreviewTitle),
   'threads.delete': method<typeof ThreadId, null>(ThreadId),
 };
 

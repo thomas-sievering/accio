@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { JsonStore } from '@accio/persistence';
-import type { HarnessInstall, MachineInfo } from '@accio/protocol';
+import { DEFAULT_THREAD_NAMING, type ThreadNamingSettings, type HarnessInstall, type MachineInfo } from '@accio/protocol';
 
 export type { HarnessInstall };
 
@@ -24,6 +24,7 @@ export type SharedSeed = { profiles: SharedProfile[]; machines: MachineRecord[] 
 
 type FavoriteModel = { harnessId: string; modelId: string };
 type Data = SharedSeed & {
+  threadNaming?: ThreadNamingSettings;
   modelFavorites?: Record<string, FavoriteModel[]>;
   /** GLOSSARY: Built-in tools. Harness id → switch id → on, only where it differs from accio's default. */
   harnessTools?: Record<string, Record<string, boolean>>;
@@ -52,6 +53,12 @@ export class SharedSettings {
   }
 
   private get data() { return this.store.data; }
+
+  threadNaming(): ThreadNamingSettings { return structuredClone(this.data.threadNaming ?? DEFAULT_THREAD_NAMING); }
+
+  async setThreadNaming(threadNaming: ThreadNamingSettings) {
+    await this.change(() => this.commit({ ...this.data, threadNaming }));
+  }
 
   /** Connected clients observe the same machine registry and folder settings. */
   onMachinesChanged(listener: () => void): () => void {

@@ -24,6 +24,7 @@ export type HubSnapshot = {
   favorites: Record<string, { harnessId: string; modelId: string }[]>;
   /** Absent in snapshots cached before built-in tool switches existed. */
   harnessTools?: Record<string, Record<string, boolean>>;
+  threadNaming?: ReturnType<SharedSettings['threadNaming']>;
   models: Record<string, CodexModel[]>;
   resources: ResourcesState;
   limits: AccountLimitsView[];
@@ -69,6 +70,7 @@ export async function startHubService(opts: HubServiceOptions) {
     const profiles = settings.profiles();
     return { hubId: trust.id, protocol: HUB_PROTOCOL, revision, epoch, profiles: profileViews(profiles, hub), accounts: hub.accountViews(), machines: settings.machines(),
       favorites: Object.fromEntries(profiles.map((p) => [p.id, settings.modelFavorites(p.id)])), harnessTools: settings.harnessTools(),
+      threadNaming: settings.threadNaming(),
       models: Object.fromEntries(profiles.map((p) => [p.id, hub.codexModels(p.id)])), resources: resources.state(), limits: hub.limits.views(), secrets: profiles.flatMap(p => secrets.list(p.id)) };
   }
   function announce() { revision++; for (const ws of sockets.clients) if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ revision })); }
@@ -206,6 +208,7 @@ export async function startHubService(opts: HubServiceOptions) {
       case 'machines.setProfileFolders': await settings.setProfileFolders(p.machineId, p.profileId, p.folders); return null;
       case 'models.favorite': await settings.setModelFavorite(p.profileId, p.model, p.favorite); return null;
       case 'harnesses.setTools': await settings.setHarnessTools(p.harnessId, p.tools); return null;
+      case 'threadNaming.save': await settings.setThreadNaming(p); return settings.threadNaming();
       default: throw new SignInError(`Unknown hub method ${method}`);
     }
   }

@@ -40,6 +40,7 @@ export type TurnDeps = {
   /** GLOSSARY: Built-in tools. Read as each turn starts, so a change applies from the next turn. */
   toolsOff: (harnessId: string) => BuiltinTool[];
   onRepairFinished: (toolId: string) => void;
+  onWorkFinished?: (threadId: string) => void;
 };
 
 /** Starting, running, steering and finishing the turns of threads on this machine. */
@@ -155,6 +156,8 @@ export class Turns {
       started = true;
       state.starting.delete(thread.id);
       next = await state.update(thread.id, t => ({ ...next,
+        title: t.title === 'New thread' && !t.titleManual ? next.title : t.title,
+        titleManual: t.titleManual, titleNeedsRefinement: t.titleNeedsRefinement,
         queuedMessages: options.queuedId ? t.queuedMessages?.filter(m => m.id !== options.queuedId) : t.queuedMessages,
         goal: goalTurnStarted(t.goal),
       }));
@@ -284,6 +287,7 @@ export class Turns {
         deps.profiles.refreshLimits(thread.profileId, providerOf(thread.model.harnessId));
         if (thread.repairToolId && outcome === 'completed') deps.onRepairFinished(thread.repairToolId);
         if (outcome === 'completed') {
+          if (!delivering) deps.onWorkFinished?.(thread.id);
           await this.dispatchQueued(thread.id);
           if (goalContinues) await this.continueGoal(thread.id);
           await deps.deliveries.dispatch(thread.id);

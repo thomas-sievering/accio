@@ -19,6 +19,8 @@ function newestFirst<T extends { name: string }>(models: T[]): T[] {
 export class Models {
   constructor(private profiles: Profiles, private settings: SettingsAccess, private machineId: string, private claude: ClaudeModels) {}
 
+  namingSettings() { return this.settings.threadNaming(); }
+
   list(profileId: string): ModelsState {
     const profile = this.profiles.profileView(profileId);
     const installed = this.settings.machine(this.machineId)?.harnesses ?? [];
@@ -117,6 +119,11 @@ export class Models {
   }
 
   register(router: Router, broadcast: Broadcast) {
+    router.on('threadNaming.get', () => this.namingSettings());
+    router.on('threadNaming.save', async (settings) => {
+      await this.settings.setThreadNaming(settings);
+      return this.namingSettings();
+    });
     this.settings.onMachinesChanged(() => broadcast('models.changed', null));
     this.watchLimits(() => broadcast('models.changed', null));
     router.on('models.list', ({ profileId }) => this.list(profileId));

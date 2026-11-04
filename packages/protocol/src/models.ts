@@ -77,7 +77,16 @@ const ProfileId = z.object({ profileId: z.string() });
 const HarnessTool = z.object({ harnessId: z.string().min(1), toolId: z.string().min(1), on: z.boolean() });
 const HarnessId = z.object({ harnessId: z.string().min(1) });
 const Favorite = ProfileId.extend({ model: ModelSelection, favorite: z.boolean() });
+export const ThreadNamingSettings = z.object({
+  automatic: z.boolean().default(true),
+  model: ModelSelection.nullable().default(null),
+  instructions: z.string().trim().max(2000).default(''),
+});
+export type ThreadNamingSettings = z.output<typeof ThreadNamingSettings>;
+export const DEFAULT_THREAD_NAMING: ThreadNamingSettings = { automatic: true, model: null, instructions: '' };
 export const modelMethods = {
+  'threadNaming.get': method<z.ZodObject<{}>, ThreadNamingSettings>(z.object({})),
+  'threadNaming.save': method<typeof ThreadNamingSettings, ThreadNamingSettings>(ThreadNamingSettings),
   'harnesses.list': method<z.ZodObject<{}>, HarnessView[]>(z.object({})),
   'harnesses.setTool': method<typeof HarnessTool, HarnessView[]>(HarnessTool),
   'harnesses.resetTools': method<typeof HarnessId, HarnessView[]>(HarnessId),

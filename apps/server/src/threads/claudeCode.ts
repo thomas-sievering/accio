@@ -18,6 +18,28 @@ const HARD_STOP_AFTER_MS = 3000;
  * the checkout's own .claude folder and CLAUDE.md.
  */
 export const claudeCode: Harness = {
+  async generateText({ cwd, prompt, model, effort, env, signal }) {
+    const abortController = new AbortController();
+    const abort = () => abortController.abort();
+    signal.addEventListener('abort', abort, { once: true });
+    if (signal.aborted) abort();
+    const q = query({ prompt, options: {
+      cwd, model, env: { ...env, CLAUDE_CODE_MAX_OUTPUT_TOKENS: '256' }, abortController,
+      tools: [], mcpServers: {}, strictMcpConfig: true, settingSources: [],
+      systemPrompt: 'You name conversations. Return only the requested JSON.',
+      maxTurns: 1, persistSession: false,
+      ...(effort ? { effort: effort as 'low' } : {}),
+    } });
+    try {
+      for await (const message of q) {
+        if (message.type === 'result') {
+          if (message.is_error || !('result' in message)) throw new Error('Title generation failed');
+          return message.result;
+        }
+      }
+      throw new Error('No generated title');
+    } finally { signal.removeEventListener('abort', abort); q.close(); await q.return(); }
+  },
   async *run({ cwd, prompt, sessionId, model, effort, modelName, env, tools, signal, resourceInstructions, mcps, requestSecret, secretPurposes, registerSteer, toolsOff = [] }: HarnessTurn) {
     if (signal.aborted) return;
     const abortController = new AbortController();

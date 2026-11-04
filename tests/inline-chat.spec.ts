@@ -9,7 +9,7 @@ const token = 'isolated-chat-test-token';
 
 test('Enter steers, Ctrl changes Send and queues; queued edits are held until saved', async ({ page, baseURL }, testInfo) => {
   await page.goto(`${baseURL}/#token=${token}`);
-  await page.getByRole('button', { name: /Inline chat fixture/ }).click();
+  await page.locator('.sidebar').getByRole('button', { name: /Inline chat fixture/ }).click();
   const input = page.locator('.composer textarea');
   await input.fill('Steering fixture'); await input.press('Enter');
   await expect(page.getByText('Waiting for steering.', { exact: true })).toBeVisible();
@@ -48,12 +48,12 @@ test('Enter steers, Ctrl changes Send and queues; queued edits are held until sa
   await expect(page.getByText('Finished: Queued edited', { exact: true })).toBeVisible();
   await expect(tray).toHaveCount(0);
   await page.reload();
-  await page.getByRole('button', { name: /Inline chat fixture/ }).click();
+  await page.locator('.sidebar').getByRole('button', { name: /Inline chat fixture/ }).click();
   await expect(page.getByText('Steered: Use the existing helper', { exact: true })).toBeVisible();
 });
 async function openChat(page: Page, baseURL: string, navigate = true) {
   if (navigate) await page.goto(`${baseURL}/#token=${token}`);
-  await page.getByRole('button', { name: /Inline chat fixture/ }).click();
+  await page.locator('.sidebar').getByRole('button', { name: /Inline chat fixture/ }).click();
   await expect(page.getByAltText('Saved picture')).toBeAttached();
 }
 
@@ -248,7 +248,7 @@ test('Electron renderer supports the same tools, snapshots, viewer and media con
 
 test('a choice shows screenshots full size and sends the pick with feedback', async ({ page, baseURL }) => {
   await page.goto(`${baseURL}/#token=${token}`);
-  await page.getByRole('button', { name: /Choice fixture/ }).click();
+  await page.locator('.sidebar').getByRole('button', { name: /Choice fixture/ }).click();
   await expect(page.getByText('Which Accounts layout?')).toBeVisible();
   await expect(page.locator('.choice-option')).toHaveCount(3);
   for (const label of ['List rows', 'Cards', 'Grouped by provider']) {

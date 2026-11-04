@@ -53,6 +53,7 @@ const harness = new FakeHarness(async function* (run) {
     yield* replyWith(`Goal turn ${turn}.`);
     return;
   }
+  if (run.prompt.startsWith('Naming fixture:')) { yield* replyWith('The login redirect loops after sign-in.'); return; }
   if (run.prompt === 'Build CI progress fixture') {
     ciPolls.set(run.cwd, 0);
     await writeFile(join(run.cwd, 'ci-fixture.txt'), 'CI progress');
@@ -187,6 +188,11 @@ const harness = new FakeHarness(async function* (run) {
   // The first browser view occurs after these source files have gone away.
   for (const name of ['chat.png', 'chat.webm', 'chat.ogg', 'my image.png', '漢字.png', 'literal%20image.png']) await rm(join(run.cwd, name));
 });
+// Only the naming journey gets generated titles; existing fixtures retain their searchable names.
+Object.assign(harness, { generateText: async ({ prompt }: { prompt: string }) => {
+  if (!prompt.includes('Naming fixture:')) throw new Error('No naming response for this fixture');
+  return JSON.stringify({ title: prompt.includes('Use German') ? 'Anmeldung reparieren' : 'Fix login redirects', needsRefinement: false });
+} });
 const app = await startApp({ home, host: '127.0.0.1', port: Number(process.env.ACCIO_CHAT_TEST_PORT ?? 47481), hubPort: 0, token, webRoot: resolve('apps/web/dist') }, {
   harness,
   // Hosting is the external boundary under test. Git publication and thread state stay real.

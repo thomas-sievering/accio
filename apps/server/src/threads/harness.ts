@@ -78,4 +78,6 @@ export type TurnResources = { env: Record<string, string>; instructions: string;
 
 export interface Harness {
   run(run: HarnessTurn): AsyncIterable<HarnessMessage>;
+  /** Isolated text generation: no session resume, tools, project instructions or transcript writes. */
+  generateText?: (input: { cwd: string; prompt: string; model: string; effort?: string; env: Record<string, string>; signal: AbortSignal }) => Promise<string>;
 }
