@@ -30,7 +30,7 @@ export function MachineSettings({ machineId, onOpen, onBack, onOpenThread }: { m
             <span className="menu-icon"><Monitor /></span>
             <span className="setting-text">
               <b>{m.name}{m.thisMachine ? ' (this machine)' : ''}</b>
-              <small>Worker · {m.platform} · {m.harnesses.length} harness{m.harnesses.length === 1 ? '' : 'es'}</small>
+              <small>{m.platform} · {m.harnesses.length} harness{m.harnesses.length === 1 ? '' : 'es'}</small>
             </span>
             <StatusPill tone={m.connected ? 'ok' : undefined}>{m.connected ? 'Connected' : 'Offline'}</StatusPill>
             <Chevron />
@@ -77,7 +77,6 @@ function MachineDetail({ machine, onBack, onOpenThread }: { machine: MachineView
           <StatusPill tone={machine.connected ? 'ok' : undefined}>{machine.connected ? 'Connected' : 'Offline'}</StatusPill>
         </SettingRow>
         <SettingRow title="Platform"><code>{machine.platform}</code></SettingRow>
-        <SettingRow title="Role" description="Runs coding turns. The desktop app also includes a client.">Worker</SettingRow>
         <SettingRow title="Accio version"><code>{machine.version}</code></SettingRow>
         {!machine.connected && <SettingRow title="Last seen"><span>{new Date(machine.lastSeen).toLocaleString()}</span></SettingRow>}
       </SettingsSection>

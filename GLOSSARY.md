@@ -5,7 +5,7 @@ A personal app that runs coding threads in harnesses such as Claude Code across 
 ## Hub, machines and roles
 
 **Machine**:
-A connected computer, together with its files and settings. It can run a client, a worker, or both. Being connected does not mean it can run turns; that requires a worker.
+A connected computer, together with its files and settings. It can run a client, a worker, or both. Being connected does not mean it can run turns; that requires a worker. The Machines list shows only machines with a worker, since its name, harnesses, tools and profile folders all belong to the worker. A client-only device, such as a phone or a browser on any computer, is not listed as a machine; once clients pair directly, it will appear as a paired client that can be unpaired.
 _Avoid_: Environment, host, node
 
 **Hub**:
