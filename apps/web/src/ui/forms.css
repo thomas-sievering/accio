@@ -61,3 +61,148 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
+
+/* Add project: one box to browse or paste a folder; it becomes the project once recognised. */
+.folder-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 22px 16px 14px;
+  border: 1px dashed var(--line-2);
+  border-radius: 12px;
+  background: var(--bg);
+  transition:
+    border-color 0.15s,
+    background 0.15s,
+    padding 0.2s ease;
+}
+.folder-pick:hover {
+  border-color: var(--muted);
+  background: var(--raised);
+}
+.folder-pick.found {
+  padding: 12px 12px 10px;
+  border-style: solid;
+  border-color: var(--line-2);
+  background: var(--raised);
+}
+.folder-pick-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.folder-pick-target {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: center;
+}
+button.folder-pick-target {
+  cursor: pointer;
+}
+.found .folder-pick-target {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+}
+.folder-pick-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  background: var(--raised);
+  color: var(--muted);
+  transition:
+    transform 0.2s ease,
+    color 0.15s,
+    border-color 0.15s;
+}
+.folder-pick-icon svg {
+  width: 18px;
+  height: 18px;
+}
+.folder-pick:hover .folder-pick-icon {
+  color: var(--ink-strong);
+  border-color: var(--muted);
+}
+.folder-pick:not(.found):hover .folder-pick-icon {
+  transform: translateY(-1px);
+}
+.found .folder-pick-icon {
+  width: 36px;
+  height: 36px;
+  background: var(--bg);
+  color: var(--ink-strong);
+}
+.folder-pick-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  line-height: 1.35;
+}
+.folder-pick-text b {
+  color: var(--ink-strong);
+  font-size: 14px;
+  font-weight: 600;
+}
+.folder-pick-text small {
+  overflow: hidden;
+  color: var(--dim);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.folder-pick-clear {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--dim);
+}
+.folder-pick-clear:hover {
+  background: var(--active);
+  color: var(--ink);
+}
+.folder-pick-clear svg {
+  width: 13px;
+  height: 13px;
+}
+.folder-pick-path {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--bg);
+  color: var(--ink);
+  font: 12.5px/1 'Cascadia Code', Consolas, monospace;
+}
+.folder-pick-path:focus {
+  outline: 2px solid var(--blue);
+  outline-offset: -1px;
+}
+.folder-pick-path[aria-invalid='true'] {
+  border-color: var(--red);
+}
+.folder-pick-root {
+  color: var(--dim);
+  font-size: 12px;
+}
