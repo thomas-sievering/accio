@@ -129,7 +129,7 @@ export class TurnTranscript {
     const previous = this.tools.get(id);
     const state: ToolState = {
       item: { ...previous?.item, kind: 'tool', id, turnId: this.turnId, name: event.name,
-        summary: summarizeTool(event.name, event.summary), status: event.status,
+        summary: summarizeTool(event.name, event.name === 'Shell' || event.name === 'Bash' ? event.input ?? event.summary : event.summary), status: event.status,
         ...(event.output !== undefined ? { output: truncate(resultText(event.output)) } : {}) },
       input: event.input ?? event.summary,
       inputComplete: true,
@@ -339,10 +339,13 @@ export class TurnTranscript {
 export function summarizeTool(name: string, input: unknown): string {
   const i = input !== null && typeof input === 'object' ? input as Record<string, unknown> : {};
   const pick = (...keys: string[]) => keys.map((k) => i[k]).find((v) => typeof v === 'string' && v.length > 0) as string | undefined;
+  const shell = name === 'Shell' || name === 'Bash';
+  const description = shell && typeof i.description === 'string' ? i.description.trim() : '';
   const line =
+    (description || undefined) ??
     pick('command', 'file_path', 'notebook_path', 'pattern', 'url', 'query', 'description', 'prompt', 'skill') ??
     (typeof input === 'string' ? input : Object.keys(i).length ? JSON.stringify(i) : '');
-  const display = name === 'Shell' || name === 'Bash' ? shellCommandSummary(line) : line;
+  const display = shell && !description ? shellCommandSummary(line) : line;
   const first = omitInlineData(display).split('\n')[0] ?? '';
   return first.length > 200 ? `${first.slice(0, 199)}…` : first;
 }
