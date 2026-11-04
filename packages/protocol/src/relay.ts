@@ -44,3 +44,10 @@ export const RELAY_THREAD_METHODS = [
   'threads.goal', 'threads.setModel', 'threads.snooze', 'threads.settle', 'threads.reopen',
   'threads.rename', 'threads.regenerateTitle', 'threads.previewTitle', 'threads.delete', 'threads.readNote',
 ] as const satisfies readonly MethodName[];
+
+/**
+ * Methods about a machine itself, addressed by `machineId`. A call names the machine it is
+ * about; any other machine forwards it there through the relay.
+ */
+export const RELAY_MACHINE_METHODS = ['update.status', 'update.start', 'app.screenshot'] as const satisfies readonly MethodName[];
+export type RelayMachineMethod = typeof RELAY_MACHINE_METHODS[number];

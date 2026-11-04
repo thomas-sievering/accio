@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { WorkerProcess, type Ready } from './workerProcess.js';
 import { stat } from 'node:fs/promises';
 import { previewUrl } from './openPreview.js';
+import type { DesktopMessage } from '@accio/worker/dist/machine/desktop.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -22,7 +23,8 @@ let workerOutput = '';
 function startWorker(): Promise<Ready> {
   const entry = require.resolve('@accio/worker');
   const child = spawn(process.execPath, [entry], {
-    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+    // ACCIO_DESKTOP: the worker may ask this process to restart the app or capture its window.
+    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', ACCIO_DESKTOP: '1' },
     stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
     windowsHide: true,
   });
@@ -33,7 +35,34 @@ function startWorker(): Promise<Ready> {
     app.quit();
   });
   child.stdout?.on('data', (d) => process.stdout.write(d));
+  child.on('message', (message: DesktopMessage) => { void answerWorker(message, (reply) => child.send(reply)); });
   return worker.ready;
+}
+
+/** GLOSSARY: Update and App screenshot. What the worker asks of the app it runs in. */
+async function answerWorker(message: DesktopMessage, reply: (message: DesktopMessage) => void) {
+  if (message?.type === 'relaunch') {
+    // The same Electron and app folder start again once this one has quit as usual.
+    app.relaunch();
+    app.quit();
+    return;
+  }
+  if (message?.type !== 'capture') return;
+  try {
+    const win = BrowserWindow.getAllWindows()[0];
+    if (!win) throw new Error('Accio has no open window.');
+    if (win.isMinimized()) win.restore();
+    if (message.script) {
+      await win.webContents.executeJavaScript(message.script, true);
+      // Lets the view the script opened finish rendering.
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    }
+    const image = await win.webContents.capturePage();
+    if (image.isEmpty()) throw new Error('The window captured as empty; it may be hidden.');
+    reply({ type: 'captured', id: message.id, png: image.toPNG().toString('base64') });
+  } catch (error) {
+    reply({ type: 'captured', id: message.id, error: error instanceof Error ? error.message : String(error) });
+  }
 }
 
 async function createWindow(ready: Ready) {
