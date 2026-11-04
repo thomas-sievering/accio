@@ -5,6 +5,7 @@ One compact row above the composer: change counts, **Ship ▾**, and **Open app*
 Decisions are in [ADR 0015](../adr/0015-threads-own-delivery-with-optional-pull-requests.md). Browser coverage: `tests/delivery.spec.ts` and `tests/delivery-merge.spec.ts`; server coverage: `apps/worker/src/threads/deliveryObservation.test.ts`.
 
 - **Ship** finishes the task, integrates the latest default branch, verifies it and publishes. Clicking during work queues a durable request; **×** cancels that request without stopping the work. A queued request survives disconnects. After a server restart, resume the interrupted work explicitly.
+- With a **test command** in project settings, a direct Ship is a [scripted ship](scripted-ship.md): accio commits, rebases, runs the command and pushes without a model turn, and hands over to the agent only when something fails.
 - **Prepare for review** runs the same preparation and opens a PR, without permission to merge. The workspace stays available for review fixes.
 - The sidebar and composer show **Waiting for checks**, **Waiting for review**, or **Waiting for merge · #123**. A confirmed merge appears as **Merged · checking main** until target verification passes, then **Merged into main · #123**. Direct publication reads **Shipped to main**. Ordinary idle turns read **Ready**.
 - Project settings choose direct publication or a PR for Ship. This applies to new requests; an existing request keeps its recorded policy and target.

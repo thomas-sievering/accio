@@ -30,6 +30,8 @@ describe('deliveryTrack', () => {
     const now = new Date('2026-11-03T10:06:30Z');
     const running = (step?: ThreadDelivery['step']) => thread({ status: 'running', startedAt: '2026-11-03T10:00:00Z', ...(step ? { step } : {}) }, { status: 'running' });
     expect(deliveryTrack(running(), now)!.stations[0]).toMatchObject({ state: 'active', detail: 'Agent is working · 6m' });
+    // A scripted ship has no turn running.
+    expect(deliveryTrack(thread({ status: 'running', startedAt: '2026-11-03T10:00:00Z' }), now)!.stations[0]).toMatchObject({ state: 'active', detail: 'Starting · 6m' });
     const verifying = deliveryTrack(running({ name: 'verify', at: '2026-11-03T10:05:00Z', note: 'Rerunning the failing test on main' }), now)!;
     expect(verifying.stations[0]).toMatchObject({ state: 'active', detail: 'Verify · 3 of 3 · 6m', note: 'Rerunning the failing test on main' });
     expect(deliveryTrack(running({ name: 'integrate', at: '2026-11-03T10:05:00Z' }), now)!.stations[0]!.detail).toBe('Integrate main · 2 of 3 · 6m');

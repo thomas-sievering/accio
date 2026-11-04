@@ -146,6 +146,11 @@ const harness = new FakeHarness(async function* (run) {
     if (!run.signal.aborted) yield { type: 'harness_event', event: { kind: 'end' } };
     return;
   }
+  if (run.prompt === 'Build scripted fixture') {
+    await writeFile(join(run.cwd, 'scripted.txt'), 'Shipped without a delivery turn.\n');
+    yield* replyWith('Scripted feature implemented.');
+    return;
+  }
   if (run.prompt === 'Build review fixture') {
     await writeFile(join(run.cwd, 'review-feature.txt'), `A feature prepared for human review: ${++reviewFeature}.\n`);
     yield* replyWith('Review feature implemented.');
@@ -234,6 +239,7 @@ const harness = new FakeHarness(async function* (run) {
 });
 // Only the naming journey gets generated titles; existing fixtures retain their searchable names.
 Object.assign(harness, { generateText: async ({ prompt }: { prompt: string }) => {
+  if (prompt.startsWith('Write the commit message')) return JSON.stringify({ commit: 'Add the scripted fixture', summary: 'Scripted shipping works', test: ['Click Ship'] });
   if (!prompt.includes('Naming fixture:')) throw new Error('No naming response for this fixture');
   return JSON.stringify({ title: prompt.includes('Use German') ? 'Anmeldung reparieren' : 'Fix login redirects', needsRefinement: false });
 } });
@@ -298,6 +304,19 @@ await git(home, 'clone', '--quiet', ciOrigin, ciFolder);
 await git(ciFolder, 'config', 'user.name', 'Accio Browser Test');
 await git(ciFolder, 'config', 'user.email', 'browser@example.test');
 await client.call('checkouts.add', { path: ciFolder, profileId: 'personal' });
+// Scripted ship: a project with a test command, so Ship runs without a delivery turn.
+const scriptedOrigin = join(home, 'scripted-origin.git');
+const scriptedFolder = join(home, 'scripted-project');
+await git(home, 'clone', '--quiet', '--bare', deliveryFolder, scriptedOrigin);
+await git(home, 'clone', '--quiet', scriptedOrigin, scriptedFolder);
+await git(scriptedFolder, 'config', 'user.name', 'Accio Browser Test');
+await git(scriptedFolder, 'config', 'user.email', 'browser@example.test');
+await writeFile(join(scriptedFolder, 'check.cjs'), 'setTimeout(() => process.exit(0), 1500);\n');
+await git(scriptedFolder, 'add', '.');
+await git(scriptedFolder, 'commit', '--quiet', '-m', 'test command');
+await git(scriptedFolder, 'push', '--quiet', 'origin', 'HEAD:refs/heads/main');
+const scriptedCheckout = await client.call('checkouts.add', { path: scriptedFolder, profileId: 'personal' });
+await client.call('projects.setDelivery', { projectId: scriptedCheckout.projectId, deliveryPolicy: 'direct', previewCommand: '', testCommand: 'node check.cjs' });
 // Skills panel: a project with one repository skill, and a library source with one profile skill and one optional.
 const skillsFolder = join(home, 'skills-project');
 const skillsLibrary = join(home, 'skills-library');

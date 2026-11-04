@@ -144,11 +144,15 @@ _Avoid_: Archive, close, resolve
 Requesting delivery from the owning thread: finish the work, integrate the target branch, verify and publish under the project's direct or pull-request policy. A request made during work waits for that turn to finish. It authorizes publication under its recorded policy.
 
 **Delivery step**:
-The part of a delivery turn the agent says it is on (commit, integrate, verify or publish), with a short note, reported through the delivery_step accio tool. The Delivery panel shows it with the turn's elapsed time. It is for following along only; accio's own delivery checks never depend on it.
+The part of a delivery the agent, or a scripted ship, says it is on (commit, integrate, verify or publish), with a short note. The agent reports it through the delivery_step accio tool. The Delivery panel shows it with the turn's elapsed time. It is for following along only; accio's own delivery checks never depend on it.
 _Avoid_: Phase, stage
 
+**Scripted ship**:
+A direct Ship in a project with a test command, run by accio without a model turn: commit, rebase onto the target, run the test command (once more if it fails), push. A conflict, a second test failure or a target that keeps moving hands over to the delivery turn, with what happened. The lightweight naming model writes the commit message and shipped note.
+_Avoid_: Fast ship, auto ship
+
 **Shipped note**:
-What a delivery changed and what to try, written by the delivery turn through the shipped_note accio tool for the person who will use the change. Once the delivery is verified, the thread shows it as a turn of its own and the Changelog lists it. A delivered thread with a note waits at the top of the open list until you open it, then settles as usual.
+What a delivery changed and what to try, written by the delivery turn through the shipped_note accio tool, or by the naming model for a scripted ship, for the person who will use the change. Once the delivery is verified, the thread shows it as a turn of its own and the Changelog lists it. A delivered thread with a note waits at the top of the open list until you open it, then settles as usual.
 _Avoid_: Release note, summary, receipt
 
 **Changelog**:

@@ -149,6 +149,8 @@ export class Turns {
         if (!workspace) throw new UserError('Could not restore an owned workspace.');
         thread = { ...thread, workspace, sessionId: archived ? null : thread.sessionId, delivery: undefined };
       }
+      // A follow-up or a scripted ship's handover says why in `detail`; the prompt carries it before the turn clears it.
+      const requested = thread.delivery;
       if (delivering) {
         const { step: _previous, ...delivery } = thread.delivery!;
         thread = { ...thread, delivery: { ...delivery, status: 'running', detail: undefined, startedAt: now() } };
@@ -156,7 +158,7 @@ export class Turns {
       const cwd = state.cwd(thread);
       const goalCommand = parseGoalCommand(picked);
       // A /goal message never reaches the harness as typed: Claude Code would run its own /goal.
-      const prompt = delivering && !resume ? deliveryPrompt(thread.workspace!, thread.delivery!) : goalCommand?.type === 'set' ? newGoalPrompt(goalCommand.objective) : picked;
+      const prompt = delivering && !resume ? deliveryPrompt(thread.workspace!, requested!) : goalCommand?.type === 'set' ? newGoalPrompt(goalCommand.objective) : picked;
       if (delivering && !resume) text = thread.delivery!.mode === 'review' ? 'Prepare for review.' : `Ship to ${thread.delivery!.baseBranch} when ready.`;
       // A refused resource preparation is not a sent message or a failed turn.
       // Reserve the turn above, but publish it only after its tools are ready.

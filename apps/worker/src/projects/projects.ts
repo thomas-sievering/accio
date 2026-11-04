@@ -92,10 +92,10 @@ export class Projects {
   register(router: Router) {
     router
       .on('projects.get', () => this.data)
-      .on('projects.setDelivery', async ({ projectId, deliveryPolicy, previewCommand }) => {
+      .on('projects.setDelivery', async ({ projectId, deliveryPolicy, previewCommand, testCommand }) => {
         const project = this.data.projects.find((p) => p.id === projectId);
         if (!project) throw new UserError('No such project');
-        const updated = { ...project, deliveryPolicy, previewCommand };
+        const updated = { ...project, deliveryPolicy, previewCommand, testCommand: testCommand ?? project.testCommand };
         await this.commit({ ...this.data, projects: this.data.projects.map((p) => p.id === projectId ? updated : p) });
         return updated;
       })

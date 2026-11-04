@@ -15,6 +15,8 @@ export type ProjectView = {
   startCommand?: string;
   /** Runs before the start command after each update, such as pnpm install. */
   setupCommand?: string;
+  /** Ship runs it in the worktree before pushing; without it, Ship is a full agent turn. */
+  testCommand?: string;
 };
 
 /** GLOSSARY: Checkout. One machine's copy of a project's repository. */
@@ -47,7 +49,7 @@ const AddCheckout = z.object({ path: z.string().trim().min(1), profileId: z.stri
 /** deleteThreads records explicit confirmation to delete all current checkout threads. */
 const RemoveCheckout = z.object({ id: z.string(), deleteThreads: z.boolean().optional() });
 const SetProfile = z.object({ projectId: z.string(), profileId: z.string() });
-const DeliverySettings = z.object({ projectId: z.string(), deliveryPolicy: z.enum(['direct', 'pull-request']), previewCommand: z.string().trim().max(2000) });
+const DeliverySettings = z.object({ projectId: z.string(), deliveryPolicy: z.enum(['direct', 'pull-request']), previewCommand: z.string().trim().max(2000), testCommand: z.string().trim().max(2000).optional() });
 
 const AppSettings = z.object({ projectId: z.string(), startCommand: z.string().trim().max(2000), setupCommand: z.string().trim().max(2000) });
 const ProjectId = z.object({ projectId: z.string() });

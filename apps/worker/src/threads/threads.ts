@@ -90,6 +90,7 @@ export class Threads {
       beginTurn: (threadId, text, options) => this.turns.begin(threadId, text, options),
       withLifecycle: (threadId, action) => this.withLifecycle(threadId, action),
       delivered: (threadId, backfill) => this.recordShipped(threadId, backfill),
+      describeShip: (threadId, files, signal) => this.naming.describeShip(threadId, files, signal),
     }, deliveryHosting);
     this.turns = new Turns(this.state, { profiles, projects, models, machines, harnesses, secrets: this.secrets, content: this.content, deliveries: this.deliveries, tools,
       resources: () => this.resources, toolsOff: (harnessId) => builtinToolsOff(harnessId, this.toolOverrides?.()[harnessId]), onWorkFinished: id => this.naming.refine(id), onRepairFinished: (toolId) => this.onRepairFinished?.(toolId) });
@@ -215,6 +216,10 @@ export class Threads {
       .on('threads.send', ({ threadId, text, pick, mode }) => {
         // Never wait behind a starting turn for steering: it may be blocked on
         // authentication, and the caller must keep its unsent draft immediately.
+        // A scripted ship holds the slot with no turn to steer.
+        if (state.running.has(threadId) && !turns.canSteer(threadId) && state.get(threadId)?.delivery?.status === 'running') {
+          throw new UserError('Finish or cancel delivery before sending more work.');
+        }
         if (state.running.has(threadId) && mode !== 'queue' && !turns.canSteer(threadId)) {
           throw new UserError('The agent is starting or finishing. Try sending again in a moment.');
         }

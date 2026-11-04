@@ -31,6 +31,7 @@ export function ProjectForm({ project, onClose, onOpenSettings }: { project: Pro
   const [previewCommand, setPreviewCommand] = useState(project.previewCommand ?? '');
   const [startCommand, setStartCommand] = useState(project.startCommand ?? '');
   const [setupCommand, setSetupCommand] = useState(project.setupCommand ?? '');
+  const [testCommand, setTestCommand] = useState(project.testCommand ?? '');
   // Skill choices wait here until Save, keyed by skill id.
   const [skills, setSkills] = useState<Record<string, boolean>>({});
   const key = projectKey(project);
@@ -38,7 +39,7 @@ export function ProjectForm({ project, onClose, onOpenSettings }: { project: Pro
     const skill = resources?.skills.find((s) => s.id === id);
     return skill && skill.scope.projectKeys.includes(key) !== on ? [{ skill, on }] : [];
   });
-  const deliveryChanged = policy !== (project.deliveryPolicy ?? 'direct') || previewCommand !== (project.previewCommand ?? '');
+  const deliveryChanged = policy !== (project.deliveryPolicy ?? 'direct') || previewCommand !== (project.previewCommand ?? '') || testCommand !== (project.testCommand ?? '');
   const appChanged = startCommand !== (project.startCommand ?? '') || setupCommand !== (project.setupCommand ?? '');
   const dirty = profileId !== project.profileId || deliveryChanged || appChanged || skillChanges.length > 0;
   // An open inline confirmation takes Escape first.
@@ -52,7 +53,7 @@ export function ProjectForm({ project, onClose, onOpenSettings }: { project: Pro
   const save = async () => {
     const done = await run(async () => {
       if (profileId !== project.profileId) await client.call('projects.setProfile', { projectId: project.id, profileId });
-      if (deliveryChanged) await client.call('projects.setDelivery', { projectId: project.id, deliveryPolicy: policy, previewCommand });
+      if (deliveryChanged) await client.call('projects.setDelivery', { projectId: project.id, deliveryPolicy: policy, previewCommand, testCommand });
       if (appChanged) await client.call('projects.setApp', { projectId: project.id, startCommand, setupCommand });
       for (const { skill, on } of skillChanges) await client.call('skills.setScope', { id: skill.id, scope: { ...skill.scope, projectKeys: toggled(skill.scope.projectKeys, key, on) } });
       return true;
@@ -81,6 +82,11 @@ export function ProjectForm({ project, onClose, onOpenSettings }: { project: Pro
           { value: 'pull-request', label: 'Through a pull request' },
         ]} />
       </div>
+      <label className="field">
+        <span>Test command</span>
+        <input value={testCommand} onChange={e => setTestCommand(e.target.value)} placeholder="pnpm install && pnpm test" />
+        <small className="hint">Optional. Ship commits, rebases, runs this and pushes without the agent; it steps in only when something fails.</small>
+      </label>
       <label className="field">
         <span>Preview command</span>
         <input value={previewCommand} onChange={e => setPreviewCommand(e.target.value)} placeholder="pnpm dev --port {port}" />

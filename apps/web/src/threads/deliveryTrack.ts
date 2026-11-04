@@ -48,7 +48,8 @@ export function deliveryTrack(t: ThreadView, now = new Date()): DeliveryTrack | 
     const elapsed = d.startedAt ? since(d.startedAt, now) : undefined;
     const step = d.step && PREPARE_STEPS.indexOf(d.step.name);
     prepare.state = 'active';
-    prepare.detail = [d.step ? `${stepLabel(d.step.name, d.baseBranch)} · ${step! + 1} of ${PREPARE_STEPS.length}` : 'Agent is working', elapsed].filter(Boolean).join(' · ');
+    // A scripted ship runs without a turn, so no agent is involved.
+    prepare.detail = [d.step ? `${stepLabel(d.step.name, d.baseBranch)} · ${step! + 1} of ${PREPARE_STEPS.length}` : t.status === 'running' ? 'Agent is working' : 'Starting', elapsed].filter(Boolean).join(' · ');
     prepare.note = d.step?.note;
   } else if (blocked && !status.published) {
     prepare.state = 'failed';
@@ -62,7 +63,7 @@ export function deliveryTrack(t: ThreadView, now = new Date()): DeliveryTrack | 
   // The agent said it is publishing: preparation is behind it.
   if (d.status === 'running' && d.step?.name === 'publish' && !pushed && !pr) {
     publish.state = 'active';
-    publish.detail = 'Agent is publishing';
+    publish.detail = t.status === 'running' ? 'Agent is publishing' : 'Pushing';
     publish.note = d.step.note;
   }
 
