@@ -169,7 +169,7 @@ test('web chat replays snapshots, full ordered tool details and playable stable 
   expect(errors).toEqual([]);
 });
 
-test('a running turn shows one status line of what it is doing, then folds under Worked for', async ({ page, baseURL }) => {
+test('a running turn shows what it says as it goes and its latest calls behind one status line, then folds under Worked for', async ({ page, baseURL }) => {
   await openChat(page, baseURL!);
   // Inside a fold, calls sit bare on the rail and failures stay collapsed.
   const fixture = page.locator('.turn-work').first();
@@ -182,14 +182,20 @@ test('a running turn shows one status line of what it is doing, then folds under
   await page.locator('textarea').press('Enter');
   const live = page.locator('.turn-work.live');
   const status = live.getByRole('status');
+  // What it says before a call shows right away, above the live line.
   await expect(status).toHaveText('Running ls -la');
+  await expect(page.locator('.msg.assistant', { hasText: 'I’ll look around the folder first.' })).toBeVisible();
   await expect(live.locator('.turn-work-elapsed')).toHaveText(/^(<1s|\d+s)$/);
   await expect(live.locator('.tool')).toHaveCount(0);
   await expect(status).toHaveText('Reading README.md');
-  // Opening it while running shows the steps so far, and it stays open once the turn completes.
+  // Opening it while running shows the calls since the last message, and it stays open once the turn completes.
   await live.locator('.turn-work-toggle').click();
-  await expect(live.locator('.tool.done').first()).toBeVisible();
+  await expect(live.locator('.tool-summary')).toHaveText(['ls -la', 'README.md']);
+  // A later message stays in order; the live line below it holds only the calls after it.
   await expect(status).toHaveText('Searching TODO');
+  await expect(page.locator('.msg.assistant', { hasText: 'Now checking for open TODOs.' })).toBeVisible();
+  await expect(live.locator('.tool-summary')).toHaveText(['TODO']);
+  await page.screenshot({ path: test.info().outputPath('running-turn.png') });
 
   await expect(page.getByText('Explored the folder.')).toBeVisible();
   await expect(live).toHaveCount(0);
@@ -199,6 +205,7 @@ test('a running turn shows one status line of what it is doing, then folds under
   await expect(work.locator('.tool.done')).toHaveCount(3);
   await expect(work.locator('.tool-summary')).toHaveText(['ls -la', 'README.md', 'TODO']);
   await expect(work.getByText('Explored the folder.')).toHaveCount(0);
+  await expect(work.locator('.msg.assistant')).toHaveText(['I’ll look around the folder first.', 'Now checking for open TODOs.']);
   await work.locator('.turn-work-toggle').click();
   await expect(work.locator('.tool')).toHaveCount(0);
 });
