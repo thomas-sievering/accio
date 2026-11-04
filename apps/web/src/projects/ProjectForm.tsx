@@ -29,6 +29,8 @@ export function ProjectForm({ project, onClose, onOpenSettings }: { project: Pro
   const [profileId, setProfileId] = useState(project.profileId);
   const [policy, setPolicy] = useState(project.deliveryPolicy ?? 'direct');
   const [previewCommand, setPreviewCommand] = useState(project.previewCommand ?? '');
+  const [startCommand, setStartCommand] = useState(project.startCommand ?? '');
+  const [setupCommand, setSetupCommand] = useState(project.setupCommand ?? '');
   // Skill choices wait here until Save, keyed by skill id.
   const [skills, setSkills] = useState<Record<string, boolean>>({});
   const key = projectKey(project);
@@ -37,7 +39,8 @@ export function ProjectForm({ project, onClose, onOpenSettings }: { project: Pro
     return skill && skill.scope.projectKeys.includes(key) !== on ? [{ skill, on }] : [];
   });
   const deliveryChanged = policy !== (project.deliveryPolicy ?? 'direct') || previewCommand !== (project.previewCommand ?? '');
-  const dirty = profileId !== project.profileId || deliveryChanged || skillChanges.length > 0;
+  const appChanged = startCommand !== (project.startCommand ?? '') || setupCommand !== (project.setupCommand ?? '');
+  const dirty = profileId !== project.profileId || deliveryChanged || appChanged || skillChanges.length > 0;
   // An open inline confirmation takes Escape first.
   useEscape(confirming !== undefined, () => setConfirming(undefined));
 
@@ -50,6 +53,7 @@ export function ProjectForm({ project, onClose, onOpenSettings }: { project: Pro
     const done = await run(async () => {
       if (profileId !== project.profileId) await client.call('projects.setProfile', { projectId: project.id, profileId });
       if (deliveryChanged) await client.call('projects.setDelivery', { projectId: project.id, deliveryPolicy: policy, previewCommand });
+      if (appChanged) await client.call('projects.setApp', { projectId: project.id, startCommand, setupCommand });
       for (const { skill, on } of skillChanges) await client.call('skills.setScope', { id: skill.id, scope: { ...skill.scope, projectKeys: toggled(skill.scope.projectKeys, key, on) } });
       return true;
     });
@@ -81,6 +85,14 @@ export function ProjectForm({ project, onClose, onOpenSettings }: { project: Pro
         <span>Preview command</span>
         <input value={previewCommand} onChange={e => setPreviewCommand(e.target.value)} placeholder="pnpm dev --port {port}" />
         <small className="hint">Optional. Runs in the thread’s worktree with its own PORT and app state. Use {'{port}'} where the command needs its assigned port.</small>
+      </label>
+      <label className="field">
+        <span>Start command</span>
+        <input value={startCommand} onChange={e => setStartCommand(e.target.value)} placeholder="pnpm start" />
+      </label>
+      <label className="field">
+        <span>Setup command</span>
+        <input value={setupCommand} onChange={e => setSetupCommand(e.target.value)} placeholder="pnpm install" />
       </label>
       <div className="field">
         <span>Checkouts on this machine</span>
@@ -131,7 +143,7 @@ export function ProjectForm({ project, onClose, onOpenSettings }: { project: Pro
       <SettingsSection>
         <div className="setting-form">{fields}</div>
       </SettingsSection>
-      <SettingsFooter busy={busy} onCancel={onClose} saveLabel="Save" saveDisabled={busy || !dirty} onSave={() => void save()} dirty={dirty && !busy} />
+      <SettingsFooter busy={busy} onCancel={onClose} saveLabel="Save" saveDisabled={busy || !dirty} dirty={dirty && !busy} />
     </form>
   );
 }

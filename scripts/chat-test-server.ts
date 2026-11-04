@@ -10,6 +10,7 @@ import { fakeClaudeFetch, TestClient } from '../apps/worker/src/testing/testApp.
 import type { HarnessMessage } from '../apps/worker/src/threads/harness.js';
 import { DeliveryGit, DeliveryPending } from '../apps/worker/src/threads/delivery.js';
 import { git } from '../apps/worker/src/git.js';
+import { PROJECT_APP_TIMING } from '../apps/worker/src/projects/projectApps.js';
 
 const home = await mkdtemp(join(tmpdir(), 'accio-chat-browser-'));
 // Disposable encryption for this isolated fixture, including headless Linux runners.
@@ -46,6 +47,8 @@ const subagentSteps: Record<string, [string, Record<string, string>][]> = {
   deliveries: [['Read', { file_path: 'delivery.ts' }], ['Bash', { command: 'pnpm test delivery' }]],
   review: [['Bash', { command: 'git diff' }], ['Read', { file_path: 'transcript.ts' }]],
 };
+// The project dashboard journey watches a branch advance within seconds.
+Object.assign(PROJECT_APP_TIMING, { pollMs: 1000, debounceMs: 200, graceMs: 3000 });
 const goalTurns = new Map<string, number>();
 const harness = new FakeHarness(async function* (run) {
   if (run.prompt === 'Cache usage fixture') {

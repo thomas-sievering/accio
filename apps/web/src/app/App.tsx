@@ -7,6 +7,7 @@ import { ChangelogView } from '../changelog/ChangelogView';
 import { hasSignedInAccount, ProfilesProvider, useProfiles } from '../profiles/profiles';
 import { ProjectsProvider, useProjects } from '../projects/projects';
 import { AddProjectSheet } from '../projects/AddProjectSheet';
+import { ProjectDashboard } from '../projects/ProjectDashboard';
 import { ThreadsProvider, useThreads } from '../threads/threads';
 import { PendingSecretsProvider } from '../secrets/pendingSecrets';
 import { ResourcesProvider } from '../resources/resources';
@@ -64,15 +65,20 @@ function Shell() {
   useAppEvent('project.open', ({ id }) => setSettings({ section: 'projects', projectId: id }));
   const [panelWanted, togglePanel] = usePanelOpen();
   const [limits, setLimits] = useState<{ scope: LimitsScope; navigation: number } | null>(null);
+  const [dashboard, setDashboard] = useState<{ projectId: string; navigation: number } | null>(null);
+  // Like Limits, the dashboard covers the main pane until a thread or draft is opened.
+  const dashboardProject = dashboard !== null && dashboard.navigation === navigation ? state?.projects.find((p) => p.id === dashboard.projectId) : undefined;
+  const closeDashboard = useCallback(() => setDashboard(null), []);
+  useAppEvent('project.dashboard', ({ id }) => { setLimits(null); setChangelog(null); setDashboard({ projectId: id, navigation }); });
   const limitsOpen = limits !== null && limits.navigation === navigation;
   // GLOSSARY: Changelog. Covers the main pane like Limits until a thread or draft is opened.
   const [changelog, setChangelog] = useState<{ navigation: number; projectId?: string } | null>(null);
   const changelogOpen = changelog !== null && changelog.navigation === navigation && !limitsOpen;
   const closeChangelog = useCallback(() => setChangelog(null), []);
-  const openChangelog = (projectId?: string) => { setLimits(null); setSettings(null); setChangelog({ navigation, projectId }); };
+  const openChangelog = (projectId?: string) => { setLimits(null); setSettings(null); setDashboard(null); setChangelog({ navigation, projectId }); };
   useAppEvent('changelog.open', ({ projectId }) => openChangelog(projectId));
-  // The panel belongs to an open thread or draft: home, onboarding, Limits and the Changelog have none.
-  const hasPane = !!(thread || draft) && !limitsOpen && !changelogOpen;
+  // The panel belongs to an open thread or draft: home, onboarding, Limits, the Changelog and a project dashboard have none.
+  const hasPane = !!(thread || draft) && !limitsOpen && !changelogOpen && !dashboardProject;
   const panelOpen = panelWanted && hasPane;
   const narrow = useNarrow();
   const overlay = panelOpen && narrow && settings === null;
@@ -118,6 +124,7 @@ function Shell() {
   const openLimits = (scope: LimitsScope, origin?: SettingsRoute) => {
     limitsOrigin.current = origin;
     limitsReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setDashboard(null);
     setLimits({ scope, navigation });
   };
   const draftProfileId = draft && (draft.profileId ?? state?.projects.find((p) => p.id === state.checkouts.find((c) => c.id === draft.checkoutId)?.projectId)?.profileId);
@@ -203,12 +210,13 @@ function Shell() {
               onOpenAccount={openAccount} />
           )}
           {changelogOpen && !settings && <ChangelogView key={changelog.projectId ?? ''} projectId={changelog.projectId} onClose={closeChangelog} />}
+          {dashboardProject && !limitsOpen && !changelogOpen && !settings && <ProjectDashboard key={dashboardProject.id} project={dashboardProject} onClose={closeDashboard} />}
           {/* Keep the composer and reading position mounted while checking limits/settings. */}
-          <div className="thread-surface" hidden={limitsOpen || changelogOpen || settings !== null}>
+          <div className="thread-surface" hidden={limitsOpen || changelogOpen || !!dashboardProject || settings !== null}>
             {draft ? (
-              <DraftPane key={`${draft.checkoutId}:${draft.profileId}`} {...draft} active={!limitsOpen && !changelogOpen && !settings} onOpenProfile={openProfile} onOpenLimits={openLimits} />
+              <DraftPane key={`${draft.checkoutId}:${draft.profileId}`} {...draft} active={!limitsOpen && !changelogOpen && !dashboardProject && !settings} onOpenProfile={openProfile} onOpenLimits={openLimits} />
             ) : thread ? (
-              <ThreadPane key={thread.id} thread={thread} onOpenSecrets={openSecrets} active={!limitsOpen && !changelogOpen && !settings} onOpenProfile={openProfile} onOpenLimits={openLimits} />
+              <ThreadPane key={thread.id} thread={thread} onOpenSecrets={openSecrets} active={!limitsOpen && !changelogOpen && !dashboardProject && !settings} onOpenProfile={openProfile} onOpenLimits={openLimits} />
             ) : (
               <>
                 <header className="main-top drag" />

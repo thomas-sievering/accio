@@ -170,6 +170,14 @@ _Avoid_: Settle, delete (for releasing execution resources)
 The app a thread's harness starts from its owned worktree through the project's preview command, on its own port, opened by the **Open app** button. Accio stops it on Archive or shutdown. Processes started any other way are not previews.
 _Avoid_: Dev server, sandbox
 
+**Project app**:
+The app a project runs on one machine from its default branch, in a detached checkout of its own under `project-apps/`, apart from every thread's worktree. It uses the project's start command, with its own PORT, and its setup command after each change of commit. Start, Stop, Restart (same commit) and Update & restart (latest commit) control it. With auto-update on, it follows `origin`'s default branch and restarts shortly after the branch advances; an update that fails to set up or start restores the previous commit and is not retried until the branch moves again. It keeps running while the worker runs, and a restarted worker starts it again.
+_Avoid_: Owned preview (for a thread's app), dev server, deployment
+
+**Project dashboard**:
+A project's page, opened through Dashboard in the menu on the project name in a thread's header: the project app's controls, the project's active and recently settled threads, its commits (the default branch's history, the running commit marked) and the app's logs.
+_Avoid_: Project settings (for this page), overview
+
 **Shelf**:
 A group of threads in the sidebar apart from the open list: Working, Snoozed and Settled. Working holds threads in progress without you: a running turn, or a delivery GitHub is carrying. A thread comes back to the top of the open list when it finishes or needs you, such as for a secret, a review or a manual merge.
 _Avoid_: Folder, inbox, tab

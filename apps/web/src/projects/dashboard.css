@@ -1,0 +1,101 @@
+/* Project dashboard: the project app's controls, then threads, changelog and logs. */
+.dashboard-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: min(760px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 24px 0 64px;
+}
+.app-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.app-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.app-row .ghost {
+  height: 30px;
+  padding: 0 10px;
+}
+.app-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--line-2);
+}
+.app-dot.running { background: var(--green); }
+.app-dot:is(.starting, .updating, .stopping) { background: var(--blue); animation: app-pulse 1.2s ease-in-out infinite; }
+.app-dot:is(.failed, .exited) { background: var(--red); }
+@keyframes app-pulse { 50% { opacity: 0.35; } }
+.app-status { color: var(--ink-strong); font-weight: 600; white-space: nowrap; }
+.app-commit {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.app-card code, .changelog code { color: var(--muted); font-size: 12px; }
+.app-note { margin: 0; color: var(--muted); font-size: 12.5px; }
+.app-note.warn { color: var(--amber); }
+.app-note.error { color: var(--red); }
+.app-auto { color: var(--muted); font-size: 12.5px; cursor: pointer; }
+.dashboard-tabs {
+  display: flex;
+  gap: 14px;
+  border-bottom: 1px solid var(--line);
+}
+.dashboard-heading {
+  margin: 18px 0 8px;
+  color: var(--dim);
+  font-size: 12px;
+  font-weight: 600;
+}
+.dashboard-empty { color: var(--dim); }
+.changelog {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.changelog li {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 4px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.changelog-subject {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.changelog li .dim { flex: none; font-size: 12px; }
+.changelog-running { color: var(--green); font-size: 12px; }
+.app-logs {
+  max-height: 60vh;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--code);
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
