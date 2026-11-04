@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { HubSettings } from '../hub/HubSettings';
 import { MachineSettings } from '../machine/MachineSettings';
 import { HarnessesSettings } from '../harnesses/HarnessesSettings';
@@ -11,7 +11,7 @@ import { ToolsSettings } from '../tools/ToolsSettings';
 import { McpSettings } from '../mcp/McpSettings';
 import { SkillsSettings } from '../skills/SkillsSettings';
 import { useResources } from '../resources/resources';
-import { ArrowLeft, BookOpen, Hub, Key, Layers, Monitor, Plug, ScrollText, Users, Wrench } from './icons';
+import { ArrowLeft, BookOpen, Chevron, Hub, Key, Layers, Monitor, Plug, ScrollText, Users, Wrench } from './icons';
 import { SidebarResizer } from './Resizer';
 import { HubSelector } from '../hub/HubSelector';
 
@@ -169,5 +169,41 @@ export function SettingRow({ title, description, children }: { title: ReactNode;
       </div>
       {children && <div className="setting-value">{children}</div>}
     </div>
+  );
+}
+
+/** A setting row that opens a page: icon, title and description, then any status and a chevron. Add rows skip the chevron. */
+export function SettingLink({ icon, title, description, warn, chevron = true, onClick, children }: {
+  icon?: ReactNode;
+  title: ReactNode;
+  description?: ReactNode;
+  /** Shows the description as a warning. */
+  warn?: boolean;
+  chevron?: boolean;
+  onClick: () => void;
+  children?: ReactNode;
+}) {
+  return (
+    <button type="button" className="setting setting-link" onClick={onClick}>
+      {icon && <span className="menu-icon">{icon}</span>}
+      <span className="setting-text">
+        <b>{title}</b>
+        {description && <small className={warn ? 'warn' : undefined}>{description}</small>}
+      </span>
+      {children}
+      {chevron && <Chevron />}
+    </button>
+  );
+}
+
+/** Delete behind a second click that names what goes, with Keep to back out. */
+export function ConfirmDelete({ label = 'Delete', confirm, busy, onDelete }: { label?: string; confirm: string; busy: boolean; onDelete: () => void }) {
+  const [confirming, setConfirming] = useState(false);
+  if (!confirming) return <button type="button" className="ghost danger" disabled={busy} onClick={() => setConfirming(true)}>{label}</button>;
+  return (
+    <>
+      <button type="button" className="ghost" disabled={busy} onClick={() => setConfirming(false)}>Keep</button>
+      <button type="button" className="ghost danger" disabled={busy} onClick={onDelete}>{confirm}</button>
+    </>
   );
 }

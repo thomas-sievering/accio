@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { dirname } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -27,6 +27,21 @@ export class JsonFile<T> {
     }
   }
 
+  /** Whether the document is on disk yet; `read()` returns the fallback otherwise. */
+  exists(): Promise<boolean> {
+    return JsonFile.exists(this.path);
+  }
+
+  static async exists(path: string): Promise<boolean> {
+    try {
+      await access(path);
+      return true;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return false;
+      throw err;
+    }
+  }
+
   /** Resolves once every write started so far has finished. */
   idle(): Promise<void> {
     return this.queue.catch(() => {});
@@ -47,6 +62,45 @@ export class JsonFile<T> {
     };
     this.queue = this.queue.then(run, run);
     return this.queue;
+  }
+}
+
+/**
+ * A JsonFile with its current document in memory and a queue that runs one
+ * mutation at a time, in order. `commit` publishes a document only once it is
+ * on disk, so a failed write leaves the last good one in place, and a failed
+ * mutation does not stall the ones queued behind it.
+ */
+export class JsonStore<T> {
+  readonly file: JsonFile<T>;
+  data: T;
+  private queue: Promise<unknown> = Promise.resolve();
+
+  constructor(path: string, fallback: () => T) {
+    this.file = new JsonFile(path, fallback);
+    this.data = fallback();
+  }
+
+  async load(): Promise<T> {
+    this.data = await this.file.read();
+    return this.data;
+  }
+
+  change<R>(run: () => Promise<R>): Promise<R> {
+    const result = this.queue.then(run, run);
+    this.queue = result.catch(() => {});
+    return result;
+  }
+
+  async commit(next: T): Promise<void> {
+    await this.file.write(next);
+    this.data = next;
+  }
+
+  /** Resolves once every mutation queued and write started so far has finished. */
+  async idle(): Promise<void> {
+    await this.queue;
+    await this.file.idle();
   }
 }
 

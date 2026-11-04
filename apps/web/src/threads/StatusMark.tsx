@@ -5,7 +5,7 @@ import type { StatusGlyph, StatusTone } from './status';
 export function StatusGlyphIcon({ glyph, tone }: { glyph: StatusGlyph; tone: StatusTone }) {
   switch (glyph) {
     case 'spinner': return <span className="row-working" />;
-    case 'dot': return <span className={`row-flag tone-${tone}${tone === 'secret' ? ' needs-secret' : ''}`} />;
+    case 'dot': return <span className={`row-flag tone-${tone}`} />;
     case 'pr': return <PullRequest />;
     case 'merge': return <Merge />;
     case 'ship': return <Ship />;

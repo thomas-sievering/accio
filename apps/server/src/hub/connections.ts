@@ -69,7 +69,6 @@ export class HubConnections {
       () => broadcast('models.changed', null));
     const models = new Models(profiles, settings, this.here.id, claudeModels);
     profiles.register(router); machines.register(router); models.register(router, broadcast); registerHarnesses(router, settings, models);
-    router.on('hub.get', () => ({ runs: record.local ? 'local' : 'remote', hubId: record.id, url: record.url, reachable: client.status === 'connected', store: client.snapshot?.store ?? '', settingsStore: client.snapshot?.settingsStore ?? '' }));
     const projects = new Projects(record.home, profiles, machines, broadcast); await projects.load(); projects.register(router);
     const tools = new AccioTools([offerChoice]);
     const secrets = remoteSecrets(client);

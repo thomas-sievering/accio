@@ -1,6 +1,7 @@
-import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import {
+  SIGN_IN_TTL_MS,
   SignInError,
   beginSignIn,
   exchangeCode,
@@ -11,16 +12,18 @@ import {
   type Fetch,
   type PendingSignIn,
 } from './claudeOAuth.js';
-import { JsonFile } from '@accio/persistence';
+import { JsonStore } from '@accio/persistence';
+import type { ProviderId } from '@accio/protocol';
 import { loadAccounts, type AccountData, type StoredAccount } from './migrateAccounts.js';
 import { OpenAIAuth } from './openaiAuth.js';
 import { AccountLimits, LimitsReadError } from './limits.js';
 import { anthropicLimits, openaiLimits, retryAfterMs } from './providerLimits.js';
+import { safeEqual } from './trust.js';
 
 /**
  * GLOSSARY: Hub. Holds named provider accounts selected by profiles and hands out one access
  * key per profile; a key only ever unlocks its own profile's account (ADR 0007).
- * Profiles here are just ids: names and rules live in accio. A profile selects
+ * Profiles here are just ids: their names are shared settings. A profile selects
  * at most one Claude account and one ChatGPT account.
  */
 export type HubProfile = {
@@ -30,22 +33,10 @@ export type HubProfile = {
   openaiAccountId?: string | null;
 };
 
-/** What the hub tells accio about a profile's sign-in. Never the tokens. */
-export type AccountSummary = {
-  signedIn: boolean;
-  email: string | null;
-  organization: string | null;
-  claudeAccountId: string | null;
-};
-
-const SIGN_IN_TTL_MS = 15 * 60 * 1000;
 
 export class Hub {
   readonly limits: AccountLimits;
-  private file: JsonFile<AccountData>;
-  private queue: Promise<unknown> = Promise.resolve();
-  private profiles: HubProfile[] = [];
-  private accounts: StoredAccount[] = [];
+  private store: JsonStore<AccountData>;
   private pending = new Map<string, PendingSignIn & { accountId: string; startedAt: number }>();
   private refreshing = new Map<string, Promise<ClaudeAccount>>();
   private openaiPending = new Map<string, string>();
@@ -55,20 +46,15 @@ export class Hub {
     private fetchImpl: Fetch = fetch,
     private openai: OpenAIAuth = new OpenAIAuth(home),
   ) {
-    this.file = new JsonFile(join(home, 'hub', 'profiles.json'), () => ({ profiles: [], accounts: [] }));
+    this.store = new JsonStore(join(home, 'hub', 'profiles.json'), () => ({ profiles: [], accounts: [] }));
     this.limits = new AccountLimits(() => this.accountViews(), (id, signal) => this.readAccountLimits(id, signal));
   }
 
-  /** The file that holds the hub's profiles and accounts. */
-  get storePath(): string {
-    return this.file.path;
-  }
+  private get profiles() { return this.store.data.profiles; }
+  private get accounts() { return this.store.data.accounts; }
 
   async load() {
-    const data = await loadAccounts(this.file);
-    await this.file.write(data);
-    this.profiles = data.profiles;
-    this.accounts = data.accounts;
+    await this.store.commit(await loadAccounts(this.store.file));
   }
 
   /** Creates the profile's access key on first use; returns it. */
@@ -107,28 +93,18 @@ export class Hub {
   }
 
   private async prepareProfiles(next: HubProfile[], prepare: () => Promise<void>) {
-    await this.file.write({ profiles: next, accounts: this.accounts });
+    await this.store.file.write({ profiles: next, accounts: this.accounts });
     try {
       await prepare();
     } catch (error) {
       try {
-        await this.file.write({ profiles: this.profiles, accounts: this.accounts });
+        await this.store.file.write(this.store.data);
       } catch (rollbackError) {
         throw new AggregateError([error, rollbackError], 'Profile preparation and restoring the hub store both failed.');
       }
       throw error;
     }
-    this.profiles = next;
-  }
-
-  summary(id: string): AccountSummary {
-    const account = this.accounts.find((a) => a.id === this.profiles.find((p) => p.id === id)?.accountId)?.account ?? null;
-    return {
-      signedIn: account !== null,
-      email: account?.email ?? null,
-      organization: account?.organization ?? null,
-      claudeAccountId: account?.claudeAccountId ?? null,
-    };
+    this.store.data = { profiles: next, accounts: this.accounts };
   }
 
   beginAccountSignIn(accountId: string, redirectUri?: string): { signInId: string; url: string } {
@@ -235,11 +211,7 @@ export class Hub {
 
   /** The profile a request's key belongs to, or undefined for an unknown key. */
   profileForKey(key: string): HubProfile | undefined {
-    const given = Buffer.from(key);
-    return this.profiles.find((a) => {
-      const k = Buffer.from(a.accessKey);
-      return k.length === given.length && timingSafeEqual(k, given);
-    });
+    return this.profiles.find((p) => safeEqual(p.accessKey, key));
   }
 
   /** A usable access token for the profile, refreshed first when close to expiry (or when forced). */
@@ -307,9 +279,8 @@ export class Hub {
 
   async close(): Promise<void> {
     await this.limits.close();
-    await this.queue.catch(() => {});
+    await this.store.idle();
     await this.openai.close();
-    await this.file.idle();
   }
 
   private require(id: string): HubProfile {
@@ -328,13 +299,13 @@ export class Hub {
     return { id: a.id, name: a.name, providerId: 'anthropic' as const, signedIn: !!a.account, email: a.account?.email ?? null, organization: a.account?.organization ?? null };
   }
 
-  selectedAccount(profileId: string, providerId: 'anthropic' | 'openai' = 'anthropic') {
+  selectedAccount(profileId: string, providerId: ProviderId = 'anthropic') {
     const profile = this.profiles.find((p) => p.id === profileId);
     const id = providerId === 'openai' ? profile?.openaiAccountId : profile?.accountId;
     return id ? this.accountView(id) : null;
   }
 
-  saveAccount(name: string, id?: string, providerId?: 'anthropic' | 'openai') {
+  saveAccount(name: string, id?: string, providerId?: ProviderId) {
     return this.change(async () => {
       name = name.trim();
       if (!name || name.length > 80) throw new SignInError('Account name must have 1 to 80 characters.');
@@ -344,14 +315,6 @@ export class Hub {
       const accounts = id ? this.accounts.map((a) => a.id === id ? { ...a, name } : a) : [...this.accounts, { id: saved, name, providerId: providerId ?? 'anthropic', account: null }];
       await this.commit(this.profiles, accounts);
       return this.accountView(saved);
-    });
-  }
-
-  selectAccount(profileId: string, accountId: string | null) {
-    return this.change(async () => {
-      if (accountId != null) this.requireProvider(accountId, 'anthropic');
-      this.require(profileId);
-      await this.commit(this.profiles.map((p) => p.id === profileId ? { ...p, accountId } : p));
     });
   }
 
@@ -389,7 +352,7 @@ export class Hub {
     }
   }
 
-  private requireProvider(id: string, providerId: 'anthropic' | 'openai') {
+  private requireProvider(id: string, providerId: ProviderId) {
     const account = this.requireAccount(id);
     if ((account.providerId ?? 'anthropic') !== providerId) throw new SignInError(`Choose a ${providerId} account.`);
     return account;
@@ -406,15 +369,11 @@ export class Hub {
     return this.commit(this.profiles, this.accounts.map((a) => a.id === id ? { ...a, account } : a));
   }
 
-  private async commit(profiles: HubProfile[], accounts = this.accounts) {
-    await this.file.write({ profiles, accounts });
-    this.profiles = profiles;
-    this.accounts = accounts;
+  private commit(profiles: HubProfile[], accounts = this.accounts) {
+    return this.store.commit({ profiles, accounts });
   }
 
   private change<T>(run: () => Promise<T>): Promise<T> {
-    const result = this.queue.then(run, run);
-    this.queue = result.catch(() => {});
-    return result;
+    return this.store.change(run);
   }
 }

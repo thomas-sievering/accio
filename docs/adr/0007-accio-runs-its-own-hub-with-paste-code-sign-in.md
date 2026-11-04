@@ -1,6 +1,8 @@
 ---
-status: accepted
+status: superseded by ADR 0014
 ---
+
+> Superseded: sign-in now finishes automatically through a browser callback (ADR 0014); the paste-code step is gone. Accio still runs its own hub.
 
 # accio runs its own hub, and you sign in with Claude inside accio
 
@@ -16,4 +18,4 @@ The hub is part of accio (`apps/hub`), not CLIProxyAPI. You add a profile and pr
 
 - One hub process serves every profile, but each key is bound to exactly one profile's accounts. A profile's traffic therefore never reaches another profile's account, and no profile needs a separate proxy. Picking among a profile's accounts at one provider, which `S:\cliproxy-hub`'s `reset-priority` sidecar does today, moves into the hub too.
 - Threads still run the real Claude Code, through the Agent SDK. The hub only swaps the key for one of the profile's OAuth tokens, so nothing has to imitate Claude Code. Using Claude Code's client ID outside Claude Code is still unofficial, and Anthropic could change or restrict it; the account and terms-of-service risk noted in `S:\cliproxy-hub` still applies.
-- Codex and other providers will get their own sign-in flows in the hub later. Until then, CLIProxyAPI keeps serving them.
+- Codex got its own sign-in flow in the hub (ADR 0010).

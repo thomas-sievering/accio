@@ -1,14 +1,13 @@
 import { useState, type FormEvent } from 'react';
 import type { AccountView, ProviderId } from '@accio/protocol';
 import { useClient } from '../app/connection';
-import { SettingsSection } from '../app/Settings';
-import { Chevron, Plus } from '../app/icons';
+import { SettingLink, SettingsSection } from '../app/Settings';
+import { Plus } from '../app/icons';
 import { useAction } from '../app/useAction';
 import { AccountLimits } from '../limits/AccountLimits';
 import { useWatchLimits } from '../limits/limits';
 import { useProfiles } from './profiles';
-import { SignInWithClaude } from './SignInWithClaude';
-import { SignInWithOpenAI } from './SignInWithOpenAI';
+import { SignIn } from './SignIn';
 
 export function AccountsSettings({ accountId, onOpen, onBack }: { accountId?: string; onOpen: (id: string) => void; onBack: () => void }) {
   const { accounts } = useProfiles();
@@ -17,20 +16,12 @@ export function AccountsSettings({ accountId, onOpen, onBack }: { accountId?: st
   if (accountId === 'new' || accountId === 'new-openai' || account) return <AccountForm key={accountId} account={account} providerId={account?.providerId ?? (accountId === 'new-openai' ? 'openai' : 'anthropic')} onSaved={(a) => (account ? onBack() : onOpen(a.id))} onDone={onBack} />;
   return <>
     <SettingsSection title="Anthropic">
-      {accounts.filter((a) => a.providerId === 'anthropic').map((a) => <button key={a.id} className="setting setting-link" onClick={() => onOpen(a.id)}>
-        <span className="setting-text"><b>{a.name}</b><small>{a.signedIn ? a.email ?? 'Signed in' : 'Signed out'}{a.organization ? ` · ${a.organization}` : ''}</small></span><Chevron />
-      </button>)}
-      <button className="setting setting-link" onClick={() => onOpen('new')}>
-        <span className="menu-icon"><Plus /></span><span className="setting-text"><b>Add Claude account</b><small>Name an account, sign in, then select it in your profiles.</small></span>
-      </button>
+      {accounts.filter((a) => a.providerId === 'anthropic').map((a) => <SettingLink key={a.id} title={a.name} description={`${a.signedIn ? a.email ?? 'Signed in' : 'Signed out'}${a.organization ? ` · ${a.organization}` : ''}`} onClick={() => onOpen(a.id)} />)}
+      <SettingLink icon={<Plus />} title="Add Claude account" description="Name an account, sign in, then select it in your profiles." chevron={false} onClick={() => onOpen('new')} />
     </SettingsSection>
     <SettingsSection title="OpenAI">
-      {accounts.filter((a) => a.providerId === 'openai').map((a) => <button key={a.id} className="setting setting-link" onClick={() => onOpen(a.id)}>
-        <span className="setting-text"><b>{a.name}</b><small>{a.signedIn ? a.email ?? 'Signed in' : 'Signed out'}</small></span><Chevron />
-      </button>)}
-      <button className="setting setting-link" onClick={() => onOpen('new-openai')}>
-        <span className="menu-icon"><Plus /></span><span className="setting-text"><b>Add ChatGPT account</b><small>Name an account, sign in, then select it in your profiles.</small></span>
-      </button>
+      {accounts.filter((a) => a.providerId === 'openai').map((a) => <SettingLink key={a.id} title={a.name} description={a.signedIn ? a.email ?? 'Signed in' : 'Signed out'} onClick={() => onOpen(a.id)} />)}
+      <SettingLink icon={<Plus />} title="Add ChatGPT account" description="Name an account, sign in, then select it in your profiles." chevron={false} onClick={() => onOpen('new-openai')} />
     </SettingsSection>
   </>;
 }
@@ -58,7 +49,7 @@ function AccountForm({ account, providerId, onSaved, onDone }: { account?: Accou
         {error && <p className="error">{error}</p>}
       </div>
     </SettingsSection>
-    {account && <SettingsSection title={providerId === 'openai' ? 'OpenAI' : 'Anthropic'}><div className="setting-form">{providerId === 'openai' ? <SignInWithOpenAI account={account} /> : <SignInWithClaude account={account} />}<small className="hint">{usedBy.length ? `Used by ${usedBy.map((p) => p.name).join(', ')}. Remove it from these profiles before deleting.` : 'Select this account in a profile to use it.'}</small></div></SettingsSection>}
+    {account && <SettingsSection title={providerId === 'openai' ? 'OpenAI' : 'Anthropic'}><div className="setting-form"><SignIn account={account} /><small className="hint">{usedBy.length ? `Used by ${usedBy.map((p) => p.name).join(', ')}. Remove it from these profiles before deleting.` : 'Select this account in a profile to use it.'}</small></div></SettingsSection>}
     {account && <SettingsSection title="Limits">
       <div className="setting-form account-limits">
         <AccountLimits account={account} />

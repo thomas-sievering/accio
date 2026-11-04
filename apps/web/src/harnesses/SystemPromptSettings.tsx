@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import type { SystemPromptView } from '@accio/protocol';
 import { useClient, useConnectionStatus } from '../app/connection';
 import { SettingRow, SettingsSection } from '../app/Settings';
-import './harnesses.css';
 
 /** GLOSSARY: System prompt. Read-only: each section once, labelled with the harnesses that get it. */
 export function SystemPromptSettings() {

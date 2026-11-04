@@ -2,7 +2,7 @@ import { constants } from 'node:fs';
 import { lstat, open, readdir, readFile, realpath } from 'node:fs/promises';
 import { basename, join, relative, resolve, sep } from 'node:path';
 import type { LoadedSkill, WorkspaceSkill } from '@accio/protocol';
-import { inside } from './skills.js';
+import { inside } from '../paths.js';
 
 const MAX_CONTENT = 1_000_000;
 

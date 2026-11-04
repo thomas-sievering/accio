@@ -1,18 +1,19 @@
-import { access, rename } from 'node:fs/promises';
+import { rename } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { JsonFile } from '@accio/persistence';
+import type { ProviderId } from '@accio/protocol';
 import type { ClaudeAccount } from './claudeOAuth.js';
 import type { HubProfile } from './hub.js';
 import type { OpenAIAccount } from './openaiAuth.js';
 
-export type StoredAccount = { id: string; name: string; providerId?: 'anthropic' | 'openai'; account: ClaudeAccount | null; openai?: OpenAIAccount | null };
+export type StoredAccount = { id: string; name: string; providerId?: ProviderId; account: ClaudeAccount | null; openai?: OpenAIAccount | null };
 export type AccountData = { profiles: HubProfile[]; accounts: StoredAccount[] };
 type LegacyProfile = { id: string; accessKey: string; account?: ClaudeAccount; login?: ClaudeAccount };
 
 /** Load seam for both historical hub filenames and inline credentials. */
 export async function loadAccounts(file: JsonFile<AccountData>): Promise<AccountData> {
   const old = join(dirname(file.path), 'accounts.json');
-  if (!(await exists(file.path)) && await exists(old)) await rename(old, file.path);
+  if (!(await file.exists()) && await JsonFile.exists(old)) await rename(old, file.path);
   const stored = await file.read() as AccountData | LegacyProfile[];
   if (!Array.isArray(stored)) return stored;
   const accounts = stored.flatMap((p) => {
@@ -23,12 +24,4 @@ export async function loadAccounts(file: JsonFile<AccountData>): Promise<Account
   const data = { profiles, accounts };
   await file.write(data);
   return data;
-}
-
-async function exists(path: string) {
-  try { await access(path); return true; }
-  catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
-    throw error;
-  }
 }

@@ -9,7 +9,6 @@
   min-height: 0;
   overflow-anchor: none;
 }
-.msg.assistant { min-width: 0; width: min(var(--message-width), 92%); }
 .jump-latest {
   position: absolute;
   bottom: 12px;
@@ -23,10 +22,6 @@
   box-shadow: 0 3px 12px #0004;
   white-space: nowrap;
   font-size: 12px;
-}
-.tool {
-  min-width: 0;
-  width: min(var(--message-width), 92%);
 }
 .tool > .tool-toggle {
   width: 100%;

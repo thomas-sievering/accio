@@ -6,12 +6,12 @@ import type { Broadcast, Router } from '../rpc/router.js';
 import { UserError } from '../rpc/router.js';
 import { JsonFile } from '@accio/persistence';
 import { inspectFolder } from './git.js';
+import { samePath } from '../paths.js';
 import {
   addCheckout,
   findProjectFor,
   projectNameFor,
   removeCheckout,
-  samePath,
   suggestProfile,
   type Checkout,
   type Project,

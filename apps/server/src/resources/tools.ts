@@ -4,7 +4,8 @@ import { delimiter, join, resolve } from 'node:path';
 import type { ResourceAccess } from '@accio/hub';
 import type { ToolDefinition, ToolStatus } from '@accio/protocol';
 import { npmCli, runCommand, type CommandRunner } from './process.js';
-import { inside } from './skills.js';
+import { inside } from '../paths.js';
+import { now } from '../time.js';
 
 export class ManagedTools {
   private running = new Map<string, Promise<ToolStatus>>();
@@ -63,11 +64,11 @@ export class ManagedTools {
       const output = await this.run(process.execPath, [script, ...tool.checkArgs], { cwd: this.folder(tool), timeout: 30_000 });
       // A definition removed during installation must not reappear as ready.
       if (!this.current(tool)) return { ...base, status: 'pending' };
-      return await this.status({ ...base, status: 'ready', version: tool.version, detail: output.slice(-4000), checkedAt: new Date().toISOString() });
+      return await this.status({ ...base, status: 'ready', version: tool.version, detail: output.slice(-4000), checkedAt: now() });
     } catch (error) {
       if (!this.current(tool)) return { ...base, status: 'pending' };
       const detail = error instanceof Error ? error.message : String(error);
-      let status: ToolStatus = { ...base, status: 'error', detail, checkedAt: new Date().toISOString(), repairThreadId: previous?.repairThreadId, repairError: previous?.repairError };
+      let status: ToolStatus = { ...base, status: 'error', detail, checkedAt: now(), repairThreadId: previous?.repairThreadId, repairError: previous?.repairError };
       if (!this.closed && !status.repairThreadId) {
         try { status.repairThreadId = await this.repairOnce(tool, detail); delete status.repairError; }
         catch (error) { status.repairError = error instanceof Error ? error.message : String(error); }

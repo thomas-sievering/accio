@@ -3,12 +3,12 @@
  * Settings. Values stay in component state only; nothing here stores, trims
  * or logs them.
  */
-export const MAX_SECRET_BYTES = 16 * 1024;
+const MAX_SECRET_BYTES = 16 * 1024;
 
 const encoder = new TextEncoder();
 
 /** The value's UTF-8 size, which is what the server limits. */
-export function secretBytes(value: string): number {
+function secretBytes(value: string): number {
   return encoder.encode(value).length;
 }
 

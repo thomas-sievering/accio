@@ -10,4 +10,4 @@ The hub stores, forwards and relays: profiles, accounts, shared settings, the pr
 
 - The hub's code (`apps/hub`) does not depend on harnesses, threads or checkouts. Anything that runs a turn belongs in `apps/server`.
 - Running threads on an always-on computer means pairing a headless accio server there as a machine. It is not a feature of the hub.
-- In v0.1 the hub runs inside this machine's server process (ADR 0007). That is only where it is hosted for now: the hub's part still runs no threads, and splitting it out later changes nothing for threads.
+- The hub is a standalone service (ADR 0014); a desktop without a saved hub starts a managed local one. Where it is hosted changes nothing for threads.

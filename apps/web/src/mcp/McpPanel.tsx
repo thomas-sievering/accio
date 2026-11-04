@@ -3,8 +3,6 @@ import type { McpView } from '@accio/protocol';
 import { emitAppEvent } from '../app/appEvents';
 import { Settings } from '../app/icons';
 import { useResources } from '../resources/resources';
-import '../skills/skills-panel.css';
-import './mcp-panel.css';
 
 const byName = (a: McpView, b: McpView) => a.name.localeCompare(b.name);
 const target = (m: McpView) => (m.transport === 'http' ? m.url ?? '' : [m.command, ...m.args].join(' '));

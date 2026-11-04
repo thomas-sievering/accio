@@ -14,7 +14,7 @@ export type ThreadShelves = {
 
 export type ShelfPlace = 'open' | 'working' | 'snoozed' | 'settled';
 
-export function isSnoozed(t: ThreadView, now: Date): boolean {
+function isSnoozed(t: ThreadView, now: Date): boolean {
   return t.snoozedUntil !== null && new Date(t.snoozedUntil) > now;
 }
 

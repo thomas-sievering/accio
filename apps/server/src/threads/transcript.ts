@@ -1,4 +1,4 @@
-﻿import { isDeepStrictEqual } from 'node:util';
+import { isDeepStrictEqual } from 'node:util';
 import type { TranscriptItem } from '@accio/protocol';
 import { shellCommandSummary } from '@accio/protocol';
 import type { HarnessMessage, HarnessEvent, ContentBlock, StreamEvent } from './harness.js';

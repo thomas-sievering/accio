@@ -10,7 +10,6 @@ import { RevealContext, useReveal, type Reveal } from './reveal';
 
 const revealFrames = 30;
 import { Choice, optionName } from './Choice';
-import './transcript-media.css';
 
 /** Follow late media/layout changes only while the reader is already at the bottom. */
 export function Transcript({ threadId, items, working, onOpenSecrets }: { threadId: string; items: TranscriptItem[]; working: boolean; onOpenSecrets?: (profileId: string) => void }) {
@@ -214,7 +213,7 @@ const Item = memo(function Item({ threadId, item, preparing, picked, pickName }:
 });
 
 /** <1s, 9s, 1m 44s, 2h 5m. */
-export function formatDuration(ms: number): string {
+function formatDuration(ms: number): string {
   const s = Math.round(ms / 1000);
   if (s < 1) return '<1s';
   if (s < 60) return `${s}s`;

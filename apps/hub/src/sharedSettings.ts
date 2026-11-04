@@ -1,14 +1,14 @@
-import { access } from 'node:fs/promises';
 import { join } from 'node:path';
-import { JsonFile } from '@accio/persistence';
+import { JsonStore } from '@accio/persistence';
+import type { HarnessInstall, MachineInfo } from '@accio/protocol';
 
-/** A profile as the hub stores it. Its accounts are in the hub's secret store (hub.ts). */
+export type { HarnessInstall };
+
+/** A profile as the hub stores it. Its account selections and keys are kept by Hub (hub.ts). */
 export type SharedProfile = { id: string; name: string };
 
-export type HarnessInstall = { harnessId: string; version: string | null };
-
 /** What a machine tells the hub about itself when it connects. */
-export type MachineHello = { id: string; name: string; platform: string; version: string; harnesses: HarnessInstall[] };
+export type MachineHello = MachineInfo & { harnesses: HarnessInstall[] };
 
 /** GLOSSARY: Machine, as the hub records it, with the settings that apply to it alone. */
 export type MachineRecord = MachineHello & {
@@ -38,23 +38,18 @@ export const HARNESSES = [{ id: 'claudeCode', name: 'Claude Code', providers: ['
 
 /**
  * GLOSSARY: Shared settings (ADR 0004). Profiles, the paired machines and the
- * settings that apply to one machine only. Plain storage: the rules about
- * profiles still live in accio's server in v0.1.
+ * settings that apply to one machine only.
  */
 export class SharedSettings {
-  private queue: Promise<unknown> = Promise.resolve();
-  private file: JsonFile<Data>;
-  private data: Data = { profiles: [], machines: [] };
+  private store: JsonStore<Data>;
   private connected = new Set<string>();
   private listeners = new Set<() => void>();
 
   constructor(home: string) {
-    this.file = new JsonFile(join(home, 'hub', 'settings.json'), () => ({ profiles: [], machines: [] }));
+    this.store = new JsonStore(join(home, 'hub', 'settings.json'), () => ({ profiles: [], machines: [] }));
   }
 
-  get storePath(): string {
-    return this.file.path;
-  }
+  private get data() { return this.store.data; }
 
   /** Connected clients observe the same machine registry and folder settings. */
   onMachinesChanged(listener: () => void): () => void {
@@ -64,12 +59,8 @@ export class SharedSettings {
 
   /** `seed` runs only on the first start, when there is no store yet. */
   async load(seed?: () => Promise<SharedSeed>) {
-    const found = await access(this.file.path).then(
-      () => true,
-      () => false,
-    );
-    if (found) {
-      this.data = await this.file.read();
+    if (await this.store.file.exists()) {
+      await this.store.load();
     } else if (seed) {
       await this.commit(await seed());
     }
@@ -146,8 +137,7 @@ export class SharedSettings {
   }
 
   async close(): Promise<void> {
-    await this.queue.catch(() => {});
-    await this.file.idle();
+    await this.store.idle();
   }
 
   private async updateMachine(id: string, fn: (m: MachineRecord) => MachineRecord) {
@@ -157,9 +147,7 @@ export class SharedSettings {
   }
 
   private change<T>(run: () => Promise<T>): Promise<T> {
-    const result = this.queue.then(run, run);
-    this.queue = result.catch(() => {});
-    return result;
+    return this.store.change(run);
   }
 
   private requireProfile(id: string) {
@@ -167,8 +155,7 @@ export class SharedSettings {
   }
 
   private async commit(next: Data, afterWrite: () => void = () => {}) {
-    await this.file.write(next);
-    this.data = next;
+    await this.store.commit(next);
     afterWrite();
     for (const listener of this.listeners) listener();
   }

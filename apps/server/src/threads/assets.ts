@@ -5,6 +5,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep, win32 } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
+import { inside } from '../paths.js';
 import { mediaMimeType, type AssetUrl, type MediaBinding, type ThreadAsset } from '@accio/protocol';
 
 const IMAGE_LIMIT = 10 * 1024 * 1024;
@@ -317,11 +318,6 @@ function extension(mime: string) {
   return ({ 'image/jpeg': 'jpg', 'audio/mpeg': 'mp3', 'audio/mp4': 'm4a', 'video/quicktime': 'mov' } as Record<string, string>)[mime] ?? mime.split('/')[1] ?? 'bin';
 }
 
-function within(root: string, path: string) {
-  const rel = relative(root, path);
-  return rel === '' || (!isAbsolute(rel) && rel !== '..' && !rel.startsWith(`..${sep}`));
-}
-
 async function openLocal(cwd: string, source: string, home: string): Promise<{ path: string; handle: FileHandle }> {
   if (!source || source.includes('\0') || source.startsWith('\\\\') || source.startsWith('//')) throw new Error('Blocked local file path.');
   let authored = source;
@@ -343,17 +339,17 @@ async function openLocal(cwd: string, source: string, home: string): Promise<{ p
   const absolute = isAbsolute(authored);
   const root = await realpath(resolve(cwd));
   const target = resolve(root, authored);
-  if (!absolute && !within(root, target)) throw new Error('Relative file path escapes its checkout.');
+  if (!absolute && !inside(root, target)) throw new Error('Relative file path escapes its checkout.');
   // Reject symbolic links in the authored path, including links which resolve back inside cwd.
   await assertNoLinks(target, root);
   const canonical = await realpath(target);
   for (const part of ['hub', 'secret-delivery']) {
     const blocked = resolve(home, part);
-    if (within(blocked, target) || within(blocked, canonical)) throw new Error('Private Accio files cannot be downloaded or embedded.');
+    if (inside(blocked, target) || inside(blocked, canonical)) throw new Error('Private Accio files cannot be downloaded or embedded.');
     const actual = await realpath(blocked).catch(() => blocked);
-    if (within(actual, canonical)) throw new Error('Private Accio files cannot be downloaded or embedded.');
+    if (inside(actual, canonical)) throw new Error('Private Accio files cannot be downloaded or embedded.');
   }
-  if (!absolute && !within(root, canonical)) throw new Error('Relative file path escapes its checkout.');
+  if (!absolute && !inside(root, canonical)) throw new Error('Relative file path escapes its checkout.');
   const handle = await openRegular(target);
   try {
     await assertNoLinks(target, root);

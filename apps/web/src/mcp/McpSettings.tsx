@@ -1,12 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import type { McpDefinition, McpView } from '@accio/protocol';
 import { useClient } from '../app/connection';
-import { Chevron, Plug, Plus } from '../app/icons';
-import { SettingRow, SettingsSection } from '../app/Settings';
+import { Plug, Plus } from '../app/icons';
+import { ConfirmDelete, SettingLink, SettingRow, SettingsSection } from '../app/Settings';
 import { useAction } from '../app/useAction';
-import { slugId, useDraft, useResources } from '../resources/resources';
+import { LoadError, slugId, useDraft, useResources } from '../resources/resources';
 import { Field } from '../resources/Field';
-import { LoadError } from '../tools/ToolsSettings';
 import { mcpDefinition } from './mcp';
 
 const blank = (): McpDefinition => ({ id: '', name: '', transport: 'http', url: '', command: '', args: [], auth: 'none', oauthClientId: undefined });
@@ -26,23 +25,11 @@ export function McpSettings({ mcpId, onOpen, onBack }: { mcpId?: string; onOpen:
       <SettingsSection title="MCP servers">
         {state.mcps.length === 0 && <SettingRow title="No MCP servers yet" />}
         {[...state.mcps].sort((a, b) => a.name.localeCompare(b.name)).map((m) => (
-          <button key={m.id} className="setting setting-link" onClick={() => onOpen(m.id)}>
-            <span className="menu-icon"><Plug /></span>
-            <span className="setting-text">
-              <b>{m.name}</b>
-              <small>{m.transport === 'http' ? m.url : [m.command, ...m.args].join(' ')}</small>
-            </span>
+          <SettingLink key={m.id} icon={<Plug />} title={m.name} description={m.transport === 'http' ? m.url : [m.command, ...m.args].join(' ')} onClick={() => onOpen(m.id)}>
             <McpPill mcp={m} />
-            <Chevron />
-          </button>
+          </SettingLink>
         ))}
-        <button className="setting setting-link" onClick={() => onOpen('new')}>
-          <span className="menu-icon"><Plus /></span>
-          <span className="setting-text">
-            <b>Add MCP server</b>
-            <small>Connect a remote service or run a local MCP server.</small>
-          </span>
-        </button>
+        <SettingLink icon={<Plus />} title="Add MCP server" description="Connect a remote service or run a local MCP server." chevron={false} onClick={() => onOpen('new')} />
       </SettingsSection>
     </>
   );
@@ -69,7 +56,6 @@ function McpForm({ mcp, taken, onSaved, onDone }: { mcp?: McpView; taken: string
   const { value, dirty, set, reset } = useDraft<McpDefinition>(mcp ? mcpDefinition(mcp) : blank());
   const [argsText, setArgsText] = useState<string>();
   const [touched, setTouched] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const { busy, error, run } = useAction();
   const http = value.transport === 'http';
   const args = (argsText ?? value.args.join('\n')).split(/\r?\n/).map((a) => a.trim()).filter(Boolean);
@@ -156,14 +142,7 @@ function McpForm({ mcp, taken, onSaved, onDone }: { mcp?: McpView; taken: string
       {mcp && mcp.transport === 'http' && mcp.auth !== 'none' && <McpCredentials key={`${mcp.id}:${mcp.auth}:${mcp.url}`} mcp={mcp} />}
       {error && <p className="error" role="alert">{error}</p>}
       <footer className="settings-actions">
-        {mcp && (confirmDelete ? (
-          <>
-            <button type="button" className="ghost" disabled={busy} onClick={() => setConfirmDelete(false)}>Keep</button>
-            <button type="button" className="ghost danger" disabled={busy} onClick={remove}>Delete {mcp.name} and its sign-in</button>
-          </>
-        ) : (
-          <button type="button" className="ghost danger" disabled={busy} onClick={() => setConfirmDelete(true)}>Delete</button>
-        ))}
+        {mcp && <ConfirmDelete busy={busy} confirm={`Delete ${mcp.name} and its sign-in`} onDelete={remove} />}
         <span className="spacer" />
         {changed && mcp && <button type="button" className="ghost" disabled={busy} onClick={() => { reset(); setArgsText(undefined); setTouched(false); }}>Discard changes</button>}
         <button type="button" className="ghost" onClick={onDone}>{mcp ? 'Done' : 'Cancel'}</button>

@@ -4,7 +4,6 @@ import { useClient } from '../app/connection';
 import { Check, Key, MinusCircle } from '../app/icons';
 import { useSecretStore } from './secrets';
 import { safeError, valueInputProps, valueProblem } from './secretValue';
-import './secrets.css';
 
 type Answer = ParamsOf<'secretRequests.answer'>['answer'];
 type Action = Answer['type'];

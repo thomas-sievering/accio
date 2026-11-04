@@ -59,17 +59,14 @@
   padding: 0 12px;
   background: var(--side);
 }
-.side-title {
-  flex: 1;
-  padding: 0 8px;
-  font-weight: 500;
-  color: var(--ink-strong);
-}
 .side-icon:disabled {
   opacity: 0.4;
   cursor: default;
+  pointer-events: none;
 }
 .side-body {
+  display: flex;
+  flex-direction: column;
   flex: 1 0 auto;
   padding: 8px 10px 16px;
 }

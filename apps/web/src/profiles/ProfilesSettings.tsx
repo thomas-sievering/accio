@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import type { ProfileView } from '@accio/protocol';
 import { useClient } from '../app/connection';
-import { Chevron, Plus, User } from '../app/icons';
-import { SettingsSection } from '../app/Settings';
+import { Plus, User } from '../app/icons';
+import { SettingLink, SettingsSection } from '../app/Settings';
 import { useAction } from '../app/useAction';
 import { ResourcePicker } from '../resources/ResourcePicker';
 import { claudeAccount, hasSignedInAccount, useProfiles } from './profiles';
@@ -31,24 +31,10 @@ export function ProfilesSettings({
   return (
     <SettingsSection title="Profiles">
       {profiles.map((p) => (
-        <button key={p.id} className="setting setting-link" onClick={() => onOpen(p.id)}>
-          <span className="menu-icon"><User /></span>
-          <span className="setting-text">
-            <b>{p.name}</b>
-            <small className={hasSignedInAccount(p) ? undefined : 'warn'}>{p.providers.flatMap((provider) => provider.accounts.map((a) => `${a.name}${a.signedIn ? '' : ' · Signed out'}`)).join(', ') || 'No account selected'}</small>
-          </span>
-          <Chevron />
-        </button>
+        <SettingLink key={p.id} icon={<User />} title={p.name} warn={!hasSignedInAccount(p)} onClick={() => onOpen(p.id)}
+          description={p.providers.flatMap((provider) => provider.accounts.map((a) => `${a.name}${a.signedIn ? '' : ' · Signed out'}`)).join(', ') || 'No account selected'} />
       ))}
-      <button className="setting setting-link" onClick={() => onOpen('new')}>
-        <span className="menu-icon">
-          <Plus />
-        </span>
-        <span className="setting-text">
-          <b>Add profile</b>
-          <small>A side of your life threads run under, such as personal or work.</small>
-        </span>
-      </button>
+      <SettingLink icon={<Plus />} title="Add profile" description="A side of your life threads run under, such as personal or work." chevron={false} onClick={() => onOpen('new')} />
     </SettingsSection>
   );
 }
@@ -106,10 +92,7 @@ function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: Pr
       </SettingsSection>
       {profile && onOpenSecrets && (
         <SettingsSection title="Secrets">
-          <button type="button" className="setting setting-link" onClick={() => onOpenSecrets(profile.id)}>
-            <span className="setting-text"><b>Saved secrets</b><small>Tokens this profile’s threads can use, managed in Settings / Secrets.</small></span>
-            <Chevron />
-          </button>
+          <SettingLink title="Saved secrets" description="Tokens this profile’s threads can use, managed in Settings / Secrets." onClick={() => onOpenSecrets(profile.id)} />
         </SettingsSection>
       )}
       {profile && (

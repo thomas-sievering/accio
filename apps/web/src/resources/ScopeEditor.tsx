@@ -7,12 +7,10 @@ import { isOptional, projectKey, toggled } from './resources';
  * Where a skill is enabled: everywhere, for chosen
  * profiles, for chosen projects, or nowhere (optional, picked per project or profile).
  */
-export function ScopeEditor({ scope, onChange, disabled, globalLabel = 'Enable everywhere', globalHint = 'Every profile and project gets it.', name }: {
+export function ScopeEditor({ scope, onChange, disabled, name }: {
   scope: ResourceScope;
   onChange: (s: ResourceScope) => void;
   disabled?: boolean;
-  globalLabel?: string;
-  globalHint?: string;
   /** Names the group for assistive technology, e.g. "Playwright CLI". */
   name: string;
 }) {
@@ -25,8 +23,8 @@ export function ScopeEditor({ scope, onChange, disabled, globalLabel = 'Enable e
       <label className="check">
         <input type="checkbox" checked={scope.global} onChange={(e) => onChange({ ...scope, global: e.target.checked })} />
         <span>
-          {globalLabel}
-          <small>{globalHint}</small>
+          Enable everywhere
+          <small>Every profile and project gets it.</small>
         </span>
       </label>
       <div className={`scope-lists${scope.global ? ' covered' : ''}`}>

@@ -1,4 +1,6 @@
-import type { HubAccess } from '../profiles/claudeConfigFolder.js';
+import { join } from 'node:path';
+import type { ProviderId } from '@accio/protocol';
+import { configFolderOf, type HubAccess } from '../profiles/claudeConfigFolder.js';
 
 /**
  * Variables that could carry another login, another provider or another config
@@ -40,5 +42,21 @@ export function harnessEnv(base: NodeJS.ProcessEnv, access: HubAccess, configDir
   env.CLAUDE_CONFIG_DIR = configDir;
   env.ANTHROPIC_BASE_URL = access.baseUrl;
   env.ANTHROPIC_AUTH_TOKEN = access.accessKey;
+  return env;
+}
+
+/** The provider whose account a harness's turns spend. */
+export function providerOf(harnessId: string): ProviderId {
+  return harnessId === 'codex' ? 'openai' : 'anthropic';
+}
+
+/** A turn's environment: only its profile's hub access for the provider its harness uses. */
+export function turnEnv(home: string, profileId: string, harnessId: string, access: HubAccess): Record<string, string> {
+  const env = harnessEnv(process.env, access, configFolderOf(home, profileId));
+  if (harnessId !== 'codex') return env;
+  delete env.ANTHROPIC_AUTH_TOKEN; delete env.ANTHROPIC_BASE_URL; delete env.CLAUDE_CONFIG_DIR;
+  env.CODEX_HOME = join(home, 'profiles', profileId, 'codex');
+  env.ACCIO_OPENAI_URL = `${access.baseUrl}/openai`;
+  env.ACCIO_OPENAI_KEY = access.accessKey;
   return env;
 }

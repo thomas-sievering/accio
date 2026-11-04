@@ -24,12 +24,12 @@ it('migrates the original filename and login field, preserving signed-out profil
   expect(hub.selectedAccount('personal')).toBeNull();
   expect(hub.selectedAccount('work')).toMatchObject({ id: 'account-work', name: 'me@example.com', signedIn: true });
   expect(await hub.accessToken('work')).toBe('token');
-  const stored = await readFile(hub.storePath, 'utf8');
+  const stored = await readFile(join(home, 'hub', 'profiles.json'), 'utf8');
   await hub.close();
   const reloaded = new Hub(home);
   await reloaded.load();
   expect(reloaded.accountViews()).toEqual(hub.accountViews());
-  expect(await readFile(hub.storePath, 'utf8')).toBe(stored);
+  expect(await readFile(join(home, 'hub', 'profiles.json'), 'utf8')).toBe(stored);
 });
 
 it('keeps legacy credentials readable when conversion persistence fails', async () => {

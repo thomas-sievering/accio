@@ -92,7 +92,7 @@ function hoverActions(t: ThreadView, place: ShelfPlace): HoverAction[] {
   ];
 }
 
-export function timeAgo(iso: string, now: Date): string {
+function timeAgo(iso: string, now: Date): string {
   const minutes = Math.round((now.getTime() - new Date(iso).getTime()) / 60_000);
   if (minutes < 1) return 'now';
   if (minutes < 60) return `${minutes}m`;

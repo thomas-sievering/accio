@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { startCodex, type CodexClient, type CodexFactory } from '@accio/codex';
-import { SignInError } from './claudeOAuth.js';
+import { SIGN_IN_TTL_MS, SignInError } from './claudeOAuth.js';
 import { LimitsReadError } from './limits.js';
 
 /** `efforts` is absent on models stored before accio kept them. */
@@ -25,9 +25,8 @@ async function listModels(client: CodexClient): Promise<CodexModel[]> {
 }
 /** Only metadata is stored in profiles.json. Codex owns auth.json inside this hub-only credential home. */
 export type OpenAIAccount = { credentialId: string; email: string | null; planType: string | null; models: CodexModel[] };
-export type OpenAICredentials = { accessToken: string; accountId: string };
+type OpenAICredentials = { accessToken: string; accountId: string };
 type Pending = { client: CodexClient; credentialId: string; loginId?: string; success?: boolean; error?: string; authUrl?: string; callbackUsed?: boolean; timer: ReturnType<typeof setTimeout> };
-const TTL = 15 * 60_000;
 
 /** Hub-side authentication only. This class never starts a Codex thread or turn. */
 export class OpenAIAuth {
@@ -44,7 +43,7 @@ export class OpenAIAuth {
     try { client = await this.factory({ home: dir, cwd: dir }); }
     catch (error) { await this.remove(credentialId); throw new SignInError((error as Error).message); }
     const id = randomUUID();
-    const timer = setTimeout(() => { void this.cancel(id); }, TTL);
+    const timer = setTimeout(() => { void this.cancel(id); }, SIGN_IN_TTL_MS);
     timer.unref();
     const pending: Pending = { client, credentialId, timer };
     this.pending.set(id, pending);

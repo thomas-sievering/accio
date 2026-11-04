@@ -1,12 +1,12 @@
 import { useState, type FormEvent } from 'react';
 import { ToolDefinition, type MachineView, type ToolStatus } from '@accio/protocol';
 import { useClient } from '../app/connection';
-import { Chevron, Plus, Wrench } from '../app/icons';
-import { SettingRow, SettingsSection } from '../app/Settings';
+import { Plus, Wrench } from '../app/icons';
+import { ConfirmDelete, SettingLink, SettingRow, SettingsSection } from '../app/Settings';
 import { useAction } from '../app/useAction';
 import { useLive } from '../app/useLive';
 import { hasSignedInAccount, useProfiles } from '../profiles/profiles';
-import { slugId, useDraft, useResources } from '../resources/resources';
+import { LoadError, slugId, useDraft, useResources } from '../resources/resources';
 import { Field } from '../resources/Field';
 import { readiness, ToolStatusCard } from './ToolStatusCard';
 
@@ -43,24 +43,12 @@ export function ToolsSettings({ toolId, onOpen, onBack, onOpenThread }: { toolId
           const status = state.toolStatuses.find((s) => s.toolId === t.id && s.machineId === here?.id);
           const r = readiness(here, status);
           return (
-            <button key={t.id} className="setting setting-link" onClick={() => onOpen(t.id)}>
-              <span className="menu-icon"><Wrench /></span>
-              <span className="setting-text">
-                <b>{t.name}</b>
-                <small>{t.package}@{t.version}</small>
-              </span>
-              {here && <span className={`pill ${r.tone === 'ok' ? 'ok' : r.tone === 'bad' ? 'bad' : r.tone === 'busy' ? 'busy' : ''}`} title="On this machine"><span className="dot" />{r.label}</span>}
-              <Chevron />
-            </button>
+            <SettingLink key={t.id} icon={<Wrench />} title={t.name} description={`${t.package}@${t.version}`} onClick={() => onOpen(t.id)}>
+              {here && <span className={`pill ${r.tone}`} title="On this machine"><span className="dot" />{r.label}</span>}
+            </SettingLink>
           );
         })}
-        <button className="setting setting-link" onClick={() => onOpen('new')}>
-          <span className="menu-icon"><Plus /></span>
-          <span className="setting-text">
-            <b>Add tool</b>
-            <small>An npm package pinned to an exact version.</small>
-          </span>
-        </button>
+        <SettingLink icon={<Plus />} title="Add tool" description="An npm package pinned to an exact version." chevron={false} onClick={() => onOpen('new')} />
       </SettingsSection>
     </>
   );
@@ -93,7 +81,6 @@ function ToolForm({ tool, taken, onSaved, onDone }: { tool?: ToolDefinition; tak
   const { profiles = [] } = useProfiles();
   const { value, dirty, set, reset } = useDraft<Draft>(tool ?? blank());
   const [args, setArgs] = useState<string>();
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const [touched, setTouched] = useState(false);
   const { busy, error, run } = useAction();
   const argsText = args ?? value.checkArgs.join(' ');
@@ -184,14 +171,7 @@ function ToolForm({ tool, taken, onSaved, onDone }: { tool?: ToolDefinition; tak
       </SettingsSection>
       {error && <p className="error" role="alert">{error}</p>}
       <footer className="settings-actions">
-        {tool && (confirmDelete ? (
-          <>
-            <button type="button" className="ghost" disabled={busy} onClick={() => setConfirmDelete(false)}>Keep</button>
-            <button type="button" className="ghost danger" disabled={busy} onClick={remove}>Delete {tool.name} from the hub</button>
-          </>
-        ) : (
-          <button type="button" className="ghost danger" disabled={busy} onClick={() => setConfirmDelete(true)}>Delete</button>
-        ))}
+        {tool && <ConfirmDelete busy={busy} confirm={`Delete ${tool.name} from the hub`} onDelete={remove} />}
         <span className="spacer" />
         {changed && tool && <button type="button" className="ghost" disabled={busy} onClick={() => { reset(); setArgs(undefined); setTouched(false); }}>Discard changes</button>}
         <button type="button" className="ghost" onClick={onDone}>{tool ? 'Done' : 'Cancel'}</button>
@@ -201,8 +181,4 @@ function ToolForm({ tool, taken, onSaved, onDone }: { tool?: ToolDefinition; tak
       </footer>
     </form>
   );
-}
-
-export function LoadError({ error, retry }: { error: string; retry: () => void }) {
-  return <p className="error" role="alert">Could not load from the hub: {error} <button type="button" className="link" onClick={retry}>Retry</button></p>;
 }

@@ -7,7 +7,6 @@ import { useProfiles } from '../profiles/profiles';
 import { useProjects } from '../projects/projects';
 import { accessLabel, useSecretList, useSecretStore, type SecretStore } from './secrets';
 import { safeError, valueInputProps, valueProblem } from './secretValue';
-import './secrets.css';
 
 /** Where Secrets settings is open: a profile's list, a new secret, or one secret's edit or replace form. */
 export type SecretsRoute = { profileId?: string; secretId?: string; replace?: boolean };

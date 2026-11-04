@@ -90,7 +90,7 @@ describe('hub', () => {
     const { signInId, url } = await beginForProfile(hub, 'personal');
     const state = new URL(url).searchParams.get('state');
     await hub.completeAccountSignIn(signInId, `good#${state}`);
-    expect(hub.summary('personal')).toEqual({ signedIn: true, email: 'me@example.com', organization: null, claudeAccountId: 'claude-me' });
+    expect(hub.selectedAccount('personal')).toMatchObject({ signedIn: true, email: 'me@example.com', organization: null });
     await hub.close();
     const stored = JSON.parse(await readFile(join(home, 'hub', 'profiles.json'), 'utf8'));
     expect(stored.accounts[0].account.accessToken).toBe('token-1');
@@ -104,8 +104,9 @@ describe('hub', () => {
     const start = await beginForProfile(hub, 'personal');
     await hub.completeAccountSignIn(start.signInId, 'good');
     await hub.close();
-    const data = JSON.parse(await readFile(hub.storePath, 'utf8'));
-    await writeFile(hub.storePath, JSON.stringify([{ id: 'personal', accessKey: key, account: data.accounts[0].account }]));
+    const store = join(home, 'hub', 'profiles.json');
+    const data = JSON.parse(await readFile(store, 'utf8'));
+    await writeFile(store, JSON.stringify([{ id: 'personal', accessKey: key, account: data.accounts[0].account }]));
     const migrated = new Hub(home);
     await migrated.load();
     expect(await migrated.ensureProfile('personal')).toBe(key);
@@ -125,7 +126,7 @@ describe('hub', () => {
     await hub.completeAccountSignIn(start.signInId, 'short');
     for (const id of ['personal', 'work']) {
       await hub.ensureProfile(id);
-      await hub.selectAccount(id, account.id);
+      await selectAccount(hub, id, account.id);
     }
     expect(await Promise.all([hub.accessToken('personal'), hub.accessToken('work')])).toEqual(['token-2', 'token-2']);
     expect(auth.grants).toEqual(['authorization_code', 'refresh_token']);
@@ -189,7 +190,7 @@ describe('hub', () => {
     await expect(hub.saveAccount('Changed', account.id)).rejects.toThrow('disk full');
     expect(hub.accountView(account.id).name).toBe('Original');
     vi.spyOn(JsonFile.prototype, 'write').mockRejectedValueOnce(new Error('disk full'));
-    await expect(hub.selectAccount('personal', account.id)).rejects.toThrow('disk full');
+    await expect(selectAccount(hub, 'personal', account.id)).rejects.toThrow('disk full');
     expect(hub.selectedAccount('personal')).toBeNull();
     await Promise.all([hub.saveAccount('Second'), hub.saveAccount('Third')]);
     expect(hub.accountViews().map((a) => a.name)).toEqual(['Original', 'Second', 'Third']);
@@ -266,7 +267,7 @@ describe('hub', () => {
     const other = await hub.saveAccount('Other');
     for (const id of ['personal', 'work', 'removed']) {
       await hub.ensureProfile(id);
-      await hub.selectAccount(id, account.id);
+      await selectAccount(hub, id, account.id);
     }
     const signIn = async (id: string, code: string) => hub.completeAccountSignIn(hub.beginAccountSignIn(id).signInId, code);
     await signIn(account.id, 'short');
@@ -278,7 +279,7 @@ describe('hub', () => {
     release();
     expect(await token).toBeNull();
     expect(await removed).toBeNull();
-    expect(hub.summary('work').signedIn).toBe(false);
+    expect(hub.selectedAccount('work')?.signedIn).toBe(false);
 
     entered = new Promise<void>((r) => { refreshing = r; });
     wait = new Promise<void>((r) => { release = r; });
@@ -289,7 +290,7 @@ describe('hub', () => {
     await signIn(account.id, 'good');
     const fresh = await hub.accessToken('work');
     await signIn(other.id, 'job');
-    await hub.selectAccount('personal', other.id);
+    await selectAccount(hub, 'personal', other.id);
     const switched = await hub.accessToken('personal');
     release();
     expect(await pending).toBe(switched);
@@ -299,8 +300,13 @@ describe('hub', () => {
 
 });
 
+/** Selects a Claude account for a profile, creating the profile if needed. */
+function selectAccount(hub: Hub, profileId: string, accountId: string) {
+  return hub.configureProfile(profileId, accountId, async () => {});
+}
+
 async function beginForProfile(hub: Hub, profileId: string) {
   const account = await hub.saveAccount(`${profileId} Claude`);
-  await hub.selectAccount(profileId, account.id);
+  await selectAccount(hub, profileId, account.id);
   return hub.beginAccountSignIn(account.id);
 }

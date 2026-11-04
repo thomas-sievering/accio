@@ -3,7 +3,6 @@ import type { ChoiceOption, ChoicePick, ThreadAsset, TranscriptItem } from '@acc
 import { useClient } from '../app/connection';
 import { Check, Chevron, Close } from '../app/icons';
 import { assetUrl } from './assetUrl';
-import './choice.css';
 
 type ChoiceItem = Extract<TranscriptItem, { kind: 'choice' }>;
 
@@ -11,7 +10,7 @@ type ChoiceItem = Extract<TranscriptItem, { kind: 'choice' }>;
 export const PendingPick = createContext<{ pick?: ChoicePick; setPick: (pick?: ChoicePick) => void; enabled: boolean }>({ setPick: () => {}, enabled: false });
 
 /** A, B, C… as the harness reads them. */
-export function optionLetter(index: number): string {
+function optionLetter(index: number): string {
   return String.fromCharCode(65 + index);
 }
 

@@ -1,4 +1,11 @@
-/* Import order preserves the original cascade, including later feature overrides. */
+/* All styles load here; import order is the cascade, so later files override earlier ones. */
+@import "./harnesses/harnesses.css";
+@import "./secrets/secrets.css";
+@import "./threads/choice.css";
+@import "./threads/tool-group.css";
+@import "./threads/transcript-media.css";
+@import "./skills/skills-panel.css";
+@import "./mcp/mcp-panel.css";
 @import "./ui/base.css";
 @import "./app/layout.css";
 @import "./ui/context-menu.css";
@@ -15,9 +22,9 @@
 @import "./app/settings.css";
 @import "./threads/draft.css";
 @import "./projects/projects.css";
-@import "./profiles/scope.css";
+@import "./app/scope-menu.css";
 @import "./ui/menu-form.css";
-@import "./profiles/folders.css";
+@import "./machine/folders.css";
 @import "./ui/with-icon.css";
 @import "./app/first-run.css";
 @import "./resources/resources.css";

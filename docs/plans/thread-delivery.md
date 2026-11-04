@@ -2,7 +2,7 @@
 
 One compact row above the composer: change counts, **Ship ▾**, and **Open app** when the project has a preview command.
 
-[Delivery status and automatic settlement](thread-delivery-status.md) records the implemented state model, T3 source research and verification evidence.
+Decisions are in [ADR 0015](../adr/0015-threads-own-delivery-with-optional-pull-requests.md). Browser coverage: `tests/delivery.spec.ts` and `tests/delivery-merge.spec.ts`; server coverage: `apps/server/src/threads/deliveryObservation.test.ts`.
 
 - **Ship** finishes the task, integrates the latest default branch, verifies it and publishes. Clicking during work queues a durable request; **×** cancels that request without stopping the work. A queued request survives disconnects. After a server restart, resume the interrupted work explicitly.
 - **Prepare for review** runs the same preparation and opens a PR, without permission to merge. The workspace stays available for review fixes.
@@ -26,6 +26,11 @@ The pill to the right of **Open app** in the approved mockup is a **suggested us
 
 Generate short, context-aware proposed answers with a cheap, fast model such as **Luna or Haiku**, separately from the thread's coding model. Selecting a suggestion should populate the composer for the user to edit and send. Suggestions carry no permission to publish, merge or clean up. Model routing, cancellation/staleness after new messages, cost limits and privacy/profile boundaries need to be specified before implementation.
 
-## Follow-up infrastructure
+## Open work
 
-Protected remote preview forwarding, webhook-based wakeups instead of machine-side GitHub checks, and registration of processes started outside the preview runner remain separate work. Waiting and review readiness continue to retain workspace ownership. The current process tracking must not be described as complete process isolation.
+- **Link PR.** PRs created outside Ship / Prepare for review need an explicit Link PR action and a thread-scoped `link_pull_request` tool. A pasted historical link must not imply merge authority or trigger settlement.
+- **Multiple PRs / stacks.** Delivery tracks the one PR associated with its request; stacks need every relevant outcome before settlement.
+- **Infrastructure.** Protected remote preview forwarding through the hub, webhook wakeups instead of machine-side `gh` polling, project-wide publication coordination (ADR 0015), and registering processes started outside the preview runner. Current process tracking is not process isolation.
+- **After publication.** Shipping updates origin's target branch only. Advancing the original checkout, restarting the user's app or checking a deployed version are not done.
+- **Unverified.** Live GitHub authentication, real human review and live coding-provider turns; the browser fixtures substitute the harness and hosting reads.
+- T3 Code's [settlement service](https://github.com/pingdotgg/t3code/blob/a10490937dbd8a9e441b0518a77a60117f3ecf5a/apps/server/src/orchestration-v2/ThreadSettlementService.ts) and [PR sync reactor](https://github.com/pingdotgg/t3code/blob/a10490937dbd8a9e441b0518a77a60117f3ecf5a/apps/server/src/orchestration-v2/PullRequestSyncReactor.ts) are useful references for the above. Unlike T3, Accio does not auto-settle closed PRs or inactive threads, and Archive remains its explicit cleanup.
