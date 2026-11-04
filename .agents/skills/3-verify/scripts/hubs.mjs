@@ -27,7 +27,7 @@ export default async function ({page, context, home, runDir, action, capture}) {
       await page.getByText('Choose an account for Same profile',{exact:true}).waitFor();
     });
     await action('hubs/pair: add an independent hub using its first-device code',async()=>{
-      await button('Settings').click(); await page.locator('.sidebar nav').getByRole('button',{name:'Hubs',exact:true}).click();
+      await button('Settings').click(); await page.locator('.sidebar nav').getByRole('button',{name:/^Hub: /}).click(); await page.getByRole('menuitem',{name:'Manage hubs'}).click();
       await page.getByRole('textbox',{name:'Hub name',exact:true}).fill('Other dev');
       await page.getByRole('textbox',{name:'Hub address',exact:true}).fill('http://127.0.0.1:'+ready.port);
       await page.getByRole('textbox',{name:'Pairing code',exact:true}).fill(code); await button('Connect hub').click();

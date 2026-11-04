@@ -9,7 +9,10 @@ for (const [sectionName, addName] of [
     const nav = page.locator('.sidebar nav');
     const button = (name: string) => page.getByRole('button', { name, exact: true });
     await button('Settings').click();
-    await nav.getByRole('button', { name: sectionName, exact: true }).click();
+    if (sectionName === 'Hubs') {
+      await nav.getByRole('button', { name: /^Hub: / }).click();
+      await page.getByRole('menuitem', { name: 'Manage hubs' }).click();
+    } else await nav.getByRole('button', { name: sectionName, exact: true }).click();
     const add = page.getByRole('button', { name: new RegExp('^' + addName) });
     await expect(add).toBeEnabled();
     await add.click();

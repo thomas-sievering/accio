@@ -208,7 +208,7 @@
   width: 100%;
   text-align: start;
 }
-.hub-switcher.switchable:hover,
+.hub-switcher:hover,
 .hub-switcher[aria-expanded="true"] {
   background: var(--hover);
 }
