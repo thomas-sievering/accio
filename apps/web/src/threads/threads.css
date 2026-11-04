@@ -977,3 +977,7 @@ div.model-picker-empty b { color: var(--ink); font-weight: 500; }
 .row.open.one-line {
   height: 36px;
 }
+/* Effort-change particles: a fixed layer centred on the effort word; see burst() in EffortControl. */
+.effort-particles { position: fixed; width: 0; height: 0; pointer-events: none; z-index: 1000; }
+.effort-particles i { position: absolute; left: 0; top: 0; border-radius: 50%; opacity: 0; }
+.effort-particles i.star { border-radius: 0; clip-path: polygon(50% 0, 62% 37%, 100% 50%, 62% 63%, 50% 100%, 38% 63%, 0 50%, 38% 37%); }
