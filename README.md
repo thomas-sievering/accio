@@ -18,6 +18,7 @@ accio uses pnpm (pinned in `package.json`; `corepack enable pnpm` provides it).
 ```sh
 pnpm install
 pnpm start          # build, then open the desktop app (starts this machine's worker)
+pnpm try            # build, then open this checkout's app beside the running one (see below)
 pnpm worker         # worker only; open the printed http://127.0.0.1:…/#token=… link
 pnpm dev:hub        # local dev hub from source, restarted on changes (port 47323)
 pnpm hub            # standalone hub (port 47322; ACCIO_HOME, ACCIO_HUB_PORT override)
@@ -28,6 +29,8 @@ pnpm test:e2e       # build, then every Playwright suite (chat, limits, secrets)
 pnpm test:chat      # ...or one suite: test:chat, test:limits, test:secrets
 pnpm verify         # build, drive the real UI in isolation, retain proof in out/verify
 ```
+
+From a worktree, use `pnpm try` to open that version for hands-on testing. `pnpm start` uses the real `~/.accio` and port 47321, so it stops while your everyday accio is open. `pnpm try` instead gets a fresh home and free ports, joins the hub as the verify device (link one first, see the [3-verify skill](.agents/skills/3-verify/SKILL.md#real-model-turns)) so signed-in accounts and real turns work, titles its window after the checkout, and deletes the home when the window closes. Only one `pnpm try` or real-turn verify holds the device at a time; another one names the checkout that holds it.
 
 Install the test browser once with `pnpm exec playwright install chromium`. The Playwright suites (`playwright.config.ts`, one project per suite) start fixture servers from `scripts/<suite>-test-server.ts` with a fake harness, fixture provider I/O and a temporary home on their own ports; they never call a model or touch your profiles. Agents can drive further journeys with the [3-verify skill](.agents/skills/3-verify/SKILL.md).
 
