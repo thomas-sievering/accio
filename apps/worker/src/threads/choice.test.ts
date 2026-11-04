@@ -137,6 +137,6 @@ it('gives each turn its own access to accio tools, which ends with the turn', as
   expect(seen.during).toBe(200);
   expect(seen.access!.url).toBe(`http://127.0.0.1:${t.app.port}/mcp`);
   const items = await c.call('threads.transcript', { threadId: thread.id });
-  expect(items.find((item) => item.kind === 'assistant')).toMatchObject({ text: 'offer_choice,agent' });
+  expect(items.find((item) => item.kind === 'assistant')).toMatchObject({ text: 'offer_choice,app_screenshot,app_update,agent' });
   await expect.poll(async () => (await list(seen.access!)).status).toBe(401);
 });
