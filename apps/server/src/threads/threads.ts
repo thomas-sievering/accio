@@ -37,6 +37,7 @@ import type { DeliveryHosting } from './delivery.js';
 import { Deliveries } from './deliveries.js';
 import { Previews } from './previews.js';
 import { ThreadState } from './state.js';
+import { agentTool } from './subagents.js';
 import { Turns } from './turns.js';
 import { registerThreadSkills } from './threadSkills.js';
 import { ThreadNaming } from './naming.js';
@@ -86,6 +87,7 @@ export class Threads {
     }, deliveryHosting);
     this.turns = new Turns(this.state, { profiles, projects, models, machines, harnesses, secrets: this.secrets, content: this.content, deliveries: this.deliveries, tools,
       resources: () => this.resources, toolsOff: (harnessId) => builtinToolsOff(harnessId, this.toolOverrides?.()[harnessId]), onWorkFinished: id => this.naming.refine(id), onRepairFinished: (toolId) => this.onRepairFinished?.(toolId) });
+    tools?.add(agentTool((threadId, input, signal) => this.turns.startSubagent(threadId, input, signal)));
     projects.onRemoveThreads((id) => this.deleteThreads(this.state.list.filter((t) => t.checkoutId === id)));
     projects.onCheckInUse((checkoutId) => this.countUsing((t) => t.checkoutId === checkoutId));
     projects.onCheckProjectInUse((projectId) => this.countUsing((t) => t.projectId === projectId));

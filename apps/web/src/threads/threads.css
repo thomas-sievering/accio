@@ -516,6 +516,18 @@
   font-size: 12px;
   color: var(--muted);
 }
+/* A running sub-agent's latest step, after its task. */
+.tool-step {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: clip;
+  text-overflow: ellipsis;
+  color: var(--dim);
+}
+.tool-step::before {
+  content: '·';
+  margin-right: 8px;
+}
 .tool button svg {
   flex: none;
   width: 13px;

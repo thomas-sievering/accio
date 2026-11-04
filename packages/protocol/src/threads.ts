@@ -143,11 +143,14 @@ export type ChoiceOption = { label: string; source: string; asset?: ThreadAsset;
 export type ChoicePick = { choiceId: string; option: number };
 
 /** One entry of a thread's transcript. */
+/** GLOSSARY: Sub-agent. The latest tool call of the sub-agent a running tool started. */
+export type ToolStep = { name: string; summary: string };
+
 export type TranscriptItem =
   | SecretRequestItem
   | { kind: 'user'; id: string; turnId: string; text: string; at: string; resume?: boolean; delivery?: DeliveryMode; pick?: ChoicePick; steered?: boolean; goal?: 'continue' }
   | { kind: 'assistant'; id: string; turnId: string; text: string; media?: MediaBinding[] }
-  | { kind: 'tool'; id: string; turnId: string; name: string; summary: string; status: 'running' | 'done' | 'error' | 'interrupted'; output?: string; detailRevision?: number; loadedSkills?: LoadedSkill[] }
+  | { kind: 'tool'; id: string; turnId: string; name: string; summary: string; status: 'running' | 'done' | 'error' | 'interrupted'; output?: string; detailRevision?: number; loadedSkills?: LoadedSkill[]; step?: ToolStep }
   /** GLOSSARY: Choice. Screenshots the harness offers; you pick one in your next message. */
   | { kind: 'choice'; id: string; turnId: string; question: string; options: ChoiceOption[] }
   | { kind: 'notice'; id: string; turnId: string; tone: 'info' | 'error'; text: string }

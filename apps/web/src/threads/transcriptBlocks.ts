@@ -52,7 +52,7 @@ function layoutTurn(turn: TranscriptItem[], running: boolean): TranscriptBlock[]
   const current = work.findLast((item): item is ToolItem => item.kind === 'tool' && item.status === 'running');
   const state = finished
     ? { live: false as const, ms: finished.ms }
-    : { live: true as const, activity: secrets.some(item => item.status === 'pending') ? 'Waiting for secret' : current ? describeActivity(current) : 'Thinking', startedAt: prompt ? (body[0] as Extract<TranscriptItem, { kind: 'user' }>).at : undefined };
+    : { live: true as const, activity: secrets.some(item => item.status === 'pending') ? 'Waiting for secret' : current ? describeLive(current) : 'Thinking', startedAt: prompt ? (body[0] as Extract<TranscriptItem, { kind: 'user' }>).at : undefined };
   return [
     ...groupTools(body.slice(0, prompt)),
     { kind: 'work', id: `${turnId}:work`, failed, blocks: groupTools(work), ...state },
@@ -86,14 +86,19 @@ const kinds: Record<string, Kind> = {
 };
 const doing: Record<Kind, string> = { run: 'Running', read: 'Reading', edit: 'Editing', search: 'Searching', fetch: 'Fetching', agent: 'Running agent:', other: 'Using' };
 
+/** A running sub-agent adds its own latest step: "Running agent: Count the files · Reading delivery.ts". */
+function describeLive(item: ToolItem): string {
+  return item.step ? `${describeActivity(item)} · ${describeActivity(item.step)}` : describeActivity(item);
+}
+
 /** "Running pnpm test", "Reading README.md", "Using linear · get_issue". */
-export function describeActivity(item: ToolItem): string {
+export function describeActivity(item: Pick<ToolItem, 'name' | 'summary'>): string {
   const kind = kinds[item.name] ?? 'other';
   if (kind === 'other') return `${doing.other} ${toolLabel(item.name)}`;
   return item.summary ? `${doing[kind]} ${toolSummary(item)}` : `${doing[kind]}…`;
 }
 
-export function toolSummary(item: ToolItem): string {
+export function toolSummary(item: Pick<ToolItem, 'name' | 'summary'>): string {
   return item.name === 'Shell' || item.name === 'Bash' ? shellCommandSummary(item.summary, true) : item.summary;
 }
 

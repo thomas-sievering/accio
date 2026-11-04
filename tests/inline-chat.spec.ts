@@ -246,6 +246,24 @@ test('Electron renderer supports the same tools, snapshots, viewer and media con
   }
 });
 
+test('running sub-agents show their latest step, then fold into ordinary Agent rows', async ({ page, baseURL }, testInfo) => {
+  await page.goto(`${baseURL}/#token=${token}`);
+  await page.getByRole('button', { name: /Inline chat fixture/ }).click();
+  const input = page.locator('.composer textarea');
+  await input.fill('Sub-agent fixture'); await input.press('Enter');
+  // The live line names what the newest sub-agent is doing now.
+  await expect(page.locator('.turn-work-activity')).toHaveText(/^Running agent: Review the transcript diff · Running git diff$/);
+  await page.locator('.turn-work-activity').click();
+  const rows = page.locator('.tool.running');
+  await expect(rows).toHaveCount(2);
+  await expect(rows.filter({ hasText: 'Find where deliveries retry' }).locator('.tool-step')).toHaveText('Reading delivery.ts');
+  await expect(rows.filter({ hasText: 'Review the transcript diff' }).locator('.tool-step')).toHaveText('Running git diff');
+  await page.screenshot({ path: testInfo.outputPath('subagents-running.png') });
+  await expect(rows.filter({ hasText: 'Find where deliveries retry' }).locator('.tool-step')).toHaveText('Running pnpm test delivery', { timeout: 10_000 });
+  await expect(page.getByText('Both sub-agents reported back.')).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('.tool-step')).toHaveCount(0);
+});
+
 test('a choice shows screenshots full size and sends the pick with feedback', async ({ page, baseURL }) => {
   await page.goto(`${baseURL}/#token=${token}`);
   await page.locator('.sidebar').getByRole('button', { name: /Choice fixture/ }).click();
