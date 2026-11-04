@@ -235,14 +235,6 @@ export const MessageSquarePlus = () => (
   </svg>
 );
 
-// IconMCP: edit
-export const SquarePen = () => (
-  <svg {...base}>
-    <path d="M10.957 3.457 L12.543 5.043 C12.933 5.433 12.933 6.067 12.543 6.457 L5.793 13.207 C5.605 13.395 5.351 13.5 5.086 13.5 L2.5 13.5 L2.5 10.914 C2.5 10.649 2.605 10.395 2.793 10.207 L9.543 3.457 C9.933 3.067 10.567 3.067 10.957 3.457 Z" />
-    <line x1="8.75" y1="4.25" x2="11.75" y2="7.25" />
-  </svg>
-);
-
 // IconMCP: filter
 export const ListFilter = () => (
   <svg {...base}>

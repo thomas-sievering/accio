@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { access } from 'node:fs/promises';
 import { JsonFile } from '@accio/persistence';
 import { HubClient, hubAddress, remoteSettings, remoteResources, remoteMcp, remoteSecrets, type SecretsAccess, type HubSnapshot, type HarnessInstall } from '@accio/hub';
-import type { Events, HubConnectionView, MachineInfo, MethodName } from '@accio/protocol';
+import type { Events, HubConnectionView, MachineInfo } from '@accio/protocol';
 import { Router, UserError, type Broadcast } from '../rpc/router.js';
 import { Profiles } from '../profiles/profiles.js';
 import { Machines } from '../machine/machine.js';
