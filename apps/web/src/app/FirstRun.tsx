@@ -1,5 +1,5 @@
 import type { ProfileView } from '@accio/protocol';
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useClient, useHubs } from './connection';
 import { Monitor, ProviderLogo } from './icons';
 import { useAction } from './useAction';
@@ -32,19 +32,20 @@ export function FirstRun() {
   ];
   const current = steps.findIndex((done) => !done);
   const [addingProject, setAddingProject] = useState(false);
+  const [editingProfile, setEditingProfile] = useState(false);
 
   return (
     <div className="first-run">
       <h1 className="first-run-kicker">Set up Accio</h1>
       {current === 0 && <ChooseHub onLocal={chooseLocal} />}
-      {current === 1 && (
+      {(current === 1 || editingProfile && unsigned) && (
         <Screen title="Name your first profile" sub="A profile groups the accounts and projects for one side of your life, such as personal or work.">
-          <AddProfile />
+          <AddProfile profile={editingProfile ? unsigned : undefined} onDone={() => setEditingProfile(false)} />
         </Screen>
       )}
-      {current === 2 && unsigned && (
+      {current === 2 && unsigned && !editingProfile && (
         <Screen title={`Choose an account for ${unsigned.name}`} sub="Threads under this profile use its Claude or ChatGPT subscription.">
-          <SetUpAccount key={unsigned.id} profile={unsigned} addedProject={state?.projects.map(p => p.name).join(', ')} onAddProject={(state?.projects.length ?? 0) === 0 ? () => setAddingProject(true) : undefined} />
+          <SetUpAccount key={unsigned.id} profile={unsigned} onBack={() => setEditingProfile(true)} addedProject={state?.projects.map(p => p.name).join(', ')} onAddProject={(state?.projects.length ?? 0) === 0 ? () => setAddingProject(true) : undefined} />
         </Screen>
       )}
       {addingProject && <AddProjectSheet onClose={() => setAddingProject(false)} />}
@@ -53,8 +54,8 @@ export function FirstRun() {
           <AddProjectForm />
         </Screen>
       )}
-      <div className="first-run-dots" role="progressbar" aria-label="Setup progress" aria-valuemin={1} aria-valuemax={steps.length} aria-valuenow={current + 1}>
-        {steps.map((_, i) => <span key={i} className={i === current ? 'on' : i < current ? 'done' : ''} />)}
+      <div className="first-run-dots" role="progressbar" aria-label="Setup progress" aria-valuemin={1} aria-valuemax={steps.length} aria-valuenow={(editingProfile ? 1 : current) + 1}>
+        {steps.map((_, i) => <span key={i} className={i === (editingProfile ? 1 : current) ? 'on' : i < (editingProfile ? 1 : current) ? 'done' : ''} />)}
       </div>
     </div>
   );
@@ -108,19 +109,20 @@ const Globe = () => (
   </svg>
 );
 
-function AddProfile() {
+function AddProfile({ profile, onDone }: { profile?: ProfileView; onDone?: () => void } = {}) {
   const client = useClient();
-  const [name, setName] = useState('');
+  const [name, setName] = useState(profile?.name ?? '');
   const [missing, setMissing] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
   const { busy, error, run } = useAction();
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return setMissing(true);
-    void run(() => client.call('profiles.save', { name }));
+    if (!name.trim()) { setMissing(true); input.current?.focus(); return; }
+    void run(async () => { await client.call('profiles.save', { id: profile?.id, name }); onDone?.(); });
   };
   return (
     <form onSubmit={submit} className="field" noValidate>
-      <input value={name} onChange={(e) => { setName(e.target.value); setMissing(false); }} placeholder="personal, work…" aria-label="Profile name" aria-invalid={missing} aria-describedby={missing ? 'profile-name-error' : undefined} autoFocus />
+      <input ref={input} value={name} onChange={(e) => { setName(e.target.value); setMissing(false); }} placeholder="personal, work…" aria-label="Profile name" aria-invalid={missing} aria-describedby={missing ? 'profile-name-error' : undefined} autoFocus />
       {missing && <small className="error" id="profile-name-error" role="alert">Enter a name for the profile.</small>}
       {error && <p className="error">{error}</p>}
       <button type="submit" className="ghost primary first-run-next" disabled={busy}>Continue</button>
@@ -134,7 +136,7 @@ const providers = [
 ] as const;
 
 /** Pick a provider; a new account is named after the profile unless you reuse one the hub already has. */
-function SetUpAccount({ profile, onAddProject, addedProject }: { profile: ProfileView; onAddProject?: () => void; addedProject?: string }) {
+function SetUpAccount({ profile, onAddProject, addedProject, onBack }: { profile: ProfileView; onAddProject?: () => void; addedProject?: string; onBack: () => void }) {
   const client = useClient();
   const { accounts } = useProfiles();
   const [selected, setSelected] = useState('');
@@ -178,6 +180,6 @@ function SetUpAccount({ profile, onAddProject, addedProject }: { profile: Profil
     </select></label>}
     <button type="submit" className="ghost primary first-run-next" disabled={busy || !accounts}>Continue</button>
     {error && <p className="error">{error}</p>}
-    {projectFirst && <div className="first-run-links">{projectFirst}</div>}
+    <div className="first-run-links"><button type="button" className="link" onClick={onBack}>Back</button>{projectFirst && <><span aria-hidden="true">·</span>{projectFirst}</>}</div>
   </form>;
 }

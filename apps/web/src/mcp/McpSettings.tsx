@@ -140,7 +140,7 @@ function McpForm({ mcp, taken, onSaved, onDone }: { mcp?: McpView; taken: string
       </form>
       {mcp && mcp.transport === 'http' && mcp.auth !== 'none' && <McpCredentials key={`${mcp.id}:${mcp.auth}:${mcp.url}`} mcp={mcp} />}
       {error && <p className="error" role="alert">{error}</p>}
-      <SettingsFooter remove={mcp && { name: mcp.name, run: remove, consequence: mcp.transport === 'http' && mcp.auth !== 'none' ? "Threads lose this server's tools and its saved sign-in." : "Threads lose this server's tools." }} busy={busy} onCancel={onDone} saveLabel={mcp ? 'Save' : 'Add MCP server'} saveForm="mcp-form" saveDisabled={busy || (!!mcp && !changed)} dirty={!!mcp && changed && !busy} />
+      <SettingsFooter remove={mcp && { name: mcp.name, run: remove, consequence: mcp.transport === 'http' && mcp.auth !== 'none' ? "Threads lose this server's tools and its saved sign-in." : "Threads lose this server's tools." }} busy={busy} onCancel={onDone} saveLabel={mcp ? 'Save' : 'Add MCP server'} saveForm="mcp-form" saveDisabled={busy || (!!mcp && !changed)} dirty={changed && !busy} />
     </div>
   );
 }

@@ -162,6 +162,7 @@ export function TitleEdit({ thread, className, onDone }: { thread: ThreadView; c
         onChange={(e) => setTitle(e.target.value)}
         onBlur={onDone}
         onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Escape') onDone(); }} />
+      <small className="title-count" aria-live="polite">{title.length}/120</small>
     </form>
   );
 }

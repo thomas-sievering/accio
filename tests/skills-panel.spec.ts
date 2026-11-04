@@ -33,6 +33,7 @@ test('narrow panel wraps focus in both directions without a blank or background 
   await toggle.click();
   await page.getByRole('tab', { name: 'MCP', exact: true }).click();
   await page.getByRole('tabpanel', { name: 'MCP' }).getByRole('button', { name: 'docs-search Remote', exact: true }).click();
+  await expect(page.locator('.settings-page').getByRole('textbox').first()).toBeFocused();
   const accounts = page.locator('.sidebar nav').getByRole('button', { name: 'Accounts', exact: true });
   await accounts.focus();
   await page.keyboard.press('Tab');

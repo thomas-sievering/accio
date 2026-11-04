@@ -1,5 +1,37 @@
 import { test, expect } from '@playwright/test';
 
+for (const [sectionName, addName] of [
+  ['Profiles', 'Add profile'], ['Accounts', 'Add ChatGPT account'], ['Secrets', 'Add secret'],
+  ['Tools', 'Add tool'], ['MCP servers', 'Add MCP server'], ['Skills', 'Add skill source'], ['Hubs', 'Add hub'],
+]) {
+  test(`new ${sectionName} form guards typed input on Escape, section and breadcrumb navigation`, async ({ page, baseURL }) => {
+    await page.goto(`${baseURL}/#token=isolated-chat-test-token`);
+    const nav = page.locator('.sidebar nav');
+    const button = (name: string) => page.getByRole('button', { name, exact: true });
+    await button('Settings').click();
+    await nav.getByRole('button', { name: sectionName, exact: true }).click();
+    await page.getByRole('button', { name: new RegExp('^' + addName) }).click();
+    const field = page.locator('.settings-page').getByRole('textbox').first();
+    await field.fill('Unsaved form input');
+    await field.press('Escape');
+    await expect(page.getByRole('group', { name: 'Discard changes?', exact: true })).toBeVisible();
+    await button('Keep editing').click();
+    await expect(field).toHaveValue('Unsaved form input');
+    await nav.getByRole('button', { name: 'System prompt', exact: true }).click();
+    await expect(button('Discard')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(field).toHaveValue('Unsaved form input');
+    await page.locator('.main-top .crumbs').getByRole('button').click();
+    await expect(button('Discard')).toBeVisible();
+    await button('Discard').click();
+    await page.getByRole('button', { name: new RegExp('^' + addName) }).click();
+    await expect(field).toHaveValue('');
+    await field.press('Escape');
+    await expect(button('Discard')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: new RegExp('^' + addName) })).toBeVisible();
+  });
+}
+
 test('keeping unsaved settings edits never submits the form and discarding leaves the saved profile intact', async ({ page, baseURL }, info) => {
   await page.goto(`${baseURL}/#token=isolated-chat-test-token`);
   const button = (name: string) => page.getByRole('button', { name, exact: true });
@@ -42,6 +74,7 @@ test('Limits returns to its Settings origin and restores keyboard focus', async 
   const nav = page.locator('.sidebar nav');
   await nav.getByRole('button', { name: 'Projects', exact: true }).click();
   await nav.getByRole('button', { name: 'Limits', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Limits', exact: true })).toBeFocused();
   await page.getByRole('button', { name: 'Close limits', exact: true }).click();
   await expect(nav.getByRole('button', { name: 'Projects', exact: true })).toHaveAttribute('aria-current', 'page');
   await expect(nav.getByRole('button', { name: 'Limits', exact: true })).toBeFocused();

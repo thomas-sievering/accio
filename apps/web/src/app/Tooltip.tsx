@@ -1,17 +1,26 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import './tooltip.css';
 
 /** A visible label for keyboard focus as well as pointer hover, outside scroll clipping. */
-export function useTooltip(text: string) {
+let closeCurrent: (() => void) | undefined;
+export function useTooltip(text: string, clippedSelector?: string) {
   const id = useId();
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [position, setPosition] = useState({ left: 8, top: 8 });
   const tip = useRef<HTMLDivElement>(null);
   const leaveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const cancelLeave = () => clearTimeout(leaveTimer.current);
-  const hide = () => { cancelLeave(); setAnchor(null); };
-  const show = (element: HTMLElement) => { cancelLeave(); setAnchor(element); };
+  const hide = useCallback(() => { clearTimeout(leaveTimer.current); setAnchor(null); if (closeCurrent === hide) closeCurrent = undefined; }, []);
+  const show = (element: HTMLElement) => {
+    const label = clippedSelector ? element.querySelector<HTMLElement>(clippedSelector) : undefined;
+    if (clippedSelector && (!label || label.scrollWidth <= label.clientWidth)) return;
+    cancelLeave();
+    if (closeCurrent !== hide) closeCurrent?.();
+    closeCurrent = hide;
+    setAnchor(element);
+  };
+  useEffect(() => () => { clearTimeout(leaveTimer.current); if (closeCurrent === hide) closeCurrent = undefined; }, [hide]);
   useEffect(() => {
     if (!anchor) return;
     const place = () => {

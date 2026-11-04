@@ -1,6 +1,6 @@
 # UI audit comparison
 
-Work is on `ui_analysis`. The comparison includes round-5 observations and subsequent fixes; the all-auditor threshold is still pending independent review.
+Work is on `ui_analysis`. The comparison includes round-6 observations and subsequent fixes; the all-auditor threshold is still pending independent review.
 
 ## Changes visible in ordinary use
 
@@ -35,6 +35,8 @@ Matched 900×700 pairs in the interactive artifact:
 - Shipped thread: `round-1/gpt-sol/92-shipped-900.png` → `round-5/gpt-sol/061-shipped-900.png`.
 
 The latest fixes add keyboard-visible title/effort tooltips, stable focused row height, explicit panel Tab wrapping, repair-link spacing and a return to the originating Settings page from Limits. They are not yet independently scored.
+
+Round 6 independently confirms those corrections on the saved `037f47b` web build, with matching disk/served hashes. GPT Sol scores every category 9; Sonnet has three categories at 8 (Consistency, Clarity, Accessibility), and Opus has two (Accessibility, Forms). The next implementation guards all seven new-item forms, restores navigation focus, names media actions, announces send failures, limits tooltips to one, improves smaller control targets and onboarding Back, and clarifies copy feedback. These further changes still need independent ratings.
 
 ## Score interpretation
 

@@ -111,8 +111,8 @@
 .row-action {
   display: grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
   border-radius: 6px;
   color: var(--dim);
 }
@@ -241,6 +241,9 @@
   flex: 1 1 auto;
   min-width: 0;
 }
+.header-rename, .row-rename { display: flex; align-items: center; gap: 6px; }
+.title-count { flex: none; color: var(--dim); font-size: 10px; white-space: nowrap; }
+.header-rename input, .row-rename input { flex: 1; }
 .header-rename input,
 .row-rename input {
   width: 100%;
@@ -316,8 +319,8 @@
 /* Thread header */
 .thread-actions-trigger {
   flex: none;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
 }
 .thread-actions-menu {
   width: 220px;
@@ -886,7 +889,7 @@ div.model-picker-empty b { color: var(--ink); font-weight: 500; }
 .queued-message > svg { width: 13px; height: 13px; flex: none; color: var(--dim); }
 .queued-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .queued-when { color: var(--dim); white-space: nowrap; }
-.queued-message button { flex: none; padding: 4px; color: var(--muted); border-radius: 4px; white-space: nowrap; }
+.queued-message button { flex: none; min-width: 32px; min-height: 32px; padding: 4px; color: var(--muted); border-radius: 4px; white-space: nowrap; }
 .queued-message button:hover:not(:disabled) { color: var(--ink-strong); background: var(--raised-2); }
 .queued-message button svg { width: 13px; height: 13px; }
 .queued-message form { display: flex; flex: 1; min-width: 0; gap: 6px; }

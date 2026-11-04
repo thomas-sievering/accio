@@ -32,8 +32,8 @@ export function ImageViewer({ source, label, onClose, onOpen, onDownload, onErro
     onClick={(event) => { if (event.target === event.currentTarget) close(); }}>
     <header>
       <h2 id={title}>{label}</h2>
-      <button onClick={onOpen}>Open</button>
-      <button onClick={onDownload}>Download</button>
+      <button aria-label={`Open ${label}`} onClick={onOpen}>Open</button>
+      <button aria-label={`Download ${label}`} onClick={onDownload}>Download</button>
       <button className="image-viewer-close" aria-label="Close image viewer" onClick={close} autoFocus><Close /></button>
     </header>
     <img src={source} alt={label} style={width ? { width } : undefined} onLoad={(event) => setWidth(fittedWidth(event.currentTarget))} onError={onError} />

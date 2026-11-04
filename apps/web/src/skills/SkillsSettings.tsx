@@ -81,7 +81,7 @@ function AddSource({ taken, onAdded, onCancel }: { taken: string[]; onAdded: (s:
         </div>
       </SettingsSection>
       {error && <p className="error" role="alert">{error}</p>}
-      <SettingsFooter busy={busy} onCancel={onCancel} saveLabel={busy ? 'Adding…' : 'Add source'} saveDisabled={busy} />
+      <SettingsFooter busy={busy} onCancel={onCancel} saveLabel={busy ? 'Adding…' : 'Add source'} saveDisabled={busy} dirty={!!(name || url || ref) && !busy} />
     </form>
   );
 }
@@ -249,7 +249,7 @@ function SkillRow({ skill }: { skill: SkillEntry }) {
               <div className="update-row">
                 <span className="spacer" />
                 <button type="button" className="ghost primary" disabled={copy.busy || !checkoutId}
-                  onClick={async () => { const r = await copy.run(() => client.call('skills.copy', { id: skill.id, checkoutId })); if (r) setCopied(r.path); }}>
+                  onClick={async () => { setCopied(undefined); const r = await copy.run(() => client.call('skills.copy', { id: skill.id, checkoutId })); if (r) setCopied(r.path); }}>
                   {copy.busy ? 'Copying…' : 'Copy'}
                 </button>
               </div>

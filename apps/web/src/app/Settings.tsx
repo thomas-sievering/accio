@@ -79,13 +79,19 @@ export function Settings({ route, onRoute, onClose, onOpenThread, onOpenLimits }
   const projectLabel = route.section === 'projects' && route.projectId ? projectState?.projects.find((p) => p.id === route.projectId)?.name : undefined;
   const detailLabel = projectLabel || profileLabel || accountLabel || secretLabel || resourceLabel || machineLabel || hubLabel;
   const previousDetail = useRef<string | undefined>(undefined);
+  const root = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
-    if (document.activeElement === document.body) {
-      const rows = [...document.querySelectorAll<HTMLElement>('.settings-page .setting-link')];
-      const row = previousDetail.current && rows.find(el => el.textContent?.startsWith(previousDetail.current!));
-      (row || document.querySelector<HTMLElement>('.main-top .crumbs'))?.focus();
-    }
+    const previous = previousDetail.current;
     previousDetail.current = detailLabel;
+    // Wait until hidden/unmounted panes have released browser focus.
+    const frame = requestAnimationFrame(() => {
+      const active = document.activeElement as HTMLElement | null;
+      if (active && root.current?.contains(active) && active !== document.body && !active.matches('.crumbs') && active.getClientRects().length) return;
+      const rows = [...(root.current?.querySelectorAll<HTMLElement>('.settings-page .setting-link') ?? [])];
+      const row = rows.find(el => el.querySelector('b')?.textContent === previous) ?? rows[0];
+      (row ?? root.current?.querySelector<HTMLElement>('.settings-page input:not(:disabled), .settings-page button:not(:disabled)') ?? root.current?.querySelector<HTMLElement>('.main-top .crumbs'))?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
   }, [route, detailLabel]);
 
   const inDetail = !!(profileId || accountId || toolId || mcpId || sourceId || (route.section === 'secrets' && route.secretId) || (route.section === 'machines' && route.machineId) || (route.section === 'hub' && route.hubId) || (route.section === 'projects' && route.projectId));
@@ -113,7 +119,7 @@ export function Settings({ route, onRoute, onClose, onOpenThread, onOpenLimits }
   }, []);
 
   return (
-    <div className="layout">
+    <div ref={root} className="layout">
       <aside className="sidebar">
         <header className="side-top drag">
           <button className="settings-back" title="Back to threads (Esc)" onClick={leaveSettings}>

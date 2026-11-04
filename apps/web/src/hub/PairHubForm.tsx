@@ -27,7 +27,7 @@ export function PairHubForm({ className = 'setting-form', askName = true, submit
   const failure = error && <p className="error" role="alert">{error}</p>;
   if (onCancel) return <form className="settings-profile-form" onSubmit={pair} noValidate>
     <SettingsSection><div className="setting-form">{fields}{failure}</div></SettingsSection>
-    <SettingsFooter busy={busy} onCancel={onCancel} saveLabel="Connect hub" saveDisabled={busy} />
+    <SettingsFooter busy={busy} onCancel={onCancel} saveLabel="Connect hub" saveDisabled={busy} dirty={!!(name || url || code) && !busy} />
   </form>;
   return <form className={className} onSubmit={pair} noValidate>
     {fields}

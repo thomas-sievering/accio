@@ -26,7 +26,7 @@ export function ThreadRow({ thread: t, place }: { thread: ThreadView; place: She
   const openMenu = useThreadMenu();
   const [renamingId] = useRenaming();
   const renaming = renamingId === t.id;
-  const titleTip = useTooltip(t.title);
+  const titleTip = useTooltip(t.title, '.row-title');
   const onContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     // Shift+F10 and the menu key report no pointer: open under the row instead.

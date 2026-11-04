@@ -60,8 +60,8 @@ describe('layoutTranscript', () => {
       projectName: 'Project', machineName: 'This machine', status, candidates: [], expiresAt: '2026-11-03T13:00:00Z' };
     const items = [ask('q'), tool('1'), secret, tool('2')];
     const blocks = layoutTranscript(items, 't1');
-    expect(shape(blocks)).toEqual(['q', { work: [['1', '2']] }, 's']);
-    if (status === 'pending') expect(blocks[1]).toMatchObject({ activity: 'Waiting for secret' });
+    expect(shape(blocks)).toEqual(['q', 's', { work: [['1', '2']] }]);
+    if (status === 'pending') expect(blocks.at(-1)).toMatchObject({ activity: 'Waiting for secret' });
     expect(shape(layoutTranscript([...items, say('a'), done()]))).toEqual(['q', { work: [['1', '2']] }, 's', 'a']);
   });
 
@@ -88,8 +88,8 @@ describe('layoutTranscript', () => {
 
   it('says Working between calls and keeps a streaming answer outside the fold', () => {
     const blocks = layoutTranscript([ask('q'), tool('1'), say('partial answer')], 't1');
-    expect(blocks[1]).toMatchObject({ live: true, activity: 'Working' });
-    expect(shape(blocks)).toEqual(['q', { work: [['1']] }, 'partial answer']);
+    expect(blocks.at(-1)).toMatchObject({ live: true, activity: 'Working' });
+    expect(shape(blocks)).toEqual(['q', 'partial answer', { work: [['1']] }]);
     expect(layoutTranscript([ask('q')], 't1')[1]).toMatchObject({ live: true, activity: 'Working', blocks: [] });
   });
 

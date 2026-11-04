@@ -174,6 +174,7 @@ function SecretForm({ profile: initial, profiles, projects: allProjects, store, 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const creating = !secret;
+  const dirty = !!value || name !== (secret?.name ?? '') || slot !== (secret?.slot ?? '') || wide !== (secret?.profileWide ?? false) || JSON.stringify(chosen) !== JSON.stringify(secret?.projectIds ?? []) || profileId !== initial.id;
   const writesValue = creating || !!replace;
   const editsMetadata = !replace;
   const slotOk = SecretSlot.safeParse(slot).success;
@@ -310,7 +311,7 @@ function SecretForm({ profile: initial, profiles, projects: allProjects, store, 
       <SettingsFooter
         remove={secret && !replace ? { name: secret.name, run: () => void removeSecret(), consequence: 'Threads stop receiving it. This does not revoke the token at the service.' } : undefined}
         busy={busy} onCancel={() => onDone()} onSave={() => void submit()} saveDisabled={!ready}
-        saveLabel={busy ? 'Saving…' : creating ? 'Save secret' : replace ? 'Replace value' : 'Save'} />
+        saveLabel={busy ? 'Saving…' : creating ? 'Save secret' : replace ? 'Replace value' : 'Save'} dirty={dirty && !busy} />
     </div>
   );
 }

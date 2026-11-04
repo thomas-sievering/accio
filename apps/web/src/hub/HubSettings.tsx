@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useHubs } from '../app/connection';
 import { Hub, Plus } from '../app/icons';
 import { SettingRow, SettingsSection, StatusPill, useEscape } from '../app/Settings';
@@ -10,6 +10,7 @@ export function HubSettings({ adding, onAdd, onBack }: { adding?: boolean; onAdd
   const { hubs, selectedId, select, root } = useHubs();
   const [pairing, setPairing] = useState<{ code: string; expiresAt: number }>();
   const [copied, setCopied] = useState(false);
+  useEffect(() => { if (!copied) return; const timer = setTimeout(() => setCopied(false), 2000); return () => clearTimeout(timer); }, [copied]);
   const [confirming, setConfirming] = useState<string>();
   const { busy, error, run } = useAction();
   useEscape(!!confirming, () => setConfirming(undefined));
@@ -38,8 +39,12 @@ export function HubSettings({ adding, onAdd, onBack }: { adding?: boolean; onAdd
     {current && <SettingsSection title="Pair another device">
       <div className="setting-form">
         <p className="hint">Generate a one-time code for {current.name}. Enter this hub’s address and the code on the other device.</p>
-        <button type="button" className="ghost" disabled={busy || current.status !== 'connected'} onClick={() => run(async () => { setPairing(await root.call('hubs.createPairingCode', { id: current.id })); setCopied(false); })}>Generate pairing code</button>
-        {pairing && <p role="status"><code>{pairing.code}</code> · expires {new Date(pairing.expiresAt).toLocaleTimeString()} <button type="button" className="link" onClick={() => void run(async () => { await navigator.clipboard.writeText(pairing.code); setCopied(true); })}>{copied ? 'Copied' : 'Copy code'}</button></p>}
+        <button type="button" className="ghost" disabled={busy || current.status !== 'connected'} onClick={(event) => {
+          const trigger = event.currentTarget;
+          void run(async () => { setPairing(await root.call('hubs.createPairingCode', { id: current.id })); setCopied(false); })
+            .finally(() => requestAnimationFrame(() => { if (trigger.isConnected) trigger.focus(); }));
+        }}>Generate pairing code</button>
+        {pairing && <p role="status"><code>{pairing.code}</code> · expires {new Date(pairing.expiresAt).toLocaleTimeString()} <button type="button" className="ghost pairing-copy" onClick={() => void run(async () => { setCopied(false); try { await navigator.clipboard.writeText(pairing.code); setCopied(true); } catch { throw new Error('Couldn’t copy. Select and copy the code manually, or allow clipboard access.'); } })}>{copied ? 'Copied' : 'Copy code'}</button></p>}
       </div>
     </SettingsSection>}
     {error && <p className="error" role="alert">{error}</p>}

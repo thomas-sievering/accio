@@ -106,7 +106,7 @@ export function Composer({
   return (
     <div className="composer-wrap">
       {actions}
-      {error && <p className="error composer-error">{error}
+      {error && <p className="error composer-error" role="status">{error}
         {/* A send refused for a broken tool points at the repair already under way. */}
         {repairThread && <> <button type="button" className="link" onClick={() => select(repairThread.id)}>Open repair thread</button></>}
       </p>}

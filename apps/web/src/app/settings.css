@@ -157,6 +157,7 @@
   flex-direction: column;
   gap: 22px;
 }
+.pairing-copy { min-height: 32px; }
 .settings-actions {
   position: sticky;
   bottom: 0;

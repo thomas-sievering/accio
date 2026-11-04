@@ -66,9 +66,11 @@ function layoutTurn(items: TranscriptItem[], running: boolean): TranscriptBlock[
   const state = finished
     ? { live: false as const, ms: finished.ms }
     : { live: true as const, activity: secrets.some(item => item.status === 'pending') ? 'Waiting for secret' : current ? describeActivity(current) : 'Working', startedAt: prompt ? (body[0] as Extract<TranscriptItem, { kind: 'user' }>).at : undefined };
+  const workBlock: TranscriptBlock = { kind: 'work', id: `${turnId}:work`, failed, blocks: groupTools(work), ...state };
+  if (running && !finished) return [...groupTools(body.slice(0, prompt)), ...groupTools(secrets), ...groupTools(body.slice(answer)), workBlock];
   return [
     ...groupTools(body.slice(0, prompt)),
-    { kind: 'work', id: `${turnId}:work`, failed, blocks: groupTools(work), ...state },
+    workBlock,
     ...groupTools(secrets),
     ...groupTools(body.slice(answer)),
   ];

@@ -67,6 +67,6 @@ function AccountForm({ account, providerId, onSaved, onDone }: { account?: Accou
         {limitsView?.status !== 'unsupported' && <small className="hint">{usedBy.length > 1 ? `One allowance shared by ${usedBy.map((p) => p.name).join(', ')}. ` : ''}Set by {providerId === 'openai' ? 'OpenAI' : 'Anthropic'} and counting all of this account’s use, including use outside Accio.</small>}
       </div>
     </SettingsSection>}
-    <SettingsFooter remove={account && { name: account.name, run: remove, blocked: usedBy.length ? `In use by ${usedBy.map((p) => p.name).join(', ')}. Remove it from ${usedBy.length === 1 ? usedBy[0]!.name : 'those profiles'} first.` : undefined }} busy={busy} onCancel={onDone} saveLabel={account ? 'Save' : 'Add account'} saveDisabled={busy || (!!account && name === account.name)} dirty={!!account && name !== account.name && !busy} />
+    <SettingsFooter remove={account && { name: account.name, run: remove, blocked: usedBy.length ? `In use by ${usedBy.map((p) => p.name).join(', ')}. Remove it from ${usedBy.length === 1 ? usedBy[0]!.name : 'those profiles'} first.` : undefined }} busy={busy} onCancel={onDone} saveLabel={account ? 'Save' : 'Add account'} saveDisabled={busy || (!!account && name === account.name)} dirty={name !== (account?.name ?? '') && !busy} />
   </form>;
 }

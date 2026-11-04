@@ -165,7 +165,7 @@ function ToolForm({ tool, taken, onSaved, onDone, after }: { tool?: ToolDefiniti
       </SettingsSection>
       {after}
       {error && <p className="error" role="alert">{error}</p>}
-      <SettingsFooter remove={tool && { name: tool.name, run: remove }} busy={busy} onCancel={onDone} saveLabel={tool ? 'Save' : 'Add tool'} saveDisabled={busy || (!!tool && !changed)} dirty={!!tool && changed && !busy} />
+      <SettingsFooter remove={tool && { name: tool.name, run: remove, consequence: 'Threads on every machine lose this tool.' }} busy={busy} onCancel={onDone} saveLabel={tool ? 'Save' : 'Add tool'} saveDisabled={busy || (!!tool && !changed)} dirty={changed && !busy} />
     </form>
   );
 }
