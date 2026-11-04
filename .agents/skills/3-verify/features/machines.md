@@ -12,7 +12,7 @@ Users see which machine is connected, its installed harnesses, its shared name, 
 
 - Open `Settings` then `Machines`, then the row ending in `(this machine)`.
 - Click the machine badge in the thread sidebar footer to open the same Machines list.
-- In a new thread, the `Run on machine` combobox lists connected machines. Remote execution is currently unavailable.
+- In a new thread, the machine chip under the composer (`Run on machine: …`) opens a menu of connected machines. Remote execution is currently unavailable.
 
 ## Driving it with Playwright
 
