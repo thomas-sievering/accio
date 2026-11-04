@@ -17,6 +17,7 @@ import { deliveryPrompt } from './delivery.js';
 import type { Harness, HarnessTurn, TurnResources } from './harness.js';
 import { providerOf, turnEnv } from './harnessEnv.js';
 import type { ThreadState } from './state.js';
+import { AGENT_TOOL_LABEL, isAgentTool, runSubagent, type AgentInput, type SubagentTurn } from './subagents.js';
 import { assertResumable, endTurn, retryOf, startTurn, type Thread, type TurnOutcome } from './thread.js';
 import { TurnTranscript, type TranscriptChange } from './transcript.js';
 import type { BuiltinTool } from '../harnesses/builtinTools.js';
@@ -49,6 +50,10 @@ export class Turns {
   private queuedStarts = new Map<string, string>();
   private preparing = new Set<Promise<void>>();
   private turns = new Set<Promise<void>>();
+  /** The running turn of each thread, which its sub-agents inherit. */
+  private subagentTurns = new Map<string, { turnId: string; turn: SubagentTurn }>();
+  /** Parent tool rows already showing a running sub-agent. */
+  private subagentRows = new Set<string>();
 
   constructor(private state: ThreadState, private deps: TurnDeps) {}
 
@@ -214,7 +219,9 @@ export class Turns {
         profileName: deps.profiles.require(thread.profileId).name, projectId: thread.projectId || null,
         projectName: deps.projects.state().projects.find(p => p.id === thread.projectId)?.name ?? 'No project',
         machineName: deps.machines.views().find(m => m.thisMachine)?.name ?? 'This machine', signal: run.signal });
-      for await (const msg of harness.run({ ...run, sessionId: thread.sessionId, model: thread.model.modelId, toolsOff: deps.toolsOff(thread.model.harnessId), effort: deps.models.effort(thread.profileId, thread.model), requestSecret, modelName: deps.models.modelName(thread.profileId, thread.model),
+      const model = { model: thread.model.modelId, effort: deps.models.effort(thread.profileId, thread.model), modelName: deps.models.modelName(thread.profileId, thread.model), toolsOff: deps.toolsOff(thread.model.harnessId) };
+      this.subagentTurns.set(thread.id, { turnId, turn: { harness, signal: run.signal, run: { cwd: run.cwd, env: run.env, resourceInstructions: run.resourceInstructions, mcps: run.mcps, ...model } } });
+      for await (const msg of harness.run({ ...run, sessionId: thread.sessionId, ...model, requestSecret,
         registerSteer: send => { const input = this.liveInputs.get(thread.id); if (input?.turnId === turnId) input.send = send; },
         secretPurposes: deps.secrets.purposes(thread.profileId, thread.projectId || null) })) {
         for (const change of transcript.accept(msg)) {
@@ -242,6 +249,7 @@ export class Turns {
         await transcripts.add(thread.id, { kind: 'notice', id: `${turnId}:err`, turnId, tone: 'error', text: (err as Error).message });
       }
     } finally {
+      if (this.subagentTurns.get(thread.id)?.turnId === turnId) this.subagentTurns.delete(thread.id);
       const input = this.liveInputs.get(thread.id);
       if (input) input.send = undefined;
       await state.messageOps.get(thread.id)?.catch(() => {});
@@ -308,8 +316,30 @@ export class Turns {
     }
   }
 
+  /**
+   * GLOSSARY: Sub-agent. Runs one for the thread's current turn. Its steps go to
+   * the parent's running Agent row with the same description, once that row exists.
+   */
+  async startSubagent(threadId: string, input: AgentInput, signal: AbortSignal): Promise<string> {
+    const live = this.subagentTurns.get(threadId);
+    if (!live) throw new Error('A sub-agent can only start while its thread is working.');
+    const { transcripts } = this.state;
+    let rowId: string | undefined;
+    const showStep = async (step: { name: string; summary: string }) => {
+      const items = (await transcripts.get(threadId)).items;
+      const row = rowId ? items.find(item => item.id === rowId) : items.find(item => item.kind === 'tool' && item.turnId === live.turnId
+        && item.name === AGENT_TOOL_LABEL && item.status === 'running' && item.summary.trim() === input.description && !this.subagentRows.has(item.id));
+      if (row?.kind !== 'tool' || row.status !== 'running') return;
+      if (!rowId) this.subagentRows.add(rowId = row.id);
+      await transcripts.add(threadId, { ...row, step });
+    };
+    try { return await runSubagent(live.turn, input, signal, showStep); }
+    finally { if (rowId) this.subagentRows.delete(rowId); }
+  }
+
   private async apply(threadId: string, change: TranscriptChange, cwd: string, skills: WorkspaceSkill[] = []) {
     const { state, deps } = this;
+    if (change.type === 'tool' && isAgentTool(change.item.name)) change = { ...change, item: { ...change.item, name: AGENT_TOOL_LABEL } };
     if (change.type === 'session') {
       await state.update(threadId, (t) => ({ ...t, sessionId: change.sessionId }), { quiet: true });
     } else if (change.type === 'tool' && isChoiceTool(change.item.name)) {

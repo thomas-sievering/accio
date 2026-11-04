@@ -94,7 +94,7 @@ it('gives Codex accio tools on start and on resume, and keeps tool arguments str
   home = await mkdtemp(join(tmpdir(), 'accio-tools-codex-'));
   const tools = { url: 'http://127.0.0.1:1/mcp', authorization: 'Bearer t' };
   const env = { CODEX_HOME: home, ACCIO_OPENAI_URL: 'http://127.0.0.1:1234/openai', ACCIO_OPENAI_KEY: 'profile-key' };
-  const expected = { 'mcp_servers.accio': { url: tools.url, http_headers: { Authorization: 'Bearer t' } } };
+  const expected = { 'mcp_servers.accio': { url: tools.url, http_headers: { Authorization: 'Bearer t' }, tool_timeout_sec: 7200 } };
   for (const sessionId of [null, 'codex-session']) {
     const fake = new FakeCodex();
     for await (const _ of codexHarness(fake.factory).run({ cwd: home, prompt: 'hi', sessionId, env, tools, signal: new AbortController().signal })) { /* drain */ }

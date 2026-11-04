@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { systemPromptText } from '../harnesses/systemPrompt.js';
 import { ACCIO_MCP_SERVER } from '../tools/tools.js';
+import { SUBAGENT_TIMEOUT_SEC } from './subagents.js';
 import type { Harness, HarnessMessage, HarnessTurn } from './harness.js';
 import { secretMcpServer } from '../secrets/claudeTool.js';
 import { savedPurposeInstructions, SECRET_MCP_SERVER } from '../secrets/secrets.js';
@@ -51,7 +52,8 @@ export const claudeCode: Harness = {
         cwd,
         model,
         ...(effort ? { effort: effort as 'low' | 'medium' | 'high' | 'xhigh' | 'max' } : {}),
-        env,
+        // Claude's own limit on one MCP call; accio's agent tool can run as long as a sub-agent needs.
+        env: tools ? { ...env, MCP_TOOL_TIMEOUT: String(SUBAGENT_TIMEOUT_SEC * 1000) } : env,
         abortController,
         resume: sessionId ?? undefined,
         includePartialMessages: true,

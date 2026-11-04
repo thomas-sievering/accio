@@ -34,11 +34,16 @@ DeliveryGit.prototype.verify = async function(workspace, delivery, observed) {
   }
   return verifyDelivery.call(this, workspace, delivery, observed);
 };
-/** Calls an accio tool the way Claude Code or Codex would, over the turn's MCP access. */
+/** Calls one of accio's own tools the way a harness does, over its MCP endpoint. */
 async function callAccioTool(run: { tools?: { url: string; authorization: string } }, name: string, args: unknown) {
-  await fetch(run.tools!.url, { method: 'POST', headers: { 'content-type': 'application/json', authorization: run.tools!.authorization },
+  const response = await fetch(run.tools!.url, { method: 'POST', headers: { 'content-type': 'application/json', authorization: run.tools!.authorization },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }) });
+  return ((await response.json()) as { result: { content: { text: string }[] } }).result.content[0]!.text;
 }
+const subagentSteps: Record<string, [string, Record<string, string>][]> = {
+  deliveries: [['Read', { file_path: 'delivery.ts' }], ['Bash', { command: 'pnpm test delivery' }]],
+  review: [['Bash', { command: 'git diff' }], ['Read', { file_path: 'transcript.ts' }]],
+};
 const goalTurns = new Map<string, number>();
 const harness = new FakeHarness(async function* (run) {
   // GLOSSARY: Goal. "/goal fixture …" works for three turns, then reports achieved; "/goal blocked fixture" reports blocked first.
@@ -54,6 +59,28 @@ const harness = new FakeHarness(async function* (run) {
     return;
   }
   if (run.prompt.startsWith('Naming fixture:')) { yield* replyWith('The login redirect loops after sign-in.'); return; }
+  if (run.prompt === 'Sub-agent fixture') {
+    // Two sub-agents in parallel, as Claude starts them: both calls in one message.
+    const tasks = [{ description: 'Find where deliveries retry', prompt: 'Sub-agent task: deliveries' }, { description: 'Review the transcript diff', prompt: 'Sub-agent task: review' }];
+    const base = { parent_tool_use_id: null, session_id: SESSION } as const;
+    yield { type: 'system', subtype: 'init', session_id: SESSION };
+    yield { type: 'assistant', ...base, message: { id: 'agents', content: tasks.map((input, i) => ({ type: 'tool_use', id: `agent-${i}`, name: 'mcp__accio__agent', input })) } };
+    const replies = await Promise.all(tasks.map((input) => callAccioTool(run, 'agent', input)));
+    yield { type: 'user', ...base, message: { content: replies.map((text, i) => ({ type: 'tool_result', tool_use_id: `agent-${i}`, content: text })) } };
+    yield* replyWith('Both sub-agents reported back.');
+    return;
+  }
+  if (run.prompt.startsWith('Sub-agent task: ')) {
+    const which = run.prompt.slice('Sub-agent task: '.length);
+    const sub = { parent_tool_use_id: null, session_id: `sub-${which}` } as const;
+    for (const [i, [name, input]] of subagentSteps[which]!.entries()) {
+      yield { type: 'assistant', ...sub, message: { id: `${which}-${i}`, content: [{ type: 'tool_use', id: `${which}-${i}`, name, input }] } };
+      await setTimeout(4000);
+      yield { type: 'user', ...sub, message: { content: [{ type: 'tool_result', tool_use_id: `${which}-${i}`, content: 'ok' }] } };
+    }
+    yield* replyWith(`Done with ${which}.`, `sub-${which}`);
+    return;
+  }
   if (run.prompt === 'Build CI progress fixture') {
     ciPolls.set(run.cwd, 0);
     await writeFile(join(run.cwd, 'ci-fixture.txt'), 'CI progress');

@@ -37,9 +37,11 @@ export class TranscriptStore {
 
   async add(threadId: string, item: TranscriptItem) {
     const live = await this.get(threadId);
-    if (item.kind === 'tool' && item.detailRevision === undefined) {
+    if (item.kind === 'tool') {
       const previous = live.items.find((entry) => entry.id === item.id);
-      if (previous?.kind === 'tool' && previous.detailRevision !== undefined) item = { ...item, detailRevision: previous.detailRevision };
+      if (previous?.kind === 'tool' && previous.detailRevision !== undefined && item.detailRevision === undefined) item = { ...item, detailRevision: previous.detailRevision };
+      // A sub-agent's latest step stays while its call runs, whatever else updates the row.
+      if (previous?.kind === 'tool' && previous.step && !item.step && item.status === 'running') item = { ...item, step: previous.step };
     }
     live.items = upsertItem(live.items, item);
     this.scheduleSave(live);

@@ -6,6 +6,8 @@ import { z } from 'zod';
 import { SecretToolInput, SECRET_TOOL_DESCRIPTION, SECRET_MCP_SERVER, savedPurposeInstructions } from '../secrets/secrets.js';
 import { secretHttpTool } from '../secrets/httpTool.js';
 import { ACCIO_MCP_SERVER } from '../tools/tools.js';
+import { SUBAGENT_TIMEOUT_SEC } from './subagents.js';
+import { summarizeTool } from './transcript.js';
 
 /** Codex runs on this machine. Only the profile's scoped proxy key reaches it. */
 export function codexHarness(factory: CodexFactory = startCodex): Harness {
@@ -103,7 +105,7 @@ export function codexHarness(factory: CodexFactory = startCodex): Harness {
         if (signal.aborted) return;
         // Config, unlike dynamic tools, applies on resume too, so resumed threads keep accio's tools.
         const config = {
-          ...(tools ? { [`mcp_servers.${ACCIO_MCP_SERVER}`]: { url: tools.url, http_headers: { Authorization: tools.authorization } } } : {}),
+          ...(tools ? { [`mcp_servers.${ACCIO_MCP_SERVER}`]: { url: tools.url, http_headers: { Authorization: tools.authorization }, tool_timeout_sec: SUBAGENT_TIMEOUT_SEC } } : {}),
           ...(endpoint ? { [`mcp_servers.${SECRET_MCP_SERVER}`]: { url: endpoint.url, bearer_token_env_var: 'ACCIO_TOOL_TOKEN' } } : {}),
         };
         const params = { cwd, ...(model ? { model } : {}), ...(Object.keys(config).length ? { config } : {}), approvalPolicy: 'never', sandbox: 'danger-full-access',
@@ -164,7 +166,7 @@ export function codexEvents({ method, params }: CodexNotification): HarnessEvent
     case 'commandExecution': return [{ kind: 'tool', id: item.id, name: 'Shell', summary: item.command, input: { command: item.command, ...(item.cwd ? { cwd: item.cwd } : {}) }, status, output: item.aggregatedOutput ?? undefined }];
     case 'fileChange': return [{ kind: 'tool', id: item.id, name: 'Edit', summary: item.changes.map((c: any) => c.path).join(', '), status,
       ...(done ? { output: item.changes.map((c: any) => `${c.path}\n${c.diff ?? ''}`).join('\n') } : {}) }];
-    case 'mcpToolCall': return [{ kind: 'tool', id: item.id, name: `${item.server}/${item.tool}`, summary: JSON.stringify(item.arguments ?? {}), input: item.arguments ?? {}, status,
+    case 'mcpToolCall': return [{ kind: 'tool', id: item.id, name: `${item.server}/${item.tool}`, summary: summarizeTool(`${item.server}/${item.tool}`, item.arguments ?? {}), input: item.arguments ?? {}, status,
       ...(done ? { output: JSON.stringify(item.error ?? item.result ?? '') } : {}) }];
     case 'webSearch': return [{ kind: 'tool', id: item.id, name: 'Search', summary: item.query ?? '', status }];
     default: return [];

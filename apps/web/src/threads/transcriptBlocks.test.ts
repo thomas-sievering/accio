@@ -79,6 +79,11 @@ describe('layoutTranscript', () => {
     expect(layoutTranscript([...items, say('a'), done()])[1]).toMatchObject({ id: 't1:work', live: false });
   });
 
+  it('adds the latest step of a running sub-agent to what the turn is doing', () => {
+    const agent: ToolItem = { ...tool('1', 'Agent', 't1', 'running'), summary: 'Count the files', step: { name: 'Read', summary: 'delivery.ts' } };
+    expect(layoutTranscript([ask('q'), agent], 't1')[1]).toMatchObject({ live: true, activity: 'Running agent: Count the files · Reading delivery.ts' });
+  });
+
   it('says Thinking between calls and keeps a streaming answer outside the fold', () => {
     const blocks = layoutTranscript([ask('q'), tool('1'), say('partial answer')], 't1');
     expect(blocks[1]).toMatchObject({ live: true, activity: 'Thinking' });

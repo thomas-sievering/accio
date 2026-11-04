@@ -121,6 +121,10 @@ _Avoid_: Board, gallery, poll, variants (for the whole set)
 What a thread keeps working toward across turns, set with `/goal <objective>`. accio starts each next turn itself until the harness reports it achieved or blocked through the finish_goal accio tool, or a turn stops, fails or uses no tools. There is no turn limit, as in Claude Code and Codex; a bar above the composer shows it with pause, resume and clear. It works the same on every harness; no harness's own goal feature is used.
 _Avoid_: Task, objective (for the whole thing), loop
 
+**Sub-agent**:
+A helper turn that a thread's harness starts through the `agent` accio tool for one self-contained task, such as independent research or a black-box check. It runs on the same harness, model, profile and working folder with a fresh context, and gives back only its final reply. It is not a thread and keeps no transcript; while it works, its latest step shows on the parent's Agent row. Sub-agents get no accio tools, so they cannot start sub-agents of their own.
+_Avoid_: Subthread, child thread, worker, helper thread
+
 **Snooze**:
 Hiding a thread until a chosen time, when it comes back.
 _Avoid_: Mute, defer
