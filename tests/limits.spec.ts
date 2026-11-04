@@ -61,7 +61,7 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
   await createAccount('Team Claude', 'work');
   await createAccount('Shared ChatGPT', undefined, true);
   await settings('Profiles');
-  await page.getByRole('button', { name: /^Add profile / }).click();
+  await page.getByRole('button', { name: /^Add profile/ }).click();
   await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Work');
   await button('Add profile').click();
   await button('Cancel').click();
@@ -71,10 +71,7 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
   await button('Limits').click();
   await expect(button('Limits')).toHaveCount(1);
   await expect(button('Limits')).toHaveAttribute('aria-pressed', 'true');
-  await button('Side panel').click();
-  await expect(page.getByRole('complementary', { name: 'Side panel', exact: true })).toBeVisible();
   await expect(page.getByRole('radiogroup', { name: 'Profile' })).toBeVisible();
-  await button('Side panel').click();
   await expect(page.getByRole('radio', { name: 'All profiles' })).toHaveAttribute('aria-checked', 'true');
   await expect(page.locator('.limits-card')).toHaveCount(3);
   await expect(page.getByText('Shared with Personal. One allowance, shown under Personal.', { exact: true })).toBeVisible();
@@ -111,13 +108,13 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
 
   disconnected = true;
   for (const socket of sockets) socket.close({ code: 1012, reason: 'Fixture disconnect' });
-  await expect(page.getByText('Not connected to accio’s server.', { exact: false })).toBeVisible();
+  await expect(page.getByText('Not connected to Accio’s server.', { exact: false })).toBeVisible();
   await expect(card('Shared Claude')).toContainText('Last known');
   await expect(card('Shared Claude').getByRole('meter', { name: '5-hour allowance remaining' })).toHaveAttribute('aria-valuenow', '52');
   await expect(page.locator('.limits-refresh-all')).toBeDisabled();
   await page.screenshot({ path: testInfo.outputPath('disconnected.png'), fullPage: true });
   disconnected = false;
-  await expect(page.getByText('Not connected to accio’s server.', { exact: false })).toHaveCount(0);
+  await expect(page.getByText('Not connected to Accio’s server.', { exact: false })).toHaveCount(0);
   await expect(card('Shared Claude').getByText('Last known', { exact: true })).toHaveCount(0);
 
   // Radio keyboard behavior and narrow card layout; desktop chrome stays present.
@@ -159,6 +156,9 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
 
   // The active draft, not the previous Limits selection, determines default scope.
   await button('Close limits').click();
+  // New thread is withheld until setup is complete, and setup ends with a project.
+  await page.getByRole('textbox', { name: 'Folder', exact: true }).fill(process.cwd());
+  await button('Add').click();
   await page.locator('.sidebar').getByRole('button', { name: 'New thread', exact: true }).click();
   await page.getByRole('option', { name: 'No project', exact: true }).click();
   await page.getByRole('option', { name: /Personal/ }).click();

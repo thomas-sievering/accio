@@ -30,7 +30,7 @@ it('generates titles without tools, project settings or persisted sessions', asy
   q.next.mockResolvedValueOnce({ done: false, value: { type: 'result', is_error: false, result: '{"title":"Login redirects"}' } });
   queryMock.mockReturnValue(q);
   expect(await claudeCode.generateText!({ cwd: 'isolated', prompt: 'Name this', model: 'haiku', env: {}, signal: new AbortController().signal })).toBe('{"title":"Login redirects"}');
-  expect(queryMock.mock.calls[0]![0].options).toMatchObject({ tools: [], mcpServers: {}, strictMcpConfig: true, settingSources: [], persistSession: false, maxTurns: 1, env: { CLAUDE_CODE_MAX_OUTPUT_TOKENS: '256' } });
+  expect(queryMock.mock.calls[0]![0].options).toMatchObject({ tools: [], mcpServers: {}, strictMcpConfig: true, settingSources: [], persistSession: false, maxTurns: 1, env: { CLAUDE_CODE_PROMPT_CACHE_TTL: '5m', CLAUDE_CODE_MAX_OUTPUT_TOKENS: '256' } });
   expect(queryMock.mock.calls[0]![0].options).not.toHaveProperty('resume');
   expect(q.close).toHaveBeenCalled(); expect(q.return).toHaveBeenCalled();
 });

@@ -55,7 +55,7 @@ export function useWorkspaceSkills(context: SkillContext | undefined): Workspace
 export function originLabel(skill: WorkspaceSkill): string {
   if (skill.origin === 'repository') return 'Repository';
   const via = skill.enabledBy === 'global' ? 'Everywhere' : skill.enabledBy === 'profile' ? 'Profile' : 'Library';
-  return skill.sourceName ? `${via} · ${skill.sourceName}` : via;
+  return skill.sourceName && skill.sourceName !== via ? `${via} · ${skill.sourceName}` : via;
 }
 
 /** Shown in the project list: files in the repository, and library skills this project turned on. */

@@ -2,10 +2,10 @@ import { useEffect, useState, type FormEvent } from 'react';
 import type { McpDefinition, McpView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { Plug, Plus } from '../app/icons';
-import { ConfirmDelete, SettingLink, SettingRow, SettingsSection } from '../app/Settings';
+import { SettingLink, SettingsFooter, SettingsSection, StatusPill } from '../app/Settings';
 import { useAction } from '../app/useAction';
 import { LoadError, slugId, useDraft, useResources } from '../resources/resources';
-import { Field } from '../resources/Field';
+import { Field, focusFirstInvalid } from '../resources/Field';
 import { mcpDefinition } from './mcp';
 
 const blank = (): McpDefinition => ({ id: '', name: '', transport: 'http', url: '', command: '', args: [], auth: 'none', oauthClientId: undefined });
@@ -22,8 +22,7 @@ export function McpSettings({ mcpId, onOpen, onBack }: { mcpId?: string; onOpen:
   return (
     <>
       <p className="note">Remote (HTTP) servers are reached through the hub, which holds their tokens; machines never see them. Local (stdio) servers run as a command on the machine running the thread.</p>
-      <SettingsSection title="MCP servers">
-        {state.mcps.length === 0 && <SettingRow title="No MCP servers yet" />}
+      <SettingsSection>
         {[...state.mcps].sort((a, b) => a.name.localeCompare(b.name)).map((m) => (
           <SettingLink key={m.id} icon={<Plug />} title={m.name} description={m.transport === 'http' ? m.url : [m.command, ...m.args].join(' ')} onClick={() => onOpen(m.id)}>
             <McpPill mcp={m} />
@@ -36,9 +35,9 @@ export function McpSettings({ mcpId, onOpen, onBack }: { mcpId?: string; onOpen:
 }
 
 function McpPill({ mcp }: { mcp: McpView }) {
-  if (mcp.transport === 'stdio') return <span className="pill"><span className="dot" />Local</span>;
-  if (mcp.auth === 'none') return <span className="pill ok"><span className="dot" />No sign-in</span>;
-  return mcp.signedIn ? <span className="pill ok"><span className="dot" />Signed in</span> : <span className="pill warn-pill"><span className="dot" />Signed out</span>;
+  if (mcp.transport === 'stdio') return <StatusPill>Local</StatusPill>;
+  if (mcp.auth === 'none') return <StatusPill tone="ok">No sign-in</StatusPill>;
+  return mcp.signedIn ? <StatusPill tone="ok">Signed in</StatusPill> : <StatusPill tone="warn">Signed out</StatusPill>;
 }
 
 function urlProblem(url?: string) {
@@ -56,7 +55,7 @@ function McpForm({ mcp, taken, onSaved, onDone }: { mcp?: McpView; taken: string
   const { value, dirty, set, reset } = useDraft<McpDefinition>(mcp ? mcpDefinition(mcp) : blank());
   const [argsText, setArgsText] = useState<string>();
   const [touched, setTouched] = useState(false);
-  const { busy, error, run } = useAction();
+  const { busy, error, run, clear } = useAction();
   const http = value.transport === 'http';
   const args = (argsText ?? value.args.join('\n')).split(/\r?\n/).map((a) => a.trim()).filter(Boolean);
   const changed = dirty || (argsText !== undefined && JSON.stringify(args) !== JSON.stringify(mcp?.args ?? []));
@@ -72,7 +71,7 @@ function McpForm({ mcp, taken, onSaved, onDone }: { mcp?: McpView; taken: string
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setTouched(true);
-    if (invalid) return;
+    if (invalid) return focusFirstInvalid(e.currentTarget);
     const def: McpDefinition = http
       ? { id: mcp?.id ?? slugId(value.name, taken), name: value.name.trim(), transport: 'http', url: value.url!.trim(), args: [], auth: value.auth, oauthClientId: value.auth === 'oauth' ? value.oauthClientId?.trim() || undefined : undefined }
       : { id: mcp?.id ?? slugId(value.name, taken), name: value.name.trim(), transport: 'stdio', command: value.command!.trim(), args, auth: 'none' };
@@ -86,7 +85,7 @@ function McpForm({ mcp, taken, onSaved, onDone }: { mcp?: McpView; taken: string
   return (
     <div className="settings-profile-form">
       <form className="settings-profile-form" onSubmit={submit} noValidate id="mcp-form">
-        <SettingsSection title={mcp ? mcp.name : 'New MCP server'}>
+        <SettingsSection>
           <div className="setting-form">
             <Field label="Name" error={show('name')}>
               {(p) => <input {...p} value={value.name} onChange={(e) => set('name', e.target.value)} placeholder="Linear (work)" maxLength={120} required autoFocus={!mcp} />}
@@ -94,11 +93,11 @@ function McpForm({ mcp, taken, onSaved, onDone }: { mcp?: McpView; taken: string
             <fieldset className="segmented" aria-label="Transport">
               <legend>Transport</legend>
               <label className={http ? 'on' : ''}>
-                <input type="radio" name="transport" checked={http} onChange={() => set('transport', 'http')} />
+                <input type="radio" name="transport" checked={http} onChange={() => { set('transport', 'http'); setTouched(false); clear(); }} />
                 <span><b>Remote (HTTP)</b><small>Through the hub, which holds the credentials</small></span>
               </label>
               <label className={!http ? 'on' : ''}>
-                <input type="radio" name="transport" checked={!http} onChange={() => { set('transport', 'stdio'); set('auth', 'none'); }} />
+                <input type="radio" name="transport" checked={!http} onChange={() => { set('transport', 'stdio'); set('auth', 'none'); setTouched(false); clear(); }} />
                 <span><b>Local command (stdio)</b><small>Runs on the machine running the thread</small></span>
               </label>
             </fieldset>
@@ -141,15 +140,7 @@ function McpForm({ mcp, taken, onSaved, onDone }: { mcp?: McpView; taken: string
       </form>
       {mcp && mcp.transport === 'http' && mcp.auth !== 'none' && <McpCredentials key={`${mcp.id}:${mcp.auth}:${mcp.url}`} mcp={mcp} />}
       {error && <p className="error" role="alert">{error}</p>}
-      <footer className="settings-actions">
-        {mcp && <ConfirmDelete busy={busy} confirm={`Delete ${mcp.name} and its sign-in`} onDelete={remove} />}
-        <span className="spacer" />
-        {changed && mcp && <button type="button" className="ghost" disabled={busy} onClick={() => { reset(); setArgsText(undefined); setTouched(false); }}>Discard changes</button>}
-        <button type="button" className="ghost" onClick={onDone}>{mcp ? 'Done' : 'Cancel'}</button>
-        <button type="submit" form="mcp-form" className="ghost primary" disabled={busy || (!!mcp && !changed) || (touched && invalid)}>
-          {busy ? 'Saving…' : mcp ? 'Save' : 'Add MCP server'}
-        </button>
-      </footer>
+      <SettingsFooter remove={mcp && { name: mcp.name, run: remove, consequence: mcp.transport === 'http' && mcp.auth !== 'none' ? "Threads lose this server's tools and its saved sign-in." : "Threads lose this server's tools." }} busy={busy} onCancel={onDone} saveLabel={mcp ? 'Save' : 'Add MCP server'} saveForm="mcp-form" saveDisabled={busy || (!!mcp && !changed)} dirty={changed && !busy} />
     </div>
   );
 }

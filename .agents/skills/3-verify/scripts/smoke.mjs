@@ -19,10 +19,11 @@ export default async function smoke({ page, runDir, home, fixture, action, captu
   await capture('profiles-first-run');
   await action('profiles/settings: create Verify work', async () => {
     await button('Settings').click();
-    await page.getByRole('button', { name: /^Add profile / }).click();
+    await section('Profiles').click();
+    await page.getByRole('button', { name: /^Add profile/ }).click();
     await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Verify work');
     await button('Add profile').click();
-    await page.getByRole('heading', { name: 'Verify work', exact: true }).waitFor();
+    await page.getByRole('main').getByRole('navigation').getByText('Verify work', { exact: true }).waitFor();
     await button('Cancel').click();
     await profileRow('Verify work').waitFor();
   });
@@ -33,6 +34,7 @@ export default async function smoke({ page, runDir, home, fixture, action, captu
     await profileRow('Verify work renamed').waitFor();
     await page.reload();
     await button('Settings').click();
+    await section('Profiles').click();
     await profileRow('Verify work renamed').click();
     assert.equal(await page.getByRole('textbox', { name: 'Name', exact: true }).inputValue(), 'Verify work renamed');
     await button('Cancel').click();
@@ -40,19 +42,21 @@ export default async function smoke({ page, runDir, home, fixture, action, captu
   });
   await capture('profiles-persisted');
   await action('profiles/settings: cancel a draft and delete unused profile', async () => {
-    await page.getByRole('button', { name: /^Add profile / }).click();
+    await page.getByRole('button', { name: /^Add profile/ }).click();
     await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Discard me');
     await button('Cancel').click();
     assert.equal(await page.getByRole('button', { name: /^Discard me/ }).count(), 0);
     await profileRow('Verify work renamed').click();
     await button('Delete').click();
-    await page.getByRole('button', { name: /^Add profile / }).waitFor();
+    // Delete asks once more, naming what goes.
+    await button('Delete Verify work renamed').click();
+    await page.getByRole('button', { name: /^Add profile/ }).waitFor();
     assert.deepEqual((await settingsFile()).profiles.map((p) => p.name), ['Verify personal']);
   });
 
   await action('accounts/settings: create a signed-out ChatGPT account', async () => {
     await section('Accounts').click();
-    await page.getByRole('button', { name: /^Add ChatGPT account / }).click();
+    await page.getByRole('button', { name: /^Add ChatGPT account/ }).click();
     await page.getByRole('textbox', { name: 'Account name', exact: true }).fill('Verify ChatGPT');
     await button('Add account').click();
     await button('Sign in with ChatGPT').waitFor();
@@ -79,13 +83,13 @@ export default async function smoke({ page, runDir, home, fixture, action, captu
   await action('machines/settings: rename this machine and persist profile folders', async () => {
     await section('Machines').click();
     await page.getByRole('button', { name: /\(this machine\)/ }).click();
+    // The name and the profile folders save together from the page's one footer.
     await page.getByRole('textbox', { name: /^Machine name/ }).fill('Verify machine');
-    await button('Save name').click();
-    await page.getByRole('heading', { name: 'Verify machine', exact: true }).waitFor();
     await page.getByRole('textbox', { name: 'Folder path', exact: true }).fill(fixture);
     await page.getByRole('textbox', { name: 'Folder path', exact: true }).press('Enter');
-    await button('Save folders').click();
-    await button('All machines').click();
+    await button('Save').click();
+    await page.getByRole('main').getByRole('navigation').getByText('Verify machine', { exact: true }).waitFor();
+    await page.getByRole('main').getByRole('navigation').getByRole('button', { name: 'Machines', exact: true }).click();
     await page.getByRole('button', { name: /Verify machine \(this machine\)/ }).click();
     await page.getByText(fixture, { exact: true }).waitFor();
     const machine = (await settingsFile()).machines.find((m) => m.name === 'Verify machine');
@@ -103,16 +107,23 @@ export default async function smoke({ page, runDir, home, fixture, action, captu
     const projects = JSON.parse(await readFile(join(home, 'projects.json'), 'utf8'));
     assert(projects.checkouts.some((c) => c.path.toLowerCase() === fixture.toLowerCase()));
   });
-  await action('projects/filter: reopen project settings and check duplicate protection', async () => {
-    await button('Filter threads').click();
-    await button('verify-project settings').click();
-    await page.getByRole('dialog').getByText(fixture, { exact: true }).waitFor();
+  await action('projects/settings: reopen project settings and check duplicate protection', async () => {
+    // Filter appears only once setup is done; Settings / Projects opens the same form as a detail page.
+    await button('Settings').click();
+    await section('Projects').click();
+    await page.getByRole('main').getByRole('button', { name: /^verify-project/ }).click();
+    // The checkout path is cut in the middle to fit; its tooltip holds the full path.
+    await page.getByRole('main').getByTitle(fixture, { exact: true }).first().waitFor();
     await capture('projects-persisted');
-    await page.getByRole('button', { name: 'Close', exact: true }).click();
+    await button('Cancel').click();
+    await button('Back').click();
     await button('Add project').click();
     await page.getByRole('textbox', { name: 'Folder', exact: true }).fill(fixture);
     await page.getByText('This folder is already added.', { exact: true }).waitFor();
-    assert(await button('Add').isDisabled());
+    // Add stays pressable; with a folder already added it does nothing and the note stays.
+    await button('Add').click();
+    await page.getByText('This folder is already added.', { exact: true }).waitFor();
+    assert(await page.getByRole('dialog').isVisible());
     await button('Cancel').click();
   });
   await capture('final');

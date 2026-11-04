@@ -1,0 +1,90 @@
+/* Motion for every popover: menus, pickers and the right-click menu.
+   CSS only, on the native popover, so no component knows about it.
+   Timings follow Bencho's Create menu (bencho.dev, MIT). */
+
+:root {
+  /* Quick off the mark and lands without passing its target. Nothing
+     here overshoots: a rounded panel that overshoots takes its corners
+     with it, and that reads as a wobble rather than a bounce. */
+  --ease-settle: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ── the press ──────────────────────────────────────────────
+   A button that opens something sinks while it is held. The popover
+   opens on release, so the sink always comes first and the open
+   follows straight on, with no still frame between them. Fast in,
+   because a press should be felt at once; slow out, so it settles. */
+button[popovertarget] {
+  transition: scale 420ms var(--ease-settle);
+}
+button[popovertarget]:active:not(:disabled) {
+  scale: 0.94;
+  transition-duration: 120ms;
+}
+
+/* ── the panel ──────────────────────────────────────────────
+   It fades in and grows from 96% where it already sits. The New
+   thread picker stays centred; nothing moves towards a button.
+   Closing is the same move, run down and quicker. `display` and
+   `overlay` are discrete so the close can play before the popover
+   leaves the top layer. */
+:is(.menu, .new-thread-picker, .model-picker)[popover] {
+  transform-origin: top center;
+  opacity: 0;
+  scale: 0.96;
+  transition:
+    opacity 120ms ease,
+    scale 120ms ease,
+    display 120ms allow-discrete,
+    overlay 120ms allow-discrete;
+}
+:is(.menu, .new-thread-picker, .model-picker)[popover]:popover-open {
+  opacity: 1;
+  scale: 1;
+  transition:
+    opacity 160ms ease,
+    scale 220ms var(--ease-settle),
+    display 220ms allow-discrete,
+    overlay 220ms allow-discrete;
+}
+@starting-style {
+  :is(.menu, .new-thread-picker, .model-picker)[popover]:popover-open {
+    opacity: 0;
+    scale: 0.96;
+  }
+}
+
+/* ── the rows ───────────────────────────────────────────────
+   Each row rises 6px into place, one beat after the last. The beat
+   is 22ms and only the first six take one: past that a long project
+   list would still be arriving after the panel had landed, which
+   reads as late rather than as following. */
+:popover-open :is(.menu-item, .picker-option) {
+  transition:
+    opacity 160ms ease,
+    translate 220ms var(--ease-settle);
+  transition-delay: 140ms;
+}
+@starting-style {
+  :popover-open :is(.menu-item, .picker-option) {
+    opacity: 0;
+    translate: 0 6px;
+  }
+}
+:popover-open :is(.menu-item, .picker-option):nth-child(1) { transition-delay: 30ms; }
+:popover-open :is(.menu-item, .picker-option):nth-child(2) { transition-delay: 52ms; }
+:popover-open :is(.menu-item, .picker-option):nth-child(3) { transition-delay: 74ms; }
+:popover-open :is(.menu-item, .picker-option):nth-child(4) { transition-delay: 96ms; }
+:popover-open :is(.menu-item, .picker-option):nth-child(5) { transition-delay: 118ms; }
+
+/* Fades stay, travel goes. */
+@media (prefers-reduced-motion: reduce) {
+  button[popovertarget]:active:not(:disabled) { scale: none; }
+  :is(.menu, .new-thread-picker, .model-picker)[popover],
+  :is(.menu, .new-thread-picker, .model-picker)[popover]:popover-open { scale: none; }
+  @starting-style {
+    :is(.menu, .new-thread-picker, .model-picker)[popover]:popover-open { scale: none; }
+    :popover-open :is(.menu-item, .picker-option) { translate: none; }
+  }
+  :popover-open :is(.menu-item, .picker-option) { transition-delay: 0ms; }
+}

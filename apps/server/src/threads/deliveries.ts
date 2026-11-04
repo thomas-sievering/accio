@@ -47,7 +47,6 @@ export class Deliveries {
     for (const thread of this.state.list) {
       if (thread.delivery?.status === 'delivered' && thread.delivery.completedAt) {
         await this.state.updateDurably(thread.id, t => this.settleDelivered(t));
-        await this.receipt(thread.id);
       }
       this.scheduleCheck(thread.id);
     }
@@ -169,20 +168,6 @@ export class Deliveries {
     return settle(thread, now());
   }
 
-  async receipt(threadId: string) {
-    const thread = this.state.require(threadId);
-    const d = thread.delivery;
-    if (d?.status !== 'delivered' || !d.completedAt || !d.id) return;
-    const id = `delivery:${d.id}:completed`;
-    const live = await this.state.transcripts.get(threadId);
-    if (live.items.some(item => item.id === id)) return;
-    const result = d.pullRequestUrl ? `PR #${d.pullRequest?.number ?? d.pullRequestUrl.split('/').at(-1)} merged into ${d.baseBranch} (${d.pullRequestUrl})`
-      : `Shipped to ${d.baseBranch}`;
-    await this.state.transcripts.add(threadId, { kind: 'notice', id, turnId: `delivery:${d.id}`, tone: 'info',
-      text: `${result} · ${d.publishedRevision?.slice(0, 7)} · ${d.completedAt}. ${thread.settledAt ? 'Thread settled' : 'Thread stays open'}; workspace retained.` });
-    await this.state.transcripts.flush(threadId);
-  }
-
   async recordWait(threadId: string, error: Error) {
     await this.state.update(threadId, t => {
       const d = t.delivery!;
@@ -220,7 +205,6 @@ export class Deliveries {
     }
     if (!matches()) return;
     await this.state.updateDurably(threadId, t => this.settleDelivered({ ...t, delivery: { ...t.delivery!, ...verified } }));
-    if (!ownTurn) await this.receipt(threadId);
   }
 
   async check(threadId: string, force = false) {
@@ -232,7 +216,6 @@ export class Deliveries {
     const check = this.state.track(async () => {
       if (thread.delivery?.status === 'delivered') {
         await this.state.updateDurably(threadId, t => this.settleDelivered(t));
-        await this.receipt(threadId);
       } else if (this.observes(thread) || (force && !['queued', 'running'].includes(thread.delivery!.status)
         && (thread.workVersion ?? 0) === (thread.delivery!.workVersion ?? 0))) await this.verify(thread, false, true);
     });

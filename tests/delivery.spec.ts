@@ -75,8 +75,8 @@ test('CI wait shows current job and step, refreshes, survives reload and clears 
   await expect(page.getByText('CI fixture ready.', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Ship', exact: true }).click();
   const status = page.locator('.delivery-row [role="status"]');
-  await expect(status).toContainText('CI · image · Build image · step 2 of 4');
-  await expect(page.locator('.row-project').filter({ hasText: 'CI · image · Build image' })).toBeVisible();
+  await expect(status).toContainText('CI · Build image · 2 of 4');
+  await expect(page.locator('.row-project').filter({ hasText: 'CI · step 2/4' })).toBeVisible();
   // Ship opens the side panel at Delivery: the track, with live CI under the station waiting on it.
   await expect(page.getByRole('tab', { name: 'Delivery' })).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('.delivery-track [aria-current="step"]')).toContainText('Checks on main');
@@ -85,9 +85,9 @@ test('CI wait shows current job and step, refreshes, survives reload and clears 
   await expect(page.locator('.delivery-progress')).toContainText('last checked');
   await page.screenshot({ path: testInfo.outputPath('ci-progress.png') });
   await page.reload();
-  await expect(status).toContainText('Build image · step 2 of 4');
+  await expect(status).toContainText('Build image · 2 of 4');
   await page.getByRole('button', { name: 'Check now', exact: true }).click();
-  await expect(status).toContainText('Push image · step 3 of 4');
+  await expect(status).toContainText('Push image · 3 of 4');
   await page.getByRole('button', { name: 'Check now', exact: true }).click();
   await expect(page.locator('.delivery-actions [role="status"]')).toContainText('Shipped to main');
   await expect(page.locator('.delivery-progress')).toHaveCount(0);
@@ -103,13 +103,15 @@ test('a conversation with no changes stops Ship without waiting for checks', asy
   await page.locator('.composer textarea').fill('Delivery follow-up');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect(page.getByText('Fresh workspace ready.', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Ship', exact: true }).click();
-  await expect(page.getByRole('alert')).toContainText('Nothing to ship: this thread has no new commits.');
+  // With nothing to ship, Ship and its options are not offered at all.
+  await expect(page.getByRole('button', { name: 'Ship', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Shipping options', exact: true })).toHaveCount(0);
   await expect(page.getByText('Waiting for checks', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Check now', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Archive', exact: true })).toHaveCount(0);
   await page.reload();
-  await expect(page.getByRole('alert')).toContainText('Nothing to ship');
+  await expect(page.getByText('Fresh workspace ready.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Ship', exact: true })).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath('nothing-to-ship.png') });
 });
 
@@ -149,10 +151,15 @@ test('Ship menu, queued cancellation, owned preview, delivery, Archive and follo
   await expect(actions.getByRole('status')).toContainText('Shipped to main', { timeout: 20_000 });
   await expect(page.getByText('Ship to main when ready.', { exact: true })).toHaveCount(1);
   // Verified direct delivery settles automatically, keeps the conversation selected and retains its workspace.
-  await expect(actions).toContainText('Thread settled · Workspace retained');
+  await expect(actions.getByRole('button', { name: 'Reopen', exact: true })).toBeVisible();
+  await expect(actions.locator('.delivery-settled')).toHaveCount(0);
+  await expect(actions.locator('.delivery-status')).toHaveAttribute('title', 'Workspace retained');
   await expect(page.locator('.composer textarea')).toHaveAttribute('placeholder', 'Send a message to reopen this thread…');
-  await expect(page.locator('.row.settled.active')).toContainText('main');
-  await expect(page.getByText(/^Shipped to main · [0-9a-f]{7} · .*Thread settled; workspace retained\.$/)).toHaveCount(1);
+  await expect(page.locator('.row.settled.active')).toContainText('Shipped');
+  await expect(page.locator('.row.settled.active .row-main')).toHaveAttribute('title', /Shipped to main/);
+  // The outcome is said once, by the chip; the transcript carries no receipt line.
+  await expect(actions.locator('.delivery-rev')).toHaveText(/^[0-9a-f]{7}$/);
+  await expect(page.locator('.thread .notice')).toHaveCount(0);
   await expect(actions.getByRole('button', { name: 'Reopen', exact: true })).toBeVisible();
   await expect(actions.getByRole('button', { name: 'Archive', exact: true })).toBeEnabled();
   await page.screenshot({ path: testInfo.outputPath('ship-delivered.png') });
@@ -167,7 +174,7 @@ test('Ship menu, queued cancellation, owned preview, delivery, Archive and follo
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect(page.getByText('Fresh workspace ready.', { exact: true })).toBeVisible();
   await expect(page.getByText('Archived · history kept', { exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Ship', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Ship', exact: true })).toHaveCount(0);
 });
 
 test('Electron Open app uses the native bridge and archives its real owned preview', async ({ baseURL }) => {

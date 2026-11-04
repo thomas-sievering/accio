@@ -118,8 +118,8 @@ export function InlineMedia({ threadId, asset, source, mimeType, label }: Props)
       <span className="media-name" title={name}>{name}</span>
       {asset && <span className="media-size">{formatSize(asset.sizeBytes)}</span>}
       <span className="media-actions">
-        <button onClick={() => void action(false)}>Open</button>
-        <button onClick={() => void action(true)}>Download</button>
+        <button aria-label={`Open ${name}`} onClick={() => void action(false)}>Open</button>
+        <button aria-label={`Download ${name}`} onClick={() => void action(true)}>Download</button>
       </span>
     </span>
     {error && <span className="media-error" role="alert">{error} <button onClick={() => { failedOnce.current = false; retry(); }}>Retry</button></span>}

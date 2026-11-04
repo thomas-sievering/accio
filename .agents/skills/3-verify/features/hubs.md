@@ -5,7 +5,7 @@ Run `node .agents/skills/3-verify/scripts/verify.mjs .agents/skills/3-verify/scr
 Mapped entry points:
 
 - `hubs/pair`: Settings / Hubs → Hub name, Hub address, Pairing code → Connect hub. Require the independent hub's onboarding and identity. Reusing a code or pairing the same saved hub must fail.
-- `hubs/first-run`: Set up accio → radio `Remote hub` → `Continue` → Hub address and Pairing code (named after its host) → `Connect hub`. `Back` returns to the local/remote question. Joining a hub with a signed-in profile must skip to the project question.
+- `hubs/first-run`: Set up Accio → radio `Remote hub` → `Continue` → Hub address and Pairing code (named after its host) → `Connect hub`. `Back` returns to the local/remote question. Joining a hub with a signed-in profile must skip to the project question.
 - `hubs/switch`: Settings sidebar button `Hub: <name>` → menu `Choose hub` → radio menu item for the target hub, or Settings / Hubs → Use hub. Switching restores that hub's own profiles, accounts, projects and threads without pairing again.
 - `hubs/menu`: open the sidebar hub menu with a click or ArrowDown. Require connection status, a checked current hub, and a menu matching the card width. Arrow keys, Home and End move focus; Escape closes the menu and returns focus without leaving Settings. Clicking outside dismisses it.
 - `hubs/windows`: two windows select different hubs independently. Reload preserves each window's selection. Matching profile names and IDs must not mix accounts, local settings or events.
@@ -13,6 +13,6 @@ Mapped entry points:
 - `hubs/running`: with a provider or explicit harness fixture, switch during a turn. Require a running indicator on its original hub, no thread on the other hub, and completion/resume on the original profile and session.
 - `hubs/pair-device`: Generate pairing code on a connected hub, then pair a second isolated machine. Require shared account/profile metadata and independent machine keys. Keep the code private.
 - `hubs/revoke`: revoke a paired machine through `hubs.revokeMachine`. Require its control socket to close and old model keys to fail while another machine and the revoked machine's other hub still work. Revocation currently has an RPC entry point; do not claim a UI button.
-- `hubs/remove`: Remove an inactive saved connection and require its disappearance. Running work or a pending sign-in must prevent removal. Removing local connection metadata does not delete its local work.
+- `hubs/remove`: Remove an inactive saved connection: `Remove` only asks (`Remove <hub name>`, `Cancel`, "You will be disconnected from this hub."; Escape cancels); require the hub to remain until `Remove <hub name>` is clicked, then its disappearance. Running work or a pending sign-in must prevent removal. Removing local connection metadata does not delete its local work.
 
 The committed journey covers pairing, separate metadata, both-window selection and reload. The network and ownership tests cover additional trust and running-work boundaries; they are not real-provider proof. Browser sign-in and streamed turns through Cloudflare require the account preconditions in [Accounts](accounts.md). Record each unexercised entry as unverified rather than expanding the journey's coverage claim.

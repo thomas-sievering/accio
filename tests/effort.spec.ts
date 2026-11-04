@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 const token = 'isolated-chat-test-token';
 const chip = (page: Page) => page.getByRole('button', { name: /^Select model:/ });
+const effort = (page: Page) => page.getByRole('button', { name: /^Effort:/ });
 
 async function openThread(page: Page) {
   await page.locator('.sidebar').getByRole('button', { name: /Choice fixture/ }).click();
@@ -12,51 +13,53 @@ test('scrolling over the model chip changes effort; clicking it lists the models
   await page.goto(`${baseURL}/#token=${token}`);
   await openThread(page);
   // Claude Code reports no default level, so the lowest step leaves it to Claude Code.
-  await expect(chip(page)).toHaveAccessibleName('Select model: Claude Opus · default effort');
-  await expect(chip(page).locator('.effort-word-current')).toHaveText('auto');
-  const initialWidth = (await chip(page).boundingBox())!.width;
+  await expect(effort(page)).toHaveAccessibleName('Effort: Auto');
+  await expect(effort(page).locator('.effort-word-current')).toHaveText('Auto');
+  const initialWidth = (await effort(page).boundingBox())!.width;
 
-  await chip(page).hover();
+  await effort(page).hover();
   await page.mouse.wheel(0, -50);
   await page.mouse.wheel(0, -50);
-  await expect(chip(page)).toHaveAccessibleName('Select model: Claude Opus · Medium effort');
-  await expect(chip(page).locator('.effort-word-current')).toHaveText('medium');
-  expect((await chip(page).boundingBox())!.width).toBe(initialWidth);
+  await expect(effort(page)).toHaveAccessibleName('Effort: Medium');
+  await expect(effort(page).locator('.effort-word-current')).toHaveText('Medium');
+  expect((await effort(page).boundingBox())!.width).toBe(initialWidth);
   await page.mouse.wheel(0, 50);
-  await expect(chip(page)).toHaveAccessibleName('Select model: Claude Opus · Low effort');
+  await expect(effort(page)).toHaveAccessibleName('Effort: Low');
   await page.mouse.wheel(0, -50);
   await page.waitForTimeout(800); // Saved once scrolling settles.
   await page.reload();
   await openThread(page);
-  await expect(chip(page)).toHaveAccessibleName('Select model: Claude Opus · Medium effort');
+  await expect(effort(page)).toHaveAccessibleName('Effort: Medium');
 
-  await chip(page).focus();
+  await effort(page).focus();
   await page.keyboard.press('ArrowUp');
-  await expect(chip(page)).toHaveAccessibleName('Select model: Claude Opus · High effort');
-  await expect(chip(page).locator('.effort-word-current')).toHaveText('high');
-  expect(await chip(page).locator('.effort-word').evaluate((el) => el.getAnimations({ subtree: true }).length)).toBeGreaterThan(0);
+  await expect(effort(page)).toHaveAccessibleName('Effort: High');
+  await expect(effort(page).locator('.effort-word-current')).toHaveText('High');
+  expect(await effort(page).locator('.effort-word').evaluate((el) => el.getAnimations({ subtree: true }).length)).toBeGreaterThan(0);
   await page.waitForTimeout(800);
 
   // Clicking lists the models and nothing else; another model that accepts the effort keeps it.
   await chip(page).click();
   const list = page.getByRole('dialog', { name: 'Choose a model' });
   await expect(list.getByRole('slider')).toHaveCount(0);
-  await list.getByRole('navigation', { name: 'Model groups' }).getByRole('button').nth(1).click();
-  await list.locator('[data-model-choice]', { hasText: 'Claude Sonnet' }).click();
-  await expect(chip(page)).toHaveAccessibleName('Select model: Claude Sonnet · High effort');
+  // It opens on the active provider's list, with the current model focused.
+  await expect(list.locator('[data-model-choice][aria-pressed="true"]')).toBeFocused();
+  await list.locator('[data-model-choice]', { hasText: 'Sonnet' }).click();
+  await expect(chip(page)).toHaveAccessibleName('Select model: Claude Sonnet');
+  await expect(effort(page)).toHaveAccessibleName('Effort: High');
   await page.reload();
   await openThread(page);
-  await expect(chip(page)).toHaveAccessibleName('Select model: Claude Sonnet · High effort');
+  await expect(chip(page)).toHaveAccessibleName('Select model: Claude Sonnet');
 });
 
 test('effort changes immediately without animation with reduced motion', async ({ page, baseURL }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto(`${baseURL}/#token=${token}`);
   await openThread(page);
-  await chip(page).focus();
+  await effort(page).focus();
   for (let i = 0; i < 6; i++) await page.keyboard.press('ArrowDown');
-  await expect(chip(page).locator('.effort-word-current')).toHaveText('auto');
+  await expect(effort(page).locator('.effort-word-current')).toHaveText('Auto');
   await page.keyboard.press('ArrowUp');
-  await expect(chip(page).locator('.effort-word-current')).toHaveText('low');
-  expect(await chip(page).locator('.effort-word').evaluate((el) => el.getAnimations({ subtree: true }).length)).toBe(0);
+  await expect(effort(page).locator('.effort-word-current')).toHaveText('Low');
+  expect(await effort(page).locator('.effort-word').evaluate((el) => el.getAnimations({ subtree: true }).length)).toBe(0);
 });

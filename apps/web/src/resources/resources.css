@@ -49,7 +49,7 @@
   color: var(--dim);
 }
 .on-text {
-  color: var(--green) !important;
+  color: var(--dim);
 }
 
 /* Per-project / per-profile selection */
@@ -97,7 +97,7 @@
   white-space: nowrap;
 }
 .picker-status.own {
-  color: var(--green);
+  color: var(--dim);
 }
 .picker-status.inherited {
   color: var(--blue);
@@ -114,7 +114,7 @@
 /* Readiness per machine */
 .tool-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
 }
 .tool-card {
@@ -147,7 +147,21 @@
 .tool-card-text code {
   font: 12px/1.5 'Cascadia Code', Consolas, monospace;
 }
-.tool-card-text.failed code {
+.tool-card-details summary {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  list-style: none;
+  color: var(--muted);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.tool-card-details summary::-webkit-details-marker { display: none; }
+.tool-card-details summary svg { width: 12px; height: 12px; }
+.tool-card-details[open] summary svg { transform: rotate(90deg); }
+.tool-card-details code {
+  margin-top: 6px;
+  font: 12px/1.5 'Cascadia Code', Consolas, monospace;
   display: block;
   max-height: 7.5em;
   overflow: auto;
@@ -200,9 +214,6 @@
 .version-field {
   flex: 0 1 160px;
   min-width: 120px;
-}
-.field input[aria-invalid='true'] {
-  border-color: var(--red);
 }
 .field small.error {
   font-size: 12px;
@@ -313,7 +324,7 @@
   color: var(--red);
 }
 .section-note {
-  margin: 0 0 10px 14px;
+  margin: 0 0 10px;
 }
 .skill-row + .skill-row {
   border-top: 1px solid var(--line);

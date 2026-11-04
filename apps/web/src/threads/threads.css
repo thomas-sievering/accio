@@ -111,8 +111,8 @@
 .row-action {
   display: grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
   border-radius: 6px;
   color: var(--dim);
 }
@@ -183,10 +183,10 @@
   gap: 4px;
   min-width: 0;
   margin: 0;
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 15px;
 }
-/* When narrow, the project name (with its separator) gives way before the status does. */
+/* Idle rows read "project · Ready"; the project gives way before the short status does. */
 .row-project-name {
   flex: 0 1 auto;
   min-width: 0;
@@ -194,13 +194,16 @@
   text-overflow: ellipsis;
 }
 .row-project.with-state > .row-project-name::after {
-  content: ' ·';
+  content: ' \00b7';
 }
-/* The status never shares the squeeze (even a fraction would ellipsize it); it truncates only past the full width. */
 .row-state {
   display: flex;
-  flex: none;
-  max-width: 100%;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+/* A delivery row shows its status alone, at full width. */
+.row-project.delivery .row-state {
+  flex: 0 1 auto;
 }
 .row-state-label {
   min-width: 0;
@@ -217,26 +220,6 @@
   height: 11px;
   stroke-width: 2.4;
 }
-/* Shelved rows keep their delivery outcome beside the title, including on hover. */
-.row-badge {
-  display: inline-flex;
-  flex: 0 1 auto;
-  align-items: center;
-  gap: 3px;
-  min-width: 0;
-  max-width: 50%;
-  overflow: hidden;
-  font-size: 11.5px;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-.row-badge svg {
-  flex: none;
-  width: 11px;
-  height: 11px;
-  stroke-width: 2.4;
-}
 .row.open .row-status {
   position: absolute;
   inset-inline-end: 8px;
@@ -247,7 +230,34 @@
   padding: 0;
 }
 
-/* Working, Snoozed, Settled shelves, pushed to the bottom of the sidebar. */
+/* Renaming edits the title in place. */
+.row.renaming .row-actions {
+  display: none;
+}
+.header-rename {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.header-rename, .row-rename { display: flex; align-items: center; gap: 6px; }
+.title-count { flex: none; color: var(--dim); font-size: 10px; white-space: nowrap; }
+.header-rename input, .row-rename input { flex: 1; }
+.header-rename input,
+.row-rename input {
+  width: 100%;
+  min-width: 0;
+  height: 17px;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--blue);
+  border-radius: 0;
+  outline: 0;
+  background: none;
+  color: var(--ink-strong);
+  font: inherit;
+  line-height: 17px;
+}
+
+/* Snoozed and Settled shelves, below the list inside the sidebar's scroll region. */
 .shelves {
   margin-top: auto;
   padding-top: 16px;
@@ -273,14 +283,7 @@
 .shelf-chevron {
   display: grid;
   place-items: center;
-  opacity: 0;
-  transition:
-    rotate 0.15s,
-    opacity 0.15s;
-}
-.shelf-head:hover .shelf-chevron,
-.shelf-head:focus-visible .shelf-chevron {
-  opacity: 1;
+  transition: rotate 0.15s;
 }
 .shelf-head[aria-expanded='true'] .shelf-chevron {
   rotate: 90deg;
@@ -313,8 +316,8 @@
 /* Thread header */
 .thread-actions-trigger {
   flex: none;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
 }
 .thread-actions-menu {
   width: 220px;
@@ -333,6 +336,7 @@
   line-height: 1.25;
 }
 .thread-title b {
+  flex-shrink: 100;
   min-width: 0;
   font-weight: 500;
   color: var(--ink-strong);
@@ -344,7 +348,8 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-shrink: 0;
+  flex-shrink: 1;
+  min-width: 10ch;
   max-width: 35%;
   font-size: 13px;
   color: var(--muted);
@@ -355,6 +360,17 @@
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.thread-project-link {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: inherit;
+  text-underline-offset: 3px;
+}
+.thread-project-link:hover {
+  color: var(--ink);
+  text-decoration: underline;
 }
 .thread-project-name .folder-link {
   max-width: 100%;
@@ -369,7 +385,7 @@
 /* Transcript (botbot's chat column) */
 .messages {
   --chat-width: 760px;
-  --message-width: 720px;
+  --message-width: 100%;
   flex: 1;
   overflow-y: auto;
   padding: 12px 16px 24px;
@@ -392,14 +408,10 @@
   color: var(--ink);
   white-space: pre-wrap;
 }
-.msg.user.resume {
-  color: var(--muted);
-  font-style: italic;
-}
 .msg.assistant {
-  align-self: flex-start;
+  align-self: stretch;
   min-width: 0;
-  width: min(var(--message-width), 92%);
+  max-width: 100%;
 }
 .msg.assistant > :first-child {
   margin-top: 0;
@@ -449,10 +461,9 @@
 
 .tool {
   position: relative;
-  align-self: flex-start;
+  align-self: stretch;
   min-width: 0;
-  width: min(var(--message-width), 92%);
-  max-width: min(var(--message-width), 92%);
+  max-width: 100%;
 }
 .tool button {
   display: flex;
@@ -665,13 +676,14 @@
   flex-direction: column;
   gap: 8px;
 }
+/* Turn notices such as "Stopped." read like "Worked for": a muted line at the column's left edge. */
 .notice {
-  align-self: center;
-  max-width: min(var(--message-width), 92%);
-  padding: 4px 10px;
-  font-size: 12.5px;
+  align-self: stretch;
+  max-width: 100%;
+  margin: 2px 0;
+  padding-inline-start: 12px;
+  font-size: 12px;
   color: var(--muted);
-  text-align: center;
   white-space: pre-wrap;
 }
 .notice.error {
@@ -743,7 +755,7 @@
   gap: 8px;
 }
 /* The model and its effort sit together on the left of the composer bar. */
-.model-choice { display: inline-flex; align-items: center; gap: 2px; min-width: 0; margin-right: auto; }
+.model-choice { display: inline-flex; align-items: center; gap: 2px; min-width: 0; margin-right: auto; flex: 0 1 auto; }
 /* When the model leads the bar, its text lines up with the textarea's; its hover pill bleeds left. */
 .composer-bar > .model-choice:first-child > :first-child { margin-left: -8px; }
 .model-trigger {
@@ -760,6 +772,17 @@
   color: var(--ink);
 }
 .model-trigger:disabled { cursor: default; opacity: 0.6; }
+.model-trigger { min-width: 0; white-space: nowrap; }
+.model-trigger > span { overflow: hidden; text-overflow: ellipsis; }
+.effort-trigger { display: inline-flex; align-items: center; padding: 5px 8px; border-radius: 6px; flex: none; color: var(--muted); font-size: 13px; }
+.effort-trigger:hover:not(:disabled) { background: var(--hover); color: var(--ink); }
+.effort-trigger:hover:not(:disabled) .effort-word { color: inherit; }
+.effort-trigger:disabled { cursor: default; opacity: 0.6; }
+.effort-word svg { display: inline-block; width: 10px; height: 10px; margin-left: 3px; vertical-align: middle; color: var(--dim); }
+.effort-trigger:hover:not(:disabled) svg { color: inherit; }
+.effort-menu .menu-item { justify-content: space-between; }
+.model-trigger svg { fill: currentColor; }
+.menu.effort-menu { position: fixed; inset: auto; position-area: none; position-try-fallbacks: none; width: 160px; margin: 0; }
 .model-picker {
   position: fixed;
   margin: 0;
@@ -804,11 +827,12 @@ div.model-picker-empty b { color: var(--ink); font-weight: 500; }
 .model-picker-error { grid-column: 1 / -1; margin: 0; padding: 10px 12px; border-top: 1px solid var(--line); }
 
 /* GLOSSARY: Effort. Quiet text at rest; the word rolls with a spring when changed. */
-.effort-word { display: inline-grid; position: relative; overflow: hidden; color: var(--muted); font-size: 11px; line-height: 20px; margin-left: 2px; text-align: left; }
+.effort-word { display: inline-grid; position: relative; overflow: hidden; color: var(--muted); font-size: 13px; line-height: 20px; text-align: left; }
 .effort-word > span { grid-area: 1 / 1; }
 .effort-word-size { visibility: hidden; }
 .effort-word-out { opacity: 0; }
 .effort-word-current, .effort-word-out { transform-origin: left center; }
+.effort-word-out { position: absolute; inset: 0; }
 .model-picker-row.limited .model-picker-name { opacity: 0.55; }
 .model-picker-limited { color: var(--amber) !important; }
 /* GLOSSARY: Machine. Where a new thread runs; a quiet chip under the composer. */
@@ -879,11 +903,14 @@ div.model-picker-empty b { color: var(--ink); font-weight: 500; }
 .queued-message > svg { width: 13px; height: 13px; flex: none; color: var(--dim); }
 .queued-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .queued-when { color: var(--dim); white-space: nowrap; }
-.queued-message button { flex: none; padding: 4px; color: var(--muted); border-radius: 4px; white-space: nowrap; }
+.queued-message button { flex: none; min-width: 32px; min-height: 32px; padding: 4px; color: var(--muted); border-radius: 4px; white-space: nowrap; }
 .queued-message button:hover:not(:disabled) { color: var(--ink-strong); background: var(--raised-2); }
 .queued-message button svg { width: 13px; height: 13px; }
 .queued-message form { display: flex; flex: 1; min-width: 0; gap: 6px; }
-.queued-message input { flex: 1; min-width: 0; padding: 4px 6px; }
+.queued-message input { flex: 1; min-width: 0; padding: 4px 6px; border: 1px solid var(--line-2); border-radius: 5px; background: var(--bg); color: var(--ink); font: inherit; font-weight: 400; outline: 0; }
+.queued-message input:focus { border-color: var(--blue); }
+/* Save is the edit's primary action; Cancel stays plain. */
+.queued-message .queue-save:not(:disabled) { color: var(--bg); background: var(--ink-strong); border-color: var(--ink-strong); }
 @media (max-width: 600px) { .queued-when, .composer-queue kbd { display: none; } }
 /* The one slot above the composer: why the thread can't go on, and the action that fixes it */
 .notice-bar {
@@ -912,6 +939,7 @@ div.model-picker-empty b { color: var(--ink); font-weight: 500; }
   background: color-mix(in srgb, var(--red) 8%, transparent);
   color: var(--red);
 }
+.composer-bar .limits-chip { flex: none; white-space: nowrap; }
 /* GLOSSARY: Goal. One line above the composer, like the queue tray. */
 .goal-bar { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 32px; margin: 0 10px; padding: 4px 8px; background: var(--raised); border: 1px solid var(--line); border-bottom: 0; border-radius: 9px 9px 0 0; font-size: 12px; }
 .goal-bar + .queue-tray { border-radius: 0; }

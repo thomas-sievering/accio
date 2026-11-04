@@ -7,6 +7,28 @@ import { join, resolve } from 'node:path';
 const require = createRequire(import.meta.url);
 const token = 'isolated-chat-test-token';
 
+test('Claude cache usage shows provider accounting once and survives reopening', async ({ page, baseURL }, testInfo) => {
+  await page.goto(`${baseURL}/#token=${token}`);
+  await page.locator('.sidebar').getByRole('button', { name: 'New thread', exact: true }).click();
+  await page.getByRole('option', { name: 'No project', exact: true }).click();
+  if (await page.getByRole('combobox', { name: 'Search profiles' }).isVisible()) await page.getByRole('option', { name: 'Personal', exact: true }).click();
+  await expect(page.locator('.cache-usage')).toHaveCount(0);
+  await page.locator('.composer textarea').fill('Cache usage fixture');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect(page.getByText('Cache usage recorded.', { exact: true })).toBeVisible();
+  await expect(page.locator('.composer .stop')).toHaveCount(0);
+  const stat = page.locator('.cache-usage');
+  await expect(stat.locator('summary')).toHaveText('Cache 80%');
+  await stat.locator('summary').click();
+  await expect(stat.locator('dd')).toHaveText(['800', '100', '100', '100']);
+  await expect(stat).toContainText('excludes subagents and title generation');
+  await page.screenshot({ path: testInfo.outputPath('cache-usage.png') });
+  await page.reload();
+  await expect(stat.locator('summary')).toHaveText('Cache 80%');
+  await stat.locator('summary').click();
+  await expect(stat.locator('dd')).toHaveText(['800', '100', '100', '100']);
+});
+
 for (const submit of ['Enter', 'Send'] as const) {
   test(`first ${submit} shows the message before thread startup completes and recovers a failed start`, async ({ page, baseURL }, testInfo) => {
     let release: (() => void) | undefined;
@@ -58,7 +80,7 @@ for (const submit of ['Enter', 'Send'] as const) {
   });
 }
 
-test('Enter steers, Ctrl changes Send and queues; queued edits are held until saved', async ({ page, baseURL }, testInfo) => {
+test('Enter steers, Ctrl changes Send and queues; an unsaved queued edit closes when the turn ends', async ({ page, baseURL }, testInfo) => {
   await page.goto(`${baseURL}/#token=${token}`);
   await page.locator('.sidebar').getByRole('button', { name: /Inline chat fixture/ }).click();
   const input = page.locator('.composer textarea');
@@ -93,11 +115,10 @@ test('Enter steers, Ctrl changes Send and queues; queued edits are held until sa
   await tray.getByRole('button', { name: 'Remove queued message' }).click();
   await input.fill('Finish steering fixture'); await input.press('Enter');
   await expect(page.locator('.composer .stop')).toHaveCount(0);
-  await expect(tray.getByRole('textbox')).toHaveValue('Queued edited');
-  await expect(page.getByText('Finished: Queued edited', { exact: true })).toHaveCount(0);
-  await tray.getByRole('button', { name: 'Save', exact: true }).click();
-  await expect(page.getByText('Finished: Queued edited', { exact: true })).toBeVisible();
+  // The edit tray belongs to its turn: when the turn ends it closes, discarding the unsaved edit and releasing the original message.
   await expect(tray).toHaveCount(0);
+  await expect(page.getByText('Finished: Queued second', { exact: true })).toBeVisible();
+  await expect(page.getByText('Finished: Queued edited', { exact: true })).toHaveCount(0);
   await page.reload();
   await page.locator('.sidebar').getByRole('button', { name: /Inline chat fixture/ }).click();
   await expect(page.getByText('Steered: Use the existing helper', { exact: true })).toBeVisible();
@@ -125,6 +146,9 @@ async function mediaAndTools(page: Page, desktop?: ElectronApplication) {
   await expect(failed.locator('[aria-label="Tool input"]')).toContainText('powershell.exe');
   await expect(failed).toContainText('Expected fixture failure');
   await success.locator('.tool-toggle').click();
+  // Long output is capped at 20 lines until the person asks for all of it.
+  await expect(success).not.toContainText('FULL_OUTPUT_TAIL');
+  await success.getByRole('button', { name: /^Show all \d+ lines$/ }).click();
   await expect(success).toContainText('FULL_OUTPUT_TAIL');
   await expect(success).toContainText('file_path');
   const parts = await success.locator('[aria-label="Tool result"]').evaluate((element) => Array.from(element.children).map((entry) => entry.tagName));

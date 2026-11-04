@@ -22,6 +22,7 @@ export type TranscriptBlock =
  * split a run.
  */
 export function layoutTranscript(items: TranscriptItem[], runningTurn?: string): TranscriptBlock[] {
+  items = items.filter((item) => item.kind !== 'usage');
   const blocks: TranscriptBlock[] = [];
   let start = 0;
   for (let end = 1; end <= items.length; end++) {
@@ -33,11 +34,23 @@ export function layoutTranscript(items: TranscriptItem[], runningTurn?: string):
   return blocks;
 }
 
-function layoutTurn(turn: TranscriptItem[], running: boolean): TranscriptBlock[] {
-  if (!turn.length) return [];
+function layoutTurn(items: TranscriptItem[], running: boolean): TranscriptBlock[] {
+  if (!items.length) return [];
+  // The duration marker may arrive before late messages (a resumed turn's media); it still closes the turn.
+  const finished = items.find((item): item is Extract<TranscriptItem, { kind: 'finished' }> => item.kind === 'finished');
+  const turn = finished ? [...items.filter((item) => item !== finished), finished] : items;
   // Mid-turn corrections belong in the visible conversation, in their original order.
-  if (turn.some(item => item.kind === 'user' && item.steered)) return groupTools(turn);
-  const finished = turn.at(-1)?.kind === 'finished' ? turn.at(-1) as Extract<TranscriptItem, { kind: 'finished' }> : undefined;
+  // The duration still heads the turn, and a running turn keeps its live line at the end.
+  if (turn.some(item => item.kind === 'user' && item.steered)) {
+    const rest = finished ? turn.slice(0, -1) : turn;
+    const lead = rest[0]?.kind === 'user' ? 1 : 0;
+    const blocks = groupTools(finished ? [...rest.slice(0, lead), finished, ...rest.slice(lead)] : rest);
+    if (!running || finished) return blocks;
+    const current = rest.findLast((item): item is ToolItem => item.kind === 'tool' && item.status === 'running');
+    const first = rest[0];
+    return [...blocks, { kind: 'work', id: `${turn[0]!.turnId}:work`, failed: 0, blocks: [], live: true,
+      activity: current ? describeActivity(current) : 'Working', startedAt: first?.kind === 'user' ? first.at : undefined }];
+  }
   if (!finished && !running) return groupTools(turn);
   const body = finished ? turn.slice(0, -1) : turn;
   const prompt = body[0]?.kind === 'user' ? 1 : 0;
@@ -49,7 +62,7 @@ function layoutTurn(turn: TranscriptItem[], running: boolean): TranscriptBlock[]
   // Private entry and its usage records stay visible even when other work is folded.
   const secrets = beforeAnswer.filter((item) => item.kind === 'secret');
   const work = beforeAnswer.filter((item) => item.kind !== 'secret');
-  if (finished && !work.length) return groupTools(turn);
+  if (finished && !work.length) return groupTools([...body.slice(0, prompt), finished, ...body.slice(prompt)]);
   const failed = work.filter((item) => item.kind === 'tool' && item.status === 'error').length;
   return [
     ...groupTools(body.slice(0, prompt)),

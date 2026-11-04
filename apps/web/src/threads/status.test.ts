@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { DeliveryPullRequest, ThreadDelivery, ThreadView } from '@accio/protocol';
-import { autoSettled, checkedAgo, deliveryStatus, statusText, threadStatus } from './status';
+import { autoSettled, checkedAgo, deliveryStatus, shortStatus, statusText, threadStatus } from './status';
 
 const pr = (extra: Partial<DeliveryPullRequest> = {}): DeliveryPullRequest => ({
   host: 'github.com', repository: 'acme/app', number: 123, url: 'https://github.com/acme/app/pull/123',
@@ -71,7 +71,7 @@ describe('waiting on GitHub', () => {
     const t = thread({ delivery: delivery({ status: 'ready', pullRequest: pr() }) });
     expect(deliveryStatus(t)).toMatchObject({ label: 'Waiting for merge', detail: 'Merges when GitHub allows', canStopFollowUps: true });
     const stopped = deliveryStatus(thread({ delivery: delivery({ status: 'ready', pullRequest: pr(), followUpsStoppedAt: '2026-11-03T11:00:00Z', keepOpen: true }) }))!;
-    expect(stopped).toMatchObject({ label: 'Waiting for merge', detail: 'Automatic follow-ups stopped · still tracking #123', canStopFollowUps: false, canCheck: true });
+    expect(stopped).toMatchObject({ label: 'Waiting for merge', detail: 'Automatic fixes stopped · still tracking #123', canStopFollowUps: false, canCheck: true });
   });
 
   it('reads the PR number from a legacy URL', () => {
@@ -126,13 +126,13 @@ describe('live CI progress', () => {
 
   it('names the current job and step while waiting on checks, in the row and the sidebar', () => {
     const t = thread({ delivery: delivery({ waitingOn: 'checks', pullRequest: pr(), ci: ci() }) });
-    expect(deliveryStatus(t)).toMatchObject({ phase: 'waiting', label: 'CI · image · Build image · step 2 of 4', glyph: 'pr', ci: ci() });
-    expect(sidebar(t).label).toBe('CI · image · Build image · step 2 of 4 · #123');
+    expect(deliveryStatus(t)).toMatchObject({ phase: 'waiting', label: 'CI · Build image · 2 of 4', glyph: 'pr', ci: ci() });
+    expect(sidebar(t).label).toBe('CI · Build image · 2 of 4 · #123');
   });
 
   it('keeps a direct push visible while target checks run', () => {
     const s = deliveryStatus(thread({ delivery: delivery({ policy: 'direct', integratedAt: '2026-11-03T11:00:00Z', ci: ci('Push image') }) }))!;
-    expect(s).toMatchObject({ phase: 'integrated', label: 'CI · image · Push image · step 2 of 4', glyph: 'push', detail: 'Pushed · waiting for checks on main' });
+    expect(s).toMatchObject({ phase: 'integrated', label: 'CI · Push image · 2 of 4', glyph: 'push', detail: 'Pushed · waiting for checks on main' });
   });
 
   it('never lets stale CI override a known outcome', () => {
@@ -195,5 +195,16 @@ describe('checkedAgo', () => {
     expect(checkedAgo('2026-11-03T11:59:20Z', now)).toBe('checked just now');
     expect(checkedAgo('2026-11-03T11:56:00Z', now)).toBe('checked 4m ago');
     expect(checkedAgo('2026-11-03T09:00:00Z', now)).toBe('checked 3h ago');
+  });
+
+  it('shortens delivery statuses to what a sidebar row has room for', () => {
+    expect(shortStatus('CI · Build image · 2 of 4')).toBe('CI · step 2/4');
+    expect(shortStatus('CI · Checks finishing')).toBe('CI');
+    expect(shortStatus('Waiting for merge')).toBe('Review');
+    expect(shortStatus('Waiting for checks')).toBe('Checks');
+    expect(shortStatus('Shipped to main')).toBe('Shipped');
+    expect(shortStatus('Merged into main')).toBe('Merged');
+    expect(shortStatus('Merged · checking main')).toBe('Checking');
+    expect(shortStatus('Ships when done')).toBe('Ships when done');
   });
 });

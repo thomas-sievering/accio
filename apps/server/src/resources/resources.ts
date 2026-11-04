@@ -128,16 +128,20 @@ export class ResourceManager {
     if (!local) throw new Error('The pinned source revision does not contain this skill');
     await this.skills.validate(local); return { ...skill, path: local.path };
   }
+  /** Check before allocating a new conversation so a blocked draft remains unsent. */
+  async requireToolsReady() {
+    for (const tool of this.state().tools) {
+      const status = await this.tools.check(tool);
+      if (status.status !== 'ready') throw new Error(`${tool.name} is not ready. ${status.repairThreadId ? 'A repair thread was started.' : status.repairError ?? status.detail}`);
+    }
+  }
   async prepare(profileId: string, projectId: string, env: Record<string, string>, options: { repair?: boolean; cwd?: string } = {}): Promise<TurnResources> {
     const project = this.projects.state().projects.find(p => p.id === projectId);
     const key = project ? project.repoKey ?? `local:${project.id}` : undefined;
     const state = this.state();
     const tools = state.tools;
     if (options.repair) return { env: this.tools.env(state.tools, env), instructions: '', mcps: {}, snapshot: { tools: [], skills: [], mcps: [] }, release: () => {} };
-    if (!options.repair) for (const tool of tools) {
-      const status = await this.tools.check(tool);
-      if (status.status !== 'ready') throw new Error(`${tool.name} is not ready. ${status.repairThreadId ? 'A repair thread was started.' : status.repairError ?? status.detail}`);
-    }
+    await this.requireToolsReady();
     const skills = await Promise.all(state.skills.filter(s => enabled(s.scope, profileId, key)).map(skill => this.localSkill(skill)));
     const names = new Set<string>();
     for (const skill of skills) {

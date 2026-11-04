@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { modelKey, type ModelSelection, type ModelsState, type UsedUpLimit } from '@accio/protocol';
 import { useClient, useConnectionStatus } from '../app/connection';
+import { useTooltip } from '../app/Tooltip';
 import { Check, ProviderLogo, Star } from '../app/icons';
 import { EffortWord, effortSteps } from './EffortControl';
 import { useSteps, useWheelSteps } from './steps';
@@ -22,6 +23,10 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
   const id = useId();
   const panel = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  const effortTrigger = useRef<HTMLButtonElement>(null);
+  const effortId = useId();
+  const effortMenu = useRef<HTMLDivElement>(null);
+  const [effortPosition, setEffortPosition] = useState<CSSProperties>({});
   const [loaded, setLoaded] = useState<{ profileId: string; state: ModelsState }>();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -65,9 +70,9 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
   const visible = models.filter((m) => activeTab === 'favorites'
     ? favorites.has(modelKey({ harnessId: m.harnessId, modelId: m.id }))
     : JSON.stringify([m.providerId, m.harnessId]) === activeTab);
-  // Open where the choice is likeliest: favourites if there are any, else the current model's provider.
-  const openingTab = () => favorites.size > 0 ? 'favorites'
-    : selected ? JSON.stringify([selected.providerId, selected.harnessId]) : groups[0]?.id ?? 'favorites';
+  // Open on the active model's provider, where the choice is likeliest; favourites only when nothing is selected.
+  const openingTab = () => selected ? JSON.stringify([selected.providerId, selected.harnessId])
+    : favorites.size > 0 ? 'favorites' : groups[0]?.id ?? 'favorites';
   const focusRow = () => requestAnimationFrame(() => {
     const rows = panel.current?.querySelectorAll<HTMLButtonElement>('[data-model-choice]');
     (panel.current?.querySelector<HTMLButtonElement>('[data-model-choice][aria-pressed="true"]') ?? rows?.[0])?.focus();
@@ -113,19 +118,15 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
   const effort = selected && selected.efforts.length > 0 ? effortSteps(selected, current.effort) : undefined;
   const stepper = useSteps(effort?.steps ?? [], effort?.index ?? -1,
     (next) => onChange({ harnessId: current.harnessId, modelId: current.modelId, ...(next ? { effort: next } : {}) }), setError);
-  useWheelSteps(trigger, stepper.step);
+  useWheelSteps(effortTrigger, stepper.step, !!effort);
   const shownEffort = effort?.steps[stepper.shown];
-  // "Claude Opus · High effort"; Auto leaves the effort to the harness.
-  const description = `${selected?.name ?? fallbackName}${shownEffort ? ` · ${shownEffort.label === 'Auto' ? 'default' : shownEffort.label} effort` : ''}`;
+  const effortTip = useTooltip(`Effort: ${shownEffort?.label ?? 'Auto'}${shownEffort?.label === 'Auto' ? ' (the harness decides)' : ''}`);
+  // Auto leaves the effort to the harness.
+  const description = selected?.name ?? fallbackName;
 
   return <span className="model-choice">
     <button type="button" ref={trigger} className="model-trigger" popoverTarget={id}
-      disabled={disabled || busy || !profileId || status !== 'open'} aria-label={`Select model: ${description}`} title={effort ? `${description} · scroll to change effort` : description}
-      onKeyDown={(event) => {
-        if (!effort) return;
-        if (event.key === 'ArrowUp') { event.preventDefault(); stepper.step(1); }
-        if (event.key === 'ArrowDown') { event.preventDefault(); stepper.step(-1); }
-      }}
+      disabled={disabled || busy || !profileId || status !== 'open'} aria-label={`Select model: ${description}`} title={description}
       onClick={(event) => {
         const rect = event.currentTarget.getBoundingClientRect();
         const width = Math.min(340, window.innerWidth - 24);
@@ -139,8 +140,41 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
       }}>
       <ProviderLogo providerId={selected?.providerId ?? (value.harnessId === 'codex' ? 'openai' : 'anthropic')} />
       <span>{shortName}</span>
-      {effort && <EffortWord key={modelKey(current)} steps={effort.steps} index={stepper.shown} />}
     </button>
+    {effort && <>
+      <button {...effortTip.props} type="button" ref={effortTrigger} className="effort-trigger" popoverTarget={effortId}
+        disabled={disabled || busy || status !== 'open'} aria-label={`Effort: ${shownEffort?.label ?? 'Auto'}`} aria-haspopup="menu"
+        title={`Effort: ${shownEffort?.label === 'Auto' ? 'Auto (the harness decides)' : shownEffort?.label} · scroll or use the arrow keys to change`}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowUp') { event.preventDefault(); stepper.step(1); }
+          if (event.key === 'ArrowDown') { event.preventDefault(); stepper.step(-1); }
+        }}
+        onClick={(event) => {
+          const rect = event.currentTarget.getBoundingClientRect();
+          setEffortPosition({ left: Math.max(12, Math.min(rect.left, window.innerWidth - 172)), bottom: window.innerHeight - rect.top + 8, top: 'auto' });
+        }}>
+        <EffortWord key={modelKey(current)} steps={effort.steps} index={stepper.shown} />
+      </button>
+      {effortTip.tooltip}
+      <div id={effortId} ref={effortMenu} popover="auto" className="menu effort-menu" role="menu" aria-label="Effort" style={effortPosition}
+        onToggle={(event) => {
+          if (event.newState === 'open') requestAnimationFrame(() => (effortMenu.current?.querySelector<HTMLButtonElement>('[aria-checked="true"]') ?? effortMenu.current?.querySelector<HTMLButtonElement>('button'))?.focus());
+          else if (effortMenu.current?.contains(document.activeElement) || document.activeElement === document.body) effortTrigger.current?.focus();
+        }}
+        onKeyDown={(event) => {
+          if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+          event.preventDefault();
+          const items = [...(effortMenu.current?.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]') ?? [])];
+          const current = items.indexOf(document.activeElement as HTMLButtonElement);
+          const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (current + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+          items[next]?.focus();
+        }}>
+        {effort.steps.map((step, i) => <button type="button" key={step.label} role="menuitemradio" className="menu-item" aria-checked={i === stepper.shown}
+          onClick={() => { stepper.commit(i); effortMenu.current?.hidePopover(); }}>
+          <span>{step.label}</span><span className="model-picker-check" aria-hidden>{i === stepper.shown && <Check />}</span>
+        </button>)}
+      </div>
+    </>}
     <div id={id} ref={panel} popover="auto" className="model-picker" style={position} role="dialog" aria-label="Choose a model" onKeyDown={move}
       onToggle={(event) => { if (event.newState === 'open') { setTab(openingTab()); focusRow(); } }}>
       <nav className="model-picker-tabs" aria-label="Model groups">
@@ -167,7 +201,7 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
           return <div className={`model-picker-row${isSelected ? ' selected' : ''}${m.limited ? ' limited' : ''}`} key={key} title={m.limited ? usedUpText(m.limited) : undefined}>
             <button type="button" data-model-choice aria-pressed={isSelected} onClick={() => void choose(choice)}>
               {/* Favourites mix providers, so each row carries its provider's logo instead of the full name. */}
-              <span className="model-picker-name">{activeTab === 'favorites' ? <><ProviderLogo providerId={m.providerId} />{short(m.name)}</> : m.name}{m.isDefault && <span className="model-picker-badge">Default</span>}</span>
+              <span className="model-picker-name">{activeTab === 'favorites' && <ProviderLogo providerId={m.providerId} />}{short(m.name)}{m.isDefault && <span className="model-picker-badge">Default</span>}</span>
               {m.limited && <small className="model-picker-limited">{usedUpText(m.limited)}</small>}
             </button>
             <button type="button" className="model-star" title={isFavorite ? 'Remove from favourites' : 'Add to favourites'}

@@ -1,6 +1,5 @@
 .side-foot {
-  position: sticky;
-  bottom: 0;
+  flex: none;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -10,8 +9,8 @@
 .side-icon {
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   flex: none;
   border-radius: 8px;
   color: var(--dim);
@@ -47,4 +46,25 @@
 .side-icon[aria-disabled='true'] {
   cursor: default;
   opacity: 0.6;
+}
+
+/* After a snooze: one quiet line above the footer that clears itself. */
+.snooze-notice {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 18px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.snooze-notice:not(:empty) {
+  padding-block: 6px;
+}
+.snooze-notice button {
+  color: var(--ink);
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }

@@ -1,7 +1,7 @@
 /* A choice: bare screenshots in a row, as in Krea and ChatGPT; picks show as an outline and a tick. */
 .choice {
   align-self: stretch;
-  max-width: var(--message-width);
+  max-width: 100%;
   padding: 0 12px;
 }
 .choice-question {
@@ -10,7 +10,8 @@
 }
 .choice-options {
   display: grid;
-  grid-template-columns: repeat(var(--choice-columns, 2), minmax(0, 1fr));
+  /* At most --choice-columns across, and never thumbnails narrower than 220px: one or two columns when the transcript is narrow. */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, max(220px, calc(100% / var(--choice-columns, 2) - 12px))), 1fr));
   gap: 14px 12px;
 }
 .choice-option {
@@ -43,7 +44,7 @@
 .choice-open img {
   display: block;
   width: 100%;
-  max-height: 320px;
+  max-height: 360px;
   object-fit: contain;
   object-position: top left;
 }
@@ -57,24 +58,26 @@
   text-align: center;
 }
 .choice-check {
-  position: absolute;
-  top: 6px;
-  right: 6px;
+  flex: none;
   display: grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
-  background: #000a;
-  border: 1px solid var(--line-2);
-  color: transparent;
-  opacity: 0;
+  background: #0008;
+  border: 1.5px solid var(--ink);
+  color: var(--muted);
+  opacity: 0.85;
   transition: opacity 0.12s;
 }
-.choice-check svg { width: 13px; height: 13px; stroke-width: 3; }
-.choice-frame:hover .choice-check,
-.choice-check:focus-visible { opacity: 1; color: var(--muted); }
+/* An empty ring at rest: a tick means picked, so it shows only on hover, focus or once picked. */
+.choice-check svg { width: 15px; height: 15px; stroke-width: 3; opacity: 0; transition: opacity 0.12s; }
+.choice-option.selected .choice-check svg { opacity: 1; }
+.choice-option:hover .choice-check,
+.choice-check:focus-visible { opacity: 1; color: var(--ink); }
+.choice-check:focus-visible { outline: 2px solid var(--ink-strong); outline-offset: 2px; }
 .choice-check:hover { color: var(--ink-strong); }
+.choice-caption { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .choice-option.selected .choice-check {
   opacity: 1;
   background: var(--ink-strong);

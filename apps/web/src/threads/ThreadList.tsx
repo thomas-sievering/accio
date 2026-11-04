@@ -11,10 +11,12 @@ export function ThreadList() {
   const { visible, state } = useProjects();
   const { filter } = useProfiles();
 
-  const listed = shelves.open.length + shelves.working.length;
+  const listed = shelves.open.length;
   let empty: string | null = null;
   if (state && visible.length === 0 && listed === 0) empty = `No projects${filter === 'all' ? '' : ' for this profile'} yet.`;
   else if (threads && query.trim() && listed === 0) empty = 'No threads found.';
+  // A project with nothing in it yet still says so, rather than leaving the sidebar blank.
+  else if (threads && listed === 0 && shelves.snoozed.length === 0 && shelves.settled.length === 0) empty = 'No threads yet.';
 
   return (
     <ThreadMenuProvider>

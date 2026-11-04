@@ -8,7 +8,7 @@ import { useThreads } from './threads';
 
 const SETTLED_PAGE = 5;
 
-/** Working, Snoozed and Settled shelves at the bottom of the sidebar, as in T3 Code. Empty shelves are not shown. */
+/** Snoozed and Settled shelves below the thread list, as in T3 Code. Empty shelves are not shown. */
 export function ThreadShelves() {
   const { shelves, threads, selectedId } = useThreads();
   const [settledShown, setSettledShown] = useState(SETTLED_PAGE);
@@ -17,11 +17,6 @@ export function ThreadShelves() {
 
   return (
     <div className="shelves">
-      <Shelf name="working" label="Working" count={shelves.working.length} defaultOpen>
-        {shelves.working.map((t) => (
-          <ThreadRow key={t.id} thread={t} place="working" />
-        ))}
-      </Shelf>
       <Shelf name="snoozed" label="Snoozed" count={shelves.snoozed.length}>
         {shelves.snoozed.map((t) => (
           <ThreadRow key={t.id} thread={t} place="snoozed" />
@@ -63,6 +58,7 @@ function Shelf(props: { name: string; label: string; count: number; defaultOpen?
   const [open, setOpen] = useLocalState<'1' | '0'>(`accio.shelf.${props.name}`, props.defaultOpen ? '1' : '0');
   const expanded = open === '1';
   const revealed = useRef(props.reveal ?? 0);
+  const section = useRef<HTMLElement>(null);
   useEffect(() => {
     if (!props.reveal || props.reveal === revealed.current) return;
     revealed.current = props.reveal;
@@ -70,8 +66,11 @@ function Shelf(props: { name: string; label: string; count: number; defaultOpen?
   }, [props.reveal, setOpen]);
   if (props.count === 0) return null;
   return (
-    <section className="shelf">
-      <button className="shelf-head" aria-expanded={expanded} onClick={() => setOpen(expanded ? '0' : '1')}>
+    <section ref={section} className="shelf">
+      <button className="shelf-head" aria-expanded={expanded} onClick={() => {
+        setOpen(expanded ? '0' : '1');
+        if (!expanded) requestAnimationFrame(() => section.current?.querySelector('.row')?.scrollIntoView({ block: 'nearest' }));
+      }}>
         <span>{props.label}</span>
         <span className="shelf-count">{props.count}</span>
         <span className="shelf-chevron">

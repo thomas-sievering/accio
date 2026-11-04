@@ -7,7 +7,7 @@ export function ciSummary(ci?: DeliveryCI): string | undefined {
   const active = ci.checks.find(c => c.status === 'in_progress')
     ?? ci.checks.find(c => !finished(c.status));
   if (!active) return 'CI · Checks finishing';
-  if (active.step) return `CI · ${active.name} · ${active.step.name} · step ${active.step.current} of ${active.step.total}`;
+  if (active.step) return `CI · ${active.step.name} · ${active.step.current} of ${active.step.total}`;
   return `CI · ${active.name} · ${active.status.replaceAll('_', ' ')}`;
 }
 

@@ -25,7 +25,7 @@ export const claudeCode: Harness = {
     signal.addEventListener('abort', abort, { once: true });
     if (signal.aborted) abort();
     const q = query({ prompt, options: {
-      cwd, model, env: { ...env, CLAUDE_CODE_MAX_OUTPUT_TOKENS: '256' }, abortController,
+      cwd, model, env: { ...env, CLAUDE_CODE_PROMPT_CACHE_TTL: '5m', CLAUDE_CODE_MAX_OUTPUT_TOKENS: '256' }, abortController,
       tools: [], mcpServers: {}, strictMcpConfig: true, settingSources: [],
       systemPrompt: 'You name conversations. Return only the requested JSON.',
       maxTurns: 1, persistSession: false,

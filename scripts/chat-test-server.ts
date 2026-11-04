@@ -12,6 +12,8 @@ import { DeliveryGit, DeliveryPending } from '../apps/server/src/threads/deliver
 import { git } from '../apps/server/src/git.js';
 
 const home = await mkdtemp(join(tmpdir(), 'accio-chat-browser-'));
+// Disposable encryption for this isolated fixture, including headless Linux runners.
+process.env.ACCIO_SECRET_KEY = Buffer.alloc(32, 42).toString('base64');
 const fixture = (name: string) => readFile(resolve('tests/fixtures', name));
 const token = 'isolated-chat-test-token';
 const image = await fixture('chat.png');
@@ -46,6 +48,16 @@ const subagentSteps: Record<string, [string, Record<string, string>][]> = {
 };
 const goalTurns = new Map<string, number>();
 const harness = new FakeHarness(async function* (run) {
+  if (run.prompt === 'Cache usage fixture') {
+    const message = { id: 'cache-response', content: [{ type: 'text' as const, text: 'Cache usage recorded.' }],
+      usage: { input_tokens: 100, cache_read_input_tokens: 800, cache_creation_input_tokens: 100,
+        cache_creation: { ephemeral_1h_input_tokens: 100, ephemeral_5m_input_tokens: 0 } } };
+    yield { type: 'stream_event', parent_tool_use_id: null, session_id: SESSION, event: { type: 'message_start', message } };
+    yield { type: 'assistant', parent_tool_use_id: null, session_id: SESSION, uuid: 'cache-fragment', message };
+    yield { type: 'assistant', parent_tool_use_id: null, session_id: SESSION, uuid: 'cache-fragment', message };
+    yield { type: 'result', subtype: 'success', is_error: false, session_id: SESSION };
+    return;
+  }
   // GLOSSARY: Goal. "/goal fixture …" works for three turns, then reports achieved; "/goal blocked fixture" reports blocked first.
   const goal = /Goal for this thread: (.+)/.exec(run.resourceInstructions ?? '')?.[1];
   if (goal?.includes('fixture')) {
@@ -222,7 +234,7 @@ Object.assign(harness, { generateText: async ({ prompt }: { prompt: string }) =>
   if (!prompt.includes('Naming fixture:')) throw new Error('No naming response for this fixture');
   return JSON.stringify({ title: prompt.includes('Use German') ? 'Anmeldung reparieren' : 'Fix login redirects', needsRefinement: false });
 } });
-const app = await startApp({ home, host: '127.0.0.1', port: Number(process.env.ACCIO_CHAT_TEST_PORT ?? 47481), hubPort: 0, token, webRoot: resolve('apps/web/dist') }, {
+const app = await startApp({ home, host: '127.0.0.1', port: Number(process.env.ACCIO_CHAT_TEST_PORT ?? 47481), hubPort: 0, token, webRoot: resolve(process.env.ACCIO_CHAT_TEST_WEB_ROOT ?? 'apps/web/dist') }, {
   harness,
   // Hosting is the external boundary under test. Git publication and thread state stay real.
   deliveryHosting: async (_cwd, args) => {

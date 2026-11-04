@@ -2,13 +2,14 @@ import { useMemo, useState, type FormEvent } from 'react';
 import type { ResourceScope, ResourcesState, SkillEntry, SkillSource } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { BookOpen, Plus } from '../app/icons';
-import { ConfirmDelete, SettingLink, SettingRow, SettingsSection } from '../app/Settings';
+import { SettingLink, SettingRow, SettingsFooter, SettingsSection } from '../app/Settings';
 import { useAction } from '../app/useAction';
 import { useProfiles } from '../profiles/profiles';
 import { useProjects } from '../projects/projects';
 import { isOptional, LoadError, scopeSummary, shortRevision, slugId, useResources } from '../resources/resources';
 import { ScopeEditor } from '../resources/ScopeEditor';
-import { Field } from '../resources/Field';
+import { Field, focusFirstInvalid } from '../resources/Field';
+import { MidPath } from '../projects/MidPath';
 
 const activeRevision = (state: ResourcesState, sourceId: string) => state.skills.find((s) => s.sourceId === sourceId)?.revision;
 
@@ -25,14 +26,13 @@ export function SkillsSettings({ sourceId, onOpen, onBack }: { sourceId?: string
       <p className="note">
         Skills come from Git repositories. A new skill is optional until you enable it for everything, a profile, or a project. Enabled skills are synced: threads read them from the hub’s copy at the revision you applied.
       </p>
-      <SettingsSection title="Skill sources">
-        {state.sources.length === 0 && <SettingRow title="No skill sources yet" description="Add a Git repository with one or more SKILL.md files." />}
+      <SettingsSection>
         {[...state.sources].sort((a, b) => a.name.localeCompare(b.name)).map((s) => {
           const skills = state.skills.filter((k) => k.sourceId === s.id);
           const enabled = skills.filter((k) => !isOptional(k.scope)).length;
           const rev = activeRevision(state, s.id);
           return (
-            <SettingLink key={s.id} icon={<BookOpen />} title={s.name} description={<>{skills.length} skill{skills.length === 1 ? '' : 's'} · {enabled} enabled, {skills.length - enabled} optional · {s.url}</>} onClick={() => onOpen(s.id)}>
+            <SettingLink key={s.id} icon={<BookOpen />} title={s.name} description={<span className="source-line"><span>{skills.length} skill{skills.length === 1 ? '' : 's'} · {enabled} enabled, {skills.length - enabled} optional ·</span><MidPath text={s.url} /></span>} onClick={() => onOpen(s.id)}>
               {rev && <code className="revision" title={rev}>{shortRevision(rev)}</code>}
             </SettingLink>
           );
@@ -59,13 +59,13 @@ function AddSource({ taken, onAdded, onCancel }: { taken: string[]; onAdded: (s:
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setTouched(true);
-    if (invalid) return;
+    if (invalid) return focusFirstInvalid(e.currentTarget);
     const saved = await run(() => client.call('skills.addSource', { id: slugId(name, taken), name: name.trim(), url: url.trim(), ref: ref.trim() || 'HEAD' }));
     if (saved) onAdded(saved);
   };
   return (
     <form className="settings-profile-form" onSubmit={submit} noValidate>
-      <SettingsSection title="New skill source">
+      <SettingsSection>
         <div className="setting-form">
           <Field label="Name" error={touched && problems.name}>
             {(p) => <input {...p} value={name} onChange={(e) => setName(e.target.value)} placeholder="spellbook" maxLength={120} autoFocus disabled={busy} />}
@@ -81,11 +81,7 @@ function AddSource({ taken, onAdded, onCancel }: { taken: string[]; onAdded: (s:
         </div>
       </SettingsSection>
       {error && <p className="error" role="alert">{error}</p>}
-      <footer className="settings-actions">
-        <span className="spacer" />
-        <button type="button" className="ghost" onClick={onCancel} disabled={busy}>Cancel</button>
-        <button type="submit" className="ghost primary" disabled={busy || (touched && invalid)}>{busy ? 'Adding…' : 'Add source'}</button>
-      </footer>
+      <SettingsFooter busy={busy} onCancel={onCancel} saveLabel={busy ? 'Adding…' : 'Add source'} saveDisabled={busy} dirty={!!(name || url || ref) && !busy} />
     </form>
   );
 }
@@ -121,8 +117,8 @@ function SourceDetail({ source, state, onDeleted }: { source: SkillSource; state
 
   return (
     <>
-      <SettingsSection title={source.name}>
-        <SettingRow title="Repository"><code>{source.url}</code></SettingRow>
+      <SettingsSection>
+        <SettingRow title="Repository"><MidPath text={source.url} /></SettingRow>
         <SettingRow title="Follows"><code>{source.ref}</code></SettingRow>
         <SettingRow title="Active revision" description="Threads get skills from this revision until you apply another.">
           {active ? <code title={active}>{shortRevision(active)}</code> : <span className="dim">None</span>}
@@ -182,9 +178,6 @@ function SourceDetail({ source, state, onDeleted }: { source: SkillSource; state
 
       <section className="settings-section">
         <h2>Skills</h2>
-        <p className="note section-note">
-          <b>Enable synced skill</b> keeps a skill managed by accio: it follows this source’s applied revision. <b>Copy into project</b> writes an independent copy to the project’s <code>.agents/skills/</code> for you to commit and edit; it never updates.
-        </p>
         <div className="settings-card">
           {skills.length === 0 && <SettingRow title="No skills in this revision" />}
           {skills.map((s) => <SkillRow key={s.id} skill={s} />)}
@@ -192,12 +185,8 @@ function SourceDetail({ source, state, onDeleted }: { source: SkillSource; state
       </section>
 
       {del.error && <p className="error" role="alert">{del.error}</p>}
-      <footer className="settings-actions">
-        <ConfirmDelete label="Delete source" busy={del.busy} confirm={`Delete ${source.name} and its ${skills.length} skill${skills.length === 1 ? '' : 's'}`}
-          onDelete={async () => { if (await del.run(async () => (await client.call('skills.deleteSource', { id: source.id }), true))) onDeleted(); }} />
-        <span className="spacer" />
-        <button type="button" className="ghost" onClick={onDeleted}>Done</button>
-      </footer>
+      <SettingsFooter remove={{ name: source.name, run: async () => { if (await del.run(async () => (await client.call('skills.deleteSource', { id: source.id }), true))) onDeleted(); }, consequence: `Also removes its ${skills.length} skill${skills.length === 1 ? '' : 's'}.` }} busy={del.busy} onCancel={onDeleted} />
+
     </>
   );
 }
@@ -222,11 +211,11 @@ function SkillRow({ skill }: { skill: SkillEntry }) {
         <span className="setting-text">
           <b>{skill.name}</b>
           {skill.description && <small>{skill.description}</small>}
-          <small className={isOptional(skill.scope) ? 'dim' : 'on-text'}>{isOptional(skill.scope) ? 'Optional' : `Enabled: ${scopeSummary(skill.scope, profiles, projects?.projects)}`}</small>
+          <small className={isOptional(skill.scope) ? 'dim' : 'on-text'}>{isOptional(skill.scope) ? 'Optional' : `On for ${scopeSummary(skill.scope, profiles, projects?.projects)}`}</small>
         </span>
         <span className="setting-value">
-          <button type="button" className="ghost" aria-expanded={open === 'scope'} onClick={() => setOpen(open === 'scope' ? undefined : 'scope')}>Enable synced skill</button>
-          <button type="button" className="ghost" aria-expanded={open === 'copy'} onClick={() => { setOpen(open === 'copy' ? undefined : 'copy'); setCopied(undefined); }}>Copy into project</button>
+          <button type="button" className="ghost" title="Keep it managed by Accio: it follows this source's applied revision" aria-expanded={open === 'scope'} onClick={() => setOpen(open === 'scope' ? undefined : 'scope')}>Enable for…</button>
+          <button type="button" className="ghost" title="Write an independent copy to the project's .agents/skills/ to commit and edit; it never updates" aria-expanded={open === 'copy'} onClick={() => { setOpen(open === 'copy' ? undefined : 'copy'); setCopied(undefined); }}>Copy into project</button>
         </span>
       </div>
       {open === 'scope' && (
@@ -260,7 +249,7 @@ function SkillRow({ skill }: { skill: SkillEntry }) {
               <div className="update-row">
                 <span className="spacer" />
                 <button type="button" className="ghost primary" disabled={copy.busy || !checkoutId}
-                  onClick={async () => { const r = await copy.run(() => client.call('skills.copy', { id: skill.id, checkoutId })); if (r) setCopied(r.path); }}>
+                  onClick={async () => { setCopied(undefined); const r = await copy.run(() => client.call('skills.copy', { id: skill.id, checkoutId })); if (r) setCopied(r.path); }}>
                   {copy.busy ? 'Copying…' : 'Copy'}
                 </button>
               </div>

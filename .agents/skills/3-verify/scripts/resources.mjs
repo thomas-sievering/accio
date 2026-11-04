@@ -33,7 +33,6 @@ export default async function journey({ page, runDir, home, fixture, action, cap
   await action('tools/settings: empty state, preset, validation and machine-wide save', async () => {
     await button('Settings').click();
     await nav('Tools').click();
-    await page.getByText('No tools yet', { exact: true }).waitFor();
     await page.getByRole('button', { name: /^Add tool / }).click();
     await button('Use preset').click();
     assert.equal(await textbox('npm package').inputValue(), '@playwright/cli');
@@ -44,7 +43,7 @@ export default async function journey({ page, runDir, home, fixture, action, cap
     await textbox('Version').fill('0.1.23');
     assert.equal(await page.getByRole('checkbox').count(), 0);
     await button('Add tool').click();
-    await page.getByRole('heading', { name: 'Playwright CLI', exact: true }).waitFor();
+    await page.getByRole('main').getByRole('navigation').getByText('Playwright CLI', { exact: true }).waitFor();
     await page.getByRole('group', { name: /\(this machine\): Ready$/ }).waitFor({ timeout: 180_000 });
     const tool = (await resources()).tools.find((t) => t.id === 'playwright-cli');
     assert(!('scope' in tool));
@@ -61,7 +60,7 @@ export default async function journey({ page, runDir, home, fixture, action, cap
     await textbox('Version').fill('0.0.1');
     await textbox('Executable').fill('accio-missing');
     await button('Add tool').click();
-    await page.getByRole('heading', { name: 'Broken tool', exact: true }).waitFor();
+    await page.getByRole('main').getByRole('navigation').getByText('Broken tool', { exact: true }).waitFor();
     await page.getByRole('group', { name: /\(this machine\): Needs attention$/ }).waitFor({ timeout: 180_000 });
     await page.getByText(/^No repair thread: Sign in to a provider/).waitFor();
     assert(await button('Start repair thread').isEnabled());
@@ -74,7 +73,6 @@ export default async function journey({ page, runDir, home, fixture, action, cap
 
   await action('mcp/settings: bearer server available everywhere, token never shown', async () => {
     await nav('MCP servers').click();
-    await page.getByText('No MCP servers yet', { exact: true }).waitFor();
     await page.getByRole('button', { name: /^Add MCP server / }).click();
     await textbox('Name').fill('Linear (work)');
     await textbox('Server URL').fill('not a url');
@@ -82,7 +80,7 @@ export default async function journey({ page, runDir, home, fixture, action, cap
     await textbox('Server URL').fill('https://example.invalid/mcp');
     await page.getByRole('combobox', { name: 'Authentication' }).selectOption('bearer');
     await button('Add MCP server').click();
-    await page.getByRole('heading', { name: 'Linear (work)', exact: true }).waitFor();
+    await page.getByRole('main').getByRole('navigation').getByText('Linear (work)', { exact: true }).waitFor();
     await textbox('Bearer token').fill('verify-secret-token');
     await button('Save token').click();
     await page.getByText(/A token is saved on the hub/).waitFor();
@@ -102,7 +100,7 @@ export default async function journey({ page, runDir, home, fixture, action, cap
     await textbox('Server URL').fill('https://example.invalid/mcp');
     await page.getByRole('combobox', { name: 'Authentication' }).selectOption('oauth');
     await button('Add MCP server').click();
-    await page.getByRole('heading', { name: 'Linear (personal)', exact: true }).waitFor();
+    await page.getByRole('main').getByRole('navigation').getByText('Linear (personal)', { exact: true }).waitFor();
     await page.getByText(/Signed out\. Threads can’t use/).waitFor();
     await button('Sign in').click();
     const alert = page.getByRole('alert');
@@ -119,7 +117,7 @@ export default async function journey({ page, runDir, home, fixture, action, cap
     await textbox('Command').fill('node');
     await page.getByRole('textbox', { name: 'Arguments, one per line' }).fill('-e\nprocess.stdin.resume()');
     await button('Add MCP server').click();
-    await page.getByRole('heading', { name: 'Local echo', exact: true }).waitFor();
+    await page.getByRole('main').getByRole('navigation').getByText('Local echo', { exact: true }).waitFor();
     const m = (await resources()).mcps.find((x) => x.name === 'Local echo');
     assert.deepEqual(m.args, ['-e', 'process.stdin.resume()']);
     assert.equal(m.auth, 'none');
@@ -138,12 +136,11 @@ export default async function journey({ page, runDir, home, fixture, action, cap
 
   await action('skills/settings: add a Git source; skills start optional', async () => {
     await nav('Skills').click();
-    await page.getByText('No skill sources yet', { exact: true }).waitFor();
     await page.getByRole('button', { name: /^Add skill source / }).click();
     await textbox('Name').fill('Verify skills');
     await textbox('Git URL').fill(source);
     await button('Add source').click();
-    await page.getByRole('heading', { name: 'Verify skills', exact: true }).waitFor({ timeout: 60_000 });
+    await page.getByRole('main').getByRole('navigation').getByText('Verify skills', { exact: true }).waitFor({ timeout: 60_000 });
     await page.getByText('First description').waitFor();
     await page.getByText('Optional', { exact: true }).waitFor();
   });
@@ -151,7 +148,7 @@ export default async function journey({ page, runDir, home, fixture, action, cap
     await button('Enable synced skill').click();
     await page.getByRole('group', { name: 'Profiles' }).getByRole('checkbox', { name: 'Verify personal' }).check();
     await button('Save').click();
-    await page.getByText('Enabled: Verify personal').waitFor();
+    await page.getByText('On for Verify personal').waitFor();
     assert.equal((await resources()).skills[0].scope.profileIds.length, 1);
   });
 
@@ -193,19 +190,21 @@ export default async function journey({ page, runDir, home, fixture, action, cap
   });
   await capture('skills-copied');
 
-  await action('projects/sheet: only skills have project selections', async () => {
+  await action('projects/settings: only skills have project selections', async () => {
+    // The Filter gear opens the project's Settings page.
     await button('Back').click();
     await button('Filter threads').click();
     await button('verify-project settings').click();
-    const dialog = page.getByRole('dialog');
+    const dialog = page.getByRole('main');
     const skill = dialog.getByRole('group', { name: 'Skills' }).getByRole('checkbox', { name: /^demo/ });
     assert(await skill.isChecked());
     assert(await skill.isDisabled());
-    await dialog.getByText('On for profile Verify personal').first().waitFor();
+    await dialog.getByText('On for Verify personal').first().waitFor();
     assert.equal(await dialog.getByRole('group', { name: 'MCP servers' }).count(), 0);
     assert.equal(await dialog.getByRole('group', { name: 'Tools' }).count(), 0);
     await capture('project-sheet-resources');
-    await button('Close').click();
+    await button('Cancel').click();
+    await button('Back').click();
   });
   await action('profiles/settings: only skills have profile selections', async () => {
     await button('Settings').click();

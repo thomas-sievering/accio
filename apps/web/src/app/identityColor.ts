@@ -1,6 +1,6 @@
 /**
- * Project colours drawn from the Herdr reference. An id always selects the
- * same colour.
+ * Project colours drawn from the Herdr reference. A seed always selects the
+ * same colour; callers pass the project name, which survives restarts.
  */
 const COLORS = ['#ce885d', '#bb9b65', '#b3a26f', '#86a66f', '#5ea66f', '#53a69a', '#5d9fae', '#6586d8', '#8876db', '#a779b2', '#c0808d'];
 

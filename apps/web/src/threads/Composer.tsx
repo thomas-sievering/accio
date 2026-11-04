@@ -35,7 +35,7 @@ export function Composer({
   draftId: string;
 }) {
   const client = useClient();
-  const { shelves, selectedId, select } = useThreads();
+  const { threads, shelves, selectedId, select } = useThreads();
   const storageKey = `accio:${client.hubId}:composer:${draftId}`;
   const [text, updateText] = useState(() => sessionStorage.getItem(storageKey) ?? '');
   const setText = (value: string) => { updateText(value); if (value) sessionStorage.setItem(storageKey, value); else sessionStorage.removeItem(storageKey); };
@@ -45,6 +45,9 @@ export function Composer({
   const input = useRef<HTMLTextAreaElement>(null);
   const queuing = !!onStop && controlHeld;
   const sendable = !!text.trim() || !!attachment;
+  const repairThread = error?.includes('A repair thread was started')
+    ? threads?.filter((t) => t.repairToolId).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
+    : undefined;
 
   useEffect(() => {
     const modifier = (e: KeyboardEvent) => setControlHeld(e.ctrlKey || e.metaKey);
@@ -103,7 +106,10 @@ export function Composer({
   return (
     <div className="composer-wrap">
       {actions}
-      {error && <p className="error composer-error">{error}</p>}
+      {error && <p className="error composer-error" role="status">{error}
+        {/* A send refused for a broken tool points at the repair already under way. */}
+        {repairThread && <> <button type="button" className="link" onClick={() => select(repairThread.id)}>Open repair thread</button></>}
+      </p>}
       <form className="composer" onSubmit={(e: FormEvent) => { e.preventDefault(); void submit(queuing ? 'queue' : 'steer'); }}>
         {attachment && <div className="composer-chips">
           <span className="composer-chip">

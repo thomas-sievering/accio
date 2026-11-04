@@ -1,11 +1,11 @@
 import type { CheckoutView, ChoicePick, ProjectView, ThreadView } from '@accio/protocol';
 import { type ModelSelection } from '@accio/protocol';
-import { useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { useClient } from '../app/connection';
 import { useLive } from '../app/useLive';
 import { accountForModel, defaultModel, useProfiles } from '../profiles/profiles';
 import { LimitsIndicator } from '../limits/LimitsIndicator';
-import { FolderLink } from '../projects/FolderLink';
+import { emitAppEvent } from '../app/appEvents';
 import { ProjectMark } from '../projects/ProjectMark';
 import { useProjects } from '../projects/projects';
 import { Composer } from './Composer';
@@ -17,8 +17,10 @@ import { MachinePicker } from './MachinePicker';
 import { ModelPicker } from './ModelPicker';
 import { ThreadNotice } from './ThreadNotice';
 import { ThreadActionsMenu } from './ThreadActionsMenu';
+import { TitleEdit } from './ThreadMenu';
 import { EditableTitle } from './EditableTitle';
 import { Transcript } from './Transcript';
+import { CacheUsage } from './CacheUsage';
 import { useReportPendingSecrets } from '../secrets/pendingSecrets';
 import { useThreads, useTranscript } from './threads';
 
@@ -39,11 +41,13 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
   useReportPendingSecrets(thread.id, items);
   const running = thread.status === 'running';
   const [savingModel, setSavingModel] = useState(false);
+  const [renaming, setRenaming] = useState(false);
   const lastTurn = items?.findLast((item) => item.kind === 'user')?.turnId;
   const blocked = thread.status === 'failed' || thread.status === 'interrupted';
   const notices = blocked ? items?.filter((item) => item.kind === 'notice' && item.turnId === lastTurn) : undefined;
   const detail = notices?.map((item) => 'text' in item ? item.text : '').join(' ') || undefined;
-  const visibleItems = blocked ? items?.filter((item) => item.kind !== 'notice' || item.turnId !== lastTurn) : items;
+  // The delivery chip says where it shipped; older threads still hold a receipt notice for it.
+  const visibleItems = useMemo(() => items?.filter((item) => item.kind !== 'notice' || !/^delivery:.*:completed$/.test(item.id) && !(blocked && item.turnId === lastTurn)), [items, blocked, lastTurn]);
   // The option ticked for the next message; it belongs to this thread only.
   const [pending, setPending] = useState<{ threadId: string; pick: ChoicePick }>();
   const pick = pending?.threadId === thread.id ? pending.pick : undefined;
@@ -53,7 +57,7 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
 
   return (
     <>
-      <PaneHeader title={thread.title} titleEditor={<EditableTitle key={thread.id} thread={thread} />} {...place} checkout={thread.workspace && !thread.workspace.releasedAt && place.checkout ? { ...place.checkout, path: thread.workspace.path } : place.checkout} actions={<ThreadActionsMenu key={thread.id} thread={thread} items={items} />} />
+      <PaneHeader title={thread.title} titleEditor={renaming ? <TitleEdit thread={thread} className="header-rename" onDone={() => setRenaming(false)} /> : <EditableTitle key={thread.id} thread={thread} />} {...place} checkout={thread.workspace && !thread.workspace.releasedAt && place.checkout ? { ...place.checkout, path: thread.workspace.path } : place.checkout} actions={<ThreadActionsMenu key={thread.id} thread={thread} items={items} onRename={() => setRenaming(true)} />} />
       {visibleItems ? <PendingPick.Provider value={{ pick, setPick, enabled: !running }}>
         <Transcript threadId={thread.id} items={visibleItems} working={running} onOpenSecrets={onOpenSecrets} />
       </PendingPick.Provider> : (
@@ -72,7 +76,7 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
         target={thread.id}
         draftId={`thread:${thread.id}`}
         onStop={running ? async () => void (await client.call('threads.stop', { threadId: thread.id })) : undefined}
-        placeholder={running ? 'Send a correction or follow-up…' : thread.settledAt ? 'Send a message to reopen this thread…' : `Ask ${thread.model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}
+        placeholder={running ? 'Enter steers · Ctrl+Enter queues' : thread.settledAt ? 'Send a message to reopen this thread…' : `Ask ${thread.model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}
         attachment={pick && pickLabel ? { label: pickLabel, onRemove: () => setPick(undefined) } : undefined}
         onSend={async (text, mode) => {
           await client.call('threads.send', { threadId: thread.id, text, mode, ...(pick ? { pick } : {}) });
@@ -85,6 +89,7 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
             finally { setSavingModel(false); }
           }} />
           {place.profile && <LimitsIndicator active={active} account={accountForModel(place.profile, thread.model)} onOpen={() => onOpenLimits(place.profile!.id)} />}
+          <CacheUsage items={items ?? []} />
         </>}
       />
     </>
@@ -106,7 +111,8 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
   const local = machines?.find((m) => m.thisMachine);
   const machineId = chosenMachineId ?? local?.id;
   const machine = machines?.find((m) => m.id === machineId);
-  const unavailable = !machine?.connected;
+  // Until the list loads, a send goes to this machine, as the server does without a machine id.
+  const unavailable = !!machines && !machine?.connected;
   const remote = !!machine && !machine.thisMachine;
   const [starting, setStarting] = useState<string>();
 
@@ -170,7 +176,9 @@ function PaneHeader(props: {
         <span className="thread-where" title={checkout?.path}>
           {project && <ProjectMark id={project.id} size={16} />}
           <span className="thread-project-name">
-            {checkout ? <FolderLink path={checkout.path}>{project?.name ?? 'unknown project'}</FolderLink> : project?.name ?? 'No project'}
+            {project
+              ? <button type="button" className="thread-project-link" title={`${project.name} settings${checkout ? ` · ${checkout.path}` : ''}`} onClick={() => emitAppEvent('project.open', { id: project.id })}>{project.name}</button>
+              : checkout ? 'unknown project' : 'No project'}
           </span>
         </span>
         <span className="faint" aria-hidden="true">/</span>

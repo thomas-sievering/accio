@@ -31,7 +31,7 @@ export default async function ({page, context, home, runDir, action, capture}) {
       await page.getByRole('textbox',{name:'Hub name',exact:true}).fill('Other dev');
       await page.getByRole('textbox',{name:'Hub address',exact:true}).fill('http://127.0.0.1:'+ready.port);
       await page.getByRole('textbox',{name:'Pairing code',exact:true}).fill(code); await button('Connect hub').click();
-      await page.getByRole('heading',{name:'Set up accio',exact:true}).waitFor();
+      await page.getByRole('heading',{name:'Set up Accio',exact:true}).waitFor();
       await openSettings();
       await button('Hub: Other dev').waitFor();
       await button('Back').click();
@@ -40,7 +40,7 @@ export default async function ({page, context, home, runDir, action, capture}) {
       await page.getByPlaceholder(/^personal, work/).fill('Same profile'); await button('Continue').click();
       await page.getByText('Choose an account for Same profile',{exact:true}).waitFor();
       await button('Settings').click(); await page.locator('.sidebar nav').getByRole('button',{name:'Accounts',exact:true}).click();
-      await page.getByRole('button',{name:/^Add ChatGPT account /}).click();
+      await page.getByRole('button',{name:/^Add ChatGPT account/}).click();
       await page.getByRole('textbox',{name:'Account name',exact:true}).fill('Other account'); await button('Add account').click();
       await button('Sign in with ChatGPT').waitFor(); await button('Cancel').click(); await button('Back').click();
     });
