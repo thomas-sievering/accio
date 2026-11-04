@@ -11,6 +11,7 @@ import { ThreadRow } from '../threads/ThreadRow';
 import { placeOf } from '../threads/shelves';
 import { useThreads } from '../threads/threads';
 import { ProjectMark } from './ProjectMark';
+import { ProfileLabel } from '../profiles/ProfileLabel';
 
 const TABS = [{ id: 'threads', label: 'Threads' }, { id: 'commits', label: 'Commits' }, { id: 'logs', label: 'Logs' }] as const;
 type Tab = (typeof TABS)[number]['id'];
@@ -44,6 +45,7 @@ export function ProjectDashboard({ project, onClose }: { project: ProjectView; o
           <b ref={heading} role="heading" aria-level={1} tabIndex={-1}>{project.name}</b>
         </div>
         <span className="spacer" />
+        <ProfileLabel profileId={project.profileId} />
         <button type="button" className="side-icon" title={`${project.name} settings`} aria-label={`${project.name} settings`}
           onClick={() => emitAppEvent('settings.open', { section: 'projects', projectId: project.id, fromDashboard: true })}><Settings /></button>
         <button type="button" className="side-icon" title="Close (Esc)" aria-label="Close dashboard" onClick={onClose}><Close /></button>

@@ -1,5 +1,17 @@
 
 /* Main */
+.profile-label {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 140px;
+  color: var(--dim);
+  font-size: 11px;
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .thread-surface {
   display: contents;
 }
