@@ -1,10 +1,10 @@
 import { fork, type ChildProcess } from 'node:child_process';
-import { createConnection, createServer } from 'node:net';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { JsonFile } from '@accio/persistence';
 import { UserError } from '../rpc/router.js';
+import { freePort, listening } from '../ports.js';
 import { cleanExecutionEnv } from './harnessEnv.js';
 
 type Preview = { pid: number; port: number };
@@ -80,17 +80,3 @@ export class Previews {
 }
 
 function alive(pid: number) { try { process.kill(pid, 0); return true; } catch { return false; } }
-function listening(port: number): Promise<boolean> {
-  return new Promise(resolve => {
-    const socket = createConnection({ host: '127.0.0.1', port });
-    const finish = (connected: boolean) => { socket.destroy(); resolve(connected); };
-    socket.once('connect', () => finish(true)); socket.once('error', () => finish(false)); socket.setTimeout(300, () => finish(false));
-  });
-}
-async function freePort(): Promise<number> {
-  const server = createServer();
-  await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
-  const port = (server.address() as { port: number }).port;
-  await new Promise<void>(resolve => server.close(() => resolve()));
-  return port;
-}

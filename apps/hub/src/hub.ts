@@ -14,7 +14,7 @@ import {
 } from './claudeOAuth.js';
 import { JsonStore } from '@accio/persistence';
 import type { ProviderId } from '@accio/protocol';
-import { loadAccounts, type AccountData, type StoredAccount } from './migrateAccounts.js';
+import { loadAccounts, type AccountData } from './migrateAccounts.js';
 import { OpenAIAuth } from './openaiAuth.js';
 import { AccountLimits, LimitsReadError } from './limits.js';
 import { anthropicLimits, openaiLimits, retryAfterMs } from './providerLimits.js';

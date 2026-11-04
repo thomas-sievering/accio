@@ -11,6 +11,7 @@ import { useAction } from '../app/useAction';
 import { useResources } from '../resources/resources';
 import { ToolStatusCard } from '../tools/ToolStatusCard';
 import { OnboardMachine } from './OnboardMachine';
+import { MachineUpdate } from './MachineUpdate';
 
 /** The machines known to the hub, including those currently offline. */
 export function MachineSettings({ machineId, onOpen, onBack, onOpenThread }: { machineId?: string; onOpen: (id: string) => void; onBack: () => void; onOpenThread: (threadId: string) => void }) {
@@ -77,7 +78,7 @@ function MachineDetail({ machine, onBack, onOpenThread }: { machine: MachineView
           <StatusPill tone={machine.connected ? 'ok' : undefined}>{machine.connected ? 'Connected' : 'Offline'}</StatusPill>
         </SettingRow>
         <SettingRow title="Platform"><code>{machine.platform}</code></SettingRow>
-        <SettingRow title="Accio version"><code>{machine.version}</code></SettingRow>
+        <MachineUpdate machine={machine} />
         {!machine.connected && <SettingRow title="Last seen"><span>{new Date(machine.lastSeen).toLocaleString()}</span></SettingRow>}
       </SettingsSection>
       <SettingsSection title="Installed harnesses">

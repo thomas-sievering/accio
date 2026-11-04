@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { cp, lstat, mkdir, readFile, readdir, realpath } from 'node:fs/promises';
-import { isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { join, relative, resolve, sep } from 'node:path';
 import { optionalScope } from '@accio/hub';
 import type { SkillEntry, SkillSource } from '@accio/protocol';
 import { runCommand, type CommandRunner } from './process.js';

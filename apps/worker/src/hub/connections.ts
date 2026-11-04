@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { access } from 'node:fs/promises';
 import { JsonFile } from '@accio/persistence';
 import { HubClient, hubAddress, remoteSettings, remoteResources, remoteMcp, remoteSecrets, type SecretsAccess, type HubSnapshot, type HarnessInstall } from '@accio/hub';
-import type { Events, HubConnectionView, MachineInfo, MethodName } from '@accio/protocol';
+import type { Events, HubConnectionView, MachineInfo } from '@accio/protocol';
 import { Router, UserError, type Broadcast } from '../rpc/router.js';
 import { Profiles } from '../profiles/profiles.js';
 import { Machines } from '../machine/machine.js';
@@ -27,6 +27,8 @@ import type { ClaudeModelSource } from '../harnesses/catalog.js';
 import { harnessEnv } from '../threads/harnessEnv.js';
 import { configFolderOf } from '../profiles/claudeConfigFolder.js';
 import { Relay } from '../relay/relay.js';
+import type { Updates } from '../machine/update.js';
+import { machineTools } from '../machine/machineTools.js';
 
 export type SavedHub = { id: string; name: string; url: string; token: string; home: string; local: boolean; managed?: boolean; snapshot?: HubSnapshot };
 export type HubWorkspace = { client: HubClient; router: Router; relay: Relay; profiles: Profiles; machines: Machines; models: Models; projects: Projects; threads: Threads; tools: AccioTools; resources: ResourceManager; secrets: SecretsAccess; home: string; initialize(origin: string): void; close(): Promise<void> };
@@ -42,7 +44,7 @@ export class HubConnections {
   private closing = false;
   private origin?: string;
   initialized = false;
-  constructor(private home: string, private here: MachineInfo, private harnesses: HarnessInstall[], private runners: Record<string, Harness>, private send: (event: any, data: any, hubId?: string) => void, private resourceCommand?: CommandRunner, private claudeModelSource?: ClaudeModelSource, private deliveryHosting?: DeliveryHosting) {
+  constructor(private home: string, private here: MachineInfo, private harnesses: HarnessInstall[], private runners: Record<string, Harness>, private send: (event: any, data: any, hubId?: string) => void, private resourceCommand?: CommandRunner, private claudeModelSource?: ClaudeModelSource, private deliveryHosting?: DeliveryHosting, private updates?: Updates) {
     this.file = new JsonFile(join(home, 'hub-connections.json'), () => []);
     this.register();
   }
@@ -71,6 +73,7 @@ export class HubConnections {
       machines: () => refs.machines?.views() ?? [],
       router: () => router,
       machineName: (id) => settings.machine(id)?.name,
+      machineConnected: (id) => settings.machines().some((m) => m.id === id && m.connected),
       send: (event, data) => this.send(event, data, record.id),
     });
     const broadcast: Broadcast = (event, data) => {
@@ -98,6 +101,23 @@ export class HubConnections {
       shippedNoteTool((id, note) => threads.recordShippedNote(id, note), (id) => threads.deliveryRunning(id)),
       projectSettingsTool((id, app) => threads.saveProjectSettings(id, app), (id) => threads.projectSetupRunning(id)),
       readThreadTool((id, offset, limit) => threads.readThread(id, offset, limit), (id) => threads.handedOff(id))]);
+    const updates = this.updates;
+    if (updates) {
+      router.on('update.status', () => updates.status())
+        .on('update.start', () => updates.start())
+        .on('app.screenshot', async ({ script }) => ({ png: (await updates.screenshot(script)).toString('base64') }));
+      tools.add(...machineTools({
+        here: this.here.id,
+        machines: () => settings.machines(),
+        folder: join(this.home, 'screenshots'),
+        call: async (method, params) => {
+          const response = await router.handle({ id: 0, method, params });
+          if (!response?.ok) throw new Error(response?.error ?? 'Invalid request');
+          return response.result as never;
+        },
+      }));
+    }
+    const stopUpdates = updates?.onChange((view) => { relay.emit('update.changed', view); this.send('update.changed', view, record.id); });
     const secrets = remoteSecrets(client);
     const threads = refs.threads = new Threads(record.home, profiles, projects, this.runners, broadcast, models, machines, secrets, tools, this.deliveryHosting); await threads.load(); threads.register(router);
     // GLOSSARY: Relay. Other machines' threads join this list; calls about them go to their machine.
@@ -121,7 +141,7 @@ export class HubConnections {
     };
     workspace = { client, router, relay, profiles, machines, models, projects, threads, tools, resources, secrets, home: record.home,
       initialize: origin => { if (!initialized) relay.start(record.url, record.token); if (!initialized) void projectApps.load().catch(error => console.error('[project apps] startup failed', error)); tools.listen(record.id === this.defaultId ? origin : `${origin}/hubs/${record.id}`); initialized = true; continueAfterRestart(); if (client.status === 'connected') reconciliation = resources.reconcile().catch(error => console.error('[resources] startup check failed', error)); },
-      close: async () => { await relay.close(); await projectApps.close(); await threads.close(); await secrets.close(); await resources.close(); await reconciliation; await profiles.close(); await projects.close(); await client.close(); } };
+      close: async () => { stopUpdates?.(); await relay.close(); await projectApps.close(); await threads.close(); await secrets.close(); await resources.close(); await reconciliation; await profiles.close(); await projects.close(); await client.close(); } };
     this.workspaces.set(record.id, workspace);
     client.onChanged(() => { this.announce(); broadcast('resources.changed', resources.state()); relay.announce(); continueAfterRestart(); });
     if (client.status === 'connected') { await profiles.load(); await profiles.syncReferences(); }

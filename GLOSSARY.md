@@ -28,6 +28,14 @@ _Avoid_: Server (for the role), machine (for the process), agent, sub-agent
 The hub passing messages between workers on different machines, so you can read and drive a thread from any client. The thread stays on its worker's machine; nothing is copied. Each client lists every machine's threads together, with the owning machine's name on the others. While that machine is offline its threads stay listed from the last list it sent, greyed and read-only. A new thread can start on another machine that has a checkout of the same repository, or on any machine for No project. Images, files and Open app on another machine's thread are not relayed yet. See the [relay plan](docs/plans/thread-relay.md).
 _Avoid_: Sync (for threads), tunnel
 
+**Update**:
+Bringing a machine's Accio to the latest `main`: it fast-forwards the checkout the desktop app runs from, installs, builds and restarts, and its interrupted turns continue by themselves. A failed install or build resets to the previous commit and rebuilds it while the app keeps running. Only a clean checkout of `main` can update. Started from Settings → Machines or by a thread through the app_update accio tool, on this machine or, through the relay, on another one.
+_Avoid_: Upgrade, deploy, self-update (in UI text)
+
+**App screenshot**:
+A PNG of a machine's Accio desktop window, which a thread takes through the app_screenshot accio tool, on its own machine or another one through the relay. A script can run in the window first to open the view to capture.
+_Avoid_: Capture (as a noun), snapshot
+
 **Shared settings**:
 Everything the hub stores and hands to every paired machine, so that you change it once from any client: the profiles with their providers and accounts, which project belongs to which profile, the harnesses, skill sources, MCP servers, and each machine's profile folders. A few of them apply to one machine only, such as its profile folders, but they are still stored on the hub. A client keeps only its own look and feel, such as the theme.
 _Avoid_: Config, fleet, machine settings (for settings stored on the hub)
