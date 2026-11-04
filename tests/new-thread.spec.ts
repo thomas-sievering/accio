@@ -37,7 +37,12 @@ test('keyboard focus visibly reveals a complete title without moving adjacent ro
   await expect(tip).toContainText('Effort:');
   await page.mouse.move(899, 5);
   await page.getByRole('searchbox', { name: 'Search threads', exact: true }).focus();
+  // A long search scrolls its text horizontally; blurring it resets that scroll.
+  // That unrelated input scroll must not dismiss the row's keyboard tooltip.
+  await expect.poll(() => search.evaluate(el => el.scrollLeft)).toBeGreaterThan(0);
   await renamed.focus();
+  await expect.poll(() => search.evaluate(el => el.scrollLeft)).toBe(0);
+  await expect(renamed).toBeFocused();
   await expect(tip).toHaveText(title);
   await page.screenshot({ path: info.outputPath('full-title-keyboard.png') });
   await page.keyboard.press('Escape');
