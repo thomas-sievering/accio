@@ -35,7 +35,7 @@ export function Composer({
   draftId: string;
 }) {
   const client = useClient();
-  const { threads, select } = useThreads();
+  const { threads, shelves, selectedId, select } = useThreads();
   const storageKey = `accio:${client.hubId}:composer:${draftId}`;
   const [text, updateText] = useState(() => sessionStorage.getItem(storageKey) ?? '');
   const setText = (value: string) => { updateText(value); if (value) sessionStorage.setItem(storageKey, value); else sessionStorage.removeItem(storageKey); };
@@ -126,6 +126,13 @@ export function Composer({
           autoFocus
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
+            if (e.key === 'Tab' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !e.nativeEvent.isComposing && e.keyCode !== 229) {
+              const next = shelves.open[(shelves.open.findIndex((thread) => thread.id === selectedId) + 1) % shelves.open.length];
+              if (next && next.id !== selectedId) {
+                e.preventDefault();
+                select(next.id);
+              }
+            }
             if (e.key === 'Enter' && !e.shiftKey && !e.altKey && !e.nativeEvent.isComposing && e.keyCode !== 229) {
               e.preventDefault();
               if (!e.repeat) void submit(onStop && (e.ctrlKey || e.metaKey) ? 'queue' : 'steer');
