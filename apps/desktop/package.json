@@ -11,6 +11,6 @@
     "electron": "^45.2.1"
   },
   "dependencies": {
-    "@accio/server": "workspace:*"
+    "@accio/worker": "workspace:*"
   }
 }

@@ -1,5 +1,5 @@
 {
-  "name": "@accio/server",
+  "name": "@accio/worker",
   "private": true,
   "type": "module",
   "main": "dist/main.js",

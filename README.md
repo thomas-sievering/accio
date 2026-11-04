@@ -7,7 +7,7 @@ Runs coding threads in Claude Code and Codex on your own machines, keeping each 
 - **Hub.** accio runs its own hub (`apps/hub`): a standalone service, at home or locally, that holds accounts, profiles, shared settings, saved secrets and the model proxy. It never runs threads (ADR 0009). Machines save named hub connections under Settings / Hubs and pair with a one-time code; the hub's startup or `--pair` command issues the first one. Each window selects its own hub; running work stays on its hub (ADR 0014).
 - **Accounts.** Named Claude and ChatGPT accounts under Settings / Accounts. Press **Sign in with Claude** or **Sign in with ChatGPT**, approve in the system browser, and sign-in finishes automatically: a loopback receiver on this PC relays the callback to the hub, which keeps the tokens (ADR 0014, superseding the paste-code flow of ADR 0007). New sign-ins need accio running on the browser's PC.
 - **Profiles** each select Claude and ChatGPT accounts in order (the hub picks one per request by remaining allowance and reset time, ADR 0016) and get their own config folders under `~/.accio/profiles/<id>/`; your regular `~/.claude` and `~/.codex` are untouched. These are credential-routing boundaries, not sandboxes: harnesses run with full permissions (ADR 0005).
-- **Machines** run the threads with the Claude Agent SDK and a bundled Codex app-server, in owned Git worktrees, and serve accio tools to harnesses over MCP (ADR 0011). Ship / Prepare for review deliver through Git and optional PRs ([ADR 0015](docs/adr/0015-threads-own-delivery-with-optional-pull-requests.md), [delivery notes](docs/plans/thread-delivery.md)).
+- **Clients** let you read threads, send prompts and change settings. **Workers** on connected machines execute turns with the Claude Agent SDK and a bundled Codex app-server, in owned Git worktrees, and serve accio tools to harnesses over MCP (ADR 0011). A machine can run either role or both; currently the desktop app starts both, and the web client is served by a worker. Standalone web and iOS clients are planned. Ship / Prepare for review deliver through Git and optional PRs ([ADR 0015](docs/adr/0015-threads-own-delivery-with-optional-pull-requests.md), [delivery notes](docs/plans/thread-delivery.md)).
 - **Secrets** requested by a thread are entered privately, saved encrypted on the hub per profile and project, and delivered as short-lived files (ADR 0013). Off Windows, provision `ACCIO_SECRET_KEY` (32-byte base64) in the hub's environment and back it up separately.
 - **Tools, MCP servers and skills** are managed by the hub under Settings (ADR 0012).
 
@@ -17,8 +17,8 @@ accio uses pnpm (pinned in `package.json`; `corepack enable pnpm` provides it).
 
 ```sh
 pnpm install
-pnpm start          # build, then open the desktop app (starts this machine's server)
-pnpm server         # server only; open the printed http://127.0.0.1:…/#token=… link
+pnpm start          # build, then open the desktop app (starts this machine's worker)
+pnpm worker         # worker only; open the printed http://127.0.0.1:…/#token=… link
 pnpm dev:hub        # local dev hub from source, restarted on changes (port 47323)
 pnpm hub            # standalone hub (port 47322; ACCIO_HOME, ACCIO_HUB_PORT override)
 pnpm hub:pair       # issue a fresh first-device or recovery pairing code
@@ -45,7 +45,7 @@ Code is grouped by domain, one vertical slice each.
 - `packages/codex`: pinned Codex executable and stdio app-server client.
 - `packages/persistence`: atomic JSON files and owner-only private files.
 - `apps/hub`: hub service: accounts, sign-in, token refresh, shared resources and model proxy.
-- `apps/server`: machine server: threads, harnesses, delivery and accio tools.
+- `apps/worker`: worker implementation: threads, harnesses, delivery and accio tools; also serves the web client and manages local hub connections.
 - `apps/web`: React client.
-- `apps/desktop`: Electron shell that starts the local server.
+- `apps/desktop`: Electron shell that opens the client and starts the local worker.
 - `tests/`, `scripts/*-test-server.ts`: Playwright suites and their fixture servers.

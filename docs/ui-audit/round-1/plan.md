@@ -6,7 +6,7 @@ Guiding rule: calm, minimal, consistent. Prefer removing over adding. No new lar
 
 ## A. Thread pane (transcript, composer, delivery)
 
-1. Remove the raw `Resources for this turn: {json}` notice (`apps/server/src/threads/threads.ts`). Never show it in the transcript or in the Stopped/interrupted bar; the bar says only "Stopped." with Resume. If resource info must remain visible, a collapsed, human-readable "Resources" disclosure (names only, no hashes) is acceptable; removing is preferred.
+1. Remove the raw `Resources for this turn: {json}` notice (`apps/worker/src/threads/threads.ts`). Never show it in the transcript or in the Stopped/interrupted bar; the bar says only "Stopped." with Resume. If resource info must remain visible, a collapsed, human-readable "Resources" disclosure (names only, no hashes) is acceptable; removing is preferred.
 2. Shipped/settled line: no raw ISO timestamp (use local short time or relative). Say the outcome once: drop duplication between the transcript line, the pill and the "Thread settled · workspace retained" line.
 3. Hide the diff chip when +0 −0 and hide Ship / Shipping options when there is nothing to ship. When Ship is disabled for a real reason, give it a tooltip with that reason.
 4. Shipping options menu: choosing an option must not start delivery. It sets the mode (the main button label changes, e.g. "Prepare for review"); the main button starts it.

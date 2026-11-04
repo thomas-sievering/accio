@@ -28,7 +28,7 @@ node .agents/skills/3-verify/scripts/verify.mjs
 node .agents/skills/3-verify/scripts/verify.mjs out/verify-journey.mjs
 ```
 
-The runner prints an absolute `out/verify/<timestamp>-<id>` evidence directory. It forks the production `apps/server/dist/main.js` with:
+The runner prints an absolute `out/verify/<timestamp>-<id>` evidence directory. It forks the production `apps/worker/dist/main.js` with:
 
 - `ACCIO_HOME=<run>/scratch/home`, initially empty.
 - `ACCIO_HOST=127.0.0.1`, `ACCIO_PORT=0`, `ACCIO_HUB_PORT=0` for independent ephemeral ports.

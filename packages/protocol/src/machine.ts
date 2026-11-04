@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { method } from './rpc.js';
 
-/** The machine this server controls (see GLOSSARY: Machine). */
+/** The machine this worker runs on (see GLOSSARY: Machine). */
 export type MachineInfo = {
   /** Stable across restarts; the hub knows the machine by it. */
   id: string;
