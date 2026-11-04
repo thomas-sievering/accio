@@ -2,6 +2,7 @@
 .delivery-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .delivery-pill, .delivery-split { display: inline-flex; align-items: center; min-height: 30px; border: 1px solid var(--line-2); border-radius: 16px; color: var(--muted); font-size: 12.5px; white-space: nowrap; text-decoration: none; }
 .delivery-pill { gap: 6px; padding: 4px 11px; }
+.delivery-spacer { flex: 1; }
 .delivery-row svg { width: 13px; height: 13px; flex: none; }
 .delivery-split { overflow: hidden; }
 .delivery-split > :is(button, span, a) { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; min-height: 28px; }
