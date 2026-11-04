@@ -1,5 +1,5 @@
 import { mkdir } from 'node:fs/promises';
-import type { AccountLimitsView, LimitWindow, ProfileView, ProviderId } from '@accio/protocol';
+import { accountInUse, type AccountLimitsView, type LimitWindow, type ProfileView, type ProviderId } from '@accio/protocol';
 import { HubClient } from '@accio/hub';
 import type { Broadcast, Router } from '../rpc/router.js';
 import { UserError } from '../rpc/router.js';
@@ -40,7 +40,7 @@ export class Profiles {
     return this.limitViews().find((v) => v.accountId === accountId)?.snapshot?.windows ?? [];
   }
   refreshLimits(profileId: string, providerId: ProviderId) {
-    const account = this.profileView(profileId).providers.find((p) => p.id === providerId)?.accounts.find((a) => a.signedIn);
+    const account = accountInUse(this.profileView(profileId).providers.find((p) => p.id === providerId));
     if (!account) return;
     void this.client.call('accounts.refreshLimits', { accountIds: [account.id] }).catch((error) => console.error('[limits] background refresh failed', (error as Error).message));
   }

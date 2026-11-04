@@ -1,4 +1,4 @@
-import type { AccountLimitsView, AccountView, LimitWindow, LimitsSnapshot, ProfileProviderView, ProfileView } from '@accio/protocol';
+import { accountInUse, type AccountLimitsView, type AccountView, type LimitWindow, type LimitsSnapshot, type ProfileProviderView, type ProfileView } from '@accio/protocol';
 
 /** 'all' or a profile id. */
 export type LimitsScope = 'all' | (string & {});
@@ -15,11 +15,17 @@ export function defaultLimitsScope(profiles: ProfileView[] | undefined, ...prefe
 }
 
 type Named = { id: string; name: string };
+/**
+ * With several accounts at a provider, whether the profile's turns use this one
+ * ('inUse') or it waits ('standby'); 'only' when it is the provider's single account.
+ */
+export type AccountRole = 'only' | 'inUse' | 'standby';
+type EntryBase = { provider: ProfileProviderView; account: AccountView; role: AccountRole; sharedWith: Named[] };
 export type LimitsEntry =
   /** Meters are drawn here. `sharedWith` lists the other profiles selecting this account. */
-  | { kind: 'account'; provider: ProfileProviderView; account: AccountView; sharedWith: Named[] }
+  | EntryBase & { kind: 'account' }
   /** All profiles: this account's meters are already drawn under `shownUnder`. */
-  | { kind: 'reference'; provider: ProfileProviderView; account: AccountView; shownUnder: Named; sharedWith: Named[] };
+  | EntryBase & { kind: 'reference'; shownUnder: Named };
 export type LimitsGroup = { profile: ProfileView; entries: LimitsEntry[] };
 
 /**
@@ -37,12 +43,14 @@ export function limitsLayout(profiles: ProfileView[], scope: LimitsScope): Limit
   return profiles.filter((p) => scope === 'all' || p.id === scope).map((profile) => ({
     profile,
     entries: profile.providers.flatMap((provider): LimitsEntry[] => {
+      const inUse = accountInUse(provider);
       return provider.accounts.map((account) => {
         const sharedWith = (users.get(account.id) ?? []).filter((u) => u.id !== profile.id);
+        const role: AccountRole = provider.accounts.length === 1 ? 'only' : account.id === inUse?.id ? 'inUse' : 'standby';
         const first = drawnUnder.get(account.id);
-        if (first) return { kind: 'reference', provider, account, shownUnder: first, sharedWith };
+        if (first) return { kind: 'reference', provider, account, role, shownUnder: first, sharedWith };
         drawnUnder.set(account.id, { id: profile.id, name: profile.name });
-        return { kind: 'account', provider, account, sharedWith };
+        return { kind: 'account', provider, account, role, sharedWith };
       });
     }),
   }));

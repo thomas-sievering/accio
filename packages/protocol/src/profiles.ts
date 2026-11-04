@@ -15,8 +15,20 @@ export type ProfileProviderView = {
   accountName: string;
   /** Whether accio can sign in to it yet. */
   available: boolean;
+  /** In the profile's order, which breaks ties when the hub chooses among them. */
   accounts: AccountView[];
+  /**
+   * The signed-in account the hub chose for the next request, by limits and
+   * reset times. Absent from hubs that predate the choice.
+   */
+  inUseId?: string | null;
 };
+
+/** The account a profile's turns use at a provider; older hubs use the first signed-in one. */
+export function accountInUse(provider: ProfileProviderView | undefined): AccountView | null {
+  if (provider?.inUseId !== undefined) return provider.accounts.find((a) => a.id === provider.inUseId) ?? null;
+  return provider?.accounts.find((a) => a.signedIn) ?? null;
+}
 
 /**
  * GLOSSARY: Profile, as clients see it: profile → providers → accounts. It lives
@@ -33,6 +45,16 @@ export const SaveProfileParams = z.object({
   /** Omit to create. */
   id: z.string().optional(),
   name: z.string().trim().min(1, 'Name is required').max(40),
+  /** Each provider's accounts in order of use. A provider left out keeps its accounts. */
+  accountIds: z.object({
+    anthropic: z.array(z.string()).max(20).optional(),
+    openai: z.array(z.string()).max(20).optional(),
+  }).optional(),
+  /**
+   * The single-account form from before ordered accounts: selects only this
+   * account, or none. accountIds takes precedence; clients send both so a hub
+   * from before still applies the first account.
+   */
   accountId: z.string().nullable().optional(),
   openaiAccountId: z.string().nullable().optional(),
 });

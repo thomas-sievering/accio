@@ -18,6 +18,7 @@ describe('standalone hub trust and network boundary', () => {
     const mcpForwarded: string[] = [];
     const service = await startHubService({ home, port: 0, secretKey: Buffer.alloc(32, 42).toString('base64'), claudeFetch: async (url, init) => {
       if (String(url).includes('/oauth/token')) return Response.json({ access_token: 'private-provider-token', refresh_token: 'private-refresh-token', expires_in: 3600, account: { uuid: 'me', email_address: 'me@example.com' } });
+      if (String(url).endsWith('/api/oauth/usage')) return Response.json({});
       forwarded.push(new Headers(init?.headers).get('authorization') ?? '');
       return new Response('data: hello\n\n', { headers: { 'content-type': 'text/event-stream' } });
     }, mcpFetch: async (_url, init) => { mcpForwarded.push(new Headers(init?.headers).get('authorization') ?? ''); return Response.json({ result: 'ok' }); } });

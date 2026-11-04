@@ -6,7 +6,7 @@ Each named ChatGPT account originally signed in through app-server's `chatgptDev
 
 The hub gives each sign-in attempt a fresh Codex home under `hub/codex/<credential-id>`. Codex manages OAuth and refreshes the file credentials there. Only a completed sign-in publishes the credential id, email, plan and model catalog into the existing hub account store. Reauthentication preserves the previous account until the new one succeeds. Old Claude accounts without a provider id still mean Anthropic, and their profile selections remain intact.
 
-Profiles can select one account per provider. The existing `accountId` continues to select Claude; `openaiAccountId` selects ChatGPT. A profile key can reach only those selected accounts, and changing one provider's selection leaves the other alone.
+Profiles can select one account per provider. The existing `accountId` continues to select Claude; `openaiAccountId` selects ChatGPT. (ADR 0016 replaces these with ordered lists of accounts per provider.) A profile key can reach only those selected accounts, and changing one provider's selection leaves the other alone.
 
 ## Execution and credentials
 

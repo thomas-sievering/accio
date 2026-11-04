@@ -449,3 +449,7 @@ p.limits-message {
 .limits-freshness-state .limits-tag {
   max-width: none;
 }
+.limits-tag.in-use {
+  border-color: color-mix(in srgb, var(--green) 45%, transparent);
+  color: var(--green);
+}

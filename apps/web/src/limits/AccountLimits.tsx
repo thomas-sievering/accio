@@ -1,5 +1,5 @@
 import type { AccountLimitsView, AccountView, LimitWindow, LimitsSnapshot } from '@accio/protocol';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { ProviderLogo, Refresh, Settings } from '../app/icons';
 import { useLimits } from './limits';
 import {
@@ -171,10 +171,12 @@ function useRetry(accountId: string, refresh: (ids: string[], force?: boolean) =
  * The Limits view's card: who the account is, which profiles share it, and its limits.
  * `id` lets references elsewhere in All profiles move focus here.
  */
-export function AccountLimitsCard({ account, providerLabel, sharedWith, onOpenAccount }: {
+export function AccountLimitsCard({ account, providerLabel, sharedWith, usage, onOpenAccount }: {
   account: AccountView;
   providerLabel: string;
   sharedWith: Named[];
+  /** Whether the profile uses this account, among several at the provider. */
+  usage?: ReactNode;
   onOpenAccount: () => void;
 }) {
   return (
@@ -186,6 +188,7 @@ export function AccountLimitsCard({ account, providerLabel, sharedWith, onOpenAc
           {account.email && <small className="faint">{account.email}</small>}
         </div>
         {sharedWith.length > 0 && <span className="limits-tag" title="One allowance, used by each of these profiles">Shared with {sharedWith.map((p) => p.name).join(', ')}</span>}
+        {usage}
         <button type="button" className="row-action" title={`${account.name} settings`} aria-label={`${account.name} settings`} onClick={onOpenAccount}>
           <Settings />
         </button>

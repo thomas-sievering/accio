@@ -10,7 +10,7 @@ import type { CodexFactory } from '@accio/codex';
 import { SIGN_IN_TTL_MS, SignInError, type Fetch } from './claudeOAuth.js';
 import { HubTrust } from './trust.js';
 import { startHubProxy } from './proxy.js';
-import { profileViews, saveSharedProfile } from './profile.js';
+import { accountSelection, profileViews, saveSharedProfile } from './profile.js';
 import { Resources } from './resources.js';
 import { McpGateway } from './mcp.js';
 import { RESOURCE_WRITES } from './resourceClient.js';
@@ -195,7 +195,7 @@ export async function startHubService(opts: HubServiceOptions) {
       case 'profiles.list': return profileViews(settings.profiles(), hub);
       case 'profiles.save': {
         const { saved, profiles } = saveSharedProfile(settings.profiles(), p);
-        await hub.configureProfile(saved.id, p.accountId, async () => { await settings.setProfiles(profiles); }, p.openaiAccountId);
+        await hub.configureProfile(saved.id, accountSelection(p), async () => { await settings.setProfiles(profiles); });
         return profileViews([saved], hub)[0];
       }
       case 'profiles.delete': {

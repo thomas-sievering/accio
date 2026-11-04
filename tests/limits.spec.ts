@@ -43,8 +43,8 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
   const selectAccounts = async (name: string, claude: string, chatgpt: string) => {
     await settings('Profiles');
     await page.getByRole('button', { name: new RegExp(`^${name} `) }).click();
-    await page.getByRole('combobox', { name: /Anthropic · Claude account/ }).selectOption({ label: `${claude} · ${claude === 'Shared Claude' ? 'shared' : 'work'}@example.com` });
-    await page.getByRole('combobox', { name: /OpenAI · ChatGPT account/ }).selectOption({ label: `${chatgpt} · shared-chatgpt@example.com` });
+    await page.getByRole('combobox', { name: 'Add Claude account' }).selectOption({ label: `${claude} · ${claude === 'Shared Claude' ? 'shared' : 'work'}@example.com` });
+    await page.getByRole('combobox', { name: 'Add ChatGPT account' }).selectOption({ label: `${chatgpt} · shared-chatgpt@example.com` });
     await button('Save').click();
   };
 
@@ -186,7 +186,7 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
   // A provider selected by another profile stays hidden when unselected here.
   await settings('Profiles');
   await page.getByRole('button', { name: /^Work / }).click();
-  await page.getByRole('combobox', { name: /OpenAI · ChatGPT account/ }).selectOption('');
+  await button('Remove Shared ChatGPT').click();
   await button('Save').click();
   await button('Back').click();
   await button('Limits').click();
@@ -198,6 +198,32 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
   await page.getByRole('radio', { name: 'All profiles', exact: true }).click();
   await expect(page.locator('.limits-profile').filter({ has: page.getByRole('heading', { name: 'Work', exact: true }) })).not.toContainText('OpenAI');
   await expect(card('Shared ChatGPT')).toBeVisible();
-  expect(errors).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath('composer.png'), fullPage: true });
+
+  // A second Claude account whose week resets sooner is used first, regardless of order.
+  await button('Close limits').click();
+  await settings('Profiles');
+  await page.getByRole('button', { name: /^Personal / }).click();
+  await page.getByRole('combobox', { name: 'Add another Claude account' }).selectOption({ label: 'Unused Claude · expired@example.com' });
+  const claudeList = page.getByRole('list', { name: 'Anthropic · Claude accounts' });
+  await expect(claudeList.getByRole('listitem')).toHaveText([/^Shared Claude.*In use$/, /^Unused Claude/]);
+  await button('Save').click();
+  await button('Back').click();
+  await button('Limits').click();
+  await page.getByRole('radio', { name: 'Personal', exact: true }).click();
+  await expect(card('Unused Claude').getByText('In use', { exact: true })).toBeVisible();
+  await expect(card('Shared Claude').getByText('In use', { exact: true })).toHaveCount(0);
+  await expect(card('Shared ChatGPT').getByText('In use', { exact: true })).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath('two-accounts.png'), fullPage: true });
+  await page.locator('.sidebar').getByRole('button', { name: /A fixture-only turn/ }).click();
+  await expect(page.locator('.limits-chip')).toHaveAttribute('title', /^Unused Claude:/);
+  await settings('Profiles');
+  await page.getByRole('button', { name: /^Personal / }).click();
+  await expect(claudeList.getByRole('listitem')).toHaveText([/^Shared Claude/, /^Unused Claude.*In use$/]);
+  await page.screenshot({ path: testInfo.outputPath('profile-accounts.png'), fullPage: true });
+  await button('Move Unused Claude up').click();
+  await button('Save').click();
+  await page.getByRole('button', { name: /^Personal / }).click();
+  await expect(claudeList.getByRole('listitem')).toHaveText([/^Unused Claude.*In use$/, /^Shared Claude/]);
+  expect(errors).toEqual([]);
 });

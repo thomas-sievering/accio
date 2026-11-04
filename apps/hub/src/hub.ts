@@ -19,19 +19,24 @@ import { OpenAIAuth } from './openaiAuth.js';
 import { AccountLimits, LimitsReadError } from './limits.js';
 import { anthropicLimits, openaiLimits, retryAfterMs } from './providerLimits.js';
 import { safeEqual } from './trust.js';
+import { chooseAccount } from './accountChoice.js';
 
 /**
  * GLOSSARY: Hub. Holds named provider accounts selected by profiles and hands out one access
- * key per profile; a key only ever unlocks its own profile's account (ADR 0007).
+ * key per profile; a key only ever unlocks its own profile's accounts (ADR 0007).
  * Profiles here are just ids: their names are shared settings. A profile selects
- * at most one Claude account and one ChatGPT account.
+ * any number of accounts per provider, in order; chooseAccount picks which
+ * signed-in one serves each request.
  */
 export type HubProfile = {
   id: string;
   accessKey: string;
-  accountId: string | null;
-  openaiAccountId?: string | null;
+  /** Selected accounts of every provider, each provider's in order of use. */
+  accountIds: string[];
 };
+
+/** Per provider, the accounts to select in order; a provider left out keeps its selection. */
+export type AccountSelection = Partial<Record<ProviderId, string[]>>;
 
 
 export class Hub {
@@ -71,14 +76,15 @@ export class Hub {
   /** Serializes selection with account deletion and prepares the machine before publication.
    * If preparation fails, restore the previous durable hub state without publishing it.
    */
-  configureProfile(id: string, accountId: string | null | undefined, prepare: (key: string) => Promise<void>, openaiAccountId?: string | null) {
+  configureProfile(id: string, selection: AccountSelection, prepare: (key: string) => Promise<void>) {
     return this.change(async () => {
-      if (accountId != null) this.requireProvider(accountId, 'anthropic');
-      if (openaiAccountId != null) this.requireProvider(openaiAccountId, 'openai');
+      for (const [providerId, ids] of Object.entries(selection) as [ProviderId, string[]][]) for (const accountId of ids) this.requireProvider(accountId, providerId);
       const existing = this.profiles.find((p) => p.id === id);
       const profile = { ...(existing ?? this.newProfile(id)) };
-      if (accountId !== undefined) profile.accountId = accountId;
-      if (openaiAccountId !== undefined) profile.openaiAccountId = openaiAccountId;
+      // Each provider keeps its place relative to the others; only its own accounts change.
+      for (const [providerId, ids] of Object.entries(selection) as [ProviderId, string[]][]) {
+        profile.accountIds = [...profile.accountIds.filter((a) => this.providerOf(a) !== providerId), ...new Set(ids)];
+      }
       const next = existing ? this.profiles.map((p) => p.id === id ? profile : p) : [...this.profiles, profile];
       await this.prepareProfiles(next, () => prepare(profile.accessKey));
     });
@@ -89,7 +95,7 @@ export class Hub {
   }
 
   private newProfile(id: string): HubProfile {
-    return { id, accessKey: `accio-${randomBytes(24).toString('base64url')}`, accountId: null };
+    return { id, accessKey: `accio-${randomBytes(24).toString('base64url')}`, accountIds: [] };
   }
 
   private async prepareProfiles(next: HubProfile[], prepare: () => Promise<void>) {
@@ -172,7 +178,7 @@ export class Hub {
   }
 
   codexModels(profileId: string) {
-    const id = this.profiles.find((p) => p.id === profileId)?.openaiAccountId;
+    const id = this.accountIdInUse(profileId, 'openai');
     return this.accounts.find((a) => a.id === id)?.openai?.models ?? [];
   }
 
@@ -200,13 +206,17 @@ export class Hub {
   }
 
   async openaiCredentials(profileId: string, force = false) {
-    const id = this.require(profileId).openaiAccountId;
-    const account = this.accounts.find((a) => a.id === id)?.openai;
-    if (!account) return null;
-    const credentials = await this.openai.credentials(account, force);
-    // A sign-out or account switch during refresh must not unlock the previous account.
-    const current = this.profiles.find((p) => p.id === profileId)?.openaiAccountId;
-    return current === id && this.accounts.find((a) => a.id === id)?.openai === account ? credentials : null;
+    this.require(profileId);
+    // An automatic switch while refreshing moves on to the new account, once.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const id = this.accountIdInUse(profileId, 'openai');
+      const account = this.accounts.find((a) => a.id === id)?.openai;
+      if (!account) return null;
+      const credentials = await this.openai.credentials(account, force);
+      // A sign-out or account switch during refresh must not unlock the previous account.
+      if (this.accountIdInUse(profileId, 'openai') === id && this.accounts.find((a) => a.id === id)?.openai === account) return credentials;
+    }
+    return null;
   }
 
   /** The profile a request's key belongs to, or undefined for an unknown key. */
@@ -216,12 +226,19 @@ export class Hub {
 
   /** A usable access token for the profile, refreshed first when close to expiry (or when forced). */
   async accessToken(profileId: string, { force = false } = {}): Promise<string | null> {
-    const accountId = this.require(profileId).accountId;
+    return (await this.claudeAccess(profileId, force))?.token ?? null;
+  }
+
+  /** The profile's Claude account in use and its token. */
+  async claudeAccess(profileId: string, force = false): Promise<{ accountId: string; token: string } | null> {
+    this.require(profileId);
+    const accountId = this.accountIdInUse(profileId, 'anthropic');
     if (!accountId) return null;
     await this.accountAccessToken(accountId, force);
     // Preserve profile routing if its selection changed while the token refreshed.
-    const currentId = this.profiles.find((p) => p.id === profileId)?.accountId;
-    return this.accounts.find((a) => a.id === currentId)?.account?.accessToken ?? null;
+    const currentId = this.accountIdInUse(profileId, 'anthropic');
+    const token = this.accounts.find((a) => a.id === currentId)?.account?.accessToken;
+    return currentId && token ? { accountId: currentId, token } : null;
   }
 
   private async accountAccessToken(accountId: string, force = false): Promise<string | null> {
@@ -299,10 +316,55 @@ export class Hub {
     return { id: a.id, name: a.name, providerId: 'anthropic' as const, signedIn: !!a.account, email: a.account?.email ?? null, organization: a.account?.organization ?? null };
   }
 
+  /** The profile's accounts at this provider, in order of use. */
+  selectedAccounts(profileId: string, providerId: ProviderId) {
+    return this.selectedIds(profileId, providerId).map((id) => this.accountView(id));
+  }
+
+  /** The account serving the profile's requests at this provider: the first signed-in one. */
   selectedAccount(profileId: string, providerId: ProviderId = 'anthropic') {
-    const profile = this.profiles.find((p) => p.id === profileId);
-    const id = providerId === 'openai' ? profile?.openaiAccountId : profile?.accountId;
+    const id = this.accountIdInUse(profileId, providerId);
     return id ? this.accountView(id) : null;
+  }
+
+  /** The signed-in account chosen for the profile's next request at this provider (see chooseAccount). */
+  accountIdInUse(profileId: string, providerId: ProviderId, now = Date.now()) {
+    return chooseAccount(this.signedInIds(profileId, providerId).map((id) => ({ id, snapshot: this.limits.snapshot(id) })), now);
+  }
+
+  /**
+   * Keeps the limits behind the choice current while a profile is in use. The
+   * cache reads each account at most about once a minute, and right after a
+   * shown reset passes.
+   */
+  noteRequest(profileId: string, providerId: ProviderId) {
+    void this.limits.refresh(this.signedInIds(profileId, providerId)).catch((error) => console.error('[hub] limits refresh failed', (error as Error).message));
+  }
+
+  /**
+   * After a provider refused a request for limits: reads this account's limits
+   * again, so the next choice can move to another account. True when it would.
+   */
+  async recheckAfterLimit(profileId: string, providerId: ProviderId, accountId: string) {
+    await Promise.race([this.limits.refresh([accountId], true), new Promise((r) => setTimeout(r, 5_000).unref())]);
+    const next = this.accountIdInUse(profileId, providerId);
+    return next !== null && next !== accountId;
+  }
+
+  private signedInIds(profileId: string, providerId: ProviderId) {
+    return this.selectedIds(profileId, providerId).filter((id) => {
+      const a = this.accounts.find((x) => x.id === id);
+      return providerId === 'openai' ? !!a?.openai : !!a?.account;
+    });
+  }
+
+  private selectedIds(profileId: string, providerId: ProviderId) {
+    return (this.profiles.find((p) => p.id === profileId)?.accountIds ?? []).filter((id) => this.providerOf(id) === providerId);
+  }
+
+  private providerOf(id: string): ProviderId | undefined {
+    const account = this.accounts.find((a) => a.id === id);
+    return account && (account.providerId ?? 'anthropic');
   }
 
   saveAccount(name: string, id?: string, providerId?: ProviderId) {
@@ -321,7 +383,7 @@ export class Hub {
   deleteAccount(id: string) {
     return this.change(async () => {
       const account = this.requireAccount(id);
-      if (this.profiles.some((p) => p.accountId === id || p.openaiAccountId === id)) throw new SignInError('Remove this account from its profiles before deleting it.');
+      if (this.profiles.some((p) => p.accountIds.includes(id))) throw new SignInError('Remove this account from its profiles before deleting it.');
       await this.commit(this.profiles, this.accounts.filter((a) => a.id !== id));
       this.limits.invalidate(id);
       this.cancelSignIn(id);

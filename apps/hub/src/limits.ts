@@ -27,6 +27,11 @@ export class AccountLimits {
     return this.accounts().map((a) => structuredClone(this.entry(a).view));
   }
 
+  /** The account's last known allowance, without copying every view. */
+  snapshot(id: string) {
+    return this.entries.get(id)?.view.snapshot ?? null;
+  }
+
   subscribe(listener: (views: AccountLimitsView[]) => void) {
     this.listeners.add(listener);
     return () => { this.listeners.delete(listener); };
