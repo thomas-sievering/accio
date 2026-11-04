@@ -12,6 +12,7 @@ import { finishGoalTool } from '../goals/goal.js';
 import { deliveryStepTool } from '../threads/deliveryStep.js';
 import { shippedNoteTool } from '../threads/shippedNote.js';
 import { projectSettingsTool } from '../projects/projectSettings.js';
+import { readThreadTool } from '../threads/handoff.js';
 import { Projects } from '../projects/projects.js';
 import { ProjectApps } from '../projects/projectApps.js';
 import { Threads } from '../threads/threads.js';
@@ -79,7 +80,8 @@ export class HubConnections {
     const tools = new AccioTools([offerChoice, finishGoalTool((id, outcome, summary) => threads.finishGoal(id, outcome, summary), (id) => threads.goalActive(id)),
       deliveryStepTool((id, step, note) => threads.reportDeliveryStep(id, step, note), (id) => threads.deliveryRunning(id)),
       shippedNoteTool((id, note) => threads.recordShippedNote(id, note), (id) => threads.deliveryRunning(id)),
-      projectSettingsTool((id, app) => threads.saveProjectSettings(id, app), (id) => threads.projectSetupRunning(id))]);
+      projectSettingsTool((id, app) => threads.saveProjectSettings(id, app), (id) => threads.projectSetupRunning(id)),
+      readThreadTool((id, offset, limit) => threads.readThread(id, offset, limit), (id) => threads.handedOff(id))]);
     const secrets = remoteSecrets(client);
     const threads = new Threads(record.home, profiles, projects, this.runners, broadcast, models, machines, secrets, tools, this.deliveryHosting); await threads.load(); threads.register(router);
     const resources = new ResourceManager(record.home, this.here.id, remoteResources(client), remoteMcp(client), profiles, projects, broadcast, async (tool, detail) => {

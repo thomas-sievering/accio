@@ -90,7 +90,7 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
           setPick(undefined);
         }}
         toolbar={<>
-          <ModelPicker key={thread.id} profileId={thread.profileId} harnessId={thread.model.harnessId} value={thread.model} disabled={running} onChange={async (model) => {
+          <ModelPicker key={thread.id} profileId={thread.profileId} value={thread.model} disabled={running} onChange={async (model) => {
             setSavingModel(true);
             try { await client.call('threads.setModel', { threadId: thread.id, model }); }
             finally { setSavingModel(false); }

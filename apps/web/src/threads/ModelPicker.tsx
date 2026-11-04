@@ -15,9 +15,8 @@ const lastModels = new Map<string, ModelsState>();
  * Scrolling over it, or the up and down keys, change the effort; clicking lists the
  * profile's models, favourites first, then each provider/harness pair.
  */
-export function ModelPicker({ profileId, harnessId, value, onChange, disabled = false }: {
+export function ModelPicker({ profileId, value, onChange, disabled = false }: {
   profileId?: string;
-  harnessId?: string;
   value: ModelSelection;
   onChange: (model: ModelSelection) => Promise<void>;
   disabled?: boolean;
@@ -61,7 +60,7 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
     panel.current?.hidePopover();
   }, [profileId]);
 
-  const models = (data?.models ?? []).filter((m) => !harnessId || m.harnessId === harnessId);
+  const models = data?.models ?? [];
   const fallbackName = value.modelId === 'default' ? `${value.harnessId === 'codex' ? 'Codex' : 'Claude Code'} default` : value.modelId;
   const favorites = new Set(data?.favorites.map(modelKey));
   const groups = [...new Map(models.map((m) => [JSON.stringify([m.providerId, m.harnessId]), {
