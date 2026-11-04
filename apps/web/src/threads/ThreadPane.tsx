@@ -1,12 +1,12 @@
 import type { CheckoutView, ChoicePick, ProjectView, ThreadView } from '@accio/protocol';
 import { type ModelSelection } from '@accio/protocol';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useClient } from '../app/connection';
 import { useLive } from '../app/useLive';
 import { accountForModel, defaultModel, useProfiles } from '../profiles/profiles';
 import { LimitsIndicator } from '../limits/LimitsIndicator';
-import { emitAppEvent } from '../app/appEvents';
 import { ProjectMark } from '../projects/ProjectMark';
+import { ProjectCrumbMenu } from '../projects/ProjectCrumbMenu';
 import { useProjects } from '../projects/projects';
 import { Composer } from './Composer';
 import { QueueTray } from './QueueTray';
@@ -39,6 +39,11 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
   const place = usePlace(thread.checkoutId, thread.profileId);
   const { items, error, retry } = useTranscript(thread.id);
   useReportPendingSecrets(thread.id, items);
+  // GLOSSARY: Shipped note. Seeing a delivered thread reads its note, so it can settle as usual.
+  const unreadNote = thread.delivery?.status === 'delivered' && !!thread.delivery.note && !thread.delivery.noteReadAt;
+  useEffect(() => {
+    if (active && unreadNote) void client.call('threads.readNote', { threadId: thread.id }).catch(() => {});
+  }, [active, unreadNote, client, thread.id]);
   const running = thread.status === 'running';
   const [savingModel, setSavingModel] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -177,7 +182,7 @@ function PaneHeader(props: {
           {project && <ProjectMark id={project.id} size={16} />}
           <span className="thread-project-name">
             {project
-              ? <button type="button" className="thread-project-link" title={`${project.name} settings${checkout ? ` · ${checkout.path}` : ''}`} onClick={() => emitAppEvent('project.open', { id: project.id })}>{project.name}</button>
+              ? <ProjectCrumbMenu project={project} path={checkout?.path} />
               : checkout ? 'unknown project' : 'No project'}
           </span>
         </span>

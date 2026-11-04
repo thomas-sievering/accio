@@ -122,6 +122,75 @@ it('settles verified direct publication once, retains the workspace, and respect
   expect((await view(next, thread.id)).delivery).toMatchObject({ status: 'delivered', completedAt: expect.any(String) });
 });
 
+it('shows the shipped note in the thread and the Changelog, and settles only once the note is read', async () => {
+  const harness = new FakeHarness(async function* (run) {
+    if (run.prompt.startsWith('Deliver the current task')) {
+      await writeFile(join(run.cwd, 'feature'), 'published change\n');
+      await git(run.cwd, 'add', '.');
+      await git(run.cwd, 'commit', '--quiet', '-m', 'feature');
+      const response = await fetch(run.tools!.url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: run.tools!.authorization },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'shipped_note',
+          arguments: { summary: 'Threads can be renamed in place', test: ['Double-click a title and type a new one'] } } }),
+      });
+      expect((await response.json() as { result: { isError?: boolean } }).result.isError).toBeFalsy();
+      await git(run.cwd, 'push', '--quiet', 'origin', 'HEAD:main');
+    }
+    yield* replyWith('done');
+  });
+  const { client, checkout } = await project(harness);
+  const thread = await client.call('threads.start', { checkoutId: checkout.id, text: 'work' });
+  await wait(client, thread.id); client.events.length = 0;
+  await client.call('threads.deliver', { threadId: thread.id, mode: 'ship' });
+  await wait(client, thread.id, t => t.status === 'idle' && t.delivery?.status === 'delivered');
+  const note = { summary: 'Threads can be renamed in place', test: ['Double-click a title and type a new one'] };
+  const delivered = await view(client, thread.id);
+  expect(delivered.settledAt).toBeNull();
+  expect(delivered.delivery).toMatchObject({ note });
+  const log = await client.call('changelog.list', {});
+  expect(log).toEqual([expect.objectContaining({ threadId: thread.id, projectId: delivered.projectId, note, target: 'main', revision: expect.any(String) })]);
+  const shipped = (await client.call('threads.transcript', { threadId: thread.id })).filter(item => item.kind === 'shipped');
+  expect(shipped).toEqual([expect.objectContaining({ entry: log[0] })]);
+  const read = await client.call('threads.readNote', { threadId: thread.id });
+  expect(read.settledAt).toEqual(expect.any(String));
+  expect(read.delivery?.noteReadAt).toEqual(expect.any(String));
+  const home = app.home;
+  await app.stop({ keepHome: true });
+  app = await startTestApp({ harness: new FakeHarness() }, home);
+  const next = await app.connect();
+  expect(await next.call('changelog.list', {})).toEqual(log);
+  expect((await next.call('threads.transcript', { threadId: thread.id })).filter(item => item.kind === 'shipped')).toHaveLength(1);
+});
+
+it('backfills the Changelog with deliveries verified before it existed, without adding to their threads', async () => {
+  const harness = new FakeHarness(async function* (run) {
+    if (run.prompt.startsWith('Deliver the current task')) {
+      await writeFile(join(run.cwd, 'feature'), 'published change\n');
+      await git(run.cwd, 'add', '.');
+      await git(run.cwd, 'commit', '--quiet', '-m', 'feature');
+      await git(run.cwd, 'push', '--quiet', 'origin', 'HEAD:main');
+    }
+    yield* replyWith('done');
+  });
+  const { client, checkout } = await project(harness);
+  const thread = await client.call('threads.start', { checkoutId: checkout.id, text: 'work' });
+  await wait(client, thread.id); client.events.length = 0;
+  await client.call('threads.deliver', { threadId: thread.id, mode: 'ship' });
+  // Without a note, a delivery settles automatically as before.
+  await wait(client, thread.id, t => t.status === 'idle' && !!t.settledAt);
+  const home = app.home;
+  await app.stop({ keepHome: true });
+  const { rm } = await import('node:fs/promises');
+  await rm(join(home, 'changelog.json'), { force: true });
+  const path = join(home, 'transcripts', `${thread.id}.json`);
+  await writeFile(path, JSON.stringify(JSON.parse(await readFile(path, 'utf8')).filter((item: any) => item.kind !== 'shipped')));
+  app = await startTestApp({ harness: new FakeHarness() }, home);
+  const next = await app.connect();
+  expect(await next.call('changelog.list', {})).toEqual([expect.objectContaining({ threadId: thread.id, title: expect.any(String) })]);
+  expect((await next.call('threads.transcript', { threadId: thread.id })).filter(item => item.kind === 'shipped')).toHaveLength(0);
+});
+
 it('keeps review-only tracking past its agent budget and restart, then settles an external squash merge after target checks', async () => {
   const { client, thread, host, merge, reads, harness } = await reviewProject();
   expect(harness.runs[1]!.prompt).toContain('NEVER merge');

@@ -3,6 +3,7 @@ import { LimitsProvider } from '../limits/limits';
 import type { LimitsScope } from '../limits/limitsModel';
 import { defaultLimitsScope } from '../limits/limitsModel';
 import { LimitsView } from '../limits/LimitsView';
+import { ChangelogView } from '../changelog/ChangelogView';
 import { hasSignedInAccount, ProfilesProvider, useProfiles } from '../profiles/profiles';
 import { ProjectsProvider, useProjects } from '../projects/projects';
 import { AddProjectSheet } from '../projects/AddProjectSheet';
@@ -16,7 +17,7 @@ import { ThreadSearch } from '../threads/ThreadSearch';
 import { useAppEvent } from './appEvents';
 import { ConnectionNotice } from './ConnectionNotice';
 import { FirstRun } from './FirstRun';
-import { Close, FolderPlus, Limits, Settings as Gear } from './icons';
+import { Close, FolderPlus, Limits, ScrollText, Settings as Gear } from './icons';
 import { ScopeMenu } from './ScopeMenu';
 import { SidebarResizer } from './Resizer';
 import { Settings, type SettingsRoute } from './Settings';
@@ -64,8 +65,14 @@ function Shell() {
   const [panelWanted, togglePanel] = usePanelOpen();
   const [limits, setLimits] = useState<{ scope: LimitsScope; navigation: number } | null>(null);
   const limitsOpen = limits !== null && limits.navigation === navigation;
-  // The panel belongs to an open thread or draft: home, onboarding and Limits have none.
-  const hasPane = !!(thread || draft) && !limitsOpen;
+  // GLOSSARY: Changelog. Covers the main pane like Limits until a thread or draft is opened.
+  const [changelog, setChangelog] = useState<{ navigation: number; projectId?: string } | null>(null);
+  const changelogOpen = changelog !== null && changelog.navigation === navigation && !limitsOpen;
+  const closeChangelog = useCallback(() => setChangelog(null), []);
+  const openChangelog = (projectId?: string) => { setLimits(null); setSettings(null); setChangelog({ navigation, projectId }); };
+  useAppEvent('changelog.open', ({ projectId }) => openChangelog(projectId));
+  // The panel belongs to an open thread or draft: home, onboarding, Limits and the Changelog have none.
+  const hasPane = !!(thread || draft) && !limitsOpen && !changelogOpen;
   const panelOpen = panelWanted && hasPane;
   const narrow = useNarrow();
   const overlay = panelOpen && narrow && settings === null;
@@ -178,6 +185,10 @@ function Shell() {
             <button className="side-icon" title="Settings" aria-label="Settings" onClick={() => setSettings({ section: 'accounts' })}>
               <Gear />
             </button>
+            <button className={`side-icon${changelogOpen ? ' on-page' : ''}`} title="Changelog" aria-label="Changelog" aria-pressed={changelogOpen}
+              onClick={() => changelogOpen ? closeChangelog() : openChangelog()}>
+              <ScrollText />
+            </button>
             <button className={`side-icon${limitsOpen ? ' on-page' : ''}`} title="Limits" aria-label="Limits" aria-pressed={limitsOpen}
               onClick={() => limitsOpen ? closeLimits() : openLimits(defaultLimitsScope(profiles, currentProfileId, filter))}>
               <Limits />
@@ -191,12 +202,13 @@ function Shell() {
             <LimitsView scope={limits.scope} onScope={(scope) => setLimits({ scope, navigation })} onClose={closeLimits}
               onOpenAccount={openAccount} />
           )}
+          {changelogOpen && !settings && <ChangelogView key={changelog.projectId ?? ''} projectId={changelog.projectId} onClose={closeChangelog} />}
           {/* Keep the composer and reading position mounted while checking limits/settings. */}
-          <div className="thread-surface" hidden={limitsOpen || settings !== null}>
+          <div className="thread-surface" hidden={limitsOpen || changelogOpen || settings !== null}>
             {draft ? (
-              <DraftPane key={`${draft.checkoutId}:${draft.profileId}`} {...draft} active={!limitsOpen && !settings} onOpenProfile={openProfile} onOpenLimits={openLimits} />
+              <DraftPane key={`${draft.checkoutId}:${draft.profileId}`} {...draft} active={!limitsOpen && !changelogOpen && !settings} onOpenProfile={openProfile} onOpenLimits={openLimits} />
             ) : thread ? (
-              <ThreadPane key={thread.id} thread={thread} onOpenSecrets={openSecrets} active={!limitsOpen && !settings} onOpenProfile={openProfile} onOpenLimits={openLimits} />
+              <ThreadPane key={thread.id} thread={thread} onOpenSecrets={openSecrets} active={!limitsOpen && !changelogOpen && !settings} onOpenProfile={openProfile} onOpenLimits={openLimits} />
             ) : (
               <>
                 <header className="main-top drag" />
