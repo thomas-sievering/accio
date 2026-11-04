@@ -24,7 +24,9 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
   const [position, setPosition] = useState<CSSProperties>({});
   const { now } = useThreads();
   const delivery = thread.delivery;
-  const archived = !!thread.workspace?.releasedAt;
+  const released = !!thread.workspace?.releasedAt;
+  // Settle also releases an unchanged worktree; only a released delivery reads as Archived.
+  const archived = released && !!delivery;
   const target = delivery?.baseBranch ?? summary?.baseBranch ?? 'default branch';
 
   useEffect(() => {
@@ -91,7 +93,7 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
 
   return <div className="delivery-actions">
     <div className="delivery-row" aria-label="Delivery actions">
-      {!thread.workspace ? null : archived ? <span className="delivery-pill delivery-complete"><Check />Archived · history kept</span> : <>
+      {!thread.workspace || (released && !archived) ? null : archived ? <span className="delivery-pill delivery-complete"><Check />Archived · history kept</span> : <>
         {!receipt && summary && (summary.added > 0 || summary.removed > 0) && <span className="delivery-pill delivery-diff" title={`${summary.files} changed ${summary.files === 1 ? 'file' : 'files'}`} aria-label={`${summary.added} lines added, ${summary.removed} lines removed`}>
           <span className="delivery-added">+{summary.added}</span><span className="delivery-removed">−{summary.removed}</span>
         </span>}
@@ -117,10 +119,10 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
       {snoozedUntil && <span className="delivery-settled">Snoozed until {wakeText(snoozedUntil, now)}</span>}
       {settled && <button className="delivery-pill" disabled={busy} onClick={() => call('threads.reopen')}><Undo />Reopen</button>}
       {snoozedUntil && <button className="delivery-pill" disabled={busy} onClick={() => call('threads.reopen')}><Undo />Wake now</button>}
-      {!archived && (receipt || settled) && thread.workspace && <button className="delivery-pill" disabled={busy || thread.status === 'running'} title="Frees the workspace, keeps this thread" onClick={() => call('threads.archive')}>
+      {!released && (receipt || settled) && thread.workspace && <button className="delivery-pill" disabled={busy || thread.status === 'running'} title="Frees the workspace, keeps this thread" onClick={() => call('threads.archive')}>
         <Archive />{busy ? 'Archiving…' : 'Archive'}
       </button>}
-      {!archived && summary?.previewAvailable && <button className="delivery-pill" disabled={busy} onClick={openApp}><Play />Open app</button>}
+      {!released && summary?.previewAvailable && <button className="delivery-pill" disabled={busy} onClick={openApp}><Play />Open app</button>}
     </div>
     {hint && <p className={`delivery-hint tone-${status?.tone ?? 'ready'}`} role={status?.phase === 'attention' || status?.phase === 'closed' ? 'alert' : undefined}
       title={status?.phase === 'unavailable' ? thread.delivery?.observationError : undefined}>

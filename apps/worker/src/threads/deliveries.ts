@@ -32,11 +32,13 @@ export class Deliveries {
   async recoverReleases(): Promise<boolean> {
     let recovered = false;
     for (const thread of this.state.list) {
-      if (!thread.workspace?.releaseRequestedAt || thread.workspace.releasedAt || !thread.delivery?.revision) continue;
+      // An Archive releases its delivered revision; an unchanged settled worktree, its start revision.
+      const revision = thread.delivery ? thread.delivery.revision : thread.workspace?.startRevision;
+      if (!thread.workspace?.releaseRequestedAt || thread.workspace.releasedAt || !revision) continue;
       try {
         this.assertWorkspaceUnused(thread);
         await this.previews.stop(thread.id);
-        await this.git.release(thread.id, thread.workspace, thread.delivery.revision);
+        await this.git.release(thread.id, thread.workspace, revision);
         thread.workspace = { ...thread.workspace, releasedAt: now() };
         thread.settledAt = now();
         recovered = true;
@@ -113,6 +115,26 @@ export class Deliveries {
       thread = await this.state.update(threadId, t => settle({ ...t, workspace: { ...t.workspace!, releasedAt: now() }, delivery: verified }, now()));
       return toView(thread);
     });
+  }
+
+  /** GLOSSARY: Settle. Releases a settled worktree that holds no work. Commits, changes, a delivery or a running preview keep it. */
+  releaseIfUnchanged(threadId: string) {
+    return this.host.withLifecycle(threadId, async () => {
+      const thread = this.state.require(threadId);
+      const workspace = thread.workspace;
+      if (!thread.settledAt || !workspace || workspace.releasedAt || thread.delivery || thread.status === 'running' || this.state.running.has(threadId)
+        || thread.queuedMessages?.length || this.state.messageOps.has(threadId) || this.previews.has(threadId)) return;
+      this.assertWorkspaceUnused(thread);
+      if (!await this.git.unchanged(workspace)) return;
+      // Journal before touching files, as Archive does.
+      await this.state.update(threadId, t => ({ ...t, workspace: { ...t.workspace!, releaseRequestedAt: now() } }), { quiet: true });
+      try { await this.git.release(threadId, workspace, workspace.startRevision); }
+      catch (error) {
+        await this.state.update(threadId, t => ({ ...t, workspace: { ...t.workspace!, releaseRequestedAt: undefined } }), { quiet: true });
+        throw error;
+      }
+      await this.state.update(threadId, t => ({ ...t, workspace: { ...t.workspace!, releasedAt: now() } }));
+    }).catch(() => { /* Busy, or git refused: the worktree stays for a later Settle or Archive. */ });
   }
 
   async dispatch(threadId: string) {
