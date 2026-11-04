@@ -6,11 +6,51 @@ import { z } from 'zod';
 import { SecretToolInput, SECRET_TOOL_DESCRIPTION, SECRET_MCP_SERVER, savedPurposeInstructions } from '../secrets/secrets.js';
 import { secretHttpTool } from '../secrets/httpTool.js';
 import { ACCIO_MCP_SERVER } from '../tools/tools.js';
+import { SUBAGENT_TIMEOUT_SEC } from './subagents.js';
+import { summarizeTool } from './transcript.js';
 
 /** Codex runs on this machine. Only the profile's scoped proxy key reaches it. */
 export function codexHarness(factory: CodexFactory = startCodex): Harness {
   return {
-    async *run({ cwd, prompt, sessionId, model, effort, modelName, env, tools, signal, resourceInstructions, mcps, requestSecret, secretPurposes, registerSteer }) {
+    async generateText({ prompt, model, effort, env, signal }) {
+      // A Responses request avoids starting an agent with shell or repository access.
+      const response = await fetch(`${env.ACCIO_OPENAI_URL}/responses`, {
+        method: 'POST', signal, redirect: 'error',
+        headers: { authorization: `Bearer ${env.ACCIO_OPENAI_KEY}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ model, stream: true, store: false,
+          instructions: 'You name conversations. Return only the requested JSON.',
+          input: [{ role: 'user', content: [{ type: 'input_text', text: prompt }] }],
+          tools: [], ...(effort ? { reasoning: { effort } } : {}), text: { verbosity: 'low' },
+        }),
+      });
+      if (!response.ok || !response.body) { await response.body?.cancel(); throw new Error('Title generation provider is unavailable'); }
+      let buffer = '';
+      let text = '';
+      let size = 0;
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      try {
+        for (;;) {
+          const chunk = await reader.read();
+          if (chunk.done) break;
+          size += chunk.value.length;
+          if (size > 128_000) throw new Error('Title response exceeded its limit');
+          buffer += decoder.decode(chunk.value, { stream: true });
+          const lines = buffer.split('\n'); buffer = lines.pop()!;
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const data = line.slice(6).trim();
+            if (data === '[DONE]') continue;
+            const event = JSON.parse(data);
+            if (event.type === 'response.output_text.delta') text += event.delta;
+            if (event.type === 'response.failed' || event.type === 'error' || event.type === 'response.incomplete') throw new Error('Title generation failed');
+            if (event.type === 'response.completed') return text || event.response?.output?.flatMap((item: any) => item.content ?? []).map((part: any) => part.text ?? '').join('') || '';
+          }
+        }
+        throw new Error('Title response was interrupted');
+      } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
+    },
+    async *run({ cwd, prompt, sessionId, model, effort, modelName, env, tools, signal, resourceInstructions, mcps, requestSecret, secretPurposes, registerSteer, toolsOff = [] }) {
       if (signal.aborted) return;
       const home = env.CODEX_HOME;
       const baseUrl = env.ACCIO_OPENAI_URL;
@@ -23,6 +63,8 @@ export function codexHarness(factory: CodexFactory = startCodex): Harness {
         'model_providers.accio.env_key="ACCIO_OPENAI_KEY"', 'model_providers.accio.wire_api="responses"',
         'model_providers.accio.supports_websockets=false',
         'approval_policy="never"', 'sandbox_mode="danger-full-access"',
+        // Built-in tools switched off; app-server reads them at launch, so they hold on resume too.
+        ...toolsOff.flatMap((t) => t.config ?? []),
         ...Object.entries(mcps ?? {}).flatMap(([id, mcp]) => {
           // Override keys are dot-separated paths, not TOML key expressions.
           // IDs are validated as bare keys by the protocol.
@@ -63,7 +105,7 @@ export function codexHarness(factory: CodexFactory = startCodex): Harness {
         if (signal.aborted) return;
         // Config, unlike dynamic tools, applies on resume too, so resumed threads keep accio's tools.
         const config = {
-          ...(tools ? { [`mcp_servers.${ACCIO_MCP_SERVER}`]: { url: tools.url, http_headers: { Authorization: tools.authorization } } } : {}),
+          ...(tools ? { [`mcp_servers.${ACCIO_MCP_SERVER}`]: { url: tools.url, http_headers: { Authorization: tools.authorization }, tool_timeout_sec: SUBAGENT_TIMEOUT_SEC } } : {}),
           ...(endpoint ? { [`mcp_servers.${SECRET_MCP_SERVER}`]: { url: endpoint.url, bearer_token_env_var: 'ACCIO_TOOL_TOKEN' } } : {}),
         };
         const params = { cwd, ...(model ? { model } : {}), ...(Object.keys(config).length ? { config } : {}), approvalPolicy: 'never', sandbox: 'danger-full-access',
@@ -124,7 +166,7 @@ export function codexEvents({ method, params }: CodexNotification): HarnessEvent
     case 'commandExecution': return [{ kind: 'tool', id: item.id, name: 'Shell', summary: item.command, input: { command: item.command, ...(item.cwd ? { cwd: item.cwd } : {}) }, status, output: item.aggregatedOutput ?? undefined }];
     case 'fileChange': return [{ kind: 'tool', id: item.id, name: 'Edit', summary: item.changes.map((c: any) => c.path).join(', '), status,
       ...(done ? { output: item.changes.map((c: any) => `${c.path}\n${c.diff ?? ''}`).join('\n') } : {}) }];
-    case 'mcpToolCall': return [{ kind: 'tool', id: item.id, name: `${item.server}/${item.tool}`, summary: JSON.stringify(item.arguments ?? {}), input: item.arguments ?? {}, status,
+    case 'mcpToolCall': return [{ kind: 'tool', id: item.id, name: `${item.server}/${item.tool}`, summary: summarizeTool(`${item.server}/${item.tool}`, item.arguments ?? {}), input: item.arguments ?? {}, status,
       ...(done ? { output: JSON.stringify(item.error ?? item.result ?? '') } : {}) }];
     case 'webSearch': return [{ kind: 'tool', id: item.id, name: 'Search', summary: item.query ?? '', status }];
     default: return [];

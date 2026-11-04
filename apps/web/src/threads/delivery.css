@@ -42,16 +42,4 @@
 .delivery-error button { margin-left: 6px; }
 .delivery-queued { max-width: 100%; }
 .delivery-queued > [role="status"] { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
-.delivery-progress { margin-top: 6px; color: var(--muted); font-size: 12px; }
-.delivery-progress summary { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; list-style: none; }
-.delivery-progress summary::-webkit-details-marker { display: none; }
-.delivery-progress summary svg { width: 12px; height: 12px; transition: transform 0.12s; }
-.delivery-progress[open] summary svg { transform: rotate(90deg); }
-/* The muted underlined link used for file links, not browser blue. */
-.delivery-progress a { color: inherit; text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 3px; }
-.delivery-progress a:hover { color: var(--ink-strong); text-decoration-color: currentColor; }
-.delivery-progress ul { margin: 6px 0; padding-left: 18px; }
-.delivery-progress li { margin: 4px 0; overflow-wrap: anywhere; }
-.delivery-progress li > span:last-child { margin-left: 8px; }
-.delivery-progress small { color: var(--dim); font-size: 12px; }
 .delivery-settled { padding: 0 4px; color: var(--muted); font-size: 12.5px; }

@@ -217,3 +217,15 @@ export const BookOpen = () => (
     <path d="M12 7v14M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3Z" />
   </svg>
 );
+export const Target = () => (
+  <svg {...base}>
+    <circle cx="12" cy="12" r="9" />
+    <circle cx="12" cy="12" r="5" />
+    <circle cx="12" cy="12" r="1" />
+  </svg>
+);
+export const Pause = () => (
+  <svg {...base}>
+    <path d="M9 5v14M15 5v14" />
+  </svg>
+);

@@ -3,7 +3,7 @@ import type { ToolDetails, TranscriptItem } from '@accio/protocol';
 import { useClient, useConnectionStatus } from '../app/connection';
 import { Chevron } from '../app/icons';
 import { InlineMedia } from './InlineMedia';
-import { toolSummary } from './transcriptBlocks';
+import { describeActivity, toolSummary } from './transcriptBlocks';
 
 type ToolItem = Extract<TranscriptItem, { kind: 'tool' }>;
 const statuses: Record<ToolItem['status'], string> = { running: 'Running', done: 'Completed', error: 'Failed', interrupted: 'Interrupted' };
@@ -35,6 +35,7 @@ export function ToolCallRow({ threadId, item }: { threadId: string; item: ToolIt
     <button className="tool-toggle" onClick={() => setOpen(!open)} aria-expanded={open} aria-controls={detailId}>
       <span className="tool-name">{item.name}</span>
       <span className="tool-summary" title={item.summary}>{toolSummary(item)}</span>
+      {item.status === 'running' && item.step && <span className="tool-step">{describeActivity(item.step)}</span>}
       <span className="tool-status">{statuses[item.status]}</span>
       <Chevron />
     </button>

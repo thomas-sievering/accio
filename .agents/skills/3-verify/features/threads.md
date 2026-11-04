@@ -10,6 +10,7 @@ Users choose a project or profile, select a model, send prompts, observe streame
 - `threads-stop`: stop from composer/row/menu; resume interruptions; retry failed turns.
 - `threads-find`: title search, clear, profile/project filters and clear filter chip.
 - `threads-organize`: rename, snooze/wake, settle/reopen, shelf expansion/paging, confirmed deletion.
+- `threads-goal`: `/goal <objective>` in the composer shows the Goal bar (`getByRole('region', { name: 'Goal' })`); accio continues turns ("Continuing toward the goal" dividers) until finish_goal reports achieved or blocked; Pause, Resume and Clear goal buttons and `/goal pause|resume|clear`. Covered by `tests/goal.spec.ts` in `pnpm test:chat` with the scripted harness calling the real MCP tool; real-provider goals need a signed-in account.
 - `threads-delivery`: owned Git worktrees, Ship/review intent, cancellation, remote verification, preview ownership and safe Archive.
 
 ## How to get to it (user POV)
@@ -21,7 +22,7 @@ Users choose a project or profile, select a model, send prompts, observe streame
 
 ## Driving it with Playwright
 
-Preconditions: healthy instance. Picker and signed-out gating can be tested after UI profile creation. A successful turn requires a real signed-in selected provider account and a reported model; a project thread also needs the disposable folder added. Search/shelves need actual threads; paging needs more than five settled threads. The baseline supplies none of these authenticated thread fixtures. Report unavailable journeys as failed prerequisites/unverified coverage; never insert fake threads into storage to call this an end-to-end proof.
+Preconditions: healthy instance. Picker and signed-out gating can be tested after UI profile creation. A successful turn requires a real signed-in selected provider account and a reported model; a project thread also needs the disposable folder added. Search/shelves need actual threads; paging needs more than five settled threads. The baseline supplies none of these authenticated thread fixtures; for a signed-in account use the verify device (`pnpm verify:real`, see [Real model turns](../SKILL.md#real-model-turns)). Report unavailable journeys as failed prerequisites/unverified coverage; never insert fake threads into storage to call this an end-to-end proof.
 
 - **Picker, mouse and keyboard.** Click `page.getByRole('button', { name: 'New thread', exact: true })` (scope to sidebar or main if both exist). Fill combobox `Search projects`, then click `page.getByRole('option', { name: /^verify-project/ })`. If several checkouts exist, require and choose the intended path option. Also exercise ArrowDown/Enter through that combobox. For `No project`, click its exact option; with two profiles require combobox `Search profiles`, search and choose a profile option. Require heading `What should we build?` or `What should we build in verify-project?` and the chosen profile's account gate/model controls.
 - **Signed-out gate.** In the baseline draft fill `page.getByRole('textbox')` in `.composer` with a prompt. Require `Send` disabled and the status notice about the profile not being signed in. Click `Choose account` to open that profile. This proves only gating.

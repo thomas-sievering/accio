@@ -15,7 +15,9 @@ export type AccioTool<Shape extends z.ZodRawShape = z.ZodRawShape> = {
   name: string;
   description: string;
   input: Shape;
-  call: (args: z.infer<z.ZodObject<Shape>>, context: { threadId: string }) => Promise<string> | string;
+  /** Listed and callable only when this says so for the turn's thread, so a turn sees just the tools it can use. */
+  available?: (threadId: string) => boolean;
+  call: (args: z.infer<z.ZodObject<Shape>>, context: { threadId: string; signal: AbortSignal }) => Promise<string> | string;
 };
 
 /** Typed helper so each tool's arguments are checked against its own shape. */
@@ -36,6 +38,11 @@ export class AccioTools {
   private origin?: string;
 
   constructor(private tools: AccioTool[]) {}
+
+  /** Adds a tool whose implementation needs parts built after the server, such as running turns. */
+  add(tool: AccioTool) {
+    this.tools.push(tool);
+  }
 
   /** Where the machine server listens; known once its transport is up. */
   listen(origin: string) {
@@ -77,10 +84,13 @@ export class AccioTools {
       res.writeHead(202).end();
       return true;
     }
-    return json(res, 200, await this.answer(message as RpcRequest & { method: string }, grant.threadId));
+    // A harness that gives up on a call closes the request; long tools stop with it.
+    const caller = new AbortController();
+    res.once('close', () => caller.abort());
+    return json(res, 200, await this.answer(message as RpcRequest & { method: string }, grant.threadId, caller.signal));
   }
 
-  private async answer({ id, method, params }: RpcRequest & { method: string }, threadId: string) {
+  private async answer({ id, method, params }: RpcRequest & { method: string }, threadId: string, signal: AbortSignal) {
     switch (method) {
       case 'initialize': {
         const asked = typeof params?.protocolVersion === 'string' ? params.protocolVersion : '';
@@ -94,14 +104,14 @@ export class AccioTools {
         return rpcResult(id, {});
       case 'tools/list':
         // Claude Code would otherwise defer MCP tools behind its tool search; accio's are few and named in the system prompt.
-        return rpcResult(id, { tools: this.tools.map(({ name, description, input }) => ({ name, description, inputSchema: inputSchema(input), _meta: { 'anthropic/alwaysLoad': true } })) });
+        return rpcResult(id, { tools: this.tools.filter((t) => !t.available || t.available(threadId)).map(({ name, description, input }) => ({ name, description, inputSchema: inputSchema(input), _meta: { 'anthropic/alwaysLoad': true } })) });
       case 'tools/call': {
-        const tool = this.tools.find((t) => t.name === params?.name);
+        const tool = this.tools.find((t) => t.name === params?.name && (!t.available || t.available(threadId)));
         if (!tool) return rpcError(id, -32602, `Unknown tool: ${String(params?.name)}`);
         const args = z.object(tool.input).safeParse(params?.arguments ?? {});
         if (!args.success) return rpcResult(id, toolResult(z.prettifyError(args.error), true));
         try {
-          return rpcResult(id, toolResult(await tool.call(args.data, { threadId }), false));
+          return rpcResult(id, toolResult(await tool.call(args.data, { threadId, signal }), false));
         } catch (error) {
           return rpcResult(id, toolResult(error instanceof Error ? error.message : String(error), true));
         }

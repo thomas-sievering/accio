@@ -77,10 +77,12 @@ test('CI wait shows current job and step, refreshes, survives reload and clears 
   const status = page.locator('.delivery-row [role="status"]');
   await expect(status).toContainText('CI · Build image · 2 of 4');
   await expect(page.locator('.row-project').filter({ hasText: 'CI · step 2/4' })).toBeVisible();
-  await expect(page.locator('.row.active .row-main')).toHaveAttribute('title', /CI · Build image · 2 of 4/);
-  await page.getByText('CI details · 1 of 2 checks complete', { exact: true }).click();
+  // Ship opens the side panel at Delivery: the track, with live CI under the station waiting on it.
+  await expect(page.getByRole('tab', { name: 'Delivery' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('.delivery-track [aria-current="step"]')).toContainText('Checks on main');
+  await expect(page.locator('.delivery-progress')).toContainText('1 of 2 checks complete');
   await expect(page.getByRole('link', { name: 'image ↗', exact: true })).toHaveAttribute('href', 'https://github.com/test/fixture/actions/runs/10/job/20');
-  await expect(page.locator('.delivery-progress')).toContainText('Last checked');
+  await expect(page.locator('.delivery-progress')).toContainText('last checked');
   await page.screenshot({ path: testInfo.outputPath('ci-progress.png') });
   await page.reload();
   await expect(status).toContainText('Build image · 2 of 4');
@@ -89,6 +91,7 @@ test('CI wait shows current job and step, refreshes, survives reload and clears 
   await page.getByRole('button', { name: 'Check now', exact: true }).click();
   await expect(page.locator('.delivery-actions [role="status"]')).toContainText('Shipped to main');
   await expect(page.locator('.delivery-progress')).toHaveCount(0);
+  await expect(page.locator('.delivery-track .station-done')).toHaveCount(3);
   await expect(page.locator('.row-project').filter({ hasText: 'CI ·' })).toHaveCount(0);
   await expect(page.getByText('Ship to main when ready.', { exact: true })).toHaveCount(1);
 });

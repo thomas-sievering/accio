@@ -7,9 +7,60 @@ import { join, resolve } from 'node:path';
 const require = createRequire(import.meta.url);
 const token = 'isolated-chat-test-token';
 
+for (const submit of ['Enter', 'Send'] as const) {
+  test(`first ${submit} shows the message before thread startup completes and recovers a failed start`, async ({ page, baseURL }, testInfo) => {
+    let release: (() => void) | undefined;
+    let starts = 0;
+    await page.routeWebSocket('**/ws?*', socket => {
+      const server = socket.connectToServer();
+      socket.onMessage(message => {
+        const request = JSON.parse(String(message));
+        if (request.method !== 'threads.start') { server.send(message); return; }
+        starts++;
+        release = starts === 1
+          ? () => socket.send(JSON.stringify({ type: 'response', id: request.id, ok: false, error: 'Startup unavailable. Try again.' }))
+          : () => server.send(message);
+      });
+    });
+    await page.goto(`${baseURL}/#token=${token}`);
+    await page.locator('.sidebar').getByRole('button', { name: 'New thread', exact: true }).click();
+    await page.getByRole('option', { name: 'No project', exact: true }).click();
+    if (await page.getByRole('combobox', { name: 'Search profiles' }).isVisible()) await page.getByRole('option', { name: 'Personal', exact: true }).click();
+    const input = page.locator('.composer textarea');
+    const text = `First ${submit} startup feedback`;
+    await input.fill(text);
+    const send = async () => {
+      if (submit === 'Enter') await input.press('Enter');
+      else await page.getByRole('button', { name: 'Send', exact: true }).click();
+    };
+    await send();
+    const pending = page.locator('.draft-starting');
+    await expect(pending.locator('.msg.user')).toHaveText(text);
+    await expect(pending.getByRole('status')).toHaveText('Starting thread…');
+    await expect(input).toBeHidden();
+    // Enter again while startup is held cannot create a duplicate thread.
+    await page.keyboard.press('Enter');
+    expect(starts).toBe(1);
+    await page.screenshot({ path: testInfo.outputPath('first-send-starting.png') });
+    release!();
+    await expect(page.locator('.composer-error')).toHaveText('Startup unavailable. Try again.');
+    await expect(input).toBeVisible();
+    await expect(input).toHaveValue(text);
+    await send();
+    await expect(pending.getByRole('status')).toBeVisible();
+    expect(starts).toBe(2);
+    release!();
+    await expect(pending).toHaveCount(0);
+    await expect(page.locator('.messages .msg.user')).toHaveText(text);
+    await expect(page.locator('.composer textarea')).toHaveValue('');
+    await page.reload();
+    await expect(page.locator('.messages .msg.user')).toHaveText(text);
+  });
+}
+
 test('Enter steers, Ctrl changes Send and queues; an unsaved queued edit closes when the turn ends', async ({ page, baseURL }, testInfo) => {
   await page.goto(`${baseURL}/#token=${token}`);
-  await page.getByRole('button', { name: /Inline chat fixture/ }).click();
+  await page.locator('.sidebar').getByRole('button', { name: /Inline chat fixture/ }).click();
   const input = page.locator('.composer textarea');
   await input.fill('Steering fixture'); await input.press('Enter');
   await expect(page.getByText('Waiting for steering.', { exact: true })).toBeVisible();
@@ -47,12 +98,12 @@ test('Enter steers, Ctrl changes Send and queues; an unsaved queued edit closes 
   await expect(page.getByText('Finished: Queued second', { exact: true })).toBeVisible();
   await expect(page.getByText('Finished: Queued edited', { exact: true })).toHaveCount(0);
   await page.reload();
-  await page.getByRole('button', { name: /Inline chat fixture/ }).click();
+  await page.locator('.sidebar').getByRole('button', { name: /Inline chat fixture/ }).click();
   await expect(page.getByText('Steered: Use the existing helper', { exact: true })).toBeVisible();
 });
 async function openChat(page: Page, baseURL: string, navigate = true) {
   if (navigate) await page.goto(`${baseURL}/#token=${token}`);
-  await page.getByRole('button', { name: /Inline chat fixture/ }).click();
+  await page.locator('.sidebar').getByRole('button', { name: /Inline chat fixture/ }).click();
   await expect(page.getByAltText('Saved picture')).toBeAttached();
 }
 
@@ -171,7 +222,7 @@ test('web chat replays snapshots, full ordered tool details and playable stable 
   expect(errors).toEqual([]);
 });
 
-test('a running turn shows one status line of what it is doing, then folds under Worked for', async ({ page, baseURL }) => {
+test('a running turn shows what it says as it goes and its latest calls behind one status line, then folds under Worked for', async ({ page, baseURL }) => {
   await openChat(page, baseURL!);
   // Inside a fold, calls sit bare on the rail and failures stay collapsed.
   const fixture = page.locator('.turn-work').first();
@@ -184,14 +235,20 @@ test('a running turn shows one status line of what it is doing, then folds under
   await page.locator('textarea').press('Enter');
   const live = page.locator('.turn-work.live');
   const status = live.getByRole('status');
+  // What it says before a call shows right away, above the live line.
   await expect(status).toHaveText('Running ls -la');
+  await expect(page.locator('.msg.assistant', { hasText: 'I’ll look around the folder first.' })).toBeVisible();
   await expect(live.locator('.turn-work-elapsed')).toHaveText(/^(<1s|\d+s)$/);
   await expect(live.locator('.tool')).toHaveCount(0);
   await expect(status).toHaveText('Reading README.md');
-  // Opening it while running shows the steps so far, and it stays open once the turn completes.
+  // Opening it while running shows the calls since the last message, and it stays open once the turn completes.
   await live.locator('.turn-work-toggle').click();
-  await expect(live.locator('.tool.done').first()).toBeVisible();
+  await expect(live.locator('.tool-summary')).toHaveText(['ls -la', 'README.md']);
+  // A later message stays in order; the live line below it holds only the calls after it.
   await expect(status).toHaveText('Searching TODO');
+  await expect(page.locator('.msg.assistant', { hasText: 'Now checking for open TODOs.' })).toBeVisible();
+  await expect(live.locator('.tool-summary')).toHaveText(['TODO']);
+  await page.screenshot({ path: test.info().outputPath('running-turn.png') });
 
   await expect(page.getByText('Explored the folder.')).toBeVisible();
   await expect(live).toHaveCount(0);
@@ -201,6 +258,7 @@ test('a running turn shows one status line of what it is doing, then folds under
   await expect(work.locator('.tool.done')).toHaveCount(3);
   await expect(work.locator('.tool-summary')).toHaveText(['ls -la', 'README.md', 'TODO']);
   await expect(work.getByText('Explored the folder.')).toHaveCount(0);
+  await expect(work.locator('.msg.assistant')).toHaveText(['I’ll look around the folder first.', 'Now checking for open TODOs.']);
   await work.locator('.turn-work-toggle').click();
   await expect(work.locator('.tool')).toHaveCount(0);
 });
@@ -248,9 +306,27 @@ test('Electron renderer supports the same tools, snapshots, viewer and media con
   }
 });
 
+test('running sub-agents show their latest step, then fold into ordinary Agent rows', async ({ page, baseURL }, testInfo) => {
+  await page.goto(`${baseURL}/#token=${token}`);
+  await page.getByRole('button', { name: /Inline chat fixture/ }).click();
+  const input = page.locator('.composer textarea');
+  await input.fill('Sub-agent fixture'); await input.press('Enter');
+  // The live line names what the newest sub-agent is doing now.
+  await expect(page.locator('.turn-work-activity')).toHaveText(/^Running agent: Review the transcript diff · Running git diff$/);
+  await page.locator('.turn-work-activity').click();
+  const rows = page.locator('.tool.running');
+  await expect(rows).toHaveCount(2);
+  await expect(rows.filter({ hasText: 'Find where deliveries retry' }).locator('.tool-step')).toHaveText('Reading delivery.ts');
+  await expect(rows.filter({ hasText: 'Review the transcript diff' }).locator('.tool-step')).toHaveText('Running git diff');
+  await page.screenshot({ path: testInfo.outputPath('subagents-running.png') });
+  await expect(rows.filter({ hasText: 'Find where deliveries retry' }).locator('.tool-step')).toHaveText('Running pnpm test delivery', { timeout: 10_000 });
+  await expect(page.getByText('Both sub-agents reported back.')).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('.tool-step')).toHaveCount(0);
+});
+
 test('a choice shows screenshots full size and sends the pick with feedback', async ({ page, baseURL }) => {
   await page.goto(`${baseURL}/#token=${token}`);
-  await page.getByRole('button', { name: /Choice fixture/ }).click();
+  await page.locator('.sidebar').getByRole('button', { name: /Choice fixture/ }).click();
   await expect(page.getByText('Which Accounts layout?')).toBeVisible();
   await expect(page.locator('.choice-option')).toHaveCount(3);
   for (const label of ['List rows', 'Cards', 'Grouped by provider']) {
@@ -284,7 +360,7 @@ test('a choice shows screenshots full size and sends the pick with feedback', as
   await page.getByRole('button', { name: 'Close limits', exact: true }).click();
   await expect(page.locator('.composer-chip')).toContainText('C · Grouped by provider');
   await page.getByRole('textbox').fill('but without the toggles');
-  await page.getByRole('button', { name: 'Send' }).click();
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
 
   await expect(page.getByText('Got it: I pick C ("Grouped by provider") for "Which Accounts layout?".')).toBeVisible();
   const sent = page.locator('.msg.user').last();

@@ -16,4 +16,6 @@ if (process.argv.includes('--pair')) {
   const stop = () => { if (stopping) return; stopping = true; void service.close().then(() => process.exit(0), () => process.exit(1)); };
   process.on('SIGTERM', stop); process.on('SIGINT', stop);
   process.on('message', (message) => { if ((message as any)?.type === 'shutdown') stop(); });
+  // A parent that forked this hub over IPC owns it; stop with that parent even if it was killed.
+  process.on('disconnect', stop);
 }

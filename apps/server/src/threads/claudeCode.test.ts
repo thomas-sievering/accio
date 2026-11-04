@@ -25,6 +25,16 @@ const turn = (signal: AbortSignal) => claudeCode.run({ cwd: '.', prompt: 'hello'
 beforeEach(() => vi.clearAllMocks());
 afterEach(() => vi.useRealTimers());
 
+it('generates titles without tools, project settings or persisted sessions', async () => {
+  const q = query();
+  q.next.mockResolvedValueOnce({ done: false, value: { type: 'result', is_error: false, result: '{"title":"Login redirects"}' } });
+  queryMock.mockReturnValue(q);
+  expect(await claudeCode.generateText!({ cwd: 'isolated', prompt: 'Name this', model: 'haiku', env: {}, signal: new AbortController().signal })).toBe('{"title":"Login redirects"}');
+  expect(queryMock.mock.calls[0]![0].options).toMatchObject({ tools: [], mcpServers: {}, strictMcpConfig: true, settingSources: [], persistSession: false, maxTurns: 1, env: { CLAUDE_CODE_MAX_OUTPUT_TOKENS: '256' } });
+  expect(queryMock.mock.calls[0]![0].options).not.toHaveProperty('resume');
+  expect(q.close).toHaveBeenCalled(); expect(q.return).toHaveBeenCalled();
+});
+
 it('streams steering into the same Claude query with immediate priority and closes the channel on result', async () => {
   const q = query(); queryMock.mockReturnValue(q);
   let send: ((text: string) => Promise<void>) | undefined;
@@ -126,4 +136,13 @@ it("points Claude at this turn's accio tools", async () => {
   await claudeCode.run({ cwd: '.', prompt: 'hi', sessionId: null, env: {}, tools, mcps: { remote }, resourceInstructions: 'Enabled skill: browser', signal: new AbortController().signal })[Symbol.asyncIterator]().next();
   expect(queryMock.mock.calls[2]![0].options.mcpServers).toMatchObject({ accio: { url: tools.url }, remote });
   expect(queryMock.mock.calls[2]![0].options.systemPrompt.append).toContain('Enabled skill: browser');
+});
+
+it('removes switched-off built-in tools from the model by name', async () => {
+  const q = query(); queryMock.mockReturnValue(q);
+  const iterator = claudeCode.run({ cwd: '.', prompt: 'hi', sessionId: null, env: {}, signal: new AbortController().signal,
+    toolsOff: [{ id: 'cron', name: 'Cron', description: '', tools: ['CronCreate', 'CronList'], default: 'off' }] })[Symbol.asyncIterator]();
+  const output = iterator.next();
+  expect(queryMock.mock.calls[0]![0].options.disallowedTools).toEqual(['CronCreate', 'CronList']);
+  q.close(); await output;
 });

@@ -10,12 +10,15 @@ import { ProjectMark } from '../projects/ProjectMark';
 import { useProjects } from '../projects/projects';
 import { Composer } from './Composer';
 import { QueueTray } from './QueueTray';
+import { GoalBar } from './GoalBar';
 import { PendingPick, optionName } from './Choice';
 import { DeliveryActions } from './DeliveryActions';
+import { MachinePicker } from './MachinePicker';
 import { ModelPicker } from './ModelPicker';
 import { ThreadNotice } from './ThreadNotice';
 import { ThreadActionsMenu } from './ThreadActionsMenu';
 import { TitleEdit } from './ThreadMenu';
+import { EditableTitle } from './EditableTitle';
 import { Transcript } from './Transcript';
 import { useReportPendingSecrets } from '../secrets/pendingSecrets';
 import { useThreads, useTranscript } from './threads';
@@ -37,7 +40,6 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
   useReportPendingSecrets(thread.id, items);
   const running = thread.status === 'running';
   const [savingModel, setSavingModel] = useState(false);
-  // The header's Rename edits the title where it is shown.
   const [renaming, setRenaming] = useState(false);
   const lastTurn = items?.findLast((item) => item.kind === 'user')?.turnId;
   const blocked = thread.status === 'failed' || thread.status === 'interrupted';
@@ -54,8 +56,7 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
 
   return (
     <>
-      <PaneHeader title={thread.title} {...place} checkout={thread.workspace && !thread.workspace.releasedAt && place.checkout ? { ...place.checkout, path: thread.workspace.path } : place.checkout} renaming={renaming && <TitleEdit thread={thread} className="header-rename" onDone={() => setRenaming(false)} />}
-        actions={<ThreadActionsMenu key={thread.id} thread={thread} items={items} onRename={() => setRenaming(true)} />} />
+      <PaneHeader title={thread.title} titleEditor={renaming ? <TitleEdit thread={thread} className="header-rename" onDone={() => setRenaming(false)} /> : <EditableTitle key={thread.id} thread={thread} />} {...place} checkout={thread.workspace && !thread.workspace.releasedAt && place.checkout ? { ...place.checkout, path: thread.workspace.path } : place.checkout} actions={<ThreadActionsMenu key={thread.id} thread={thread} items={items} onRename={() => setRenaming(true)} />} />
       {visibleItems ? <PendingPick.Provider value={{ pick, setPick, enabled: !running }}>
         <Transcript threadId={thread.id} items={visibleItems} working={running} onOpenSecrets={onOpenSecrets} />
       </PendingPick.Provider> : (
@@ -70,7 +71,7 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
       <Composer
         key={thread.id}
         disabled={savingModel || thread.delivery?.status === 'queued' || thread.delivery?.status === 'running' || !place.profile || !accountForModel(place.profile, thread.model)?.signedIn}
-        actions={<><DeliveryActions key={thread.id} thread={thread} project={place.project} canRun={!!place.profile && !!accountForModel(place.profile, thread.model)?.signedIn} /><QueueTray thread={thread} /></>}
+        actions={<><DeliveryActions key={thread.id} thread={thread} project={place.project} canRun={!!place.profile && !!accountForModel(place.profile, thread.model)?.signedIn} /><GoalBar thread={thread} /><QueueTray thread={thread} /></>}
         target={thread.id}
         draftId={`thread:${thread.id}`}
         onStop={running ? async () => void (await client.call('threads.stop', { threadId: thread.id })) : undefined}
@@ -108,15 +109,24 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
   const local = machines?.find((m) => m.thisMachine);
   const machineId = chosenMachineId ?? local?.id;
   const machine = machines?.find((m) => m.id === machineId);
-  const online = machines?.filter((m) => m.connected) ?? [];
   // Until the list loads, a send goes to this machine, as the server does without a machine id.
   const unavailable = !!machines && !machine?.connected;
   const remote = !!machine && !machine.thisMachine;
+  const [starting, setStarting] = useState<string>();
 
   return (
     <>
       <PaneHeader title="New thread" {...place} />
-      <div className="hero">
+      {starting !== undefined && <div className="transcript-scroll draft-starting" aria-busy="true">
+        <div className="messages"><div className="thread">
+          <div className="msg user">{starting}</div>
+          <div className="draft-starting-status" role="status">
+            <span className="typing" aria-hidden="true"><i /><i /><i /></span>
+            Starting thread…
+          </div>
+        </div></div>
+      </div>}
+      <div className="hero" hidden={starting !== undefined}>
         <h1>{checkoutId ? `What should we build in ${place.project?.name ?? 'this checkout'}?` : 'What should we build?'}</h1>
         <ThreadNotice profile={place.profile} model={model} onOpenProfile={onOpenProfile} />
         {remote && <p className="note" role="status">Running threads on another machine is not available yet. Choose this machine to start a thread.</p>}
@@ -124,19 +134,26 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
         <Composer
           target="draft"
           draftId={`new:${checkoutId}:${profileId ?? ''}`}
-          disabled={!place.profile || !accountForModel(place.profile, model)?.signedIn || unavailable || remote}
+          disabled={starting !== undefined || !place.profile || !accountForModel(place.profile, model)?.signedIn || unavailable || remote}
           placeholder={`Ask ${model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}
-          onSend={async (text) => select((await client.call('threads.start', checkoutId ? { checkoutId, text, model, machineId } : { profileId: profileId!, text, model, machineId })).id)}
+          onSend={async (text) => {
+            setStarting(text);
+            try {
+              const thread = await client.call('threads.start', checkoutId ? { checkoutId, text, model, machineId } : { profileId: profileId!, text, model, machineId });
+              select(thread.id);
+            } finally {
+              // Keep the composer mounted so a failed start restores its draft and error.
+              setStarting(undefined);
+            }
+          }}
           toolbar={<>
-            {(machines?.length ?? 0) > 1 && <select className="composer-machine" aria-label="Run on machine" value={machineId ?? ''} disabled={!machines} onChange={(e) => setChosenMachineId(e.target.value)}>
-              {!machineId && <option value="">Loading machines…</option>}
-              {chosenMachineId && unavailable && <option value={chosenMachineId} disabled>Selected machine offline</option>}
-              {online.map((m) => <option key={m.id} value={m.id}>{m.name}{m.thisMachine ? ' (local)' : ''}</option>)}
-            </select>}
             <ModelPicker profileId={place.profile?.id} value={model} onChange={async (model) => setChoice({ checkoutId, profileId: place.profile?.id, model })} />
             {place.profile && <LimitsIndicator active={active} account={accountForModel(place.profile, model)} onOpen={() => onOpenLimits(place.profile!.id)} />}
           </>}
         />
+        <div className="draft-machine">
+          <MachinePicker machines={machines} value={machineId} onChange={setChosenMachineId} />
+        </div>
       </div>
     </>
   );
@@ -145,11 +162,10 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
 /** A compact project / thread breadcrumb; hover the project to see its checkout path. */
 function PaneHeader(props: {
   title: string;
+  titleEditor?: ReactNode;
   checkout?: CheckoutView;
   project?: ProjectView;
   actions?: ReactNode;
-  /** Replaces the title while it is being edited. */
-  renaming?: ReactNode;
 }) {
   const { checkout, project } = props;
   return (
@@ -164,7 +180,7 @@ function PaneHeader(props: {
           </span>
         </span>
         <span className="faint" aria-hidden="true">/</span>
-        {props.renaming || <b title={props.title}>{props.title}</b>}
+        {props.titleEditor ?? <b title={props.title}>{props.title}</b>}
       </div>
       {props.actions}
     </header>

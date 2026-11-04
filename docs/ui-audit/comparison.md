@@ -1,45 +1,49 @@
 # UI audit comparison
 
-Work is on `ui_analysis`. The comparison includes round-6 observations and subsequent fixes; the all-auditor threshold is still pending independent review.
+Six completed independent audit rounds informed the changes on `ui_analysis`. Merge preparation was requested before round 7 completed. The latest independent scores describe `037f47b`; the subsequent fixes and integration with current main have implementation checks, but no final independent ratings.
 
 ## Changes visible in ordinary use
 
-| Area | Before the audit | After round 4 |
+| Area | Before | Prepared for merge |
 |---|---|---|
-| Transcript | Raw resource JSON and timestamp receipts interrupt reading. | Resource diagnostics are removed from the reading flow; one delivery chip states the outcome. |
-| Delivery | Choosing a shipping mode starts it; stop wording suggests PR tracking stops. | Mode selection is separate from execution; Stop automatic fixes keeps PR observation explicit. |
-| Settings | Different save/delete patterns; repeated titles; project settings hidden behind a gear. | Shared footers and inline confirmation; breadcrumb titles; Projects and Limits in navigation. |
-| Unsaved edits | Settings navigation can discard edits. | Existing dirty editors ask Keep editing or Discard. A browser test proves keeping does not save and discarding preserves the original. |
-| Profile editor | Separate cards push useful choices below the footer at 900×700. | One compact account/name card and a Saved secrets link leave both fixture skill choices visible. |
-| Keyboard | Several menus lack focus and arrow navigation; no global search/new-thread shortcuts. | Menus take focus, arrows navigate, Escape restores focus; Ctrl+K, / and Ctrl+N reach common actions. |
-| Sidebar | Long project/status combinations truncate; snooze has no acknowledgement. | Short delivery status with complete tooltip; snooze acknowledgement and Undo. |
-| Narrow window | Three panes squeeze content and expose background controls. | Side panel overlays the app with a scrim and inert background, including the sidebar resizer. |
-| Composer | Early Enter can be lost during machine loading; effort can reset after sending/reloading. | Loading alone no longer disables a draft; menu effort changes save immediately. Regression browser tests cover both. |
-| Forms | Validation and confirmation wording vary. | Field-local errors and focus; consistent destructive action order; onboarding sheet padding restored. |
+| Transcript | Raw resource JSON, receipts and repeated status interrupt reading. | Resource diagnostics leave the reading flow; delivery has one outcome chip and the current main delivery panel. Running messages remain visible as they arrive. |
+| Delivery | Choosing a shipping mode immediately starts it. Stop wording implies tracking stops. | Selecting a mode stages it; the main button starts delivery and opens its panel. Stop automatic fixes explicitly keeps PR observation. |
+| Settings | Different save/delete patterns and hidden project settings. | Shared footers, validation and confirmation; Projects and Limits in navigation; project shortcuts reach one editor. |
+| Unsaved input | Navigation can discard typed edits. | Existing editors and all seven new-item forms guard Escape, breadcrumbs and section changes. Keep editing never saves; Discard persists nothing. |
+| Profile editor | Cards push choices below the footer at 900 ? 700. | Compact account/name card and Saved secrets link keep choices visible. |
+| Keyboard | Menus lack focus/arrow navigation; truncated titles cannot be read on focus. | Menus focus and support arrows/Escape; complete-title tooltips preserve row geometry; search/new-thread shortcuts. |
+| Narrow window | Panes squeeze content and expose background controls. | Side panel overlays an inert background, traps focus, and releases it for Settings. |
+| Composer | Early Enter can be lost; effort can reset; broken tools can leave orphan bubbles. | Early send works while machines load; effort saves immediately; refused sends retain drafts without publishing messages. Main?s immediate startup feedback is preserved. |
+| Forms and feedback | Inconsistent validation, small targets and ambiguous copy feedback. | Field-local errors and focus, larger controls, file-specific media names, announced failures, clipboard acknowledgement/reset, onboarding Back. |
 
-## Screenshot evidence
+## Before / after screenshots
 
-Before screenshots were captured by the independent round-1 auditors; after screenshots below were captured after the round-4 implementation. Fixture contents vary, so these are behavior comparisons rather than pixel-difference proofs. An interactive score chart and two matched 900×700 screenshot pairs are available locally at `out/ui-audit/comparison.html`.
+Curated evidence is versioned below; each pair uses a 900 ? 700 viewport. Before is round 1; after is round 6 (`037f47b`). Fixture contents differ. These demonstrate the audited improvements, not the later main integration or a pixel-difference test.
 
-- Profile before: `out/ui-audit/round-1/opus/116-settings-edit-profile.png`.
-- Profile after, 900×700: `out/ui-audit/round-4/resume/03-compact-profile.png`.
-- Guard after: `out/ui-audit/round-4/resume/01-unsaved-profile.png` and `out/e2e/chat/` settings-test evidence.
-- Project page after: `out/ui-audit/round-4/resume/02-project-settings.png`.
-- Limits entry result: `out/ui-audit/round-4/resume/04-settings-limits.png`.
+| Profile before | Profile after |
+|---|---|
+| ![Profile before](screenshots/profile-before.png) | ![Profile after](screenshots/profile-after.png) |
 
-The complete numbered evidence for each audit is under `out/ui-audit/round-N/<auditor>/`. These local files are ignored by Git; the reports and implementation are versioned.
+| Shipped thread before | Shipped thread after |
+|---|---|
+| ![Delivery before](screenshots/delivery-before.png) | ![Delivery after](screenshots/delivery-after.png) |
 
-Matched 900×700 pairs in the interactive artifact:
+Full numbered screenshots, ARIA snapshots and traces remain locally under `out/ui-audit/round-N/<auditor>/`. The interactive local comparison is `out/ui-audit/comparison.html`. Reports preserve each audit's precise coverage and evidence qualifications.
 
-- Profile: `round-1/gpt-sol/134-profile-form-900.png` → `round-5/gpt-sol/022-compact-profile-900.png`.
-- Shipped thread: `round-1/gpt-sol/92-shipped-900.png` → `round-5/gpt-sol/061-shipped-900.png`.
+## Latest independent scores
 
-The latest fixes add keyboard-visible title/effort tooltips, stable focused row height, explicit panel Tab wrapping, repair-link spacing and a return to the originating Settings page from Limits. They are not yet independently scored.
+| Category | Sonnet | Opus | GPT Sol |
+|---|---:|---:|---:|
+| Minimalism / calmness | 9 | 9 | 9 |
+| Hierarchy / typography | 9 | 9 | 9 |
+| Consistency | 8 | 9 | 9 |
+| Clarity / discoverability | 8 | 9 | 9 |
+| Feedback / state | 9 | 9 | 9 |
+| Efficiency / flow | 9 | 9 | 9 |
+| Accessibility | 8 | 8 | 9 |
+| Layout robustness | 9 | 9 | 9 |
+| Forms / dialogs | 9 | 8 | 9 |
 
-Round 6 independently confirms those corrections on the saved `037f47b` web build, with matching disk/served hashes. GPT Sol scores every category 9; Sonnet has three categories at 8 (Consistency, Clarity, Accessibility), and Opus has two (Accessibility, Forms). The next implementation guards all seven new-item forms, restores navigation focus, names media actions, announces send failures, limits tooltips to one, improves smaller control targets and onboarding Back, and clarifies copy feedback. These further changes still need independent ratings.
+Round 1 scores ranged from 6?8. Round 6 used one saved build with matching served/disk manifest hashes. Later fixes address the remaining concrete findings, including new-form guards and navigation focus. The original all-auditor ?9 stopping criterion was not reached before the user requested merge preparation. Round 7 was stopped; the Claude audits hit rate limits.
 
-## Score interpretation
-
-Round 1 started at 6–8 across the nine categories. In round 4, Sonnet and GPT Sol each gave four categories 9; Opus gave Feedback and Efficiency 9. Every other round-4 score was 8. In round 5 GPT Sol gave seven categories 9, with Clarity and Accessibility 8. The Claude children initially failed at rate limits, then were resumed separately on Claude HRC and produced reports. Sonnet gave four categories 9 and Opus three, with other scores 8. Their reports note the shared checkout changed during the resumed runs; Opus limits its affected baseline evidence explicitly. See `round-5/plan.md` for the complete table and audit caveat. Scores cannot be presented as ratings of the subsequent fixes.
-
-Live provider sign-in and real model execution, exhaustive screen-reader conformance, and native OS integration remain outside the established audit evidence. Mocked provider and hosting boundaries are identified in the fixture suites.
+Round 5 evidence has a shared-build qualification, documented in the reports and `round-5/plan.md`; round 6 corrected that process. Live provider sign-in and model turns, real hosting/CI, exhaustive screen-reader coverage and native OS integration remain outside the audit evidence. Scripted-provider and hosting boundaries are explicit in the tests. See [merge preparation](merge-preparation.md) for integration validation.

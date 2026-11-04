@@ -161,16 +161,18 @@
   height: 18px;
 }
 .row.open {
-  height: 44px;
+  height: 54px;
 }
 .row.open .row-main {
-  gap: 10px;
+  gap: 12px;
+  padding-inline-start: 10px;
   padding-inline-end: 62px;
 }
 .row.open .row-name {
   display: flex;
   flex-direction: column;
-  line-height: 17px;
+  gap: 3px;
+  line-height: 18px;
 }
 .row.open .row-title {
   overflow: hidden;
@@ -532,6 +534,18 @@
   font-size: 12px;
   color: var(--muted);
 }
+/* A running sub-agent's latest step, after its task. */
+.tool-step {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: clip;
+  text-overflow: ellipsis;
+  color: var(--dim);
+}
+.tool-step::before {
+  content: '·';
+  margin-right: 8px;
+}
 .tool button svg {
   flex: none;
   width: 13px;
@@ -747,8 +761,8 @@
 }
 /* The model and its effort sit together on the left of the composer bar. */
 .model-choice { display: inline-flex; align-items: center; gap: 2px; min-width: 0; margin-right: auto; flex: 0 1 auto; }
-/* The first control's text lines up with the textarea's; its hover pill bleeds left. */
-.model-choice > :first-child { margin-left: -8px; }
+/* When the model leads the bar, its text lines up with the textarea's; its hover pill bleeds left. */
+.composer-bar > .model-choice:first-child > :first-child { margin-left: -8px; }
 .model-trigger {
   display: inline-flex;
   align-items: center;
@@ -826,23 +840,28 @@ div.model-picker-empty b { color: var(--ink); font-weight: 500; }
 .effort-word-out { position: absolute; inset: 0; }
 .model-picker-row.limited .model-picker-name { opacity: 0.55; }
 .model-picker-limited { color: var(--amber) !important; }
-.composer-machine {
-  max-width: 240px;
-  min-width: 0;
-  padding: 4px 24px 4px 8px;
-  border: 1px solid var(--line);
+/* GLOSSARY: Machine. Where a new thread runs; a quiet chip under the composer. */
+.machine-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 260px;
+  padding: 4px 8px;
   border-radius: 6px;
-  background-color: var(--raised);
-  background-position: right 8px center;
-  color: var(--muted);
-  font: inherit;
-  font-size: 13px;
-  text-overflow: ellipsis;
+  color: var(--dim);
+  font-size: 12.5px;
 }
-.composer-machine:focus-visible {
-  outline: 2px solid var(--blue);
-  outline-offset: 2px;
-}
+.machine-trigger svg { flex: none; width: 13px; height: 13px; }
+.machine-trigger span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.machine-trigger:hover:not(:disabled) { background: var(--hover); color: var(--ink); }
+.machine-trigger:disabled { cursor: default; opacity: 0.6; }
+.machine-trigger.offline { color: var(--amber); }
+.menu.machine-menu { position: fixed; inset: auto; position-area: none; position-try-fallbacks: none; margin: 0; }
+.machine-menu .menu-item > svg { color: var(--muted); }
+.machine-menu .menu-item[aria-checked="true"] .menu-text b { color: var(--ink-strong); }
+.machine-check { display: grid; place-items: center; flex: none; width: 16px; color: var(--muted); }
+.machine-check svg { width: 13px; height: 13px; }
+.machine-menu-empty { margin: 0; padding: 10px; color: var(--muted); text-align: center; }
 .send {
   display: grid;
   place-items: center;
@@ -926,3 +945,20 @@ div.model-picker-empty b { color: var(--ink); font-weight: 500; }
   color: var(--red);
 }
 .composer-bar .limits-chip { flex: none; white-space: nowrap; }
+/* GLOSSARY: Goal. One line above the composer, like the queue tray. */
+.goal-bar { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 32px; margin: 0 10px; padding: 4px 8px; background: var(--raised); border: 1px solid var(--line); border-bottom: 0; border-radius: 9px 9px 0 0; font-size: 12px; }
+.goal-bar + .queue-tray { border-radius: 0; }
+.goal-bar > svg { width: 13px; height: 13px; flex: none; color: var(--blue); }
+.goal-bar.achieved > svg { color: var(--green); }
+.goal-bar.paused > svg { color: var(--amber); }
+.goal-objective { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-strong); }
+.goal-state { max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dim); }
+.goal-bar button { flex: none; padding: 4px; color: var(--muted); border-radius: 4px; }
+.goal-bar button:hover:not(:disabled) { color: var(--ink-strong); background: var(--raised-2); }
+.goal-bar button svg { width: 13px; height: 13px; }
+.goal-bar .error { margin: 0; }
+.goal-continue { align-self: center; color: var(--dim); font-size: 12px; }
+.editable-thread-title { font: inherit; font-weight: 600; color: inherit; background: none; border: 0; padding: 3px 5px; border-radius: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; -webkit-app-region: no-drag; }
+.editable-thread-title:hover { background: var(--hover); }
+.thread-title-form { display: flex; flex-direction: row; align-items: center; gap: 6px; min-width: 0; -webkit-app-region: no-drag; }
+.thread-title-form input { min-width: 100px; width: 260px; max-width: 35vw; }

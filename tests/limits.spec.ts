@@ -179,7 +179,7 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
   await page.locator('.composer textarea').fill('Unsent follow-up');
   await page.locator('.limits-chip').click();
   await expect(page.getByRole('radio', { name: 'Personal', exact: true })).toHaveAttribute('aria-checked', 'true');
-  await page.getByRole('button', { name: /A fixture-only turn/ }).click();
+  await page.locator('.sidebar').getByRole('button', { name: /A fixture-only turn/ }).click();
   await expect(button('Close limits')).toHaveCount(0);
   await expect(page.locator('.composer textarea')).toHaveValue('Unsent follow-up');
 

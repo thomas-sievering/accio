@@ -38,6 +38,15 @@ Production startup creates the token and machine identity, runs state migrations
 
 Each run owns a fresh browser context, home and ports, so runs can coexist. Use only the instance created by this runner. Browser mode shares the React UI with Electron but cannot prove Electron startup, the native Browse picker, OS folder opening, or window controls. Those require a separate desktop proof; do not simulate `window.accioDesktop` and call that native coverage.
 
+## Real model turns
+
+Real turns use the **verify device**: one machine identity, `~/.accio-verify/device.json` (or `ACCIO_VERIFY_DEVICE`), paired with a real hub whose accounts are already signed in. Journeys that `export const linkedHub = true` start from a fresh home that has already joined that hub (seeded `machine.json` and `hub-connections.json` only). Provider credentials stay on the hub; the scratch home is still removed. Seeding is scaffolding, not pairing proof. The device's machine appears on the hub as `Accio verify`.
+
+- `pnpm verify:real`: adds the disposable project, opens a draft through New thread, sends `Reply with ACCIO_VERIFY_OK…`, and requires the streamed reply plus a persisted transcript (copied to `transcript.json`).
+- Link once (or after the device is revoked): get a pairing code from a device already on the hub (Settings → Hubs, or `hubs.createPairingCode` on that device), then run `pnpm verify:link-hub` with `ACCIO_VERIFY_HUB_URL` and `ACCIO_VERIFY_PAIRING_CODE` set. It pairs through first-run setup, names the machine, and saves the device file. Never print the code or the device file.
+
+One run uses the device at a time; others wait up to 15 minutes on `device.json.lock`. Real turns spend the hub account's quota and run tools with full permissions, so keep prompts inside the disposable project. A journey can `export const headed = true`.
+
 ## Doctor
 
 The runner performs this read-only check before any journey. When an active run looks wrong:
@@ -52,9 +61,9 @@ Use the actual printed directory name as the argument. Inside a custom journey, 
 
 Use Playwright against the real production UI. The runner supplies `page`, `context`, `home`, `fixture`, `runDir`, `action`, `capture`, and `doctor` to a journey's default async export. The committed `smoke.mjs` is the executable reference for profiles, named accounts, machine settings and adding projects. It never signs in or sends a model request.
 
-For inline media, tool-detail or delivery changes, also run `pnpm test:chat` (`tests/inline-chat.spec.ts`, `tests/delivery.spec.ts` and `tests/delivery-merge.spec.ts`). It covers Chromium and a hidden Electron shell against `scripts/chat-test-server.ts`, which substitutes the coding harness and, for PR delivery, hosting reads at production dependency boundaries. Git repositories and publication are real and disposable. This coverage does not establish live GitHub or coding-provider authentication. Each invocation allocates its own port; `ACCIO_CHAT_TEST_PORT` can override that choice.
+For inline media, tool-detail or delivery changes, also run `pnpm test:chat` (`tests/inline-chat.spec.ts`, `tests/delivery.spec.ts` and `tests/delivery-merge.spec.ts`). It covers Chromium and a hidden Electron shell against `scripts/chat-test-server.ts`, which substitutes the coding harness and, for PR delivery, hosting reads at production dependency boundaries. Git repositories and publication are real and disposable. This coverage does not establish live GitHub or coding-provider authentication. Each invocation allocates its own port; `ACCIO_CHAT_TEST_PORT` can override that choice. A fixture server started by hand (`node --import tsx scripts/chat-test-server.ts`) stops itself when its parent process exits or after `ACCIO_FIXTURE_TTL_MINUTES` (default 60); stop it sooner with Ctrl+C.
 
-For a changed flow, write `out/verify-journey.mjs` as an ES module with the same export contract, then run it with the command above. Copy the relevant mapped recipe into that journey, assert the expected outcomes, and wrap each interaction group in `await action('feature/entry: expected behavior', async () => { ... })`. Save checkpoints with `await capture('feature-state')`. User actions go through Playwright clicks, typing, keyboard presses and selects. Use read-only files or RPC only as a second observation of effects; never create the tested state through internal setters or test endpoints.
+For a changed flow, write `out/verify-journey.mjs` as an ES module with the same export contract, then run it with the command above. Copy the relevant mapped recipe into that journey, assert the expected outcomes, and wrap each interaction group in `await action('feature/entry: expected behavior', async () => { ... })`. Save checkpoints with `await capture('feature-state')`. Locators time out after 5 s (`ACCIO_VERIFY_TIMEOUT_MS` overrides); pass a longer `timeout` to a single wait for slow real effects such as a model reply. User actions go through Playwright clicks, typing, keyboard presses and selects. Use read-only files or RPC only as a second observation of effects; never create the tested state through internal setters or test endpoints.
 
 Real handles in this app:
 
@@ -69,6 +78,8 @@ Selectors and complete journeys for the remaining branches live in the feature f
 For interactive debugging, set `ACCIO_VERIFY_HEADED=1` in the invoking shell, and put `await page.pause()` at the desired checkpoint in a custom journey. Resume the inspector to finish and clean up; remove the environment variable afterward. An agent can also modify and rerun a journey without using an interactive browser tool. If a host mandates a browser tool for interactive work, follow that host's tool rules.
 
 ## Evidence
+
+On failure the runner prints the failed action's label, the message without stack frames and, for locator failures, the page's ARIA snapshot. Set `ACCIO_VERIFY_VERBOSE=1` to print the full stack instead; it is always in `result.json`.
 
 Each run retains `result.json` (including failures), `actions.json`, `trace.zip`, screenshots and `.aria.yml` snapshots, `server.log`, browser errors, observed browser request destinations, and `cleanup.json`. The smoke additionally saves non-secret `persisted-settings.json`, `persisted-projects.json`, doctor reports and `coverage.json`. Open a trace with:
 

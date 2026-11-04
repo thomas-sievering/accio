@@ -36,6 +36,10 @@ export class ThreadState {
     return t;
   }
 
+  get(id: string): Thread | undefined {
+    return this.list.find((x) => x.id === id);
+  }
+
   cwd(thread: Thread) {
     return thread.workspace && !thread.workspace.releasedAt ? thread.workspace.path : thread.checkoutId ? this.projects.checkout(thread.checkoutId).path : join(this.home, 'workspaces', thread.id);
   }

@@ -36,6 +36,23 @@ export type ThreadView = {
   /** Increases for new user work, never for an automatic delivery continuation. */
   workVersion?: number;
   queuedMessages?: QueuedMessage[];
+  /** GLOSSARY: Goal. Absent until `/goal` sets one; cleared with `/goal clear`. */
+  goal?: ThreadGoal;
+};
+
+/**
+ * GLOSSARY: Goal. What the thread keeps working toward across turns. accio starts
+ * the next turn itself until the harness reports it achieved or blocked, a turn
+ * stops, fails or uses no tools. There is no turn limit.
+ */
+export type ThreadGoal = {
+  objective: string;
+  status: 'active' | 'paused' | 'achieved';
+  /** Turns worked on it since it was set; for information only. */
+  turns: number;
+  setAt: string;
+  /** Why it paused, or what the harness reported when it finished. */
+  detail?: string;
 };
 
 export type QueuedMessage = { id: string; text: string; pick?: ChoicePick; editing?: boolean };
@@ -126,11 +143,14 @@ export type ChoiceOption = { label: string; source: string; asset?: ThreadAsset;
 export type ChoicePick = { choiceId: string; option: number };
 
 /** One entry of a thread's transcript. */
+/** GLOSSARY: Sub-agent. The latest tool call of the sub-agent a running tool started. */
+export type ToolStep = { name: string; summary: string };
+
 export type TranscriptItem =
   | SecretRequestItem
-  | { kind: 'user'; id: string; turnId: string; text: string; at: string; resume?: boolean; delivery?: DeliveryMode; pick?: ChoicePick; steered?: boolean }
+  | { kind: 'user'; id: string; turnId: string; text: string; at: string; resume?: boolean; delivery?: DeliveryMode; pick?: ChoicePick; steered?: boolean; goal?: 'continue' }
   | { kind: 'assistant'; id: string; turnId: string; text: string; media?: MediaBinding[] }
-  | { kind: 'tool'; id: string; turnId: string; name: string; summary: string; status: 'running' | 'done' | 'error' | 'interrupted'; output?: string; detailRevision?: number; loadedSkills?: LoadedSkill[] }
+  | { kind: 'tool'; id: string; turnId: string; name: string; summary: string; status: 'running' | 'done' | 'error' | 'interrupted'; output?: string; detailRevision?: number; loadedSkills?: LoadedSkill[]; step?: ToolStep }
   /** GLOSSARY: Choice. Screenshots the harness offers; you pick one in your next message. */
   | { kind: 'choice'; id: string; turnId: string; question: string; options: ChoiceOption[] }
   | { kind: 'notice'; id: string; turnId: string; tone: 'info' | 'error'; text: string }
@@ -151,11 +171,14 @@ const Start = z.union([
   z.object({ profileId: z.string().min(1), ...StartCommon }),
 ]);
 const SetModel = z.object({ threadId: z.string(), model: ModelSelection });
+/** GLOSSARY: Goal. The status bar's controls; setting one goes through `/goal` in a message. */
+const GoalAction = z.object({ threadId: z.string(), action: z.enum(['pause', 'resume', 'clear']) });
 const Snooze = z.object({ threadId: z.string(), until: z.iso.datetime({ offset: true }) });
 const PickInput = z.object({ choiceId: z.string().min(1).max(512), option: z.int().min(0).max(63) });
 const Send = z.object({ threadId: z.string(), text: z.string().trim(), pick: PickInput.optional(), mode: z.enum(['steer', 'queue']).optional() })
   .refine((send) => send.text.length > 0 || send.pick, { message: 'Write a message or pick an option' });
 const Rename = z.object({ threadId: z.string(), title: z.string().trim().min(1).max(120) });
+const PreviewTitle = z.object({ threadId: z.string(), instructions: z.string().trim().max(2000), model: ModelSelection.nullable() });
 const ToolDetailRequest = z.object({ threadId: z.string(), itemId: z.string().min(1).max(512) });
 const AssetRequest = z.object({ threadId: z.string(), assetId: z.string().uuid(), download: z.boolean().optional() });
 const FileRequest = z.object({ threadId: z.string(), path: z.string().min(1).max(4096) });
@@ -183,6 +206,7 @@ export const threadMethods = {
   /** Recheck delivery, stop owned previews, release only this thread's worktree, retain history. */
   'threads.archive': method<typeof ThreadId, ThreadView>(ThreadId),
   'threads.openPreview': method<typeof ThreadId, { url: string }>(ThreadId),
+  'threads.goal': method<typeof GoalAction, ThreadView>(GoalAction),
   'threads.setModel': method<typeof SetModel, ThreadView>(SetModel),
   /** Stops the running turn; the thread becomes interrupted. */
   'threads.stop': method<typeof ThreadId, null>(ThreadId),
@@ -195,6 +219,8 @@ export const threadMethods = {
   /** Takes a thread off the Snoozed or Settled shelf. Sending a message does the same. */
   'threads.reopen': method<typeof ThreadId, ThreadView>(ThreadId),
   'threads.rename': method<typeof Rename, ThreadView>(Rename),
+  'threads.regenerateTitle': method<typeof ThreadId, ThreadView>(ThreadId),
+  'threads.previewTitle': method<typeof PreviewTitle, { title: string }>(PreviewTitle),
   'threads.delete': method<typeof ThreadId, null>(ThreadId),
 };
 

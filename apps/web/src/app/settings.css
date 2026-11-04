@@ -289,3 +289,12 @@
   outline: 1px solid var(--line-2);
   outline-offset: -1px;
 }
+.naming-advanced { margin: 20px 0; }
+.naming-advanced summary { cursor: pointer; margin-bottom: 16px; }
+.naming-instructions { display: grid; gap: 8px; }
+.naming-instructions textarea { width: 100%; resize: vertical; }
+.naming-preview { display: flex; align-items: end; gap: 12px; margin-top: 20px; }
+.naming-preview label { display: grid; gap: 8px; min-width: 0; }
+.naming-preview select { max-width: 350px; }
+.naming-model, .naming-preview .field, .naming-instructions { margin: 0; }
+.naming-model select { max-width: 280px; }

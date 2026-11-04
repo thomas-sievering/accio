@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { JsonStore } from '@accio/persistence';
-import type { HarnessInstall, MachineInfo } from '@accio/protocol';
+import { DEFAULT_THREAD_NAMING, type ThreadNamingSettings, type HarnessInstall, type MachineInfo } from '@accio/protocol';
 
 export type { HarnessInstall };
 
@@ -24,7 +24,10 @@ export type SharedSeed = { profiles: SharedProfile[]; machines: MachineRecord[] 
 
 type FavoriteModel = { harnessId: string; modelId: string };
 type Data = SharedSeed & {
+  threadNaming?: ThreadNamingSettings;
   modelFavorites?: Record<string, FavoriteModel[]>;
+  /** GLOSSARY: Built-in tools. Harness id → switch id → on, only where it differs from accio's default. */
+  harnessTools?: Record<string, Record<string, boolean>>;
 };
 
 /** GLOSSARY: Provider. Both Anthropic and OpenAI support named account sign-in. */
@@ -50,6 +53,12 @@ export class SharedSettings {
   }
 
   private get data() { return this.store.data; }
+
+  threadNaming(): ThreadNamingSettings { return structuredClone(this.data.threadNaming ?? DEFAULT_THREAD_NAMING); }
+
+  async setThreadNaming(threadNaming: ThreadNamingSettings) {
+    await this.change(() => this.commit({ ...this.data, threadNaming }));
+  }
 
   /** Connected clients observe the same machine registry and folder settings. */
   onMachinesChanged(listener: () => void): () => void {
@@ -95,6 +104,18 @@ export class SharedSettings {
         ...this.data,
         modelFavorites: { ...this.data.modelFavorites, [profileId]: favorite ? [...remaining, model] : remaining },
       });
+    });
+  }
+
+  harnessTools(): Record<string, Record<string, boolean>> {
+    return Object.fromEntries(Object.entries(this.data.harnessTools ?? {}).map(([id, tools]) => [id, { ...tools }]));
+  }
+
+  /** Replaces one harness's overrides; the machine checks them against its catalogue first. */
+  async setHarnessTools(harnessId: string, tools: Record<string, boolean>) {
+    return this.change(async () => {
+      if (!HARNESSES.some((h) => h.id === harnessId)) throw new Error(`No harness ${harnessId}`);
+      await this.commit({ ...this.data, harnessTools: { ...this.data.harnessTools, [harnessId]: { ...tools } } });
     });
   }
 

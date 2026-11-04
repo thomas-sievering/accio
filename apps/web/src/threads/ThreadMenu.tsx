@@ -66,6 +66,9 @@ export function ThreadMenuItems({ thread, close, onRename, before }: {
           <button className="menu-item" role="menuitem" onClick={() => onRename ? (close(), onRename()) : setMode('rename')}>
             <span className="menu-text">Rename…</span>
           </button>
+          <button className="menu-item" role="menuitem" disabled={busy} onClick={() => done(() => client.call('threads.regenerateTitle', { threadId: thread.id }))}>
+            <span className="menu-text">{busy ? 'Generating?' : 'Regenerate title'}</span>
+          </button>
           {running && item('Stop', 'stop')}
           {place === 'snoozed' ? item('Wake now', 'reopen') : item('Snooze until morning', 'snooze')}
           {place === 'settled' ? item('Reopen', 'reopen') : item('Settle', 'settle')}

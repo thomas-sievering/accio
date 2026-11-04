@@ -1,4 +1,5 @@
 import type { ToolAccess } from '../tools/tools.js';
+import type { BuiltinTool } from '../harnesses/builtinTools.js';
 import type { WorkspaceSkill } from '@accio/protocol';
 
 /**
@@ -64,6 +65,8 @@ export type HarnessTurn = {
   /** This turn's access to accio's MCP tools; omitted when the machine serves none. */
   tools?: ToolAccess;
   signal: AbortSignal;
+  /** GLOSSARY: Built-in tools. The harness's own tools switched off for this turn. */
+  toolsOff?: BuiltinTool[];
   /** Bound by the machine to this turn, project and profile; never accepts identity arguments. */
   requestSecret?: (input: import('../secrets/secrets.js').SecretToolArgs) => Promise<import('../secrets/secrets.js').SecretDelivery>;
   /** Authorized saved-purpose metadata lets a fresh harness reuse the exact stable key. */
@@ -75,4 +78,6 @@ export type TurnResources = { env: Record<string, string>; instructions: string;
 
 export interface Harness {
   run(run: HarnessTurn): AsyncIterable<HarnessMessage>;
+  /** Isolated text generation: no session resume, tools, project instructions or transcript writes. */
+  generateText?: (input: { cwd: string; prompt: string; model: string; effort?: string; env: Record<string, string>; signal: AbortSignal }) => Promise<string>;
 }

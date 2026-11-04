@@ -18,7 +18,7 @@ Users name Claude or ChatGPT accounts, sign in with the provider, and select tho
 
 ## Driving it with Playwright
 
-Preconditions: healthy isolated instance; a profile for selection/guard checks. Provider completion requires access to a real provider account and consent by its owner. Baseline has neither authentication nor an OAuth-code fixture; report completion unverified if unavailable.
+Preconditions: healthy isolated instance; a profile for selection/guard checks. Provider completion requires access to a real provider account and consent by its owner. Baseline has neither authentication nor an OAuth-code fixture; report completion unverified if unavailable. Real turns can use the verify device's hub accounts instead (see [Real model turns](../SKILL.md#real-model-turns)); that is not sign-in proof.
 
 - **Create through settings.** Click `Settings`, then `page.locator('.sidebar nav').getByRole('button', { name: 'Accounts', exact: true })`. Click button matching `/^Add ChatGPT account/` (or `/^Add Claude account/`), fill textbox `Account name`, click exact `Add account`. Require button `Sign in with ChatGPT` (or `Sign in with Claude`), click `Cancel`, require a row named `Verify ChatGPT Signed out` for the smoke's account.
 - **Rename/cancel/delete.** Reopen that account row. Edit `Account name`, click `Save`, require the account list, and reopen to check the value. Cancel a new account via exact `Cancel` and require no new row. For an unreferenced account click `Delete` and require absence from the list.

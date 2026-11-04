@@ -3,6 +3,7 @@ import { HubSettings } from '../hub/HubSettings';
 import { MachineSettings } from '../machine/MachineSettings';
 import { HarnessesSettings } from '../harnesses/HarnessesSettings';
 import { SystemPromptSettings } from '../harnesses/SystemPromptSettings';
+import { NamingSettings } from '../threads/NamingSettings';
 import { AccountsSettings } from '../profiles/AccountsSettings';
 import { ProfilesSettings } from '../profiles/ProfilesSettings';
 import { useProfiles } from '../profiles/profiles';
@@ -20,8 +21,8 @@ import { SidebarResizer } from './Resizer';
 import { HubSelector } from '../hub/HubSelector';
 
 /** Where Settings is open. `profileId` opens one profile ('new' to add one). */
-export type SettingsRoute = { section: 'profiles'; profileId?: string } | { section: 'accounts'; accountId?: string } | ({ section: 'secrets' } & SecretsRoute) | { section: 'hub'; hubId?: string } | { section: 'harnesses' } | { section: 'systemPrompt' } | { section: 'machines'; machineId?: string }
-  | { section: 'tools'; toolId?: string } | { section: 'mcps'; mcpId?: string } | { section: 'skills'; sourceId?: string } | { section: 'projects'; projectId?: string };
+export type SettingsRoute = { section: 'profiles'; profileId?: string } | { section: 'accounts'; accountId?: string } | ({ section: 'secrets' } & SecretsRoute) | { section: 'hub'; hubId?: string } | { section: 'harnesses'; harnessId?: string } | { section: 'systemPrompt' } | { section: 'machines'; machineId?: string }
+  | { section: 'naming' } | { section: 'tools'; toolId?: string } | { section: 'mcps'; mcpId?: string } | { section: 'skills'; sourceId?: string } | { section: 'projects'; projectId?: string };
 type Section = SettingsRoute['section'];
 
 const GROUPS: { label?: string; items: { id: Section; label: string; icon: ReactNode }[] }[] = [
@@ -31,6 +32,7 @@ const GROUPS: { label?: string; items: { id: Section; label: string; icon: React
     { id: 'profiles', label: 'Profiles', icon: <Users /> },
     { id: 'harnesses', label: 'Harnesses', icon: <Layers /> },
     { id: 'systemPrompt', label: 'System prompt', icon: <ScrollText /> },
+    { id: 'naming', label: 'Thread naming', icon: <ScrollText /> },
     { id: 'machines', label: 'Machines', icon: <Monitor /> },
   ] },
   { label: 'Tools and skills', items: [
@@ -77,7 +79,8 @@ export function Settings({ route, onRoute, onClose, onOpenThread, onOpenLimits }
   const machineLabel = route.section === 'machines' && route.machineId ? machines?.find((m) => m.id === route.machineId)?.name : undefined;
   const hubLabel = route.section === 'hub' && route.hubId ? 'Add hub' : undefined;
   const projectLabel = route.section === 'projects' && route.projectId ? projectState?.projects.find((p) => p.id === route.projectId)?.name : undefined;
-  const detailLabel = projectLabel || profileLabel || accountLabel || secretLabel || resourceLabel || machineLabel || hubLabel;
+  const harnessLabel = route.section === 'harnesses' && route.harnessId ? 'Built-in tools' : undefined;
+  const detailLabel = projectLabel || profileLabel || accountLabel || secretLabel || resourceLabel || machineLabel || hubLabel || harnessLabel;
   const previousDetail = useRef<string | undefined>(undefined);
   const root = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -94,7 +97,7 @@ export function Settings({ route, onRoute, onClose, onOpenThread, onOpenLimits }
     return () => cancelAnimationFrame(frame);
   }, [route, detailLabel]);
 
-  const inDetail = !!(profileId || accountId || toolId || mcpId || sourceId || (route.section === 'secrets' && route.secretId) || (route.section === 'machines' && route.machineId) || (route.section === 'hub' && route.hubId) || (route.section === 'projects' && route.projectId));
+  const inDetail = !!((route.section === 'harnesses' && route.harnessId) || profileId || accountId || toolId || mcpId || sourceId || (route.section === 'secrets' && route.secretId) || (route.section === 'machines' && route.machineId) || (route.section === 'hub' && route.hubId) || (route.section === 'projects' && route.projectId));
   // Escape goes up one level and leaves Settings only from a top-level page; an open inline confirmation takes it first (useEscape).
   const leave = useRef<(go: () => void) => boolean>(undefined);
   /** Every way out of a page (section, breadcrumb, Back, Escape) goes through the page's unsaved-edit check. */
@@ -184,8 +187,9 @@ export function Settings({ route, onRoute, onClose, onOpenThread, onOpenLimits }
             {route.section === 'accounts' && <AccountsSettings accountId={accountId} onOpen={(id) => onRoute({ section: 'accounts', accountId: id })} onBack={() => onRoute({ section: 'accounts' })} />}
             {route.section === 'secrets' && <SecretsSettings route={route} onRoute={(r) => onRoute({ section: 'secrets', ...r })} />}
             {route.section === 'hub' && <HubSettings adding={!!route.hubId} onAdd={() => onRoute({ section: 'hub', hubId: 'new' })} onBack={() => onRoute({ section: 'hub' })} />}
-            {route.section === 'harnesses' && <HarnessesSettings />}
+            {route.section === 'harnesses' && <HarnessesSettings harnessId={route.harnessId} onOpen={(harnessId) => onRoute({ section: 'harnesses', harnessId })} onBack={() => onRoute({ section: 'harnesses' })} />}
             {route.section === 'systemPrompt' && <SystemPromptSettings />}
+            {route.section === 'naming' && <NamingSettings />}
             {route.section === 'tools' && <ToolsSettings key={toolId ?? ''} toolId={toolId} onOpen={(id) => onRoute({ section: 'tools', toolId: id })} onBack={() => onRoute({ section: 'tools' })} onOpenThread={onOpenThread} />}
             {route.section === 'mcps' && <McpSettings key={mcpId ?? ''} mcpId={mcpId} onOpen={(id) => onRoute({ section: 'mcps', mcpId: id })} onBack={() => onRoute({ section: 'mcps' })} />}
             {route.section === 'skills' && <SkillsSettings key={sourceId ?? ''} sourceId={sourceId} onOpen={(id) => onRoute({ section: 'skills', sourceId: id })} onBack={() => onRoute({ section: 'skills' })} />}

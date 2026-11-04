@@ -60,7 +60,7 @@ describe('layoutTranscript', () => {
       projectName: 'Project', machineName: 'This machine', status, candidates: [], expiresAt: '2026-11-03T13:00:00Z' };
     const items = [ask('q'), tool('1'), secret, tool('2')];
     const blocks = layoutTranscript(items, 't1');
-    expect(shape(blocks)).toEqual(['q', 's', { work: [['1', '2']] }]);
+    expect(shape(blocks)).toEqual(['q', ['1'], 's', { work: [['2']] }]);
     if (status === 'pending') expect(blocks.at(-1)).toMatchObject({ activity: 'Waiting for secret' });
     expect(shape(layoutTranscript([...items, say('a'), done()]))).toEqual(['q', { work: [['1', '2']] }, 's', 'a']);
   });
@@ -86,11 +86,22 @@ describe('layoutTranscript', () => {
     expect(layoutTranscript([...items, say('a'), done()])[1]).toMatchObject({ id: 't1:work', live: false });
   });
 
-  it('says Working between calls and keeps a streaming answer outside the fold', () => {
+  it('adds the latest step of a running sub-agent to what the turn is doing', () => {
+    const agent: ToolItem = { ...tool('1', 'Agent', 't1', 'running'), summary: 'Count the files', step: { name: 'Read', summary: 'delivery.ts' } };
+    expect(layoutTranscript([ask('q'), agent], 't1')[1]).toMatchObject({ live: true, activity: 'Running agent: Count the files · Reading delivery.ts' });
+  });
+
+  it('keeps what a running turn says between calls visible, with only its latest calls behind the live line', () => {
+    const items = [ask('q'), say('plan'), tool('1'), tool('2'), say('note'), tool('3', 'Read', 't1', 'running')];
+    expect(shape(layoutTranscript(items, 't1'))).toEqual(['q', 'plan', ['1', '2'], 'note', { work: [['3']] }]);
+    expect(shape(layoutTranscript([...items, say('a'), done()]))).toEqual(['q', { work: ['plan', ['1', '2'], 'note', ['3']] }, 'a']);
+  });
+
+  it('says Thinking after a message and keeps the live line below a streaming answer', () => {
     const blocks = layoutTranscript([ask('q'), tool('1'), say('partial answer')], 't1');
-    expect(blocks.at(-1)).toMatchObject({ live: true, activity: 'Working' });
-    expect(shape(blocks)).toEqual(['q', 'partial answer', { work: [['1']] }]);
-    expect(layoutTranscript([ask('q')], 't1')[1]).toMatchObject({ live: true, activity: 'Working', blocks: [] });
+    expect(blocks.at(-1)).toMatchObject({ live: true, activity: 'Thinking', blocks: [] });
+    expect(shape(blocks)).toEqual(['q', ['1'], 'partial answer', { work: [] }]);
+    expect(layoutTranscript([ask('q')], 't1')[1]).toMatchObject({ live: true, activity: 'Thinking', blocks: [] });
   });
 
   it('leaves a stopped or failed turn laid out in full', () => {

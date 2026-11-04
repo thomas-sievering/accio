@@ -1,9 +1,9 @@
 import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 import type { DeliveryMode, DeliverySummary, ProjectView, ThreadView } from '@accio/protocol';
+import { emitAppEvent } from '../app/appEvents';
 import { useClient, useConnectionStatus } from '../app/connection';
 import { Archive, Check, ChevronDown, Close, Play, Refresh, Ship, StopSquare, Undo } from '../app/icons';
 import { useAction } from '../app/useAction';
-import { DeliveryProgress } from './DeliveryProgress';
 import { StatusGlyphIcon } from './StatusMark';
 import { checkedAgo, deliveryStatus, statusText } from './status';
 import { useThreads } from './threads';
@@ -45,7 +45,7 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
     return () => { live = false; clearInterval(timer); };
   }, [client, connection, thread.id, thread.updatedAt, thread.workspace, thread.delivery, project?.previewCommand, attempt]);
 
-  const deliver = () => void run(async () => { await client.call('threads.deliver', { threadId: thread.id, mode }); });
+  const deliver = () => { emitAppEvent('panel.show', 'delivery'); void run(async () => { await client.call('threads.deliver', { threadId: thread.id, mode }); }); };
   // Choosing an option only sets the mode; the main button starts delivery.
   const choose = (choice: DeliveryMode) => { setMode(choice); menu.current?.hidePopover(); trigger.current?.focus(); };
   const openApp = () => {
@@ -127,7 +127,6 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
       {/* The chip beside it already carries the tone; only a call to act keeps its own mark. */}
       {status?.tone === 'attention' && <span className="delivery-dot" aria-hidden="true" />}<span className="delivery-hint-text">{hint}</span>
     </p>}
-    {status?.ci && <DeliveryProgress ci={status.ci} />}
     <div id={id} ref={menu} className="menu delivery-menu" popover="auto" role="menu" aria-label="Shipping options" style={position}
       onToggle={e => {
         if (e.newState === 'open' && trigger.current) {

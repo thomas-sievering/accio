@@ -25,6 +25,17 @@ export type HarnessView = {
   models: HarnessModel[];
   /** The machines that have it installed. */
   machines: { machineId: string; version: string | null }[];
+  /** GLOSSARY: Built-in tools. Its own tools, as switches shared by the whole hub. */
+  tools: BuiltinToolView[];
+};
+
+/** GLOSSARY: Built-in tools. One switch over one or more tool names the model sees. */
+export type BuiltinToolView = {
+  id: string; name: string; description: string; tools: string[];
+  /** Always on: the harness cannot work without it. */
+  required: boolean;
+  defaultOn: boolean;
+  on: boolean;
 };
 
 /**
@@ -63,9 +74,22 @@ export const DEFAULT_MODEL: ModelSelection = { harnessId: 'claudeCode', modelId:
 export const modelKey = (model: ModelSelection) => JSON.stringify([model.harnessId, model.modelId]);
 
 const ProfileId = z.object({ profileId: z.string() });
+const HarnessTool = z.object({ harnessId: z.string().min(1), toolId: z.string().min(1), on: z.boolean() });
+const HarnessId = z.object({ harnessId: z.string().min(1) });
 const Favorite = ProfileId.extend({ model: ModelSelection, favorite: z.boolean() });
+export const ThreadNamingSettings = z.object({
+  automatic: z.boolean().default(true),
+  model: ModelSelection.nullable().default(null),
+  instructions: z.string().trim().max(2000).default(''),
+});
+export type ThreadNamingSettings = z.output<typeof ThreadNamingSettings>;
+export const DEFAULT_THREAD_NAMING: ThreadNamingSettings = { automatic: true, model: null, instructions: '' };
 export const modelMethods = {
+  'threadNaming.get': method<z.ZodObject<{}>, ThreadNamingSettings>(z.object({})),
+  'threadNaming.save': method<typeof ThreadNamingSettings, ThreadNamingSettings>(ThreadNamingSettings),
   'harnesses.list': method<z.ZodObject<{}>, HarnessView[]>(z.object({})),
+  'harnesses.setTool': method<typeof HarnessTool, HarnessView[]>(HarnessTool),
+  'harnesses.resetTools': method<typeof HarnessId, HarnessView[]>(HarnessId),
   'systemPrompt.get': method<z.ZodObject<{}>, SystemPromptView>(z.object({})),
   'models.list': method<typeof ProfileId, ModelsState>(ProfileId),
   'models.favorite': method<typeof Favorite, ModelsState>(Favorite),

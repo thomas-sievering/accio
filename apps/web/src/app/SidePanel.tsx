@@ -1,17 +1,26 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { SkillContext } from '@accio/protocol';
 import { McpPanel } from '../mcp/McpPanel';
+import { DeliveryPanel, deliveryNeedsYou } from '../threads/DeliveryPanel';
 import { SkillsPanel } from '../skills/SkillsPanel';
 import { useThreads } from '../threads/threads';
+import { useAppEvent } from './appEvents';
 import { PanelRight } from './icons';
 import { PanelResizer } from './Resizer';
 
 const KEY = 'accio.panelOpen';
+const TAB_KEY = 'accio.panelTab';
 
 /** Whether the right-hand side panel is open; remembered across launches. */
 export function usePanelOpen() {
   const [open, setOpen] = useState(() => localStorage.getItem(KEY) === '1');
   const toggle = () => setOpen((was) => { localStorage.setItem(KEY, was ? '0' : '1'); return !was; });
+  // A request to show a tab opens the panel there; the panel itself also switches if already open.
+  useAppEvent('panel.show', (tab) => {
+    localStorage.setItem(TAB_KEY, tab);
+    localStorage.setItem(KEY, '1');
+    setOpen(true);
+  });
   return [open, toggle] as const;
 }
 
@@ -35,9 +44,10 @@ export function PanelToggle({ open, onToggle }: { open: boolean; onToggle: () =>
   );
 }
 
-const TABS = [{ id: 'skills', label: 'Skills' }, { id: 'mcp', label: 'MCP' }] as const;
-type Tab = (typeof TABS)[number]['id'];
-const TAB_KEY = 'accio.panelTab';
+const TABS = [{ id: 'delivery', label: 'Delivery' }, { id: 'skills', label: 'Skills' }, { id: 'mcp', label: 'MCP' }] as const;
+export type PanelTab = (typeof TABS)[number]['id'];
+type Tab = PanelTab;
+const storedTab = (): Tab => { const saved = localStorage.getItem(TAB_KEY); return TABS.some((t) => t.id === saved) ? saved as Tab : 'skills'; };
 
 /**
  * The right-hand side panel: what sits beside the open thread or draft, one tab
@@ -45,7 +55,8 @@ const TAB_KEY = 'accio.panelTab';
  */
 export function SidePanel({ overlay = false }: { overlay?: boolean }) {
   const { threads, selectedId, draft } = useThreads();
-  const [tab, setTab] = useState<Tab>(() => (localStorage.getItem(TAB_KEY) === 'mcp' ? 'mcp' : 'skills'));
+  const [tab, setTab] = useState<Tab>(storedTab);
+  useAppEvent('panel.show', setTab);
   const tabRefs = useRef<Partial<Record<Tab, HTMLButtonElement | null>>>({});
   const panel = useRef<HTMLElement>(null);
   const thread = threads?.find((t) => t.id === selectedId);
@@ -91,11 +102,15 @@ export function SidePanel({ overlay = false }: { overlay?: boolean }) {
         {TABS.map((t) => (
           <button key={t.id} ref={(el) => { tabRefs.current[t.id] = el; }} type="button" role="tab" id={`side-tab-${t.id}`}
             aria-selected={tab === t.id} aria-controls={`side-tabpanel-${t.id}`} tabIndex={tab === t.id ? 0 : -1}
-            className="side-panel-tab" onClick={() => select(t.id)}>{t.label}</button>
+            className="side-panel-tab" onClick={() => select(t.id)}>
+            {t.label}{t.id === 'delivery' && deliveryNeedsYou(thread) && <span className="tab-dot" aria-label="needs attention" />}
+          </button>
         ))}
       </div>
       <div role="tabpanel" id={`side-tabpanel-${tab}`} aria-labelledby={`side-tab-${tab}`} className="side-panel-body">
-        {!context
+        {tab === 'delivery'
+          ? thread && !draft ? <DeliveryPanel thread={thread} /> : <p className="side-panel-empty">Open a thread to follow its delivery.</p>
+          : !context
           ? <p className="side-panel-empty">Open a thread or start one to see its {tab === 'mcp' ? 'MCP servers' : 'skills'}.</p>
           : tab === 'skills'
             ? <SkillsPanel key={key} context={context} composer={draft ? 'draft' : thread!.id} />

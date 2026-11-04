@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import type { PanelTab } from './SidePanel';
 import type { SettingsRoute } from './Settings';
 
 /**
@@ -17,6 +18,8 @@ export type AppEvents = {
   'project.open': { id: string };
   /** A thread was snoozed until a time (ISO); the sidebar says so briefly. */
   'thread.snoozed': { threadId: string; until: string };
+  /** Open the side panel at a tab, such as Delivery after pressing Ship. */
+  'panel.show': PanelTab;
 };
 
 const prefix = 'accio:';

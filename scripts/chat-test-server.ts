@@ -3,8 +3,9 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
+import { closeWhenOrphaned } from './fixtureLifetime.js';
 import { startApp } from '../apps/server/src/app.js';
-import { FakeHarness, SESSION, replyWith } from '../apps/server/src/testing/fakeHarness.js';
+import { FakeHarness, SESSION, replyWith, toolCall } from '../apps/server/src/testing/fakeHarness.js';
 import { fakeClaudeFetch, TestClient } from '../apps/server/src/testing/testApp.js';
 import type { HarnessMessage } from '../apps/server/src/threads/harness.js';
 import { DeliveryGit, DeliveryPending } from '../apps/server/src/threads/delivery.js';
@@ -33,7 +34,53 @@ DeliveryGit.prototype.verify = async function(workspace, delivery, observed) {
   }
   return verifyDelivery.call(this, workspace, delivery, observed);
 };
+/** Calls one of accio's own tools the way a harness does, over its MCP endpoint. */
+async function callAccioTool(run: { tools?: { url: string; authorization: string } }, name: string, args: unknown) {
+  const response = await fetch(run.tools!.url, { method: 'POST', headers: { 'content-type': 'application/json', authorization: run.tools!.authorization },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }) });
+  return ((await response.json()) as { result: { content: { text: string }[] } }).result.content[0]!.text;
+}
+const subagentSteps: Record<string, [string, Record<string, string>][]> = {
+  deliveries: [['Read', { file_path: 'delivery.ts' }], ['Bash', { command: 'pnpm test delivery' }]],
+  review: [['Bash', { command: 'git diff' }], ['Read', { file_path: 'transcript.ts' }]],
+};
+const goalTurns = new Map<string, number>();
 const harness = new FakeHarness(async function* (run) {
+  // GLOSSARY: Goal. "/goal fixture …" works for three turns, then reports achieved; "/goal blocked fixture" reports blocked first.
+  const goal = /Goal for this thread: (.+)/.exec(run.resourceInstructions ?? '')?.[1];
+  if (goal?.includes('fixture')) {
+    const turn = goalTurns.set(goal, (goalTurns.get(goal) ?? 0) + 1).get(goal)!;
+    await setTimeout(400);
+    // Resuming restarts the turn count, so "blocked" blocks on the goal's own first prompt only.
+    if (goal.startsWith('blocked') && run.prompt.startsWith('New goal')) await callAccioTool(run, 'finish_goal', { outcome: 'blocked', summary: 'Need the fixture token' });
+    else if (goal.startsWith('blocked') || turn === 3) await callAccioTool(run, 'finish_goal', { outcome: 'achieved', summary: 'Fixture verified' });
+    yield* toolCall('Bash', { command: `check ${turn}` }, `goal-${goal}-${turn}`);
+    yield* replyWith(`Goal turn ${turn}.`);
+    return;
+  }
+  if (run.prompt.startsWith('Naming fixture:')) { yield* replyWith('The login redirect loops after sign-in.'); return; }
+  if (run.prompt === 'Sub-agent fixture') {
+    // Two sub-agents in parallel, as Claude starts them: both calls in one message.
+    const tasks = [{ description: 'Find where deliveries retry', prompt: 'Sub-agent task: deliveries' }, { description: 'Review the transcript diff', prompt: 'Sub-agent task: review' }];
+    const base = { parent_tool_use_id: null, session_id: SESSION } as const;
+    yield { type: 'system', subtype: 'init', session_id: SESSION };
+    yield { type: 'assistant', ...base, message: { id: 'agents', content: tasks.map((input, i) => ({ type: 'tool_use', id: `agent-${i}`, name: 'mcp__accio__agent', input })) } };
+    const replies = await Promise.all(tasks.map((input) => callAccioTool(run, 'agent', input)));
+    yield { type: 'user', ...base, message: { content: replies.map((text, i) => ({ type: 'tool_result', tool_use_id: `agent-${i}`, content: text })) } };
+    yield* replyWith('Both sub-agents reported back.');
+    return;
+  }
+  if (run.prompt.startsWith('Sub-agent task: ')) {
+    const which = run.prompt.slice('Sub-agent task: '.length);
+    const sub = { parent_tool_use_id: null, session_id: `sub-${which}` } as const;
+    for (const [i, [name, input]] of subagentSteps[which]!.entries()) {
+      yield { type: 'assistant', ...sub, message: { id: `${which}-${i}`, content: [{ type: 'tool_use', id: `${which}-${i}`, name, input }] } };
+      await setTimeout(4000);
+      yield { type: 'user', ...sub, message: { content: [{ type: 'tool_result', tool_use_id: `${which}-${i}`, content: 'ok' }] } };
+    }
+    yield* replyWith(`Done with ${which}.`, `sub-${which}`);
+    return;
+  }
   if (run.prompt === 'Build CI progress fixture') {
     ciPolls.set(run.cwd, 0);
     await writeFile(join(run.cwd, 'ci-fixture.txt'), 'CI progress');
@@ -122,12 +169,14 @@ const harness = new FakeHarness(async function* (run) {
   if (run.prompt === 'explore tools') {
     // One call at a time, each long enough for a person (and the check) to see the status line change.
     const steps = [
-      { id: 'explore-ls', name: 'Bash', input: { command: 'ls -la' }, result: 'README.md\nwebsite/\nworkflow/' },
+      { id: 'explore-ls', name: 'Bash', input: { command: 'ls -la' }, result: 'README.md\nwebsite/\nworkflow/', say: 'I’ll look around the folder first.' },
       { id: 'explore-read', name: 'Read', input: { file_path: 'README.md' }, result: '# litewerks' },
-      { id: 'explore-grep', name: 'Grep', input: { pattern: 'TODO' }, result: 'No matches' },
+      { id: 'explore-grep', name: 'Grep', input: { pattern: 'TODO' }, result: 'No matches', say: 'Now checking for open TODOs.' },
     ];
     for (const step of steps) {
-      yield { type: 'assistant', parent_tool_use_id: null, session_id: SESSION, message: { id: step.id, content: [{ type: 'tool_use', id: step.id, name: step.name, input: step.input }] } } as HarnessMessage;
+      // Like Claude, a step can say what it is about to do before its call.
+      const say = step.say ? [{ type: 'text', text: step.say }] : [];
+      yield { type: 'assistant', parent_tool_use_id: null, session_id: SESSION, message: { id: step.id, content: [...say, { type: 'tool_use', id: step.id, name: step.name, input: step.input }] } } as HarnessMessage;
       await setTimeout(Number(process.env.ACCIO_CHAT_TOOL_DELAY ?? 700));
       yield { type: 'user', parent_tool_use_id: null, session_id: SESSION, message: { content: [{ type: 'tool_result', tool_use_id: step.id, content: step.result }] } } as HarnessMessage;
     }
@@ -168,6 +217,11 @@ const harness = new FakeHarness(async function* (run) {
   // The first browser view occurs after these source files have gone away.
   for (const name of ['chat.png', 'chat.webm', 'chat.ogg', 'my image.png', '漢字.png', 'literal%20image.png']) await rm(join(run.cwd, name));
 });
+// Only the naming journey gets generated titles; existing fixtures retain their searchable names.
+Object.assign(harness, { generateText: async ({ prompt }: { prompt: string }) => {
+  if (!prompt.includes('Naming fixture:')) throw new Error('No naming response for this fixture');
+  return JSON.stringify({ title: prompt.includes('Use German') ? 'Anmeldung reparieren' : 'Fix login redirects', needsRefinement: false });
+} });
 const app = await startApp({ home, host: '127.0.0.1', port: Number(process.env.ACCIO_CHAT_TEST_PORT ?? 47481), hubPort: 0, token, webRoot: resolve(process.env.ACCIO_CHAT_TEST_WEB_ROOT ?? 'apps/web/dist') }, {
   harness,
   // Hosting is the external boundary under test. Git publication and thread state stay real.
@@ -262,6 +316,8 @@ const thread = await client.call('threads.start', { profileId: 'personal', text:
 await client.waitFor('threads.changed', (threads) => threads.some((entry) => entry.id === thread.id && entry.status === 'idle'));
 const choice = await client.call('threads.start', { profileId: 'personal', text: 'Choice fixture' });
 await client.waitFor('threads.changed', (threads) => threads.some((entry) => entry.id === choice.id && entry.status === 'idle'));
+const goalThread = await client.call('threads.start', { profileId: 'personal', text: 'Goal fixture' });
+await client.waitFor('threads.changed', (threads) => threads.some((entry) => entry.id === goalThread.id && entry.status === 'idle'));
 // MCP tab: a remote server that still needs signing in, and a local one.
 await client.call('mcp.save', { id: 'docs-search', name: 'docs-search', transport: 'http', url: 'https://mcp.example.test/docs', args: [], auth: 'oauth' });
 await client.call('mcp.save', { id: 'local-db', name: 'local-db', transport: 'stdio', command: 'db-mcp', args: ['--readonly'], auth: 'none' });
@@ -280,3 +336,4 @@ const close = async () => {
 process.on('SIGINT', () => void close());
 process.on('SIGTERM', () => void close());
 process.on('message', message => { if ((message as { type?: string })?.type === 'shutdown') void close(); });
+closeWhenOrphaned('Chat', () => void close());

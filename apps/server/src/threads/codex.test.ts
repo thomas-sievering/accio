@@ -8,7 +8,25 @@ import { harnessEnv } from './harnessEnv.js';
 import { codexEvents, codexHarness } from './codex.js';
 
 let home: string | undefined;
-afterEach(async () => { vi.useRealTimers(); if (home) await rm(home, { recursive: true, force: true }); home = undefined; });
+afterEach(async () => { vi.useRealTimers(); vi.unstubAllGlobals(); if (home) await rm(home, { recursive: true, force: true }); home = undefined; });
+
+it('names with a tool-free Responses request and handles fragmented streaming output', async () => {
+  const encoder = new TextEncoder();
+  const event = 'data: ' + JSON.stringify({ type: 'response.output_text.delta', delta: '{"title":"Login redirects"}' }) + '\n\n';
+  const fetchMock = vi.fn(async () => new Response(new ReadableStream({ start(controller) {
+    controller.enqueue(encoder.encode(event.slice(0, 15)));
+    controller.enqueue(encoder.encode(event.slice(15) + 'data: {"type":"response.completed"}\r\n\r\n'));
+    controller.close();
+  } })));
+  vi.stubGlobal('fetch', fetchMock);
+  const factory = vi.fn();
+  const result = await codexHarness(factory).generateText!({ cwd: 'isolated', prompt: 'Name this', model: 'small-mini', effort: 'low', env: { ACCIO_OPENAI_URL: 'http://localhost/openai', ACCIO_OPENAI_KEY: 'profile-key' }, signal: new AbortController().signal });
+  expect(result).toBe('{"title":"Login redirects"}');
+  const [url, options] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+  expect(url).toBe('http://localhost/openai/responses');
+  expect(JSON.parse(String(options.body))).toMatchObject({ model: 'small-mini', tools: [], reasoning: { effort: 'low' }, store: false });
+  expect(factory).not.toHaveBeenCalled();
+});
 
 it('steers the expected native Codex turn and unregisters when it completes', async () => {
   home = await mkdtemp(join(tmpdir(), 'accio-steer-codex-'));
@@ -76,7 +94,7 @@ it('gives Codex accio tools on start and on resume, and keeps tool arguments str
   home = await mkdtemp(join(tmpdir(), 'accio-tools-codex-'));
   const tools = { url: 'http://127.0.0.1:1/mcp', authorization: 'Bearer t' };
   const env = { CODEX_HOME: home, ACCIO_OPENAI_URL: 'http://127.0.0.1:1234/openai', ACCIO_OPENAI_KEY: 'profile-key' };
-  const expected = { 'mcp_servers.accio': { url: tools.url, http_headers: { Authorization: 'Bearer t' } } };
+  const expected = { 'mcp_servers.accio': { url: tools.url, http_headers: { Authorization: 'Bearer t' }, tool_timeout_sec: 7200 } };
   for (const sessionId of [null, 'codex-session']) {
     const fake = new FakeCodex();
     for await (const _ of codexHarness(fake.factory).run({ cwd: home, prompt: 'hi', sessionId, env, tools, signal: new AbortController().signal })) { /* drain */ }
@@ -89,4 +107,15 @@ it('gives Codex accio tools on start and on resume, and keeps tool arguments str
   for await (const _ of codexHarness(fake.factory).run({ cwd: home, prompt: 'hi', sessionId: 'codex-session', env, tools, mcps: { remote: { type: 'http', url: 'https://example.test/mcp', headers: { Authorization: 'Bearer remote' } } }, resourceInstructions: 'Enabled skill: browser', signal: new AbortController().signal })) { /* drain */ }
   expect(fake.latest.options.config).toContain('mcp_servers.remote.url="https://example.test/mcp"');
   expect(fake.latest.requests.find(r => r.method === 'thread/resume')?.params).toMatchObject({ config: expected, developerInstructions: expect.stringContaining('Enabled skill: browser') });
+});
+
+it('starts app-server with switched-off built-in tools removed', async () => {
+  home = await mkdtemp(join(tmpdir(), 'accio-tools-codex-'));
+  const fake = new FakeCodex();
+  const iterator = codexHarness(fake.factory).run({ cwd: home, prompt: 'hi', sessionId: null, signal: new AbortController().signal,
+    env: { CODEX_HOME: home, ACCIO_OPENAI_URL: 'http://127.0.0.1:1234/openai', ACCIO_OPENAI_KEY: 'key' },
+    toolsOff: [{ id: 'goals', name: 'Goals', description: '', tools: ['get_goal'], default: 'off', config: ['features.goals=false'] }] })[Symbol.asyncIterator]();
+  await iterator.next();
+  expect(fake.latest.options.config).toContain('features.goals=false');
+  while (!(await iterator.next()).done) { /* drain */ }
 });

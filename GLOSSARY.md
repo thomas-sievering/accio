@@ -54,6 +54,10 @@ _Avoid_: Thinking level, reasoning effort, thinking budget
 Tools accio gives every harness, such as offer_choice. Each machine serves them to its own harnesses over MCP, under the name `accio`; each turn may use them only while it runs.
 _Avoid_: Accio MCP, custom tools, plugins
 
+**Built-in tools**:
+A harness's own tools, such as Claude Code's WebSearch or Codex's goals, grouped into switches under Settings → Harnesses. The switches are shared settings for the whole hub. By default only a shell and file reading and editing are on; other capabilities come as accio tools that work the same on every harness. Changes apply from each thread's next turn.
+_Avoid_: Default tools, native tools, harness tools
+
 **System prompt**:
 What accio adds to a harness's own instructions for every turn: titled sections that describe accio's chat, such as how to show images inline. Each harness receives it in its own way. Claude Code gets it after its built-in system prompt and Codex as developer instructions. It is read-only and shown under Settings → System prompt.
 _Avoid_: Instructions, preamble, custom prompt
@@ -112,6 +116,14 @@ _Avoid_: Errored, crashed
 **Choice**:
 Two or more screenshots a harness shows side by side, through the offer_choice accio tool, when you ask it to prototype, try or mock up UI for a feature. You pick one in your next message and add feedback if you like; the harness reads the pick on the message's first line.
 _Avoid_: Board, gallery, poll, variants (for the whole set)
+
+**Goal**:
+What a thread keeps working toward across turns, set with `/goal <objective>`. accio starts each next turn itself until the harness reports it achieved or blocked through the finish_goal accio tool, or a turn stops, fails or uses no tools. There is no turn limit, as in Claude Code and Codex; a bar above the composer shows it with pause, resume and clear. It works the same on every harness; no harness's own goal feature is used.
+_Avoid_: Task, objective (for the whole thing), loop
+
+**Sub-agent**:
+A helper turn that a thread's harness starts through the `agent` accio tool for one self-contained task, such as independent research or a black-box check. It runs on the same harness, model, profile and working folder with a fresh context, and gives back only its final reply. It is not a thread and keeps no transcript; while it works, its latest step shows on the parent's Agent row. Sub-agents get no accio tools, so they cannot start sub-agents of their own.
+_Avoid_: Subthread, child thread, worker, helper thread
 
 **Snooze**:
 Hiding a thread until a chosen time, when it comes back.

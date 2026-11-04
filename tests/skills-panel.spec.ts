@@ -42,7 +42,7 @@ test('narrow panel wraps focus in both directions without a blank or background 
 
 async function openSkills(page: Page, baseURL: string, thread: RegExp) {
   await page.goto(`${baseURL}/#token=${token}`);
-  await page.getByRole('button', { name: thread }).click();
+  await page.locator('.sidebar').getByRole('button', { name: thread }).click();
   const toggle = page.getByRole('button', { name: 'Side panel', exact: true });
   if (await toggle.getAttribute('aria-pressed') !== 'true') await toggle.click();
   await expect(page.getByRole('tab', { name: 'Skills', exact: true })).toHaveAttribute('aria-selected', 'true');
@@ -126,7 +126,7 @@ test('Skills tab lists project and inherited skills, adds, references, edits, di
   await page.screenshot({ path: testInfo.outputPath('skills-edited.png') });
 
   // Switching to a thread outside any project changes the context.
-  await page.getByRole('button', { name: /Inline chat fixture/ }).click();
+  await page.locator('.sidebar').getByRole('button', { name: /Inline chat fixture/ }).click();
   await expect(panel(page).getByText('No project', { exact: true })).toBeVisible();
   await expect(panel(page).getByText(/Project skills need a project/)).toBeVisible();
   await expect(panel(page).getByRole('button', { name: 'Add skill', exact: true })).toHaveCount(0);
@@ -153,7 +153,7 @@ test('MCP tab lists every MCP server, flags sign-in and opens settings', async (
   await expect(page.getByRole('tab', { name: 'Skills', exact: true })).toHaveAttribute('aria-selected', 'true');
   await page.getByRole('tab', { name: 'MCP', exact: true }).click();
   await page.goto(`${baseURL}/#token=${token}`);
-  await page.getByRole('button', { name: /Skills fixture/ }).click();
+  await page.locator('.sidebar').getByRole('button', { name: /Skills fixture/ }).click();
   await expect(page.getByRole('tab', { name: 'MCP', exact: true })).toHaveAttribute('aria-selected', 'true');
 
   // A row opens that server in settings.
