@@ -136,3 +136,12 @@
   font-size: 12px;
   color: var(--dim);
 }
+/* First run has one action: Add spans the column like Continue on the other steps. */
+.first-run-screen .sheet-foot .primary {
+  flex: 1;
+  height: 38px;
+  margin-top: 4px;
+}
+.first-run-screen .sheet-foot .spacer {
+  display: none;
+}

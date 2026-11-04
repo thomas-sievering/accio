@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { FolderInspection } from '@accio/protocol';
 import { useClient } from '../app/connection';
+import { Close, Folder, FolderPlus } from '../app/icons';
 import { Sheet } from '../app/Sheet';
 import { useAction } from '../app/useAction';
 import { useProfiles } from '../profiles/profiles';
@@ -50,11 +51,6 @@ export function AddProjectForm({ onAdded, onCancel }: { onAdded?: () => void; on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path, client]);
 
-  const browse = async () => {
-    const picked = await window.accioDesktop?.pickFolder();
-    if (picked) setPath(picked);
-  };
-
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setTried(true);
@@ -78,39 +74,9 @@ export function AddProjectForm({ onAdded, onCancel }: { onAdded?: () => void; on
   return (
     <form onSubmit={submit} ref={formRef} noValidate>
       <div className="sheet-body">
-        <label className="field">
-          <span>Folder</span>
-          <span className="row-input">
-            <input value={path} onChange={(e) => { setPath(e.target.value); setTried(false); }} placeholder="S:\my-repo" autoFocus data-autofocus spellCheck={false} aria-invalid={pathProblem || (tried && seen?.alreadyAdded) ? true : undefined} />
-            {window.accioDesktop && (
-              <button type="button" className="ghost" onClick={browse}>
-                Browse…
-              </button>
-            )}
-          </span>
-          {pathProblem && <small className="error" role="alert">{pathProblem}</small>}
-        </label>
-
-        {seen && (
-          <div className="facts">
-            <div>
-              <span className="dim">Project</span> {seen.name}
-            </div>
-            <div>
-              <span className="dim">Repository</span> {seen.repoKey ?? 'no git remote; this folder is its own project'}
-            </div>
-            {seen.path !== path.trim() && (
-              <div>
-                <span className="dim">Checkout</span> {seen.path}
-              </div>
-            )}
-            {!joining && onlyProfile && (
-              <div>
-                <span className="dim">Profile</span> {onlyProfile.name}
-              </div>
-            )}
-          </div>
-        )}
+        <FolderPicker path={path} seen={seen} invalid={!!pathProblem || (tried && !!seen?.alreadyAdded)} profile={!joining ? onlyProfile?.name : undefined}
+          onPath={(p) => { setPath(p); setTried(false); }} />
+        {pathProblem && <small className="error" role="alert">{pathProblem}</small>}
 
         {seen?.alreadyAdded ? (
           <p className="note">This folder is already added.</p>
@@ -143,5 +109,47 @@ export function AddProjectForm({ onAdded, onCancel }: { onAdded?: () => void; on
         </button>
       </footer>
     </form>
+  );
+}
+
+/**
+ * The folder as one target: browse or paste while empty; once Accio
+ * recognises it, the same box shows the project it found. The path stays
+ * editable underneath either way.
+ */
+function FolderPicker(props: { path: string; seen: FolderInspection | null; invalid: boolean; profile?: string; onPath: (path: string) => void }) {
+  const { path, seen, onPath } = props;
+  const desktop = window.accioDesktop;
+  const input = useRef<HTMLInputElement>(null);
+  const browse = async () => {
+    const picked = await desktop?.pickFolder();
+    if (picked) onPath(picked);
+  };
+  const head = seen ? (
+    <>
+      <span className="folder-pick-icon"><Folder /></span>
+      <span className="folder-pick-text">
+        <b>{seen.name}</b>
+        <small>{seen.repoKey ?? 'no git remote; this folder is its own project'}{props.profile && <span> · {props.profile}</span>}</small>
+      </span>
+    </>
+  ) : (
+    <>
+      <span className="folder-pick-icon"><FolderPlus /></span>
+      <span className="folder-pick-text">
+        <b>{desktop ? 'Choose a folder' : 'Paste a folder path'}</b>
+      </span>
+    </>
+  );
+  return (
+    <div className={`folder-pick${seen ? ' found' : ''}`}>
+      <div className="folder-pick-head">
+        {desktop ? <button type="button" className="folder-pick-target" onClick={browse} title="Browse for a folder">{head}</button> : <div className="folder-pick-target">{head}</div>}
+        {path && <button type="button" className="folder-pick-clear" aria-label="Clear folder" onClick={() => { onPath(''); input.current?.focus(); }}><Close /></button>}
+      </div>
+      <input ref={input} className="folder-pick-path" value={path} onChange={(e) => onPath(e.target.value)} placeholder="S:\my-repo" aria-label="Folder"
+        autoFocus data-autofocus spellCheck={false} aria-invalid={props.invalid || undefined} />
+      {seen && seen.path !== path.trim() && <small className="folder-pick-root">Checkout {seen.path}</small>}
+    </div>
   );
 }
