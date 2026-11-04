@@ -161,8 +161,10 @@ export type DeliverySummary = {
   available: boolean;
   reason?: string;
   baseBranch?: string;
+  /** Git's line totals; `modified` of each are paired edits, counted in both. */
   added: number;
   removed: number;
+  modified: number;
   files: number;
   previewAvailable: boolean;
 };

@@ -62,6 +62,7 @@
 }
 .delivery-added, .delivery-complete > svg { color: var(--green); }
 .delivery-removed { color: var(--red); }
+.delivery-modified { color: var(--orange); }
 .delivery-complete { color: var(--ink); }
 /* The resolved delivery: a static glyph and readable text; colour only supports it. */
 .delivery-row .delivery-status { color: var(--ink); }

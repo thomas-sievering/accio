@@ -123,6 +123,16 @@ it('counts only the thread’s own lines after it integrates newer target work',
   expect(await c.call('threads.deliverySummary', { threadId: thread.id })).toMatchObject({ added: 2, removed: 0, files: 1 });
 });
 
+it('counts paired removed and added lines as modified', async () => {
+  const { c, checkout } = await setup();
+  const thread = await c.call('threads.start', { checkoutId: checkout.id, text: 'work' });
+  await wait(c, thread.id);
+  const cwd = thread.workspace!.path;
+  // One seeded line replaced by three: one modified, two added.
+  await writeFile(join(cwd, 'seed.txt'), 'x\ny\nz\n');
+  expect(await c.call('threads.deliverySummary', { threadId: thread.id })).toMatchObject({ added: 3, removed: 1, modified: 1, files: 1 });
+});
+
 it('discovers a changed remote default branch even with a stale origin/HEAD and narrow fetch refspec', async () => {
   const { c, source, origin, checkout } = await setup();
   const { revision } = await advanceOrigin(origin, 'release/next');
