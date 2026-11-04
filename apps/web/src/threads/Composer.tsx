@@ -96,7 +96,8 @@ export function Composer({
     try {
       await run(async () => {
         await onSend(value, mode);
-        if (input.current?.value === text) setText('');
+        // Sent from a composer that has since closed (a started draft): forget its saved text too.
+        if (!input.current || input.current.value === text) setText('');
       });
     } finally {
       sending.current = false;

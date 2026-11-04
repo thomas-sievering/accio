@@ -22,6 +22,7 @@ import { EditableTitle } from './EditableTitle';
 import { Transcript } from './Transcript';
 import { CacheUsage } from './CacheUsage';
 import { useReportPendingSecrets } from '../secrets/pendingSecrets';
+import { viewTransition } from '../ui/viewTransition';
 import { useThreads, useTranscript } from './threads';
 
 /** Where a thread runs, looked up once for the header, the notice and the composer. */
@@ -63,7 +64,7 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
   return (
     <>
       <PaneHeader title={thread.title} titleEditor={renaming ? <TitleEdit thread={thread} className="header-rename" onDone={() => setRenaming(false)} /> : <EditableTitle key={thread.id} thread={thread} />} {...place} checkout={thread.workspace && !thread.workspace.releasedAt && place.checkout ? { ...place.checkout, path: thread.workspace.path } : place.checkout} actions={<ThreadActionsMenu key={thread.id} thread={thread} items={items} onRename={() => setRenaming(true)} />} />
-      {visibleItems ? <PendingPick.Provider value={{ pick, setPick, enabled: !running }}>
+      {!visibleItems && !error && startedWith.has(thread.id) ? <StartingTranscript text={startedWith.get(thread.id)!} /> : visibleItems ? <PendingPick.Provider value={{ pick, setPick, enabled: !running }}>
         <Transcript threadId={thread.id} items={visibleItems} working={running} onOpenSecrets={onOpenSecrets} />
       </PendingPick.Provider> : (
         <div className="empty">
@@ -124,16 +125,9 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
   return (
     <>
       <PaneHeader title="New thread" {...place} />
-      {starting !== undefined && <div className="transcript-scroll draft-starting" aria-busy="true">
-        <div className="messages"><div className="thread">
-          <div className="msg user">{starting}</div>
-          <div className="draft-starting-status" role="status">
-            <span className="typing" aria-hidden="true"><i /><i /><i /></span>
-            Starting thread…
-          </div>
-        </div></div>
-      </div>}
-      <div className="hero" hidden={starting !== undefined}>
+      {starting !== undefined && <StartingTranscript text={starting} />}
+      {/* While starting, the composer settles where the thread's own will be, so the swap is still. */}
+      <div className={`hero${starting !== undefined ? ' starting' : ''}`} inert={starting !== undefined}>
         <h1>{checkoutId ? `What should we build in ${place.project?.name ?? 'this checkout'}?` : 'What should we build?'}</h1>
         <ThreadNotice profile={place.profile} model={model} onOpenProfile={onOpenProfile} />
         {remote && <p className="note" role="status">Running threads on another machine is not available yet. Choose this machine to start a thread.</p>}
@@ -144,13 +138,17 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
           disabled={starting !== undefined || !place.profile || !accountForModel(place.profile, model)?.signedIn || unavailable || remote}
           placeholder={`Ask ${model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}
           onSend={async (text) => {
-            setStarting(text);
+            const shown = viewTransition('thread-start', () => setStarting(text));
             try {
               const thread = await client.call('threads.start', checkoutId ? { checkoutId, text, model, machineId } : { profileId: profileId!, text, model, machineId });
-              select(thread.id);
-            } finally {
+              startedWith.set(thread.id, text);
+              await shown;
+              await viewTransition('thread-open', () => select(thread.id));
+            } catch (error) {
               // Keep the composer mounted so a failed start restores its draft and error.
-              setStarting(undefined);
+              await shown;
+              await viewTransition('thread-start', () => setStarting(undefined));
+              throw error;
             }
           }}
           toolbar={<>
@@ -164,6 +162,21 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
       </div>
     </>
   );
+}
+
+/** First messages of threads started here, shown until their transcript arrives so the swap from the draft is still. */
+const startedWith = new Map<string, string>();
+
+/** The first message and a live row, laid out as the transcript will be once the turn reports. */
+function StartingTranscript({ text }: { text: string }) {
+  return <div className="transcript-scroll draft-starting" aria-busy="true">
+    <div className="messages"><div className="thread">
+      <div className="msg user">{text}</div>
+      <div className="turn-work live">
+        <button className="turn-work-toggle" disabled><span className="turn-work-activity" role="status">Starting thread…</span></button>
+      </div>
+    </div></div>
+  </div>;
 }
 
 /** A compact project / thread breadcrumb; hover the project to see its checkout path. */

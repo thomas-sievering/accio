@@ -8,18 +8,52 @@
   margin: auto;
   padding-bottom: 8vh;
 }
-.hero[hidden] { display: none; }
-.draft-starting-status {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--muted);
-  font-size: 13px;
+/* Sent: only the composer stays, at the foot like the thread's own, emptied while the start completes. */
+.hero.starting {
+  margin: 0 auto 14px;
+  padding-bottom: 0;
 }
-.draft-starting { animation: draft-starting-in 120ms ease-out; }
-@keyframes draft-starting-in { from { opacity: 0.6; } to { opacity: 1; } }
+.hero.starting > :not(.composer-wrap) { display: none; }
+.hero.starting textarea { max-height: 44px; overflow: hidden; color: transparent; }
+
+/* ── the first send ─────────────────────────────────────────
+   One view transition per step (thread-start in viewTransition.ts).
+   The composer glides from the middle to the foot, the question
+   lifts away, and the message rises in above. The thread then takes
+   over the same places, so the second step (thread-open) only crossfades. */
+.hero h1 { view-transition-name: draft-question; }
+.hero > .composer-wrap,
+.thread-surface > .composer-wrap { view-transition-name: composer; }
+.draft-starting .msg.user { view-transition-name: first-message; }
+.draft-starting .turn-work { view-transition-name: first-status; }
+
+html:active-view-transition-type(thread-start, thread-open) {
+  &::view-transition-group(*) {
+    animation-duration: 380ms;
+    animation-timing-function: var(--ease-settle);
+  }
+  &::view-transition-old(root),
+  &::view-transition-new(root) { animation-duration: 180ms; }
+  /* The composer's box is opaque, so its new self simply covers the old as it glides:
+     no blend, so neither half dims the box mid-move. */
+  &::view-transition-old(composer) { animation: none; mix-blend-mode: normal; }
+  &::view-transition-new(composer) { animation: draft-in 180ms ease both; mix-blend-mode: normal; }
+}
+/* The thread takes over in place: only words change, so they swap quickly. */
+html:active-view-transition-type(thread-open) {
+  &::view-transition-old(root),
+  &::view-transition-new(root) { animation-duration: 120ms; }
+}
+html:active-view-transition-type(thread-start) {
+  &::view-transition-old(draft-question) { animation: draft-lift 160ms ease-out both; }
+  &::view-transition-new(first-message) { animation: draft-rise 340ms var(--ease-settle) 40ms both; }
+  &::view-transition-new(first-status) { animation: draft-in 200ms ease 200ms both; }
+}
+@keyframes draft-lift { to { opacity: 0; translate: 0 -10px; } }
+@keyframes draft-rise { from { opacity: 0; translate: 0 14px; } }
+@keyframes draft-in { from { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
-  .draft-starting, .draft-starting .typing i { animation: none; }
+  .draft-starting .turn-work-toggle::before { animation: none; }
 }
 .hero h1 {
   margin: 0 0 26px;

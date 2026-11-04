@@ -73,6 +73,14 @@ const harness = new FakeHarness(async function* (run) {
     yield* replyWith(`Goal turn ${turn}.`);
     return;
   }
+  // A first turn paced like a real model, for watching the new-thread transition.
+  if (run.prompt.startsWith('Naming fixture: slow')) {
+    await setTimeout(1500);
+    yield* toolCall('Read', { file_path: 'login.ts' }, 'slow-read');
+    await setTimeout(1500);
+    yield* replyWith('The login redirect loops after sign-in.');
+    return;
+  }
   if (run.prompt.startsWith('Naming fixture:')) { yield* replyWith('The login redirect loops after sign-in.'); return; }
   if (run.prompt === 'Sub-agent fixture') {
     // Two sub-agents in parallel, as Claude starts them: both calls in one message.
