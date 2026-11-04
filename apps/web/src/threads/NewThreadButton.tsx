@@ -1,5 +1,5 @@
 import { useId, useRef, useState } from 'react';
-import { ArrowLeft, Chevron, SquarePen } from '../app/icons';
+import { ArrowLeft, Chevron, MessageSquarePlus } from '../app/icons';
 import { useProfiles } from '../profiles/profiles';
 import { folderName } from '../projects/folderName';
 import { ProjectMark } from '../projects/ProjectMark';
@@ -53,7 +53,7 @@ export function NewThreadButton({ className = 'side-icon', label }: { className?
   return (
     <>
       <button className={className} title="New thread" aria-label="New thread" popoverTarget={id}>
-        <SquarePen />{label}
+        <MessageSquarePlus />{label}
       </button>
       <div className="new-thread-picker" id={id} popover="auto" ref={menu}
         onToggle={(e) => { if (e.newState === 'open') go(''); }}>
