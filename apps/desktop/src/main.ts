@@ -9,11 +9,14 @@ import { previewUrl } from './openPreview.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
+// A separate home (e.g. `pnpm try`) gets its own window state, so two copies never share a cache.
+if (process.env.ACCIO_HOME) app.setPath('userData', join(process.env.ACCIO_HOME, 'desktop'));
 
 let worker: WorkerProcess | undefined;
 let localServerOrigin: string | undefined;
 let quitting = false;
 let quitAllowed = false;
+let workerOutput = '';
 
 /** The last window closing quits the app and interrupts the local machine's turns. */
 function startWorker(): Promise<Ready> {
@@ -23,7 +26,7 @@ function startWorker(): Promise<Ready> {
     stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
     windowsHide: true,
   });
-  child.stderr?.on('data', (d) => process.stderr.write(d));
+  child.stderr?.on('data', (d) => { process.stderr.write(d); workerOutput = (workerOutput + d).slice(-2000); });
   worker = new WorkerProcess(child, (error) => {
     console.error(error);
     dialog.showErrorBox('accio worker stopped', `${error.message}. Quit and reopen accio to reconnect. Interrupted threads can be resumed.`);
@@ -38,7 +41,7 @@ async function createWindow(ready: Ready) {
     width: 1280,
     height: 840,
     backgroundColor: '#18191d',
-    title: 'accio',
+    title: process.env.ACCIO_WINDOW_TITLE ?? 'accio',
     autoHideMenuBar: true,
     // Same chrome as botbot: native caption buttons over a hidden title bar.
     titleBarStyle: 'hidden',
@@ -48,6 +51,8 @@ async function createWindow(ready: Ready) {
       additionalArguments: [`--accio-server-origin=${new URL(ready.url).origin}`],
     },
   });
+  // `pnpm try` names its window after the checkout so it stands apart from the real one.
+  if (process.env.ACCIO_WINDOW_TITLE) win.on('page-title-updated', (event) => event.preventDefault());
   win.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url);
     return { action: 'deny' };
@@ -88,6 +93,8 @@ app.whenReady().then(async () => {
     });
   } catch (err) {
     console.error(err);
+    const reason = workerOutput.match(/^Error: .+$/m)?.[0].slice(7) ?? String(err);
+    dialog.showErrorBox('accio could not start', reason);
     app.quit();
   }
 });

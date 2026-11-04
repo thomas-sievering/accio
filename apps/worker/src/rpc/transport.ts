@@ -82,7 +82,9 @@ export async function startTransport(opts: TransportOptions) {
   };
 
   await new Promise<void>((done, fail) => {
-    http.once('error', fail);
+    http.once('error', (error: NodeJS.ErrnoException) => fail(error.code === 'EADDRINUSE'
+      ? new Error(`Port ${opts.port} is in use, most likely by another accio on this home. Close it, or run "pnpm try" to open this checkout beside it.`)
+      : error));
     http.listen(opts.port, opts.host, () => done());
   });
   const address = http.address();
