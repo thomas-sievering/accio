@@ -99,13 +99,15 @@ test('a conversation with no changes stops Ship without waiting for checks', asy
   await page.locator('.composer textarea').fill('Delivery follow-up');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect(page.getByText('Fresh workspace ready.', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Ship', exact: true }).click();
-  await expect(page.getByRole('alert')).toContainText('Nothing to ship: this thread has no new commits.');
+  // With nothing to ship, Ship and its options are not offered at all.
+  await expect(page.getByRole('button', { name: 'Ship', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Shipping options', exact: true })).toHaveCount(0);
   await expect(page.getByText('Waiting for checks', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Check now', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Archive', exact: true })).toHaveCount(0);
   await page.reload();
-  await expect(page.getByRole('alert')).toContainText('Nothing to ship');
+  await expect(page.getByText('Fresh workspace ready.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Ship', exact: true })).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath('nothing-to-ship.png') });
 });
 
@@ -148,7 +150,7 @@ test('Ship menu, queued cancellation, owned preview, delivery, Archive and follo
   await expect(actions).toContainText('Thread settled · Workspace retained');
   await expect(page.locator('.composer textarea')).toHaveAttribute('placeholder', 'Send a message to reopen this thread…');
   await expect(page.locator('.row.settled.active')).toContainText('main');
-  await expect(page.getByText(/^Shipped to main · [0-9a-f]{7} · .*Thread settled; workspace retained\.$/)).toHaveCount(1);
+  await expect(page.getByText(/^Shipped to main · [0-9a-f]{7}$/)).toHaveCount(1);
   await expect(actions.getByRole('button', { name: 'Reopen', exact: true })).toBeVisible();
   await expect(actions.getByRole('button', { name: 'Archive', exact: true })).toBeEnabled();
   await page.screenshot({ path: testInfo.outputPath('ship-delivered.png') });
@@ -163,7 +165,7 @@ test('Ship menu, queued cancellation, owned preview, delivery, Archive and follo
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect(page.getByText('Fresh workspace ready.', { exact: true })).toBeVisible();
   await expect(page.getByText('Archived · history kept', { exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Ship', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Ship', exact: true })).toHaveCount(0);
 });
 
 test('Electron Open app uses the native bridge and archives its real owned preview', async ({ baseURL }) => {

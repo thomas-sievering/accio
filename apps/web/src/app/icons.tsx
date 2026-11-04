@@ -51,6 +51,13 @@ export const Users = () => (
     <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
   </svg>
 );
+export const IdCard = () => (
+  <svg {...base}>
+    <rect x="2" y="5" width="20" height="14" rx="2" />
+    <circle cx="9" cy="11" r="2" />
+    <path d="M6 16a3 3 0 0 1 6 0M15 10h4M15 14h4" />
+  </svg>
+);
 export const Layers = () => (
   <svg {...base}>
     <path d="m12 2 10 5-10 5L2 7z" />
@@ -182,14 +189,6 @@ export const MinusCircle = () => (
   <svg {...base}>
     <circle cx="12" cy="12" r="9" />
     <path d="M8 12h8" />
-  </svg>
-);
-/** The Owl: accio's agent that works across every thread. From Lucide Lab (ISC licence). */
-export const Owl = () => (
-  <svg {...base}>
-    <ellipse cx="12" cy="9" rx="8" ry="7" />
-    <path d="M12 9a4 4 0 1 1 8 0v12h-4C9.4 21 4 15.6 4 9a4 4 0 1 1 8 0v1M8 9h.01M16 9h.01" />
-    <path d="M20 21a3.9 3.9 0 1 1 0-7.8m-10 6.2V22m4-1.15V22" />
   </svg>
 );
 export const PanelRight = () => (

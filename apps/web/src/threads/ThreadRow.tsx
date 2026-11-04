@@ -17,10 +17,10 @@ export function ThreadRow({ thread: t, place }: { thread: ThreadView; place: She
   const { selectedId, select, now, act } = useThreads();
   const { state } = useProjects();
   const project = state?.projects.find((p) => p.id === t.projectId)?.name;
-  // Working rows keep the full open look: project mark and the spinning status.
-  const open = place === 'open' || place === 'working';
-  // Only a running turn can wait on a secret; the mark stays on the Working shelf row.
-  const needsSecret = (useNeedsSecret(t.id) || t.needsSecret === true) && t.status === 'running' && place === 'working';
+  // Open rows show the project mark and the spinning status; shelved rows are one line.
+  const open = place === 'open';
+  // Only a running turn can wait on a secret.
+  const needsSecret = (useNeedsSecret(t.id) || t.needsSecret === true) && t.status === 'running' && open;
   const openMenu = useThreadMenu();
   const onContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();

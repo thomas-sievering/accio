@@ -18,6 +18,7 @@ test('review-only PR stays visible until an external merge, then settles with a 
   await expect(page.getByText('Review feature implemented.', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Shipping options', exact: true }).click();
   await page.getByRole('menuitemradio', { name: /Prepare for review/ }).click();
+  await page.getByRole('button', { name: 'Prepare for review', exact: true }).click();
   const actions = page.locator('.delivery-actions');
   await expect(actions).toContainText('Waiting for merge');
   await expect(actions).toContainText('Prepared for review; merge manually');
@@ -85,6 +86,7 @@ test('stopping review follow-ups retains PR tracking and prevents later failed c
   await expect(page.getByText('Review feature implemented.', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Shipping options', exact: true }).click();
   await page.getByRole('menuitemradio', { name: /Prepare for review/ }).click();
+  await page.getByRole('button', { name: 'Prepare for review', exact: true }).click();
   const actions = page.locator('.delivery-actions');
   await expect(actions).toContainText('Waiting for merge');
   await actions.getByRole('button', { name: 'Stop automatic follow-ups', exact: true }).click();

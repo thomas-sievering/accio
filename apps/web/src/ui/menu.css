@@ -12,6 +12,15 @@
   font-size: 13.5px;
   -webkit-app-region: no-drag;
 }
+/* Fade in so a popover is never seen at its pre-anchor position. */
+.menu:popover-open {
+  animation: menu-in 0.1s ease-out backwards;
+}
+@keyframes menu-in {
+  from {
+    opacity: 0;
+  }
+}
 @supports (position-area: block-end) {
   .menu {
     margin-top: 6px;

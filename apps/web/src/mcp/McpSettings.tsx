@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import type { McpDefinition, McpView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { Plug, Plus } from '../app/icons';
-import { ConfirmDelete, SettingLink, SettingRow, SettingsSection } from '../app/Settings';
+import { SettingLink, SettingRow, SettingsFooter, SettingsSection, StatusPill } from '../app/Settings';
 import { useAction } from '../app/useAction';
 import { LoadError, slugId, useDraft, useResources } from '../resources/resources';
 import { Field } from '../resources/Field';
@@ -22,7 +22,7 @@ export function McpSettings({ mcpId, onOpen, onBack }: { mcpId?: string; onOpen:
   return (
     <>
       <p className="note">Remote (HTTP) servers are reached through the hub, which holds their tokens; machines never see them. Local (stdio) servers run as a command on the machine running the thread.</p>
-      <SettingsSection title="MCP servers">
+      <SettingsSection>
         {state.mcps.length === 0 && <SettingRow title="No MCP servers yet" />}
         {[...state.mcps].sort((a, b) => a.name.localeCompare(b.name)).map((m) => (
           <SettingLink key={m.id} icon={<Plug />} title={m.name} description={m.transport === 'http' ? m.url : [m.command, ...m.args].join(' ')} onClick={() => onOpen(m.id)}>
@@ -36,9 +36,9 @@ export function McpSettings({ mcpId, onOpen, onBack }: { mcpId?: string; onOpen:
 }
 
 function McpPill({ mcp }: { mcp: McpView }) {
-  if (mcp.transport === 'stdio') return <span className="pill"><span className="dot" />Local</span>;
-  if (mcp.auth === 'none') return <span className="pill ok"><span className="dot" />No sign-in</span>;
-  return mcp.signedIn ? <span className="pill ok"><span className="dot" />Signed in</span> : <span className="pill warn-pill"><span className="dot" />Signed out</span>;
+  if (mcp.transport === 'stdio') return <StatusPill>Local</StatusPill>;
+  if (mcp.auth === 'none') return <StatusPill tone="ok">No sign-in</StatusPill>;
+  return mcp.signedIn ? <StatusPill tone="ok">Signed in</StatusPill> : <StatusPill tone="warn">Signed out</StatusPill>;
 }
 
 function urlProblem(url?: string) {
@@ -86,7 +86,7 @@ function McpForm({ mcp, taken, onSaved, onDone }: { mcp?: McpView; taken: string
   return (
     <div className="settings-profile-form">
       <form className="settings-profile-form" onSubmit={submit} noValidate id="mcp-form">
-        <SettingsSection title={mcp ? mcp.name : 'New MCP server'}>
+        <SettingsSection>
           <div className="setting-form">
             <Field label="Name" error={show('name')}>
               {(p) => <input {...p} value={value.name} onChange={(e) => set('name', e.target.value)} placeholder="Linear (work)" maxLength={120} required autoFocus={!mcp} />}
@@ -141,15 +141,7 @@ function McpForm({ mcp, taken, onSaved, onDone }: { mcp?: McpView; taken: string
       </form>
       {mcp && mcp.transport === 'http' && mcp.auth !== 'none' && <McpCredentials key={`${mcp.id}:${mcp.auth}:${mcp.url}`} mcp={mcp} />}
       {error && <p className="error" role="alert">{error}</p>}
-      <footer className="settings-actions">
-        {mcp && <ConfirmDelete busy={busy} confirm={`Delete ${mcp.name} and its sign-in`} onDelete={remove} />}
-        <span className="spacer" />
-        {changed && mcp && <button type="button" className="ghost" disabled={busy} onClick={() => { reset(); setArgsText(undefined); setTouched(false); }}>Discard changes</button>}
-        <button type="button" className="ghost" onClick={onDone}>{mcp ? 'Done' : 'Cancel'}</button>
-        <button type="submit" form="mcp-form" className="ghost primary" disabled={busy || (!!mcp && !changed) || (touched && invalid)}>
-          {busy ? 'Saving…' : mcp ? 'Save' : 'Add MCP server'}
-        </button>
-      </footer>
+      <SettingsFooter remove={mcp && { name: mcp.name, run: remove, consequence: 'Its saved sign-in goes too.' }} busy={busy} onCancel={onDone} saveLabel={mcp ? 'Save' : 'Add MCP server'} saveForm="mcp-form" saveDisabled={busy || (!!mcp && !changed) || (touched && invalid)} />
     </div>
   );
 }

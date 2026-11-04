@@ -10,7 +10,8 @@
 }
 .choice-options {
   display: grid;
-  grid-template-columns: repeat(var(--choice-columns, 2), minmax(0, 1fr));
+  /* At most --choice-columns across, and never thumbnails narrower than 220px: one or two columns when the transcript is narrow. */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, max(220px, calc(100% / var(--choice-columns, 2) - 12px))), 1fr));
   gap: 14px 12px;
 }
 .choice-option {
@@ -43,7 +44,7 @@
 .choice-open img {
   display: block;
   width: 100%;
-  max-height: 320px;
+  max-height: 360px;
   object-fit: contain;
   object-position: top left;
 }

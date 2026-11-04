@@ -28,7 +28,7 @@ export function AccountLimits({ account, onSignIn }: {
   }
   if (!view) {
     if (!disconnected && loadError) return <LimitsMessage tone="error" text="Couldn’t load this account’s limits from the hub." action={{ label: 'Retry', run: retryLoad }} />;
-    return disconnected ? <LimitsMessage tone="muted" text="Not connected. Limits appear once accio reconnects." /> : <LimitsSkeleton />;
+    return disconnected ? <LimitsMessage tone="muted" text="Not connected. Limits appear once Accio reconnects." /> : <LimitsSkeleton />;
   }
   if (view.status === 'unsupported') {
     return <LimitsMessage tone="muted" text="This account doesn’t report usage limits." />;
@@ -47,7 +47,7 @@ export function AccountLimits({ account, onSignIn }: {
 
   if (!snapshot) {
     if (view.status === 'error') return problem ?? <LimitsMessage tone="error" text="Usage unavailable." action={retryAction} />;
-    return disconnected ? <LimitsMessage tone="muted" text="Not connected. Limits appear once accio reconnects." /> : <LimitsSkeleton />;
+    return disconnected ? <LimitsMessage tone="muted" text="Not connected. Limits appear once Accio reconnects." /> : <LimitsSkeleton />;
   }
 
   const lastKnown = view.status === 'error' || disconnected || !!refreshError;

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { HarnessView } from '@accio/protocol';
 import { useClient, useConnectionStatus } from '../app/connection';
 import { useLive } from '../app/useLive';
-import { SettingRow, SettingsSection } from '../app/Settings';
+import { SettingRow, SettingsSection, StatusPill } from '../app/Settings';
 
 /** Shared harness catalogue and the installations each machine reports. */
 export function HarnessesSettings() {
@@ -35,7 +35,8 @@ export function HarnessesSettings() {
           {h.machines.map((install) => {
             const machine = machines?.find((m) => m.id === install.machineId);
             return (
-              <SettingRow key={install.machineId} title={machine?.name ?? install.machineId} description={machine?.connected ? 'Connected' : 'Offline'}>
+              <SettingRow key={install.machineId} title={machine?.name ?? install.machineId}>
+                <StatusPill tone={machine?.connected ? 'ok' : undefined}>{machine?.connected ? 'Connected' : 'Offline'}</StatusPill>
                 <code>{install.version ?? 'Version unknown'}</code>
               </SettingRow>
             );

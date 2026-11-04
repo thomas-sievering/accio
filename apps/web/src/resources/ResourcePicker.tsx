@@ -6,14 +6,17 @@ import { useProfiles } from '../profiles/profiles';
 import { enabledBecause, projectKey, toggled, useResources } from './resources';
 
 type Context = { kind: 'project'; project: ProjectView } | { kind: 'profile'; profile: ProfileView };
-type Item = { key: string; kind: 'skill'; name: string; detail: string; scope: ResourceScope; save: (scope: ResourceScope) => Promise<unknown> };
+type Item = { id: string; key: string; kind: 'skill'; name: string; detail: string; scope: ResourceScope; save: (scope: ResourceScope) => Promise<unknown> };
+
+/** Skill choices held by the caller until it saves: the wanted state by skill id. */
+export type Staged = { values: Record<string, boolean>; set: (skillId: string, on: boolean) => void };
 
 /**
  * Turn the hub's skills on or off for one project or
  * profile. Only this project's (or profile's) own selection changes; the rest of
- * each resource's scope is kept as it is. Changes save immediately.
+ * each resource's scope is kept as it is. Changes save immediately, or, given `staged`, wait in the caller's draft.
  */
-export function ResourcePicker({ context }: { context: Context }) {
+export function ResourcePicker({ context, staged }: { context: Context; staged?: Staged }) {
   const client = useClient();
   const { state, loadError, retry } = useResources();
   const { profiles = [] } = useProfiles();
@@ -25,7 +28,7 @@ export function ResourcePicker({ context }: { context: Context }) {
   const groups = useMemo(() => {
     if (!state) return [];
     const sourceName = (id: string) => state.sources.find((s) => s.id === id)?.name ?? id;
-    const skill = (s: SkillEntry): Item => ({ key: `skill:${s.id}`, kind: 'skill', name: s.name, detail: s.description || sourceName(s.sourceId), scope: s.scope, save: (scope) => client.call('skills.setScope', { id: s.id, scope }) });
+    const skill = (s: SkillEntry): Item => ({ id: s.id, key: `skill:${s.id}`, kind: 'skill', name: s.name, detail: s.description || sourceName(s.sourceId), scope: s.scope, save: (scope) => client.call('skills.setScope', { id: s.id, scope }) });
     const byName = <T extends { name: string }>(a: T, b: T) => a.name.localeCompare(b.name);
     return [
       { title: 'Skills', empty: 'No skills yet. Add a skill source in Settings / Skills.', items: [...state.skills].sort(byName).map(skill) },
@@ -56,7 +59,7 @@ export function ResourcePicker({ context }: { context: Context }) {
             {g.items.length === 0 && <small className="hint">{g.empty}</small>}
             {g.items.length > 0 && items.length === 0 && <small className="hint">No matches.</small>}
             {items.map((i) => (
-              <PickerRow key={i.key} item={i} context={context} profileId={profileId} projectKey={key} profileName={profileName}
+              <PickerRow key={i.key} item={i} context={context} staged={staged} profileId={profileId} projectKey={key} profileName={profileName}
                 clash={i.kind === 'skill' && (enabledSkillNames.get(i.name) ?? 0) > 1 && !!enabledBecause(i.scope, profileId, key)} />
             ))}
           </div>
@@ -66,11 +69,11 @@ export function ResourcePicker({ context }: { context: Context }) {
   );
 }
 
-function PickerRow({ item, context, profileId, projectKey: key, profileName, clash }: { item: Item; context: Context; profileId: string; projectKey?: string; profileName: string; clash: boolean }) {
+function PickerRow({ item, context, staged, profileId, projectKey: key, profileName, clash }: { item: Item; context: Context; staged?: Staged; profileId: string; projectKey?: string; profileName: string; clash: boolean }) {
   const { busy, error, run } = useAction();
   // Shown while saving, so the box doesn’t snap back before the hub confirms.
   const [pending, setPending] = useState<boolean>();
-  const own = context.kind === 'project' ? item.scope.projectKeys.includes(key!) : item.scope.profileIds.includes(profileId);
+  const own = staged?.values[item.id] ?? (context.kind === 'project' ? item.scope.projectKeys.includes(key!) : item.scope.profileIds.includes(profileId));
   const inherited = context.kind === 'project' ? enabledBecause({ ...item.scope, projectKeys: [] }, profileId) : item.scope.global ? 'global' : undefined;
   const on = own || !!inherited;
   const status = inherited === 'global'
@@ -81,6 +84,7 @@ function PickerRow({ item, context, profileId, projectKey: key, profileName, cla
         ? context.kind === 'project' ? 'On for this project' : 'On for this profile'
         : 'Optional';
   const change = (checked: boolean) => {
+    if (staged) { staged.set(item.id, checked); return Promise.resolve(); }
     setPending(checked);
     return run(() => item.save(context.kind === 'project'
       ? { ...item.scope, projectKeys: toggled(item.scope.projectKeys, key!, checked) }

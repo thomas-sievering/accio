@@ -1,25 +1,30 @@
 import { useState } from 'react';
 import { useHubs } from '../app/connection';
-import { SettingsSection, SettingRow } from '../app/Settings';
+import { Plus } from '../app/icons';
+import { SettingRow, SettingsSection, StatusPill } from '../app/Settings';
 import { useAction } from '../app/useAction';
 import { PairHubForm } from './PairHubForm';
 
-export function HubSettings() {
+/** The saved hubs; "Add hub" opens the pairing form as its own page. Without a hub yet (first run) the form is the whole page. */
+export function HubSettings({ adding, onAdd, onBack }: { adding?: boolean; onAdd?: () => void; onBack?: () => void } = {}) {
   const { hubs, selectedId, select, root } = useHubs();
   const [pairing, setPairing] = useState<{ code: string; expiresAt: number }>();
   const { busy, error, run } = useAction();
   const current = hubs.find((h) => h.id === selectedId);
+  if (!hubs.length) return <SettingsSection><PairHubForm /></SettingsSection>;
+  if (adding) return <PairHubForm onCancel={onBack} />;
   return <>
-    <SettingsSection title="Saved hubs">
+    <SettingsSection>
       {hubs.map((hub) => <SettingRow key={hub.id} title={hub.name} description={hub.url}>
-        <span className={`pill ${hub.status === 'connected' ? 'ok' : 'bad'}`}>{hub.status === 'connected' ? 'Connected' : hub.status === 'connecting' ? 'Connecting' : 'Offline'}</span>
-        {hub.id !== selectedId && <button type="button" className="link" onClick={() => select(hub.id)}>Use hub</button>}
-        <button type="button" className="link" disabled={busy || hub.running > 0} onClick={() => run(() => root.call('hubs.remove', { id: hub.id }))}>Remove</button>
+        <StatusPill tone={hub.status === 'connected' ? 'ok' : hub.error ? 'bad' : undefined}>{hub.status === 'connected' ? 'Connected' : hub.status === 'connecting' ? 'Connecting' : 'Offline'}</StatusPill>
+        {hub.id !== selectedId && <button type="button" className="ghost" onClick={() => select(hub.id)}>Use hub</button>}
+        <button type="button" className="ghost" disabled={busy || hub.running > 0} onClick={() => run(() => root.call('hubs.remove', { id: hub.id }))}>Remove</button>
       </SettingRow>)}
       {current?.error && <div className="setting-form"><p className="error" role="status">{current.error}</p></div>}
-    </SettingsSection>
-    <SettingsSection title="Add hub">
-      <PairHubForm />
+      {onAdd && <button type="button" className="setting setting-link" onClick={onAdd}>
+        <span className="menu-icon"><Plus /></span>
+        <span className="setting-text"><b>Add hub</b><small>Pair this device with another hub by address and one-time code.</small></span>
+      </button>}
     </SettingsSection>
     {current && <SettingsSection title="Pair another device">
       <div className="setting-form">

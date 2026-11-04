@@ -34,7 +34,7 @@ export function FirstRun() {
 
   return (
     <div className="first-run">
-      <h1 className="first-run-kicker">Set up accio</h1>
+      <h1 className="first-run-kicker">Set up Accio</h1>
       {current === 0 && <ChooseHub onLocal={chooseLocal} />}
       {current === 1 && (
         <Screen title="Name your first profile" sub="A side of your life threads run under. Add more later in Settings.">
@@ -47,7 +47,7 @@ export function FirstRun() {
         </Screen>
       )}
       {current === 3 && (
-        <Screen title="Add your first project" sub="Point accio at a folder with code in it.">
+        <Screen title="Add your first project" sub="Point Accio at a folder with code in it.">
           <AddProjectForm />
         </Screen>
       )}
@@ -81,7 +81,7 @@ function ChooseHub({ onLocal }: { onLocal: () => void }) {
     </Screen>
   );
   return (
-    <Screen title="Where should accio keep your accounts?" sub="Profiles and sign-ins live on a hub. You can add more hubs later.">
+    <Screen title="Where should Accio keep your accounts?" sub="Profiles and sign-ins live on a hub. You can add more hubs later.">
       <div className="choice-cards" role="radiogroup" aria-label="Hub">
         <Choice on={where === 'local'} onClick={() => setWhere('local')} icon={<Monitor />} title="This PC" detail="Everything stays on this computer" />
         <Choice on={where === 'remote'} onClick={() => setWhere('remote')} icon={<Globe />} title="Remote hub" detail="Share accounts across your machines" />
@@ -109,19 +109,22 @@ const Globe = () => (
 function AddProfile() {
   const client = useClient();
   const [name, setName] = useState('');
+  const [missing, setMissing] = useState(false);
   const { busy, error, run } = useAction();
   const submit = (e: FormEvent) => {
     e.preventDefault();
+    if (!name.trim()) return setMissing(true);
     void run(() => client.call('profiles.save', { name }));
   };
   return (
-    <form onSubmit={submit} className="field">
+    <form onSubmit={submit} className="field" noValidate>
       <span className="row-input">
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="personal, work…" autoFocus required />
-        <button type="submit" className="ghost primary" disabled={busy || !name.trim()}>
+        <input value={name} onChange={(e) => { setName(e.target.value); setMissing(false); }} placeholder="personal, work…" aria-label="Profile name" aria-invalid={missing} aria-describedby={missing ? 'profile-name-error' : undefined} autoFocus />
+        <button type="submit" className="ghost primary" disabled={busy}>
           Continue
         </button>
       </span>
+      {missing && <p className="error" id="profile-name-error" role="alert">Name required</p>}
       {error && <p className="error">{error}</p>}
     </form>
   );

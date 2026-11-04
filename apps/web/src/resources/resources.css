@@ -147,7 +147,14 @@
 .tool-card-text code {
   font: 12px/1.5 'Cascadia Code', Consolas, monospace;
 }
-.tool-card-text.failed code {
+.tool-card-details summary {
+  color: var(--muted);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.tool-card-details code {
+  margin-top: 6px;
+  font: 12px/1.5 'Cascadia Code', Consolas, monospace;
   display: block;
   max-height: 7.5em;
   overflow: auto;
@@ -313,7 +320,7 @@
   color: var(--red);
 }
 .section-note {
-  margin: 0 0 10px 14px;
+  margin: 0 0 10px;
 }
 .skill-row + .skill-row {
   border-top: 1px solid var(--line);

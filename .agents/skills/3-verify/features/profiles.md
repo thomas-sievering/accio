@@ -11,7 +11,7 @@ Profiles separate personal/work configuration and choose one named account per p
 
 ## How to get to it (user POV)
 
-- From an empty home, keep `This PC` under `Set up accio` and choose `Continue`, then enter a name and choose `Continue`.
+- From an empty home, keep `This PC` under `Set up Accio` and choose `Continue`, then enter a name and choose `Continue`.
 - Choose `Settings` then `Profiles`; choose `Add profile` or an existing profile row.
 - In a signed-out thread draft, choose `Choose account` to open that profile directly.
 

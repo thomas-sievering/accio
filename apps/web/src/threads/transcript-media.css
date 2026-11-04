@@ -23,6 +23,7 @@
   white-space: nowrap;
   font-size: 12px;
 }
+.tool.open { width: 100%; max-width: 100%; }
 .tool > .tool-toggle {
   width: 100%;
   text-align: left;
@@ -124,10 +125,14 @@
 }
 .media-size { color: var(--dim); }
 .media-loading { color: var(--dim); font-size: 11px; }
-.media-actions { display: inline-flex; gap: 9px; margin-left: auto; }
+.media-caption { align-items: center; }
+.media-actions { display: inline-flex; gap: 4px; margin-left: auto; }
 .media-actions button, .media-error button {
-  display: inline;
-  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  min-width: 24px;
+  padding: 0 6px;
   font-size: inherit;
   color: var(--muted);
   border-radius: 2px;

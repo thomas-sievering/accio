@@ -6,12 +6,13 @@ import { useAction } from '../app/useAction';
 import { useProfiles } from '../profiles/profiles';
 import { useThreads } from '../threads/threads';
 import { useProjects } from './projects';
+import { FolderLink } from './FolderLink';
 import { ResourcePicker } from '../resources/ResourcePicker';
 import type { SettingsRoute } from '../app/Settings';
 
 /**
- * A project's profile and its checkouts on this machine. A checkout with threads
- * is removed only after a second, explicit click that deletes those threads too.
+ * A project's profile and its checkouts on this machine. A checkout is removed only after a second, explicit click
+ * (which also deletes its threads).
  */
 export function ProjectSheet({ project, onClose, onOpenSettings }: { project: ProjectView; onClose: () => void; onOpenSettings: (route: SettingsRoute) => void }) {
   const client = useClient();
@@ -83,19 +84,24 @@ export function ProjectSheet({ project, onClose, onOpenSettings }: { project: Pr
               const count = threads.filter((t) => t.checkoutId === c.id).length;
               return (
                 <div key={c.id} className="list-row static">
-                  <code className="grow">{c.path}</code>
+                  <FolderLink path={c.path} className="grow path-link">
+                    <span className="path-mid" title={c.path}>
+                      <span className="path-head">{c.path.slice(0, -14)}</span>
+                      <span className="path-tail">{c.path.slice(-14)}</span>
+                    </span>
+                  </FolderLink>
                   {confirming === c.id ? (
                     <>
                       <button disabled={busy} className="ghost" onClick={() => setConfirming(undefined)}>
                         Cancel
                       </button>
                       <button disabled={busy} className="ghost danger" onClick={() => remove(c.id)}>
-                        Delete {count} {count === 1 ? 'thread' : 'threads'} and remove
+                        {count > 0 ? `Remove checkout and delete ${count} ${count === 1 ? 'thread' : 'threads'}` : 'Confirm remove'}
                       </button>
                     </>
                   ) : (
-                    <button disabled={busy} className="ghost danger" onClick={() => (count > 0 ? setConfirming(c.id) : remove(c.id))}>
-                      Remove
+                    <button disabled={busy} className="ghost danger" aria-label={`Remove checkout ${c.path}`} onClick={() => setConfirming(c.id)}>
+                      Remove checkout
                     </button>
                   )}
                 </div>
@@ -105,14 +111,15 @@ export function ProjectSheet({ project, onClose, onOpenSettings }: { project: Pr
         </div>
         {error && <p className="error">{error}</p>}
         <div className="field">
-          <span>Skills</span>
           <small className="hint">
             Turn on what this project needs, for every checkout and thread of it. Things on everywhere or for its profile are inherited. Changes save immediately.
           </small>
           <ResourcePicker context={{ kind: 'project', project }} />
           <span className="signin-links">
-            <button type="button" className="link" onClick={() => onOpenSettings({ section: 'tools' })}>Manage tools</button>
+            <button type="button" className="link" onClick={() => onOpenSettings({ section: 'tools' })}>Tools</button>
+            <span aria-hidden="true">·</span>
             <button type="button" className="link" onClick={() => onOpenSettings({ section: 'mcps' })}>MCP servers</button>
+            <span aria-hidden="true">·</span>
             <button type="button" className="link" onClick={() => onOpenSettings({ section: 'skills' })}>Skills</button>
           </span>
         </div>

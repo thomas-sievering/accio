@@ -152,7 +152,7 @@ async function run(journeyFile) {
       requests.push({ method: request.method(), origin: target.origin, path: target.pathname });
     });
     await action('Open authenticated production UI', () => page.goto(ready.url + '/#token=' + ready.token));
-    await page.getByRole('heading', { name: 'Set up accio', exact: true }).waitFor();
+    await page.getByRole('heading', { name: 'Set up Accio', exact: true }).waitFor();
     await capture('initial');
     const { default: journey } = await import(pathToFileURL(resolve(journeyFile)).href);
     await journey({ page, context, runDir, home, fixture, action, capture, doctor: () => doctor(runDir) });

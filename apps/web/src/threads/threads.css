@@ -245,7 +245,7 @@
   padding: 0;
 }
 
-/* Working, Snoozed, Settled shelves, pushed to the bottom of the sidebar. */
+/* Snoozed and Settled shelves, below the list inside the sidebar's scroll region. */
 .shelves {
   margin-top: auto;
   padding-top: 16px;
@@ -271,14 +271,7 @@
 .shelf-chevron {
   display: grid;
   place-items: center;
-  opacity: 0;
-  transition:
-    rotate 0.15s,
-    opacity 0.15s;
-}
-.shelf-head:hover .shelf-chevron,
-.shelf-head:focus-visible .shelf-chevron {
-  opacity: 1;
+  transition: rotate 0.15s;
 }
 .shelf-head[aria-expanded='true'] .shelf-chevron {
   rotate: 90deg;
@@ -331,6 +324,7 @@
   line-height: 1.25;
 }
 .thread-title b {
+  flex-shrink: 100;
   min-width: 0;
   font-weight: 500;
   color: var(--ink-strong);
@@ -342,7 +336,8 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-shrink: 0;
+  flex-shrink: 1;
+  min-width: 10ch;
   max-width: 35%;
   font-size: 13px;
   color: var(--muted);
@@ -353,6 +348,17 @@
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.thread-project-link {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: inherit;
+  text-underline-offset: 3px;
+}
+.thread-project-link:hover {
+  color: var(--ink);
+  text-decoration: underline;
 }
 .thread-project-name .folder-link {
   max-width: 100%;
@@ -729,7 +735,7 @@
   gap: 8px;
 }
 /* The model and its effort sit together on the left of the composer bar. */
-.model-choice { display: inline-flex; align-items: center; gap: 2px; min-width: 0; margin-right: auto; }
+.model-choice { display: inline-flex; align-items: center; gap: 2px; min-width: 0; margin-right: auto; flex: 0 1 auto; }
 /* The first control's text lines up with the textarea's; its hover pill bleeds left. */
 .model-choice > :first-child { margin-left: -8px; }
 .model-trigger {
@@ -746,6 +752,12 @@
   color: var(--ink);
 }
 .model-trigger:disabled { cursor: default; opacity: 0.6; }
+.model-trigger { min-width: 0; white-space: nowrap; }
+.model-trigger > span { overflow: hidden; text-overflow: ellipsis; }
+.effort-trigger { display: inline-flex; align-items: center; padding: 5px 6px; border-radius: 6px; flex: none; }
+.effort-trigger:hover:not(:disabled) { background: var(--hover); }
+.effort-trigger:disabled { cursor: default; opacity: 0.6; }
+.menu.effort-menu { position: fixed; inset: auto; position-area: none; position-try-fallbacks: none; width: 160px; margin: 0; }
 .model-picker {
   position: fixed;
   margin: 0;
@@ -893,3 +905,4 @@ div.model-picker-empty b { color: var(--ink); font-weight: 500; }
   background: color-mix(in srgb, var(--red) 8%, transparent);
   color: var(--red);
 }
+.composer-bar .limits-chip { flex: none; white-space: nowrap; }

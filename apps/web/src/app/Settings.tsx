@@ -11,18 +11,20 @@ import { ToolsSettings } from '../tools/ToolsSettings';
 import { McpSettings } from '../mcp/McpSettings';
 import { SkillsSettings } from '../skills/SkillsSettings';
 import { useResources } from '../resources/resources';
-import { ArrowLeft, BookOpen, Chevron, Hub, Key, Layers, Monitor, Plug, ScrollText, Users, Wrench } from './icons';
+import { ArrowLeft, BookOpen, Chevron, Hub, IdCard, Key, Layers, Monitor, Plug, ScrollText, Users, Wrench } from './icons';
+import { useClient } from './connection';
+import { useLive } from './useLive';
 import { SidebarResizer } from './Resizer';
 import { HubSelector } from '../hub/HubSelector';
 
 /** Where Settings is open. `profileId` opens one profile ('new' to add one). */
-export type SettingsRoute = { section: 'profiles'; profileId?: string } | { section: 'accounts'; accountId?: string } | ({ section: 'secrets' } & SecretsRoute) | { section: 'hub' } | { section: 'harnesses' } | { section: 'systemPrompt' } | { section: 'machines'; machineId?: string }
+export type SettingsRoute = { section: 'profiles'; profileId?: string } | { section: 'accounts'; accountId?: string } | ({ section: 'secrets' } & SecretsRoute) | { section: 'hub'; hubId?: string } | { section: 'harnesses' } | { section: 'systemPrompt' } | { section: 'machines'; machineId?: string }
   | { section: 'tools'; toolId?: string } | { section: 'mcps'; mcpId?: string } | { section: 'skills'; sourceId?: string };
 type Section = SettingsRoute['section'];
 
 const GROUPS: { label?: string; items: { id: Section; label: string; icon: ReactNode }[] }[] = [
   { label: 'Hub settings', items: [
-    { id: 'accounts', label: 'Accounts', icon: <Users /> },
+    { id: 'accounts', label: 'Accounts', icon: <IdCard /> },
     { id: 'secrets', label: 'Secrets', icon: <Key /> },
     { id: 'profiles', label: 'Profiles', icon: <Users /> },
     { id: 'harnesses', label: 'Harnesses', icon: <Layers /> },
@@ -60,7 +62,11 @@ export function Settings({ route, onRoute, onClose, onOpenThread }: { route: Set
     : mcpId ? (mcpId === 'new' ? 'New MCP server' : resources?.mcps.find((m) => m.id === mcpId)?.name)
       : sourceId ? (sourceId === 'new' ? 'New skill source' : resources?.sources.find((s) => s.id === sourceId)?.name)
         : undefined;
-  const detailLabel = profileLabel || accountLabel || secretLabel || resourceLabel;
+  const client = useClient();
+  const machines = useLive(() => client.call('machines.list', {}), 'machines.changed');
+  const machineLabel = route.section === 'machines' && route.machineId ? machines?.find((m) => m.id === route.machineId)?.name : undefined;
+  const hubLabel = route.section === 'hub' && route.hubId ? 'Add hub' : undefined;
+  const detailLabel = profileLabel || accountLabel || secretLabel || resourceLabel || machineLabel || hubLabel;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -130,18 +136,13 @@ export function Settings({ route, onRoute, onClose, onOpenThread }: { route: Set
             )}
             {route.section === 'accounts' && <AccountsSettings accountId={accountId} onOpen={(id) => onRoute({ section: 'accounts', accountId: id })} onBack={() => onRoute({ section: 'accounts' })} />}
             {route.section === 'secrets' && <SecretsSettings route={route} onRoute={(r) => onRoute({ section: 'secrets', ...r })} />}
-            {route.section === 'hub' && <HubSettings />}
+            {route.section === 'hub' && <HubSettings adding={!!route.hubId} onAdd={() => onRoute({ section: 'hub', hubId: 'new' })} onBack={() => onRoute({ section: 'hub' })} />}
             {route.section === 'harnesses' && <HarnessesSettings />}
             {route.section === 'systemPrompt' && <SystemPromptSettings />}
             {route.section === 'tools' && <ToolsSettings key={toolId ?? ''} toolId={toolId} onOpen={(id) => onRoute({ section: 'tools', toolId: id })} onBack={() => onRoute({ section: 'tools' })} onOpenThread={onOpenThread} />}
             {route.section === 'mcps' && <McpSettings key={mcpId ?? ''} mcpId={mcpId} onOpen={(id) => onRoute({ section: 'mcps', mcpId: id })} onBack={() => onRoute({ section: 'mcps' })} />}
             {route.section === 'skills' && <SkillsSettings key={sourceId ?? ''} sourceId={sourceId} onOpen={(id) => onRoute({ section: 'skills', sourceId: id })} onBack={() => onRoute({ section: 'skills' })} />}
-            {route.section === 'machines' && (
-              <>
-                {route.machineId && <button className="link" onClick={() => onRoute({ section: 'machines' })}>All machines</button>}
-                <MachineSettings machineId={route.machineId} onOpen={(machineId) => onRoute({ section: 'machines', machineId })} onOpenThread={onOpenThread} />
-              </>
-            )}
+            {route.section === 'machines' && <MachineSettings machineId={route.machineId} onOpen={(machineId) => onRoute({ section: 'machines', machineId })} onBack={() => onRoute({ section: 'machines' })} onOpenThread={onOpenThread} />}
           </div>
         </div>
       </main>
@@ -150,13 +151,18 @@ export function Settings({ route, onRoute, onClose, onOpenThread }: { route: Set
 }
 
 /** A titled group of settings, drawn as one card. */
-export function SettingsSection({ title, children }: { title: string; children: ReactNode }) {
+export function SettingsSection({ title, children }: { title?: string; children: ReactNode }) {
   return (
     <section className="settings-section">
-      <h2>{title}</h2>
+      {title && <h2>{title}</h2>}
       <div className="settings-card">{children}</div>
     </section>
   );
+}
+
+/** The one status treatment: a dot and a word, as Connected, Signed out or Local. */
+export function StatusPill({ tone, children }: { tone?: 'ok' | 'bad' | 'warn' | 'busy'; children: ReactNode }) {
+  return <span className={`pill${tone ? ` ${tone === 'warn' ? 'warn-pill' : tone}` : ''}`}><span className="dot" />{children}</span>;
 }
 
 /** One setting: what it is on the left, its value or control on the right. */
@@ -196,14 +202,46 @@ export function SettingLink({ icon, title, description, warn, chevron = true, on
   );
 }
 
-/** Delete behind a second click that names what goes, with Keep to back out. */
-export function ConfirmDelete({ label = 'Delete', confirm, busy, onDelete }: { label?: string; confirm: string; busy: boolean; onDelete: () => void }) {
+/**
+ * The one footer of every settings detail page: Delete on the left (it asks inline, naming what it deletes),
+ * Cancel and Save on the right. Without `saveLabel` the page has nothing to save and offers Back.
+ * Delete stays visible but disabled, with `blocked` as its reason, when the thing is in use.
+ */
+export function SettingsFooter({ remove, busy, onCancel, saveLabel, saveDisabled, saveForm, onSave }: {
+  remove?: { name: string; run: () => void; blocked?: string; consequence?: string };
+  busy?: boolean;
+  onCancel: () => void;
+  saveLabel?: string;
+  saveDisabled?: boolean;
+  /** The id of the form to submit when the footer sits outside it. */
+  saveForm?: string;
+  /** Saves without a form; otherwise the button submits one. */
+  onSave?: () => void;
+}) {
   const [confirming, setConfirming] = useState(false);
-  if (!confirming) return <button type="button" className="ghost danger" disabled={busy} onClick={() => setConfirming(true)}>{label}</button>;
   return (
-    <>
-      <button type="button" className="ghost" disabled={busy} onClick={() => setConfirming(false)}>Keep</button>
-      <button type="button" className="ghost danger" disabled={busy} onClick={onDelete}>{confirm}</button>
-    </>
+    <footer className="settings-actions">
+      {remove && (confirming ? (
+        <>
+          <button type="button" className="ghost danger" disabled={busy} onClick={remove.run}>Delete {remove.name}</button>
+          <button type="button" className="ghost" disabled={busy} onClick={() => setConfirming(false)}>Cancel</button>
+          {remove.consequence && <small className="hint">{remove.consequence}</small>}
+        </>
+      ) : (
+        <>
+          <button type="button" className="ghost danger" disabled={busy || !!remove.blocked} onClick={() => setConfirming(true)}>Delete</button>
+          {remove.blocked && <small className="hint">{remove.blocked}</small>}
+        </>
+      ))}
+      <span className="spacer" />
+      {!confirming && (
+        <>
+          <button type="button" className="ghost" disabled={busy} onClick={onCancel}>{saveLabel ? 'Cancel' : 'Back'}</button>
+          {saveLabel && (
+            <button type={onSave ? 'button' : 'submit'} form={onSave ? undefined : saveForm} className="ghost primary" disabled={saveDisabled} onClick={onSave}>{saveLabel}</button>
+          )}
+        </>
+      )}
+    </footer>
   );
 }

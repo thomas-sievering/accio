@@ -45,11 +45,9 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
     return () => { live = false; clearInterval(timer); };
   }, [client, connection, thread.id, thread.updatedAt, thread.workspace, thread.delivery, project?.previewCommand, attempt]);
 
-  const deliver = (choice: DeliveryMode) => {
-    setMode(choice);
-    menu.current?.hidePopover();
-    void run(async () => { await client.call('threads.deliver', { threadId: thread.id, mode: choice }); });
-  };
+  const deliver = () => void run(async () => { await client.call('threads.deliver', { threadId: thread.id, mode }); });
+  // Choosing an option only sets the mode; the main button starts delivery.
+  const choose = (choice: DeliveryMode) => { setMode(choice); menu.current?.hidePopover(); trigger.current?.focus(); };
   const openApp = () => {
     const desktop = window.accioDesktop?.openPreview;
     // Reserve the tab during the user gesture, before the preview's asynchronous startup.
@@ -71,11 +69,13 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
     void run(async () => { await client.call(method, { threadId: thread.id }); });
   const settled = !!thread.settledAt;
   // A fresh request is offered with no delivery, after new work, or when a person must act.
-  const offerShip = !status || status.canShip;
+  const nothingToShip = !!summary && summary.files === 0;
+  const offerShip = (!status || status.canShip) && !nothingToShip;
   const receipt = status?.phase === 'delivered';
   const age = checkedAgo(status?.checkedAt, now);
   const hint = archived ? undefined : receipt
     ? settled ? 'Thread settled · Workspace retained' : delivery?.keepOpen ? 'Kept open · Workspace retained' : 'Workspace retained'
+    : settled && !['queued', 'shipping'].includes(status?.phase ?? '') ? 'Thread settled'
     : status?.phase === 'queued' || status?.phase === 'shipping' ? undefined
     : [status?.detail, status && ['waiting', 'integrated', 'unavailable'].includes(status.phase) ? age : undefined].filter(Boolean).join(' · ') || undefined;
   const statusName = status && statusText(status.label, status.pullRequest);
@@ -88,7 +88,7 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
   return <div className="delivery-actions">
     <div className="delivery-row" aria-label="Delivery actions">
       {archived ? <span className="delivery-pill delivery-complete"><Check />Archived · history kept</span> : <>
-        {!receipt && summary && <span className="delivery-pill delivery-diff" title={`${summary.files} changed ${summary.files === 1 ? 'file' : 'files'}`} aria-label={`${summary.added} lines added, ${summary.removed} lines removed`}>
+        {!receipt && summary && (summary.added > 0 || summary.removed > 0) && <span className="delivery-pill delivery-diff" title={`${summary.files} changed ${summary.files === 1 ? 'file' : 'files'}`} aria-label={`${summary.added} lines added, ${summary.removed} lines removed`}>
           <span className="delivery-added">+{summary.added}</span><span className="delivery-removed">−{summary.removed}</span>
         </span>}
         {status?.phase === 'queued' || status?.phase === 'paused' ? <span className={`delivery-split delivery-queued${shipWhenDone ? ' delivery-armed' : ''}`}>
@@ -103,13 +103,13 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
           {receipt && status.revision && <span className="delivery-rev" title="Revision on the target">{status.revision}</span>}
         </span>}
         {offerShip && <span className="delivery-split">
-          <button disabled={busy || !canRun || !summary?.available || !!thread.queuedMessages?.length} title={thread.queuedMessages?.length ? 'Send or remove queued messages first' : summary?.reason ?? (mode === 'review' ? 'Prepare a PR without merging' : `Finish, verify and ship to ${target}`)} onClick={() => deliver(mode)}><Ship />{mode === 'review' ? 'Prepare for review' : 'Ship'}</button>
+          <button disabled={busy || !canRun || !summary?.available || !!thread.queuedMessages?.length} title={thread.queuedMessages?.length ? 'Send or remove queued messages first' : !canRun ? 'Sign in to this profile to ship' : summary?.reason ?? (mode === 'review' ? 'Prepare a PR without merging' : `Finish, verify and ship to ${target}`)} onClick={deliver}><Ship />{mode === 'review' ? 'Prepare for review' : 'Ship'}</button>
           <button ref={trigger} popoverTarget={id} disabled={busy || !summary?.available || !!thread.queuedMessages?.length} aria-label="Shipping options" aria-haspopup="menu"><ChevronDown /></button>
         </span>}
         {status?.canCheck && <button className="delivery-pill" disabled={busy} onClick={() => call('threads.checkDelivery')}><Refresh />Check now</button>}
         {status?.canStopFollowUps && <button className="delivery-pill" disabled={busy} title="Keep tracking the PR without starting the agent again" onClick={() => call('threads.cancelDelivery')}><StopSquare />Stop automatic follow-ups</button>}
         {status?.canCancel && status.phase !== 'queued' && <button className="delivery-pill" disabled={busy} onClick={() => call('threads.cancelDelivery')}><Close />Cancel delivery</button>}
-        {receipt && <>
+        {(receipt || settled) && <>
           {settled && <button className="delivery-pill" disabled={busy} onClick={() => call('threads.reopen')}><Undo />Reopen</button>}
           <button className="delivery-pill" disabled={busy || thread.status === 'running'} title="Frees the workspace, keeps this thread" onClick={() => call('threads.archive')}>
             <Archive />{busy ? 'Archiving…' : 'Archive'}
@@ -138,11 +138,11 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
           buttons[(current + (e.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length]?.focus();
         }
       }}>
-      <button className="menu-item" role="menuitemradio" aria-checked={mode === 'ship'} disabled={busy || !canRun} onClick={() => deliver('ship')}>
+      <button className="menu-item" role="menuitemradio" aria-checked={mode === 'ship'} disabled={busy || !canRun} onClick={() => choose('ship')}>
         <span className="delivery-check">{mode === 'ship' && <Check />}</span>
         <span className="menu-text">Ship to {target}<small>{project?.deliveryPolicy === 'pull-request' ? 'Rebase, test and merge through a PR.' : 'Rebase, test and push when ready.'}</small></span>
       </button>
-      <button className="menu-item" role="menuitemradio" aria-checked={mode === 'review'} disabled={busy || !canRun} onClick={() => deliver('review')}>
+      <button className="menu-item" role="menuitemradio" aria-checked={mode === 'review'} disabled={busy || !canRun} onClick={() => choose('review')}>
         <span className="delivery-check">{mode === 'review' && <Check />}</span>
         <span className="menu-text">Prepare for review<small>Rebase, test and open a PR. Never merges.</small></span>
       </button>

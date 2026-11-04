@@ -3,7 +3,8 @@ import type { MachineView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { useLive } from '../app/useLive';
 import { Chevron, Monitor } from '../app/icons';
-import { SettingRow, SettingsSection } from '../app/Settings';
+import { SettingRow, SettingsFooter, SettingsSection, StatusPill } from '../app/Settings';
+import { Field } from '../resources/Field';
 import { useProfiles } from '../profiles/profiles';
 import { FolderList } from './FolderList';
 import { useAction } from '../app/useAction';
@@ -11,16 +12,16 @@ import { useResources } from '../resources/resources';
 import { ToolStatusCard } from '../tools/ToolStatusCard';
 
 /** The machines known to the hub, including those currently offline. */
-export function MachineSettings({ machineId, onOpen, onOpenThread }: { machineId?: string; onOpen: (id: string) => void; onOpenThread: (threadId: string) => void }) {
+export function MachineSettings({ machineId, onOpen, onBack, onOpenThread }: { machineId?: string; onOpen: (id: string) => void; onBack: () => void; onOpenThread: (threadId: string) => void }) {
   const client = useClient();
   const machines = useLive(() => client.call('machines.list', {}), 'machines.changed');
   if (!machines) return <p className="note">Loading machines…</p>;
   const machine = machines.find((m) => m.id === machineId);
-  if (machine) return <MachineDetail key={machine.id} machine={machine} onOpenThread={onOpenThread} />;
+  if (machine) return <MachineDetail key={machine.id} machine={machine} onBack={onBack} onOpenThread={onOpenThread} />;
   return (
     <>
       <p className="note">Machines known to the hub. Their profile folders are stored on the hub too.</p>
-      <SettingsSection title="Machines">
+      <SettingsSection>
         {machines.length === 0 && <SettingRow title="No machines connected yet" />}
         {machines.map((m) => (
           <button key={m.id} className="setting setting-link" onClick={() => onOpen(m.id)}>
@@ -29,7 +30,7 @@ export function MachineSettings({ machineId, onOpen, onOpenThread }: { machineId
               <b>{m.name}{m.thisMachine ? ' (this machine)' : ''}</b>
               <small>{m.platform} · {m.harnesses.length} harness{m.harnesses.length === 1 ? '' : 'es'}</small>
             </span>
-            <ConnectionPill connected={m.connected} />
+            <StatusPill tone={m.connected ? 'ok' : undefined}>{m.connected ? 'Connected' : 'Offline'}</StatusPill>
             <Chevron />
           </button>
         ))}
@@ -38,26 +39,48 @@ export function MachineSettings({ machineId, onOpen, onOpenThread }: { machineId
   );
 }
 
-const ConnectionPill = ({ connected }: { connected: boolean }) => <span className={`pill ${connected ? 'ok' : ''}`}><span className="dot" />{connected ? 'Connected' : 'Offline'}</span>;
-
-function MachineDetail({ machine, onOpenThread }: { machine: MachineView; onOpenThread: (threadId: string) => void }) {
+function MachineDetail({ machine, onBack, onOpenThread }: { machine: MachineView; onBack: () => void; onOpenThread: (threadId: string) => void }) {
+  const client = useClient();
   const { profiles = [] } = useProfiles();
   const { state: resources } = useResources();
+  // Edits wait here until Save: the name, and each profile's folders by profile id.
+  const [name, setName] = useState<string>();
+  const [folders, setFolders] = useState<Record<string, string[]>>({});
+  const [touched, setTouched] = useState(false);
+  const { busy, error, run } = useAction();
+  const shownName = name ?? machine.name;
+  const changedFolders = Object.keys(folders).filter((id) => JSON.stringify(folders[id]) !== JSON.stringify(machine.profileFolders[id] ?? []));
+  const renamed = shownName.trim() !== machine.name;
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setTouched(true);
+    if (!shownName.trim()) return;
+    const done = await run(async () => {
+      if (renamed) await client.call('machines.rename', { machineId: machine.id, name: shownName.trim() });
+      for (const profileId of changedFolders) await client.call('machines.setProfileFolders', { machineId: machine.id, profileId, folders: folders[profileId]! });
+      return true;
+    });
+    if (done) { setName(undefined); setFolders({}); }
+  };
   return (
-    <>
-      <SettingsSection title={machine.name}>
-        <MachineName machine={machine} />
+    <form className="settings-profile-form" id="machine-form" onSubmit={submit} noValidate>
+      <SettingsSection>
+        <div className="setting-form">
+          <Field label="Machine name" error={touched && !shownName.trim() && 'Name required'} hint="Shared with everyone connected to the hub.">
+            {(p) => <input {...p} value={shownName} onChange={(e) => setName(e.target.value)} maxLength={100} required disabled={busy} />}
+          </Field>
+        </div>
         <SettingRow title="Status" description={machine.thisMachine ? 'The computer this window is talking to.' : undefined}>
-          <ConnectionPill connected={machine.connected} />
+          <StatusPill tone={machine.connected ? 'ok' : undefined}>{machine.connected ? 'Connected' : 'Offline'}</StatusPill>
         </SettingRow>
         <SettingRow title="Platform"><code>{machine.platform}</code></SettingRow>
-        <SettingRow title="accio version"><code>{machine.version}</code></SettingRow>
+        <SettingRow title="Accio version"><code>{machine.version}</code></SettingRow>
         {!machine.connected && <SettingRow title="Last seen"><span>{new Date(machine.lastSeen).toLocaleString()}</span></SettingRow>}
       </SettingsSection>
       <SettingsSection title="Installed harnesses">
         {machine.harnesses.length === 0 && <SettingRow title="No harnesses reported" />}
         {machine.harnesses.map((h) => (
-          <SettingRow key={h.harnessId} title={h.harnessId === 'claudeCode' ? 'Claude Code' : h.harnessId}>
+          <SettingRow key={h.harnessId} title={h.harnessId === 'claudeCode' ? 'Claude Code' : h.harnessId === 'codex' ? 'Codex' : h.harnessId}>
             <code>{h.version ?? 'Version unknown'}</code>
           </SettingRow>
         ))}
@@ -77,67 +100,17 @@ function MachineDetail({ machine, onOpenThread }: { machine: MachineView; onOpen
       <SettingsSection title="Profile folders">
         {profiles.length === 0 && <SettingRow title="Add a profile first" />}
         {profiles.map((p) => (
-          <ProfileFolders key={`${machine.id}:${p.id}`} machine={machine} profileId={p.id} name={p.name} />
+          <div key={p.id} className="setting-form">
+            <div className="field">
+              <span>{p.name}</span>
+              <FolderList folders={folders[p.id] ?? machine.profileFolders[p.id] ?? []} onChange={(f) => setFolders((d) => ({ ...d, [p.id]: f }))} disabled={busy} />
+              <small className="hint">Folders on {machine.name}. New projects inside these folders default to {p.name}.</small>
+            </div>
+          </div>
         ))}
       </SettingsSection>
-    </>
-  );
-}
-
-function MachineName({ machine }: { machine: MachineView }) {
-  const client = useClient();
-  const [draft, setDraft] = useState<string>();
-  const { busy, error, run } = useAction();
-  const name = draft ?? machine.name;
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    const saved = await run(() => client.call('machines.rename', { machineId: machine.id, name }));
-    if (saved) setDraft(undefined);
-  };
-  return (
-    <form className="setting-form" onSubmit={submit}>
-      <label className="field">
-        <span>Machine name</span>
-        <input value={name} onChange={(e) => setDraft(e.target.value)} maxLength={100} required disabled={busy} />
-        <small className="hint">Shared with everyone connected to the hub.</small>
-      </label>
       {error && <p className="error" role="alert">{error}</p>}
-      <button type="submit" className="ghost primary" disabled={busy || !name.trim() || name.trim() === machine.name}>Save name</button>
-    </form>
-  );
-}
-
-function ProfileFolders({ machine, profileId, name }: { machine: MachineView; profileId: string; name: string }) {
-  const client = useClient();
-  const saved = machine.profileFolders[profileId] ?? [];
-  const [draft, setDraft] = useState<string[]>();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    setBusy(true);
-    setError(undefined);
-    try {
-      await client.call('machines.setProfileFolders', {
-        machineId: machine.id, profileId,
-        folders: draft ?? saved,
-      });
-      setDraft(undefined);
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <form className="setting-form" onSubmit={submit}>
-      <div className="field">
-        <span>{name}</span>
-        <FolderList folders={draft ?? saved} onChange={setDraft} disabled={busy} />
-        <small className="hint">Folders on {machine.name}. New projects inside these folders default to {name}.</small>
-      </div>
-      {error && <p className="error">{error}</p>}
-      <button type="submit" className="ghost primary" disabled={busy || draft === undefined || JSON.stringify(draft) === JSON.stringify(saved)}>Save folders</button>
+      <SettingsFooter busy={busy} onCancel={onBack} saveLabel="Save" saveDisabled={busy || (!renamed && changedFolders.length === 0)} />
     </form>
   );
 }

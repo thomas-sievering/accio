@@ -21,7 +21,7 @@ const ids = (ts: ThreadView[]) => ts.map((t) => t.id);
 const later = '2026-11-04T09:00:00';
 
 describe('shelveThreads', () => {
-  it('puts settled before snoozed before working', () => {
+  it('puts settled before snoozed, and keeps a running thread in the open list', () => {
     const s = shelveThreads(
       [
         thread('settled', { settledAt: '2026-11-03T11:00:00', snoozedUntil: later }),
@@ -34,8 +34,7 @@ describe('shelveThreads', () => {
     );
     expect(ids(s.settled)).toEqual(['settled']);
     expect(ids(s.snoozed)).toEqual(['snoozed', 'sleeping']);
-    expect(ids(s.working)).toEqual(['working']);
-    expect(ids(s.open)).toEqual(['open']);
+    expect(ids(s.open)).toEqual(['working', 'open']);
   });
 
   it('wakes a thread whose snooze has passed', () => {
@@ -54,7 +53,7 @@ describe('shelveThreads', () => {
       ],
       now,
     );
-    expect(ids(s.open)).toEqual(['cut', 'other', 'old']);
+    expect(ids(s.open)).toEqual(['busy', 'cut', 'other', 'old']);
   });
 });
 

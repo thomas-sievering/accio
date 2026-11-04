@@ -8,7 +8,7 @@ import { useThreads } from './threads';
 
 /** Searchable project picker; No project is always the first choice. */
 export function NewThreadButton({ className = 'side-icon', label }: { className?: string; label?: string }) {
-  const { openDraft, setProjectScope } = useThreads();
+  const { openDraft, projectScope, setProjectScope, threads, selectedId } = useThreads();
   const { visible, checkoutsOf } = useProjects();
   const { profiles = [], filter } = useProfiles();
   const menu = useRef<HTMLDivElement>(null);
@@ -16,7 +16,9 @@ export function NewThreadButton({ className = 'side-icon', label }: { className?
   const id = useId();
   const [query, setQuery] = useState('');
   const [step, setStep] = useState('');
-  const [active, setActive] = useState(0);
+  const [activeId, setActiveId] = useState('');
+  // The project in view (the filtered one, else the open thread's) starts highlighted.
+  const currentProject = projectScope || threads?.find((t) => t.id === selectedId)?.projectId || '';
   const availableProfiles = profiles.filter((p) => filter === 'all' || p.id === filter);
   const start = (checkoutId: string, profileId?: string) => {
     menu.current?.hidePopover();
@@ -24,7 +26,7 @@ export function NewThreadButton({ className = 'side-icon', label }: { className?
     openDraft(checkoutId, profileId);
   };
   const go = (next: string) => {
-    setStep(next); setQuery(''); setActive(0);
+    setStep(next); setQuery(''); setActiveId(next ? '' : currentProject);
     search.current?.focus();
   };
   type Choice = { id: string; name: string; detail?: string; projectId?: string; next?: boolean; disabled?: boolean; pick: () => void };
@@ -47,7 +49,7 @@ export function NewThreadButton({ className = 'side-icon', label }: { className?
     id: 'no-project', name: 'No project', disabled: availableProfiles.length === 0,
     pick: () => availableProfiles.length === 1 ? start('', availableProfiles[0]!.id) : go('profiles'),
   });
-  const selected = Math.min(active, Math.max(0, filtered.length - 1));
+  const selected = Math.max(0, filtered.findIndex((c) => c.id === activeId));
   return (
     <>
       <button className={className} title="New thread" aria-label="New thread" popoverTarget={id}>
@@ -60,11 +62,11 @@ export function NewThreadButton({ className = 'side-icon', label }: { className?
           <input ref={search} autoFocus placeholder="Search..." value={query} role="combobox"
             aria-label={step === 'profiles' ? 'Search profiles' : 'Search projects'} aria-expanded="true"
             aria-controls={`${id}-list`} aria-activedescendant={filtered.length ? `${id}-option-${selected}` : undefined}
-            onChange={(e) => { setQuery(e.target.value); setActive(0); }}
+            onChange={(e) => { setQuery(e.target.value); setActiveId(''); }}
             onKeyDown={(e) => {
               if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
                 e.preventDefault();
-                setActive((selected + (e.key === 'ArrowDown' ? 1 : -1) + filtered.length) % (filtered.length || 1));
+                setActiveId(filtered[(selected + (e.key === 'ArrowDown' ? 1 : -1) + filtered.length) % (filtered.length || 1)]?.id ?? '');
               } else if (e.key === 'Enter') {
                 e.preventDefault();
                 if (!filtered[selected]?.disabled) filtered[selected]?.pick();
@@ -79,7 +81,7 @@ export function NewThreadButton({ className = 'side-icon', label }: { className?
             <button key={c.id} id={`${id}-option-${index}`} className="picker-option" role="option"
               aria-selected={index === selected} disabled={c.disabled} tabIndex={-1}
               ref={(node) => { if (index === selected) node?.scrollIntoView({ block: 'nearest' }); }}
-              onMouseMove={() => setActive(index)} onClick={c.pick}>
+              onMouseMove={() => setActiveId(c.id)} onClick={c.pick}>
               {c.projectId ? <ProjectMark id={c.projectId} size={16} /> : <span className="no-project-mark" />}
               <span className="menu-text"><b>{c.name}</b>{c.detail && <small>{c.detail}</small>}</span>
               {c.next && <Chevron />}

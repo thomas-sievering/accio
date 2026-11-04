@@ -9,3 +9,23 @@
   font-weight: 600;
   line-height: 1;
 }
+.path-mid {
+  display: flex;
+  min-width: 0;
+}
+.path-head {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.path-tail {
+  flex: none;
+  white-space: pre;
+}
+.path-link,
+.path-link .folder-link {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  text-align: start;
+}

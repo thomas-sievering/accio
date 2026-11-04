@@ -5,7 +5,7 @@ import { useClient } from '../app/connection';
 import { useLive } from '../app/useLive';
 import { accountForModel, defaultModel, useProfiles } from '../profiles/profiles';
 import { LimitsIndicator } from '../limits/LimitsIndicator';
-import { FolderLink } from '../projects/FolderLink';
+import { emitAppEvent } from '../app/appEvents';
 import { ProjectMark } from '../projects/ProjectMark';
 import { useProjects } from '../projects/projects';
 import { Composer } from './Composer';
@@ -69,7 +69,7 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
         target={thread.id}
         draftId={`thread:${thread.id}`}
         onStop={running ? async () => void (await client.call('threads.stop', { threadId: thread.id })) : undefined}
-        placeholder={running ? 'Send a correction or follow-up…' : thread.settledAt ? 'Send a message to reopen this thread…' : `Ask ${thread.model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}
+        placeholder={running ? 'Enter steers · Ctrl+Enter queues' : thread.settledAt ? 'Send a message to reopen this thread…' : `Ask ${thread.model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}
         attachment={pick && pickLabel ? { label: pickLabel, onRemove: () => setPick(undefined) } : undefined}
         onSend={async (text, mode) => {
           await client.call('threads.send', { threadId: thread.id, text, mode, ...(pick ? { pick } : {}) });
@@ -122,11 +122,11 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
           placeholder={`Ask ${model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}
           onSend={async (text) => select((await client.call('threads.start', checkoutId ? { checkoutId, text, model, machineId } : { profileId: profileId!, text, model, machineId })).id)}
           toolbar={<>
-            <select className="composer-machine" aria-label="Run on machine" value={machineId ?? ''} disabled={!machines} onChange={(e) => setChosenMachineId(e.target.value)}>
+            {(machines?.length ?? 0) > 1 && <select className="composer-machine" aria-label="Run on machine" value={machineId ?? ''} disabled={!machines} onChange={(e) => setChosenMachineId(e.target.value)}>
               {!machineId && <option value="">Loading machines…</option>}
               {chosenMachineId && unavailable && <option value={chosenMachineId} disabled>Selected machine offline</option>}
               {online.map((m) => <option key={m.id} value={m.id}>{m.name}{m.thisMachine ? ' (local)' : ''}</option>)}
-            </select>
+            </select>}
             <ModelPicker profileId={place.profile?.id} value={model} onChange={async (model) => setChoice({ checkoutId, profileId: place.profile?.id, model })} />
             {place.profile && <LimitsIndicator active={active} account={accountForModel(place.profile, model)} onOpen={() => onOpenLimits(place.profile!.id)} />}
           </>}
@@ -150,7 +150,9 @@ function PaneHeader(props: {
         <span className="thread-where" title={checkout?.path}>
           {project && <ProjectMark id={project.id} size={16} />}
           <span className="thread-project-name">
-            {checkout ? <FolderLink path={checkout.path}>{project?.name ?? 'unknown project'}</FolderLink> : project?.name ?? 'No project'}
+            {project
+              ? <button type="button" className="thread-project-link" title={`${project.name} settings${checkout ? ` · ${checkout.path}` : ''}`} onClick={() => emitAppEvent('project.open', { id: project.id })}>{project.name}</button>
+              : checkout ? 'unknown project' : 'No project'}
           </span>
         </span>
         <span className="faint" aria-hidden="true">/</span>

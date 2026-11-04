@@ -1,8 +1,8 @@
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
 import { ToolDefinition, type MachineView, type ToolStatus } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { Plus, Wrench } from '../app/icons';
-import { ConfirmDelete, SettingLink, SettingRow, SettingsSection } from '../app/Settings';
+import { SettingLink, SettingRow, SettingsFooter, SettingsSection } from '../app/Settings';
 import { useAction } from '../app/useAction';
 import { useLive } from '../app/useLive';
 import { hasSignedInAccount, useProfiles } from '../profiles/profiles';
@@ -27,17 +27,15 @@ export function ToolsSettings({ toolId, onOpen, onBack, onOpenThread }: { toolId
   if (toolId && !tool) return <><p className="note">This tool was deleted.</p><button className="link" onClick={onBack}>All tools</button></>;
   if (tool) {
     return (
-      <>
-        <ToolForm key={tool.id} tool={tool} taken={[]} onSaved={() => {}} onDone={onBack} />
-        <MachineStatuses tool={tool} machines={machines} statuses={state.toolStatuses} onOpenThread={onOpenThread} />
-      </>
+      <ToolForm key={tool.id} tool={tool} taken={[]} onSaved={() => {}} onDone={onBack}
+        after={<MachineStatuses tool={tool} machines={machines} statuses={state.toolStatuses} onOpenThread={onOpenThread} />} />
     );
   }
   const here = machines?.find((m) => m.thisMachine);
   return (
     <>
-      <p className="note">Managed npm tools. accio installs each tool’s exact version into its own folder on every machine, checks it, and adds it to every thread’s PATH on that machine. A failed check starts a repair thread.</p>
-      <SettingsSection title="Tools">
+      <p className="note">Managed npm tools. Accio installs each tool’s exact version into its own folder on every machine, checks it, and adds it to every thread’s PATH on that machine. A failed check starts a repair thread.</p>
+      <SettingsSection>
         {state.tools.length === 0 && <SettingRow title="No tools yet" description="Start with the Playwright CLI preset, or add any npm package with an executable." />}
         {[...state.tools].sort((a, b) => a.name.localeCompare(b.name)).map((t) => {
           const status = state.toolStatuses.find((s) => s.toolId === t.id && s.machineId === here?.id);
@@ -76,7 +74,7 @@ const valid = {
   executable: (v: string) => ToolDefinition.shape.executable.safeParse(v).success,
 };
 
-function ToolForm({ tool, taken, onSaved, onDone }: { tool?: ToolDefinition; taken: string[]; onSaved: (t: ToolDefinition) => void; onDone: () => void }) {
+function ToolForm({ tool, taken, onSaved, onDone, after }: { tool?: ToolDefinition; taken: string[]; onSaved: (t: ToolDefinition) => void; onDone: () => void; /** Shown between the form and its footer. */ after?: ReactNode }) {
   const client = useClient();
   const { profiles = [] } = useProfiles();
   const { value, dirty, set, reset } = useDraft<Draft>(tool ?? blank());
@@ -123,7 +121,7 @@ function ToolForm({ tool, taken, onSaved, onDone }: { tool?: ToolDefinition; tak
 
   return (
     <form className="settings-profile-form" onSubmit={submit} noValidate>
-      <SettingsSection title={tool ? tool.name : 'New tool'}>
+      <SettingsSection>
         <div className="setting-form">
           {!tool && (
             <div className="preset">
@@ -152,7 +150,7 @@ function ToolForm({ tool, taken, onSaved, onDone }: { tool?: ToolDefinition; tak
               <input value={argsText} onChange={(e) => setArgs(e.target.value)} placeholder="--version" spellCheck={false} />
             </label>
           </div>
-          <small className="hint">accio runs the executable with these arguments (separated by spaces) to check it works.</small>
+          <small className="hint">Accio runs the executable with these arguments (separated by spaces) to check it works.</small>
         </div>
       </SettingsSection>
       <p className="note">Saving installs and checks this tool on this machine. Managed tools are available to every profile and project on the machine.</p>
@@ -165,20 +163,13 @@ function ToolForm({ tool, taken, onSaved, onDone }: { tool?: ToolDefinition; tak
               {profiles.map((p) => <option key={p.id} value={p.id}>{p.name}{hasSignedInAccount(p) ? '' : ' · Signed out'}</option>)}
             </select>
           </label>
-          <small className="hint">When a check fails, accio starts a thread on that machine that diagnoses and fixes the install, then checks again.</small>
+          <small className="hint">When a check fails, Accio starts a thread on that machine that diagnoses and fixes the install, then checks again.</small>
           {repairWarning && <small className="warn" role="status">{repairWarning}</small>}
         </div>
       </SettingsSection>
+      {after}
       {error && <p className="error" role="alert">{error}</p>}
-      <footer className="settings-actions">
-        {tool && <ConfirmDelete busy={busy} confirm={`Delete ${tool.name} from the hub`} onDelete={remove} />}
-        <span className="spacer" />
-        {changed && tool && <button type="button" className="ghost" disabled={busy} onClick={() => { reset(); setArgs(undefined); setTouched(false); }}>Discard changes</button>}
-        <button type="button" className="ghost" onClick={onDone}>{tool ? 'Done' : 'Cancel'}</button>
-        <button type="submit" className="ghost primary" disabled={busy || (!!tool && !changed) || (touched && invalid)}>
-          {busy ? 'Saving…' : tool ? 'Save' : 'Add tool'}
-        </button>
-      </footer>
+      <SettingsFooter remove={tool && { name: tool.name, run: remove }} busy={busy} onCancel={onDone} saveLabel={tool ? 'Save' : 'Add tool'} saveDisabled={busy || (!!tool && !changed) || (touched && invalid)} />
     </form>
   );
 }

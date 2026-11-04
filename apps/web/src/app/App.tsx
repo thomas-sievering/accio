@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { LimitsProvider } from '../limits/limits';
 import type { LimitsScope } from '../limits/limitsModel';
 import { defaultLimitsScope } from '../limits/limitsModel';
@@ -17,7 +17,7 @@ import { ThreadSearch } from '../threads/ThreadSearch';
 import { useAppEvent } from './appEvents';
 import { ConnectionNotice } from './ConnectionNotice';
 import { FirstRun } from './FirstRun';
-import { Close, FolderPlus, Limits, Owl, Settings as Gear } from './icons';
+import { Close, FolderPlus, Limits, Settings as Gear } from './icons';
 import { ScopeMenu } from './ScopeMenu';
 import { SidebarResizer } from './Resizer';
 import { Settings, type SettingsRoute } from './Settings';
@@ -59,6 +59,7 @@ function Shell() {
   const [settings, setSettings] = useState<SettingsRoute | null>(null);
   const closeSettings = useCallback(() => setSettings(null), []);
   useAppEvent('settings.open', setSettings);
+  useAppEvent('project.open', ({ id }) => setSheet({ kind: 'project', id }));
   const [panelOpen, togglePanel] = usePanelOpen();
   const openThread = (id: string) => {
     select(id);
@@ -88,6 +89,26 @@ function Shell() {
   const draftProfileId = draft && (draft.profileId ?? state?.projects.find((p) => p.id === state.checkouts.find((c) => c.id === draft.checkoutId)?.projectId)?.profileId);
   const currentProfileId = draft ? draftProfileId ?? undefined : thread?.profileId;
   const setUp = profiles && state && profiles.length > 0 && profiles.some(hasSignedInAccount) && state.checkouts.length > 0;
+  // Until setup is done there is nothing to search, filter or start a thread in.
+  const settingUp = !!profiles && !!state && !setUp;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'n' || settings || settingUp) return;
+      e.preventDefault();
+      document.querySelector<HTMLButtonElement>('.side-tools [aria-label="New thread"]')?.click();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [settings, settingUp]);
+  // Arrow keys step between the sidebar's thread rows.
+  const onRowKeys = (e: React.KeyboardEvent<HTMLElement>) => {
+    if ((e.key !== 'ArrowDown' && e.key !== 'ArrowUp') || !(e.target instanceof HTMLElement) || !e.target.matches('.row-main')) return;
+    const rows = [...e.currentTarget.querySelectorAll<HTMLElement>('.row-main')];
+    const next = rows[rows.indexOf(e.target) + (e.key === 'ArrowDown' ? 1 : -1)];
+    if (!next) return;
+    e.preventDefault();
+    next.focus();
+  };
 
   return (
     <>
@@ -96,12 +117,12 @@ function Shell() {
         <aside className="sidebar">
           <div className="side-controls drag">
             <div className="side-tools">
-              <ThreadSearch />
-              <ScopeMenu onOpenProject={(p) => setSheet({ kind: 'project', id: p.id })} />
+              {!settingUp && <ThreadSearch />}
+              {!settingUp && <ScopeMenu onOpenProject={(p) => setSheet({ kind: 'project', id: p.id })} />}
               <button className="side-icon" title="Add project" aria-label="Add project" disabled={!profiles?.length} onClick={() => setSheet({ kind: 'addProject' })}>
                 <FolderPlus />
               </button>
-              <NewThreadButton />
+              {!settingUp && <NewThreadButton />}
             </div>
             {filterLabel && (
               <div className="side-filter-summary">
@@ -111,26 +132,22 @@ function Shell() {
               </div>
             )}
           </div>
-          <nav className="side-body">
+          <nav className="side-body" onKeyDown={onRowKeys}>
             <ThreadList />
           </nav>
           <footer className="side-foot">
-            <button className="side-icon" title="Settings" aria-label="Settings" onClick={() => setSettings({ section: 'profiles' })}>
+            <button className="side-icon" title="Settings" aria-label="Settings" onClick={() => setSettings({ section: 'accounts' })}>
               <Gear />
             </button>
             <button className={`side-icon${limitsOpen ? ' on-page' : ''}`} title="Limits" aria-label="Limits" aria-pressed={limitsOpen}
               onClick={() => limitsOpen ? closeLimits() : openLimits(defaultLimitsScope(profiles, currentProfileId, filter))}>
               <Limits />
             </button>
-            {/* The Owl, accio's agent across all threads, is still to be designed. */}
-            <button className="side-icon" title="Owl · coming soon" aria-label="Owl, coming soon" aria-disabled="true">
-              <Owl />
-            </button>
             <ConnectionNotice />
           </footer>
         </aside>
         <SidebarResizer />
-        <main className="main">
+        <div className="main" role="main">
           {limitsOpen && !settings && (
             <LimitsView scope={limits.scope} onScope={(scope) => setLimits({ scope, navigation })} onClose={closeLimits}
               onOpenAccount={openAccount} />
@@ -144,11 +161,11 @@ function Shell() {
             ) : (
               <>
                 <header className="main-top drag" />
-                {profiles && state && !setUp ? <FirstRun /> : <Idle />}
+                {settingUp ? <FirstRun /> : <Idle />}
               </>
             )}
           </div>
-        </main>
+        </div>
         {panelOpen && <SidePanel />}
         <PanelToggle open={panelOpen} onToggle={togglePanel} />
         {sheet?.kind === 'addProject' && <AddProjectSheet onClose={close} />}

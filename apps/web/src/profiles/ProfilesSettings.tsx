@@ -2,9 +2,11 @@ import { useState, type FormEvent } from 'react';
 import type { ProfileView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { Plus, User } from '../app/icons';
-import { SettingLink, SettingsSection } from '../app/Settings';
+import { SettingLink, SettingsFooter, SettingsSection } from '../app/Settings';
 import { useAction } from '../app/useAction';
 import { ResourcePicker } from '../resources/ResourcePicker';
+import { Field } from '../resources/Field';
+import { toggled, useResources } from '../resources/resources';
 import { claudeAccount, hasSignedInAccount, useProfiles } from './profiles';
 
 /** Profiles select accounts configured in Accounts settings. */
@@ -29,7 +31,7 @@ export function ProfilesSettings({
   if (current) return <ProfileForm key={current.id} profile={current} onSaved={onBack} onDone={onBack} onOpenSecrets={onOpenSecrets} />;
 
   return (
-    <SettingsSection title="Profiles">
+    <SettingsSection>
       {profiles.map((p) => (
         <SettingLink key={p.id} icon={<User />} title={p.name} warn={!hasSignedInAccount(p)} onClick={() => onOpen(p.id)}
           description={p.providers.flatMap((provider) => provider.accounts.map((a) => `${a.name}${a.signedIn ? '' : ' · Signed out'}`)).join(', ') || 'No account selected'} />
@@ -45,12 +47,26 @@ function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: Pr
   const [accountId, setAccountId] = useState(profile ? claudeAccount(profile)?.id ?? '' : '');
   const [openaiAccountId, setOpenAIAccountId] = useState(profile?.providers.find((p) => p.id === 'openai')?.accounts[0]?.id ?? '');
   const [name, setName] = useState(profile?.name ?? '');
+  const { state: resources } = useResources();
+  // Skill choices wait here until Save, keyed by skill id.
+  const [skills, setSkills] = useState<Record<string, boolean>>({});
+  const [touched, setTouched] = useState(false);
   const { busy, error, run } = useAction();
-  const dirty = !profile || name !== profile.name || accountId !== (claudeAccount(profile)?.id ?? '') || openaiAccountId !== (profile.providers.find((p) => p.id === 'openai')?.accounts[0]?.id ?? '');
+  const skillChanges = Object.entries(skills).flatMap(([id, on]) => {
+    const skill = resources?.skills.find((s) => s.id === id);
+    return skill && profile && skill.scope.profileIds.includes(profile.id) !== on ? [{ skill, on }] : [];
+  });
+  const dirty = !profile || skillChanges.length > 0 || name !== profile.name || accountId !== (claudeAccount(profile)?.id ?? '') || openaiAccountId !== (profile.providers.find((p) => p.id === 'openai')?.accounts[0]?.id ?? '');
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const saved = await run(() => client.call('profiles.save', { id: profile?.id, name, accountId: accountId || null, openaiAccountId: openaiAccountId || null }));
+    setTouched(true);
+    if (!name.trim()) return;
+    const saved = await run(async () => {
+      const p = await client.call('profiles.save', { id: profile?.id, name, accountId: accountId || null, openaiAccountId: openaiAccountId || null });
+      for (const { skill, on } of skillChanges) await client.call('skills.setScope', { id: skill.id, scope: { ...skill.scope, profileIds: toggled(skill.scope.profileIds, p.id, on) } });
+      return p;
+    });
     if (saved) onSaved(saved);
   };
   const remove = async () => {
@@ -58,14 +74,12 @@ function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: Pr
   };
 
   return (
-    <form className="settings-profile-form" onSubmit={submit}>
-      <SettingsSection title={profile ? profile.name : 'New profile'}>
+    <form className="settings-profile-form" onSubmit={submit} noValidate>
+      <SettingsSection>
         <div className="setting-form">
-          <label className="field">
-            <span>Name</span>
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="personal, work…" autoFocus={!profile} required />
-          </label>
-          <small className="hint">Shared on the hub. Set profile folders under Machines.</small>
+          <Field label="Name" error={touched && !name.trim() && 'Name required'} hint="Shared on the hub. Set profile folders under Machines.">
+            {(p) => <input {...p} value={name} onChange={(e) => setName(e.target.value)} placeholder="personal, work…" autoFocus={!profile} required />}
+          </Field>
           {error && <p className="error">{error}</p>}
         </div>
       </SettingsSection>
@@ -98,30 +112,12 @@ function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: Pr
       {profile && (
         <SettingsSection title="Skills">
           <div className="setting-form">
-            <small className="hint">Turned on for every project and thread of {profile.name}. Changes save immediately, separately from Save.</small>
-            <ResourcePicker context={{ kind: 'profile', profile }} />
+            <small className="hint">Turned on for every project and thread of {profile.name}. Applied when you Save.</small>
+            <ResourcePicker context={{ kind: 'profile', profile }} staged={{ values: skills, set: (id, on) => setSkills((s) => ({ ...s, [id]: on })) }} />
           </div>
         </SettingsSection>
       )}
-      <footer className="settings-actions">
-        {profile && (
-          <button
-            type="button"
-            className="ghost danger"
-            disabled={busy}
-            onClick={remove}
-          >
-            Delete
-          </button>
-        )}
-        <span className="spacer" />
-        <button type="button" className="ghost" onClick={onDone}>
-          Cancel
-        </button>
-        <button type="submit" className="ghost primary" disabled={busy || !accounts || !dirty}>
-          {profile ? 'Save' : 'Add profile'}
-        </button>
-      </footer>
+      <SettingsFooter remove={profile && { name: profile.name, run: remove }} busy={busy} onCancel={onDone} saveLabel={profile ? 'Save' : 'Add profile'} saveDisabled={busy || !accounts || !dirty} />
     </form>
   );
 }

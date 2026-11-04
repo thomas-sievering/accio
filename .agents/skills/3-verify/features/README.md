@@ -5,7 +5,7 @@ This is the maintained source for driving Accio as a user. Read the affected fea
 ## Baseline preconditions
 
 - Use the [3-verify launch](../SKILL.md#launch). It builds and starts the real production server and web app in a fresh home, with independent ports and Chromium context.
-- Readiness includes the doctor and visible `Set up accio` heading. No accounts, profiles, projects or threads exist initially.
+- Readiness includes the doctor and visible `Set up Accio` heading. No accounts, profiles, projects or threads exist initially.
 - The runner provides `fixture`, an empty local `verify-project` git repository without a remote. Its own git boundary prevents discovering the parent Accio checkout. The smoke creates `Verify personal`, a signed-out `Verify ChatGPT` account, a profile folder mapping, and a project through UI actions.
 - Baseline has no provider credentials. Full sign-in, model availability, successful turns, transcript search and shelves require additional real user setup. Report these journeys as unverified with that reason until driven.
 

@@ -1,36 +1,32 @@
 import type { ThreadView } from '@accio/protocol';
 
-/** Where a thread sits in the sidebar: in the one open list, or on a shelf below it. */
+/** Where a thread sits in the sidebar: in the one open list, or on a shelf below it (a running thread stays in the list). */
 export type ThreadShelves = {
   /** Open threads of every project in one list, most recently active first (as in T3 Code). */
   open: ThreadView[];
-  /** Threads with a running turn, most recently active first. */
-  working: ThreadView[];
   /** Soonest to wake first. */
   snoozed: ThreadView[];
   /** Most recently settled first. */
   settled: ThreadView[];
 };
 
-export type ShelfPlace = 'open' | 'working' | 'snoozed' | 'settled';
+export type ShelfPlace = 'open' | 'snoozed' | 'settled';
 
 function isSnoozed(t: ThreadView, now: Date): boolean {
   return t.snoozedUntil !== null && new Date(t.snoozedUntil) > now;
 }
 
-/** Settled wins over snoozed, snoozed over working; a snooze that has passed puts the thread back in the open list. */
+/** Settled wins over snoozed; a running thread stays in the open list; a snooze that has passed puts the thread back in the open list. */
 export function placeOf(t: ThreadView, now: Date): ShelfPlace {
   if (t.settledAt) return 'settled';
   if (isSnoozed(t, now)) return 'snoozed';
-  if (t.status === 'running') return 'working';
   return 'open';
 }
 
 export function shelveThreads(threads: ThreadView[], now: Date): ThreadShelves {
-  const shelves: ThreadShelves = { open: [], working: [], snoozed: [], settled: [] };
+  const shelves: ThreadShelves = { open: [], snoozed: [], settled: [] };
   for (const t of threads) shelves[placeOf(t, now)].push(t);
   shelves.open.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  shelves.working.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   shelves.snoozed.sort((a, b) => a.snoozedUntil!.localeCompare(b.snoozedUntil!));
   shelves.settled.sort((a, b) => b.settledAt!.localeCompare(a.settledAt!));
   return shelves;

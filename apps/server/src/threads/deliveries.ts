@@ -179,7 +179,7 @@ export class Deliveries {
     const result = d.pullRequestUrl ? `PR #${d.pullRequest?.number ?? d.pullRequestUrl.split('/').at(-1)} merged into ${d.baseBranch} (${d.pullRequestUrl})`
       : `Shipped to ${d.baseBranch}`;
     await this.state.transcripts.add(threadId, { kind: 'notice', id, turnId: `delivery:${d.id}`, tone: 'info',
-      text: `${result} · ${d.publishedRevision?.slice(0, 7)} · ${d.completedAt}. ${thread.settledAt ? 'Thread settled' : 'Thread stays open'}; workspace retained.` });
+      text: d.publishedRevision ? `${result} · ${d.publishedRevision.slice(0, 7)}` : result });
     await this.state.transcripts.flush(threadId);
   }
 

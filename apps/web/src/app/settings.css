@@ -75,7 +75,7 @@
   padding: 28px 0 64px;
 }
 .settings-section h2 {
-  margin: 0 0 10px 14px;
+  margin: 0 0 10px;
   font-size: 15px;
   font-weight: 600;
 }
@@ -154,10 +154,17 @@
   gap: 28px;
 }
 .settings-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   margin-top: 14px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+  background: var(--bg);
 }
 .pill {
   display: inline-flex;

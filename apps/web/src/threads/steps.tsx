@@ -48,7 +48,7 @@ export function useSteps<T>(steps: Step<T>[], index: number, onChange: (value: T
 }
 
 /** Steps on the mouse wheel over `target`. React's onWheel is passive, so the page would scroll too; this listens directly. */
-export function useWheelSteps(target: RefObject<HTMLElement | null>, step: (by: number) => void) {
+export function useWheelSteps(target: RefObject<HTMLElement | null>, step: (by: number) => void, present = true) {
   const latest = useRef(step);
   latest.current = step;
   useEffect(() => {
@@ -66,6 +66,6 @@ export function useWheelSteps(target: RefObject<HTMLElement | null>, step: (by: 
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
-  }, [target]);
+  }, [target, present]);
 }
 

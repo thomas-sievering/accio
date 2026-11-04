@@ -152,9 +152,6 @@ export class Turns {
       const env = turnEnv(state.home, thread.profileId, thread.model.harnessId, access);
       resources = await deps.resources()?.prepare(thread.profileId, thread.projectId, env, { repair: !!thread.repairToolId, cwd });
       if (controller.signal.aborted || state.closing) throw new UserError('Turn interrupted before starting');
-      if (resources && (resources.snapshot.tools.length || resources.snapshot.skills.length || resources.snapshot.mcps.length)) {
-        await transcripts.add(thread.id, { kind: 'notice', id: `${turnId}:resources`, turnId, tone: 'info', text: `Resources for this turn: ${JSON.stringify(resources.snapshot)}` });
-      }
       const grant = deps.tools?.grant(thread.id);
       const turnResources = resources;
       this.liveInputs.set(thread.id, { turnId });

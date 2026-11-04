@@ -79,11 +79,11 @@ describe('layoutTranscript', () => {
     expect(layoutTranscript([...items, say('a'), done()])[1]).toMatchObject({ id: 't1:work', live: false });
   });
 
-  it('says Thinking between calls and keeps a streaming answer outside the fold', () => {
+  it('says Working between calls and keeps a streaming answer outside the fold', () => {
     const blocks = layoutTranscript([ask('q'), tool('1'), say('partial answer')], 't1');
-    expect(blocks[1]).toMatchObject({ live: true, activity: 'Thinking' });
+    expect(blocks[1]).toMatchObject({ live: true, activity: 'Working' });
     expect(shape(blocks)).toEqual(['q', { work: [['1']] }, 'partial answer']);
-    expect(layoutTranscript([ask('q')], 't1')[1]).toMatchObject({ live: true, activity: 'Thinking', blocks: [] });
+    expect(layoutTranscript([ask('q')], 't1')[1]).toMatchObject({ live: true, activity: 'Working', blocks: [] });
   });
 
   it('leaves a stopped or failed turn laid out in full', () => {

@@ -43,8 +43,8 @@ export function ToolStatusCard({ tool, machine, status, heading, onOpenThread }:
   if (r.label === 'Offline') text = status ? `Last known: ${status.status === 'ready' ? `ready (${status.version ?? tool.version})` : status.status === 'error' ? 'needs attention' : status.status}${status.checkedAt ? `, ${when(status.checkedAt)}` : ''}.` : `${machine.name} hasn’t reported on this tool.`;
   else if (r.label === 'Ready') text = `${status?.version ?? tool.version} · checked ${when(status?.checkedAt) ?? 'just now'}`;
   else if (r.label === 'Installing') text = status?.detail ?? 'Installing and checking…';
-  else if (r.label === 'Needs attention') text = status?.detail ?? 'The last check failed.';
-  else text = local ? 'Not checked yet.' : `${machine.name} checks it when accio starts there, or before a thread there needs it.`;
+  else if (r.label === 'Needs attention') text = `Couldn’t install ${tool.package} ${tool.version}. Check the package and version, then retry.`;
+  else text = local ? 'Not checked yet.' : `${machine.name} checks it when Accio starts there, or before a thread there needs it.`;
 
   return (
     <div className="tool-card" aria-label={`${title}: ${r.label}`} role="group">
@@ -52,12 +52,13 @@ export function ToolStatusCard({ tool, machine, status, heading, onOpenThread }:
         <b>{title}</b>
         <span className={`pill ${r.tone}`}><span className="dot" />{r.label}</span>
       </div>
-      <p className={`tool-card-text${r.label === 'Needs attention' ? ' failed' : ''}`} title={status?.detail}>
-        {r.label === 'Needs attention' ? <code>{text}</code> : r.label === 'Ready' && firstLine(status?.detail) ? <>{text} · <code>{firstLine(status?.detail)}</code></> : text}
+      <p className="tool-card-text">
+        {r.label === 'Ready' && firstLine(status?.detail) ? <>{text} · <code>{firstLine(status?.detail)}</code></> : text}
       </p>
+      {r.label === 'Needs attention' && status?.detail && <details className="tool-card-details"><summary>Details</summary><code>{status.detail}</code></details>}
       {status?.status === 'error' && (
         status.repairThreadId
-          ? <p className="hint">{repairThread ? `A repair thread is ${repairThread.status === 'running' ? 'working on it' : 'open'}. accio checks again when it completes.` : 'A repair thread was started but is no longer listed here.'}</p>
+          ? <p className="hint">{repairThread ? `A repair thread is ${repairThread.status === 'running' ? 'working on it' : 'open'}. Accio checks again when it completes.` : 'A repair thread was started but is no longer listed here.'}</p>
           : status.repairError && <p className="warn tool-card-text" role="status">No repair thread: {status.repairError}</p>
       )}
       <div className="tool-card-actions">

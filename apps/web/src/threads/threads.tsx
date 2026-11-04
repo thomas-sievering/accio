@@ -19,7 +19,7 @@ type ThreadsCtx = {
   openDraft: (checkoutId: string, profileId?: string) => void;
   /** Counts thread and draft openings, so a view over the main pane can close on any of them, even reselecting the open thread. */
   navigation: number;
-  /** The open list plus the Working, Snoozed and Settled shelves, after the project scope and search. */
+  /** The open list (running threads included) plus the Snoozed and Settled shelves, after the project scope and search. */
   shelves: ThreadShelves;
   /** The one project the sidebar is narrowed to, or '' for every visible project. */
   projectScope: string;

@@ -13,6 +13,8 @@ export type AppEvents = {
   'transcript.reveal': { threadId: string; itemId: string };
   /** Open settings at a section, such as one MCP server from the side panel. */
   'settings.open': SettingsRoute;
+  /** Open a project's settings, such as from the thread header's project name. */
+  'project.open': { id: string };
 };
 
 const prefix = 'accio:';

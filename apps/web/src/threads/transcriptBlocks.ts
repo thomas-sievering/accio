@@ -52,7 +52,7 @@ function layoutTurn(turn: TranscriptItem[], running: boolean): TranscriptBlock[]
   const current = work.findLast((item): item is ToolItem => item.kind === 'tool' && item.status === 'running');
   const state = finished
     ? { live: false as const, ms: finished.ms }
-    : { live: true as const, activity: secrets.some(item => item.status === 'pending') ? 'Waiting for secret' : current ? describeActivity(current) : 'Thinking', startedAt: prompt ? (body[0] as Extract<TranscriptItem, { kind: 'user' }>).at : undefined };
+    : { live: true as const, activity: secrets.some(item => item.status === 'pending') ? 'Waiting for secret' : current ? describeActivity(current) : 'Working', startedAt: prompt ? (body[0] as Extract<TranscriptItem, { kind: 'user' }>).at : undefined };
   return [
     ...groupTools(body.slice(0, prompt)),
     { kind: 'work', id: `${turnId}:work`, failed, blocks: groupTools(work), ...state },

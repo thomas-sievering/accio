@@ -10,7 +10,7 @@ export function ProjectMark({ id, size = 18 }: { id: string; size?: number }) {
     <span
       className="project-mark"
       aria-hidden="true"
-      style={{ inlineSize: size, blockSize: size, fontSize: Math.round(size * 0.58), '--mark': identityColorOf(id) } as React.CSSProperties}
+      style={{ inlineSize: size, blockSize: size, fontSize: Math.round(size * 0.58), '--mark': identityColorOf(name || id) } as React.CSSProperties}
     >
       {initial}
     </span>

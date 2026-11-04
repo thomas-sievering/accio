@@ -7,7 +7,7 @@ import { join, resolve } from 'node:path';
 const require = createRequire(import.meta.url);
 const token = 'isolated-chat-test-token';
 
-test('Enter steers, Ctrl changes Send and queues; queued edits are held until saved', async ({ page, baseURL }, testInfo) => {
+test('Enter steers, Ctrl changes Send and queues; an unsaved queued edit closes when the turn ends', async ({ page, baseURL }, testInfo) => {
   await page.goto(`${baseURL}/#token=${token}`);
   await page.getByRole('button', { name: /Inline chat fixture/ }).click();
   const input = page.locator('.composer textarea');
@@ -42,11 +42,10 @@ test('Enter steers, Ctrl changes Send and queues; queued edits are held until sa
   await tray.getByRole('button', { name: 'Remove queued message' }).click();
   await input.fill('Finish steering fixture'); await input.press('Enter');
   await expect(page.locator('.composer .stop')).toHaveCount(0);
-  await expect(tray.getByRole('textbox')).toHaveValue('Queued edited');
-  await expect(page.getByText('Finished: Queued edited', { exact: true })).toHaveCount(0);
-  await tray.getByRole('button', { name: 'Save', exact: true }).click();
-  await expect(page.getByText('Finished: Queued edited', { exact: true })).toBeVisible();
+  // The edit tray belongs to its turn: when the turn ends it closes, discarding the unsaved edit and releasing the original message.
   await expect(tray).toHaveCount(0);
+  await expect(page.getByText('Finished: Queued second', { exact: true })).toBeVisible();
+  await expect(page.getByText('Finished: Queued edited', { exact: true })).toHaveCount(0);
   await page.reload();
   await page.getByRole('button', { name: /Inline chat fixture/ }).click();
   await expect(page.getByText('Steered: Use the existing helper', { exact: true })).toBeVisible();
@@ -74,6 +73,9 @@ async function mediaAndTools(page: Page, desktop?: ElectronApplication) {
   await expect(failed.locator('[aria-label="Tool input"]')).toContainText('powershell.exe');
   await expect(failed).toContainText('Expected fixture failure');
   await success.locator('.tool-toggle').click();
+  // Long output is capped at 20 lines until the person asks for all of it.
+  await expect(success).not.toContainText('FULL_OUTPUT_TAIL');
+  await success.getByRole('button', { name: /^Show all \d+ lines$/ }).click();
   await expect(success).toContainText('FULL_OUTPUT_TAIL');
   await expect(success).toContainText('file_path');
   const parts = await success.locator('[aria-label="Tool result"]').evaluate((element) => Array.from(element.children).map((entry) => entry.tagName));

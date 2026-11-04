@@ -97,7 +97,7 @@ test('save, reuse, manage, use once and decline a secret', async ({ page }) => {
 
   // Delete asks within the row first.
   await page.locator('.secret-row').first().getByRole('button', { name: /^Delete/ }).click();
-  await page.getByRole('button', { name: 'Delete secret' }).click();
+  await page.locator('.secret-row').first().getByRole('group').getByRole('button', { name: /^Delete / }).click();
   await expect(page.getByText('No saved secrets for Personal')).toBeVisible();
   await page.getByRole('button', { name: 'Back' }).click();
 
