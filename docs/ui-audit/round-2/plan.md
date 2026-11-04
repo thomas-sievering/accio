@@ -15,7 +15,7 @@ Files: `apps/web/src/threads/` except the sidebar row files listed under C, plus
 3. "Worked for …" is always above the turn's content, never below the reply.
 4. The running line "Working · Ns" stays visible for the whole running turn, including after steering, pinned at the end of the active turn.
 5. Every settled thread, shipped or not, shows one calm state row above the composer: "Settled" · Reopen, plus Archive only where a releasable workspace exists. Same row component for the shipped case.
-6. Delivery outcome said once: keep the chip ("Shipped to main · abc1234"); remove the separate centred transcript receipt line (stop writing / rendering that notice in `apps/server/src/threads/deliveries.ts` `receipt`, update its tests) and shrink the extra caption to at most "Workspace retained" (or move it into the chip's title).
+6. Delivery outcome said once: keep the chip ("Shipped to main · abc1234"); remove the separate centred transcript receipt line (stop writing / rendering that notice in `apps/worker/src/threads/deliveries.ts` `receipt`, update its tests) and shrink the extra caption to at most "Workspace retained" (or move it into the chip's title).
 7. Effort chip shows "Auto" (capitalised, like the menu); the effort menu marks the current value with the same trailing check the model picker uses.
 8. The composer's provider glyph renders muted (currentColor, `--muted`), not orange. Brand colour stays only in the model picker rail.
 9. Thread header "…" menu: label the item by what it copies (check what it really copies) and add the thread's existing actions (Rename, Snooze/Settle or Reopen, Delete) by reusing the sidebar row menu actions, so the menu earns its place.

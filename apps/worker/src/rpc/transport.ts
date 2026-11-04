@@ -101,7 +101,7 @@ export async function startTransport(opts: TransportOptions) {
 
 async function serveStatic(root: string | undefined, req: IncomingMessage, res: ServerResponse) {
   if (!root) {
-    res.writeHead(404).end('accio server (no web client built)');
+    res.writeHead(404).end('accio worker (no web client built)');
     return;
   }
   const base = resolve(root);

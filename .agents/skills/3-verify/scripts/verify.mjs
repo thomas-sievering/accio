@@ -12,7 +12,7 @@ import { promisify } from 'node:util';
 import { chromium } from 'playwright';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
-const require = createRequire(join(root, 'apps/server/package.json'));
+const require = createRequire(join(root, 'apps/worker/package.json'));
 const WebSocket = require('ws');
 const json = async (file) => JSON.parse(await readFile(file, 'utf8'));
 const save = (file, value) => writeFile(file, JSON.stringify(value, null, 2) + '\n');
@@ -22,7 +22,7 @@ const within = (ms, promise) => Promise.race([Promise.resolve(promise).catch(() 
 
 async function fingerprint() {
   const hash = createHash('sha256');
-  for (const base of ['apps/server/dist', 'apps/hub/dist', 'apps/web/dist', 'packages/protocol/dist', 'packages/persistence/dist', 'packages/codex/dist']) {
+  for (const base of ['apps/worker/dist', 'apps/hub/dist', 'apps/web/dist', 'packages/protocol/dist', 'packages/persistence/dist', 'packages/codex/dist']) {
     for (const name of (await readdir(join(root, base), { recursive: true })).sort()) {
       if (!/\.(js|html|css)$/.test(name)) continue;
       hash.update(base + '/' + name).update(await readFile(join(root, base, name)));
@@ -174,7 +174,7 @@ async function run(journeyFile) {
     // Keep git discovery inside the fixture instead of finding Accio's parent repo.
     const git = await promisify(execFile)('git', ['init', '--quiet', fixture], { windowsHide: true });
     await save(join(runDir, 'fixture.json'), { command: ['git', 'init', '--quiet', fixture], exitCode: 0, stdout: git.stdout, stderr: git.stderr });
-    child = fork(join(root, 'apps/server/dist/main.js'), [], {
+    child = fork(join(root, 'apps/worker/dist/main.js'), [], {
       cwd: root, silent: true, windowsHide: true,
       env: { ...process.env, ACCIO_HOME: home, ACCIO_PORT: '0', ACCIO_HUB_PORT: '0', ACCIO_HOST: '127.0.0.1', ACCIO_WEB_ROOT: join(root, 'apps/web/dist') },
     });

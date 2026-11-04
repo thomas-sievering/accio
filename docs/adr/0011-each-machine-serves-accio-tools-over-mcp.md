@@ -1,6 +1,6 @@
 # Each machine serves accio's tools over MCP
 
-Accio gives harnesses its own tools, such as `offer_choice`, through one MCP server named `accio`. Each machine serves it at `/mcp` on the accio server's own port, and only its own harnesses use it. Every turn gets a bearer token that names its thread; the token stops working when the turn ends. Claude Code receives the server in the Agent SDK's `mcpServers`. Codex receives it as `mcp_servers.accio` in the `config` of both `thread/start` and `thread/resume`. T3 Code wires its own tools into both harnesses the same way.
+Accio gives harnesses its own tools, such as `offer_choice`, through one MCP server named `accio`. Each machine serves it at `/mcp` on the accio worker's own port, and only its own harnesses use it. Every turn gets a bearer token that names its thread; the token stops working when the turn ends. Claude Code receives the server in the Agent SDK's `mcpServers`. Codex receives it as `mcp_servers.accio` in the `config` of both `thread/start` and `thread/resume`. T3 Code wires its own tools into both harnesses the same way.
 
 ## Considered Options
 
@@ -10,7 +10,7 @@ Accio gives harnesses its own tools, such as `offer_choice`, through one MCP ser
 
 ## Consequences
 
-- A tool is written once with `accioTool` (`apps/server/src/tools`) and works for every harness.
+- A tool is written once with `accioTool` (`apps/worker/src/tools`) and works for every harness.
 - Tokens live only in memory on the machine. A turn cut off by a restart gets a new token when it is resumed.
 - The URL is loopback. A harness that runs somewhere loopback can't reach, such as a container, would need another address.
 - Claude Code names the tools `mcp__accio__<tool>` and Codex `accio/<tool>`; the transcript recognises both.

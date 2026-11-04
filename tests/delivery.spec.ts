@@ -5,7 +5,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
-import { TestClient } from '../apps/server/src/testing/testApp.js';
+import { TestClient } from '../apps/worker/src/testing/testApp.js';
 
 test('new thread starts at the latest remote default branch while its source checkout stays stale', async ({ page, baseURL }, info) => {
   const exec = promisify(execFile);

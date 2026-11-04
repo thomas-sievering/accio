@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { TestClient } from '../apps/server/src/testing/testApp.js';
+import { TestClient } from '../apps/worker/src/testing/testApp.js';
 
 const token = 'isolated-chat-test-token';
 const effort = (page: Page) => page.getByRole('button', { name: /^Effort:/ });

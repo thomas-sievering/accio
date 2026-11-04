@@ -69,6 +69,6 @@ it('refuses calls without a live grant, so a turn that ended can no longer use t
   expect((await rpc(grant.access, 'tools/list')).status).toBe(401);
 });
 
-it('grants nothing before the machine server listens', () => {
+it('grants nothing before the worker listens', () => {
   expect(new AccioTools([echo]).grant('thread-1')).toBeUndefined();
 });

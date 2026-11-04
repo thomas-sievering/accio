@@ -4,9 +4,9 @@ import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { closeWhenOrphaned } from './fixtureLifetime.js';
-import { startApp } from '../apps/server/src/app.js';
-import { FakeHarness, replyWith } from '../apps/server/src/testing/fakeHarness.js';
-import { fakeClaudeFetch, TestClient } from '../apps/server/src/testing/testApp.js';
+import { startApp } from '../apps/worker/src/app.js';
+import { FakeHarness, replyWith } from '../apps/worker/src/testing/fakeHarness.js';
+import { fakeClaudeFetch, TestClient } from '../apps/worker/src/testing/testApp.js';
 
 const home = await mkdtemp(join(tmpdir(), 'accio-secrets-browser-'));
 const token = 'isolated-secrets-test-token';

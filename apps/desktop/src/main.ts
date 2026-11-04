@@ -3,34 +3,34 @@ import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ServerProcess, type Ready } from './serverProcess.js';
+import { WorkerProcess, type Ready } from './workerProcess.js';
 import { stat } from 'node:fs/promises';
 import { previewUrl } from './openPreview.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 
-let server: ServerProcess | undefined;
+let worker: WorkerProcess | undefined;
 let localServerOrigin: string | undefined;
 let quitting = false;
 let quitAllowed = false;
 
 /** The last window closing quits the app and interrupts the local machine's turns. */
-function startServer(): Promise<Ready> {
-  const entry = require.resolve('@accio/server');
+function startWorker(): Promise<Ready> {
+  const entry = require.resolve('@accio/worker');
   const child = spawn(process.execPath, [entry], {
     env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
     stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
     windowsHide: true,
   });
   child.stderr?.on('data', (d) => process.stderr.write(d));
-  server = new ServerProcess(child, (error) => {
+  worker = new WorkerProcess(child, (error) => {
     console.error(error);
-    dialog.showErrorBox('accio server stopped', `${error.message}. Quit and reopen accio to reconnect. Interrupted threads can be resumed.`);
+    dialog.showErrorBox('accio worker stopped', `${error.message}. Quit and reopen accio to reconnect. Interrupted threads can be resumed.`);
     app.quit();
   });
   child.stdout?.on('data', (d) => process.stdout.write(d));
-  return server.ready;
+  return worker.ready;
 }
 
 async function createWindow(ready: Ready) {
@@ -80,7 +80,7 @@ ipcMain.handle('accio:open-folder', async (event, path: unknown) => {
 
 app.whenReady().then(async () => {
   try {
-    const ready = await startServer();
+    const ready = await startWorker();
     localServerOrigin = new URL(ready.url).origin;
     await createWindow(ready);
     app.on('activate', () => {
@@ -98,7 +98,7 @@ app.on('before-quit', (event) => {
   event.preventDefault();
   if (quitting) return;
   quitting = true;
-  void (server?.close() ?? Promise.resolve()).finally(() => {
+  void (worker?.close() ?? Promise.resolve()).finally(() => {
     quitAllowed = true;
     app.quit();
   });

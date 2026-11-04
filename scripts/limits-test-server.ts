@@ -3,10 +3,10 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { closeWhenOrphaned } from './fixtureLifetime.js';
-import { startApp } from '../apps/server/src/app.js';
-import { fakeClaudeFetch } from '../apps/server/src/testing/testApp.js';
-import { FakeCodex } from '../apps/server/src/testing/fakeCodex.js';
-import { FakeHarness, replyWith } from '../apps/server/src/testing/fakeHarness.js';
+import { startApp } from '../apps/worker/src/app.js';
+import { fakeClaudeFetch } from '../apps/worker/src/testing/testApp.js';
+import { FakeCodex } from '../apps/worker/src/testing/fakeCodex.js';
+import { FakeHarness, replyWith } from '../apps/worker/src/testing/fakeHarness.js';
 
 const home = await mkdtemp(join(tmpdir(), 'accio-limits-browser-'));
 const reads = new Map<string, number>();

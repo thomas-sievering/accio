@@ -1,6 +1,6 @@
 # Inline chat: remaining work
 
-Milestone 1 (structured tool details, immutable local media snapshots, scoped media URLs, native players, current-file downloads, resize-aware scrolling) has shipped. Its behavior is described in the README; `tests/inline-chat.spec.ts` covers it in Chromium and Electron. Storage and delivery live in `apps/server/src/threads/assets.ts` and `content.ts`; renderers live beside `apps/web/src/threads/Transcript.tsx`.
+Milestone 1 (structured tool details, immutable local media snapshots, scoped media URLs, native players, current-file downloads, resize-aware scrolling) has shipped. Its behavior is described in the README; `tests/inline-chat.spec.ts` covers it in Chromium and Electron. Storage and delivery live in `apps/worker/src/threads/assets.ts` and `content.ts`; renderers live beside `apps/web/src/threads/Transcript.tsx`.
 
 ## Milestone 2: interactive HTML and charts
 

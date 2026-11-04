@@ -42,7 +42,7 @@ After publishing, the owning thread checks the running or deployed result where 
 
 ### Machines execute; the hub coordinates
 
-Consistent with [ADR 0009](0009-the-hub-never-runs-threads.md), harnesses, working copies, verification and Git operations run on a machine's accio server. The hub may hold shared delivery policy and relay project coordination, but it does not acquire checkouts or run harnesses. The concrete coordination protocol remains open.
+Consistent with [ADR 0009](0009-the-hub-never-runs-threads.md), harnesses, working copies, verification and Git operations run on a machine's accio worker. The hub may hold shared delivery policy and relay project coordination, but it does not acquire checkouts or run harnesses. The concrete coordination protocol remains open.
 
 ## Consequences
 

@@ -3,7 +3,7 @@ import type { ChildProcess } from 'node:child_process';
 export type Ready = { url: string; token: string };
 
 /** Owns readiness, unexpected death, and bounded graceful shutdown of one child. */
-export class ServerProcess {
+export class WorkerProcess {
   readonly ready: Promise<Ready>;
   private stopping = false;
   private exited = false;
@@ -24,7 +24,7 @@ export class ServerProcess {
         if (!match?.[1]) return;
         try {
           const value = JSON.parse(match[1]) as Ready;
-          if (typeof value.url !== 'string' || typeof value.token !== 'string') throw new Error('Invalid server readiness message');
+          if (typeof value.url !== 'string' || typeof value.token !== 'string') throw new Error('Invalid worker readiness message');
           ready = true;
           resolve(value);
         } catch (error) { reject(error); }
@@ -33,7 +33,7 @@ export class ServerProcess {
       child.once('exit', (code, signal) => {
         this.exited = true;
         exit();
-        const error = new Error(`accio server exited (${signal ?? code})`);
+        const error = new Error(`accio worker exited (${signal ?? code})`);
         if (!ready) reject(error);
         else if (!this.stopping) onDeath(error);
       });
