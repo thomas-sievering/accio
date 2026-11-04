@@ -108,7 +108,7 @@ export function Composer({
       {actions}
       {error && <p className="error composer-error">{error}
         {/* A send refused for a broken tool points at the repair already under way. */}
-        {repairThread && <button type="button" className="link" onClick={() => select(repairThread.id)}>Open repair thread</button>}
+        {repairThread && <> <button type="button" className="link" onClick={() => select(repairThread.id)}>Open repair thread</button></>}
       </p>}
       <form className="composer" onSubmit={(e: FormEvent) => { e.preventDefault(); void submit(queuing ? 'queue' : 'steer'); }}>
         {attachment && <div className="composer-chips">

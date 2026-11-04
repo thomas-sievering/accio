@@ -68,7 +68,7 @@ function Shell() {
   const hasPane = !!(thread || draft) && !limitsOpen;
   const panelOpen = panelWanted && hasPane;
   const narrow = useNarrow();
-  const overlay = panelOpen && narrow;
+  const overlay = panelOpen && narrow && settings === null;
   const dismissOverlay = useCallback(() => {
     togglePanel();
     document.querySelector<HTMLElement>('.panel-toggle')?.focus();
@@ -93,14 +93,23 @@ function Shell() {
   const openAccount = (accountId: string) => setSettings({ section: 'accounts', accountId });
   // Limits cover the main pane until a thread or draft is opened; settings opened from them return here.
   const limitsReturnFocus = useRef<HTMLElement | null>(null);
+  const limitsOrigin = useRef<SettingsRoute | undefined>(undefined);
   const closeLimits = useCallback(() => {
     setLimits(null);
+    const origin = limitsOrigin.current;
+    limitsOrigin.current = undefined;
+    if (origin) setSettings(origin);
     requestAnimationFrame(() => {
+      if (origin) {
+        [...document.querySelectorAll<HTMLElement>('.settings-link')].find((el) => el.textContent?.trim() === 'Limits')?.focus();
+        return;
+      }
       const target = limitsReturnFocus.current;
       if (target?.isConnected && !target.closest('[hidden]')) target.focus();
     });
   }, []);
-  const openLimits = (scope: LimitsScope) => {
+  const openLimits = (scope: LimitsScope, origin?: SettingsRoute) => {
+    limitsOrigin.current = origin;
     limitsReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setLimits({ scope, navigation });
   };
@@ -141,7 +150,7 @@ function Shell() {
   return (
     <>
       {settings && <Settings route={settings} onRoute={setSettings} onClose={closeSettings} onOpenThread={openThread}
-        onOpenLimits={() => { setSettings(null); openLimits(defaultLimitsScope(profiles, currentProfileId, filter)); }} />}
+        onOpenLimits={() => { setSettings(null); openLimits(defaultLimitsScope(profiles, currentProfileId, filter), settings); }} />}
       <div className={`layout${panelOpen ? ' with-panel' : ''}`} hidden={settings !== null}>
         <aside className="sidebar" inert={overlay}>
           <div className="side-controls drag">

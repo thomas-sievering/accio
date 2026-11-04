@@ -4,6 +4,41 @@ import { TestClient } from '../apps/server/src/testing/testApp.js';
 const token = 'isolated-chat-test-token';
 const effort = (page: Page) => page.getByRole('button', { name: /^Effort:/ });
 
+test('keyboard focus visibly reveals a complete title without moving adjacent rows', async ({ page, baseURL }, info) => {
+  await page.setViewportSize({ width: 900, height: 700 });
+  await freshDraft(page, baseURL);
+  await page.locator('.composer textarea').fill('Queued title tooltip');
+  await page.locator('.composer textarea').press('Enter');
+  const row = page.locator('.row-main').filter({ hasText: 'Queued title tooltip' });
+  await row.focus();
+  await page.keyboard.press('Shift+F10');
+  await page.getByRole('menuitem', { name: /Rename/ }).click();
+  const title = 'A complete saved title with enough words to wrap beyond the compact sidebar row and still be readable by keyboard';
+  await page.getByRole('textbox', { name: 'Thread title', exact: true }).fill(title);
+  await page.getByRole('textbox', { name: 'Thread title', exact: true }).press('Enter');
+  const renamed = page.locator('.row-main').filter({ hasText: title });
+  const before = await renamed.boundingBox();
+  await page.getByRole('searchbox', { name: 'Search threads', exact: true }).focus();
+  for (let i = 0; i < 12 && !(await renamed.evaluate(el => el === document.activeElement)); i++) await page.keyboard.press('Tab');
+  await expect(renamed).toBeFocused();
+  const tip = page.getByRole('tooltip');
+  await expect(tip).toHaveText(title);
+  await expect(tip).toBeInViewport();
+  expect((await renamed.boundingBox())?.height).toBe(before?.height);
+  await page.screenshot({ path: info.outputPath('full-title-keyboard.png') });
+  await page.keyboard.press('Escape');
+  await expect(tip).toHaveCount(0);
+  await expect(renamed).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(tip).not.toHaveText(title);
+  const chip = effort(page);
+  await chip.focus();
+  await expect(tip).toContainText('Effort:');
+  await chip.press('Enter');
+  await expect(page.getByRole('menu', { name: 'Effort', exact: true })).toBeVisible();
+  await expect(tip).toHaveCount(0);
+});
+
 async function freshDraft(page: Page, baseURL: string | undefined) {
   await page.goto(`${baseURL}/#token=${token}`);
   await page.getByRole('button', { name: 'New thread', exact: true }).first().click();

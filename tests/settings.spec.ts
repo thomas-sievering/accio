@@ -10,6 +10,7 @@ test('keeping unsaved settings edits never submits the form and discarding leave
   const name = page.getByRole('textbox', { name: 'Name', exact: true });
   await name.fill('Guard original');
   await button('Add profile').click();
+  await expect(button('Save')).toBeDisabled();
   await expect(name).toHaveValue('Guard original');
   await name.fill('Guard unsaved');
   await section('Projects').click();
@@ -31,4 +32,20 @@ test('keeping unsaved settings edits never submits the form and discarding leave
   await page.getByRole('button', { name: /^Guard original No account selected$/ }).click();
   await expect(name).toHaveValue('Guard original');
   await expect(button('Save')).toBeDisabled();
+});
+
+test('Limits returns to its Settings origin and restores keyboard focus', async ({ page, baseURL }) => {
+  await page.goto(`${baseURL}/#token=isolated-chat-test-token`);
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  const nav = page.locator('.sidebar nav');
+  await nav.getByRole('button', { name: 'Projects', exact: true }).click();
+  await nav.getByRole('button', { name: 'Limits', exact: true }).click();
+  await page.getByRole('button', { name: 'Close limits', exact: true }).click();
+  await expect(nav.getByRole('button', { name: 'Projects', exact: true })).toHaveAttribute('aria-current', 'page');
+  await expect(nav.getByRole('button', { name: 'Limits', exact: true })).toBeFocused();
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
+  await page.getByRole('button', { name: 'Limits', exact: true }).click();
+  await page.getByRole('button', { name: 'Close limits', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Settings', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Limits', exact: true })).toBeFocused();
 });

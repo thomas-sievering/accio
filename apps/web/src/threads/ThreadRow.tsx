@@ -1,4 +1,5 @@
 import type { ThreadView } from '@accio/protocol';
+import { useTooltip } from '../app/Tooltip';
 import { Check, Clock, StopSquare, Undo } from '../app/icons';
 import { ProjectMark } from '../projects/ProjectMark';
 import { useProjects } from '../projects/projects';
@@ -25,6 +26,7 @@ export function ThreadRow({ thread: t, place }: { thread: ThreadView; place: She
   const openMenu = useThreadMenu();
   const [renamingId] = useRenaming();
   const renaming = renamingId === t.id;
+  const titleTip = useTooltip(t.title);
   const onContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     // Shift+F10 and the menu key report no pointer: open under the row instead.
@@ -60,7 +62,7 @@ export function ThreadRow({ thread: t, place }: { thread: ThreadView; place: She
   const Main = renaming ? 'div' : 'button';
   return (
     <div className={`${className}${renaming ? ' renaming' : ''}`} onContextMenu={onContextMenu}>
-      <Main className="row-main" {...(renaming ? {} : { onClick: () => select(t.id), title: `${t.title} · ${project ?? 'No project'}${showState ? ` · ${statusLine}` : ''}`, 'aria-current': t.id === selectedId ? 'page' as const : undefined })}>
+      <Main className="row-main" {...(renaming ? {} : { ...titleTip.props, onClick: () => select(t.id), title: `${t.title} · ${project ?? 'No project'}${showState ? ` · ${statusLine}` : ''}`, 'aria-current': t.id === selectedId ? 'page' as const : undefined })}>
         {t.projectId ? <ProjectMark id={t.projectId} /> : <span className="no-project-mark" />}
         <span className="row-name">
           {renaming ? <RowRename thread={t} /> : <span className="row-title">{t.title}</span>}
@@ -81,6 +83,7 @@ export function ThreadRow({ thread: t, place }: { thread: ThreadView; place: She
         </span>
       </Main>
       {actions}
+      {!renaming && titleTip.tooltip}
     </div>
   );
 }

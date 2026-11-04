@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { modelKey, type ModelSelection, type ModelsState, type UsedUpLimit } from '@accio/protocol';
 import { useClient, useConnectionStatus } from '../app/connection';
+import { useTooltip } from '../app/Tooltip';
 import { Check, ChevronDown, ProviderLogo, Star } from '../app/icons';
 import { EffortWord, effortSteps } from './EffortControl';
 import { useSteps, useWheelSteps } from './steps';
@@ -119,6 +120,7 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
     (next) => onChange({ harnessId: current.harnessId, modelId: current.modelId, ...(next ? { effort: next } : {}) }), setError);
   useWheelSteps(effortTrigger, stepper.step, !!effort);
   const shownEffort = effort?.steps[stepper.shown];
+  const effortTip = useTooltip(`Effort: ${shownEffort?.label ?? 'Auto'}${shownEffort?.label === 'Auto' ? ' (the harness decides)' : ''}`);
   // Auto leaves the effort to the harness.
   const description = selected?.name ?? fallbackName;
 
@@ -140,7 +142,7 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
       <span>{shortName}</span>
     </button>
     {effort && <>
-      <button type="button" ref={effortTrigger} className="effort-trigger" popoverTarget={effortId}
+      <button {...effortTip.props} type="button" ref={effortTrigger} className="effort-trigger" popoverTarget={effortId}
         disabled={disabled || busy || status !== 'open'} aria-label={`Effort: ${shownEffort?.label ?? 'Auto'}`} aria-haspopup="menu"
         title={`Effort: ${shownEffort?.label === 'Auto' ? 'Auto (the harness decides)' : shownEffort?.label} · scroll or use the arrow keys to change`}
         onKeyDown={(event) => {
@@ -155,6 +157,7 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
         {/* A small caret says this opens a menu, as the word alone read like a label. */}
         <ChevronDown />
       </button>
+      {effortTip.tooltip}
       <div id={effortId} ref={effortMenu} popover="auto" className="menu effort-menu" role="menu" aria-label="Effort" style={effortPosition}
         onToggle={(event) => {
           if (event.newState === 'open') requestAnimationFrame(() => (effortMenu.current?.querySelector<HTMLButtonElement>('[aria-checked="true"]') ?? effortMenu.current?.querySelector<HTMLButtonElement>('button'))?.focus());

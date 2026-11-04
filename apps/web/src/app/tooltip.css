@@ -1,0 +1,15 @@
+.focus-tooltip {
+  position: fixed;
+  z-index: 1000;
+  width: max-content;
+  max-width: min(360px, calc(100vw - 16px));
+  padding: 8px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  background: var(--raised);
+  color: var(--ink-strong);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}

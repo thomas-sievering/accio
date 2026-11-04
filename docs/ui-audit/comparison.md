@@ -1,6 +1,6 @@
 # UI audit comparison
 
-Work is on `ui_analysis`. This is a working comparison through the round-4 fixes; the all-auditor threshold is still pending a new independent audit.
+Work is on `ui_analysis`. The comparison includes round-5 observations and subsequent fixes; the all-auditor threshold is still pending independent review.
 
 ## Changes visible in ordinary use
 
@@ -19,7 +19,7 @@ Work is on `ui_analysis`. This is a working comparison through the round-4 fixes
 
 ## Screenshot evidence
 
-Before screenshots were captured by the independent round-1 auditors; after screenshots below were captured after the round-4 implementation. Fixture contents and viewport dimensions vary, so these are behavior comparisons rather than pixel-difference proofs.
+Before screenshots were captured by the independent round-1 auditors; after screenshots below were captured after the round-4 implementation. Fixture contents vary, so these are behavior comparisons rather than pixel-difference proofs. An interactive score chart and two matched 900×700 screenshot pairs are available locally at `out/ui-audit/comparison.html`.
 
 - Profile before: `out/ui-audit/round-1/opus/116-settings-edit-profile.png`.
 - Profile after, 900×700: `out/ui-audit/round-4/resume/03-compact-profile.png`.
@@ -29,8 +29,15 @@ Before screenshots were captured by the independent round-1 auditors; after scre
 
 The complete numbered evidence for each audit is under `out/ui-audit/round-N/<auditor>/`. These local files are ignored by Git; the reports and implementation are versioned.
 
+Matched 900×700 pairs in the interactive artifact:
+
+- Profile: `round-1/gpt-sol/134-profile-form-900.png` → `round-5/gpt-sol/022-compact-profile-900.png`.
+- Shipped thread: `round-1/gpt-sol/92-shipped-900.png` → `round-5/gpt-sol/061-shipped-900.png`.
+
+The latest fixes add keyboard-visible title/effort tooltips, stable focused row height, explicit panel Tab wrapping, repair-link spacing and a return to the originating Settings page from Limits. They are not yet independently scored.
+
 ## Score interpretation
 
-Round 1 started at 6–8 across the nine categories. In round 4, Sonnet and GPT Sol each gave four categories 9; Opus gave Feedback and Efficiency 9. Every other round-4 score was 8. Round-4 scores were assigned before the subsequent fixes; they cannot be presented as ratings of those fixes. See the individual reports for exact verdicts and unmet preconditions.
+Round 1 started at 6–8 across the nine categories. In round 4, Sonnet and GPT Sol each gave four categories 9; Opus gave Feedback and Efficiency 9. Every other round-4 score was 8. In round 5 GPT Sol gave seven categories 9, with Clarity and Accessibility 8. Sonnet and Opus round 5 failed at provider rate limits. Scores were assigned before the subsequent fixes; they cannot be presented as ratings of those fixes. See the individual reports for exact verdicts and unmet preconditions.
 
 Live provider sign-in and real model execution, exhaustive screen-reader conformance, and native OS integration remain outside the established audit evidence. Mocked provider and hosting boundaries are identified in the fixture suites.

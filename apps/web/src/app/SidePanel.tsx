@@ -47,6 +47,7 @@ export function SidePanel({ overlay = false }: { overlay?: boolean }) {
   const { threads, selectedId, draft } = useThreads();
   const [tab, setTab] = useState<Tab>(() => (localStorage.getItem(TAB_KEY) === 'mcp' ? 'mcp' : 'skills'));
   const tabRefs = useRef<Partial<Record<Tab, HTMLButtonElement | null>>>({});
+  const panel = useRef<HTMLElement>(null);
   const thread = threads?.find((t) => t.id === selectedId);
   // A draft has no thread yet: its skills come from the checkout (or the profile, without one).
   const context: SkillContext | undefined = draft
@@ -54,7 +55,24 @@ export function SidePanel({ overlay = false }: { overlay?: boolean }) {
     : thread ? { threadId: thread.id } : undefined;
   const key = context ? JSON.stringify(context) : '';
   // An overlay takes focus with it when it opens.
-  useEffect(() => { if (overlay) tabRefs.current[tab]?.focus(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!overlay) return;
+    tabRefs.current[tab]?.focus();
+    const wrapFocus = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab' || event.defaultPrevented || document.querySelector('dialog[open], :popover-open')) return;
+      const controls = [...(panel.current?.querySelectorAll<HTMLElement>('button, input, textarea, select, a[href], [tabindex]') ?? [])]
+        .filter((el) => el.tabIndex >= 0 && !el.matches(':disabled') && !el.closest('[inert]') && el.getClientRects().length > 0);
+      const toggle = panel.current?.closest('.layout')?.querySelector<HTMLElement>('.panel-toggle');
+      if (toggle) controls.push(toggle);
+      const at = controls.indexOf(document.activeElement as HTMLElement);
+      if (at < 0 || (event.shiftKey ? at === 0 : at === controls.length - 1)) {
+        event.preventDefault();
+        (event.shiftKey ? controls.at(-1) : controls[0])?.focus();
+      }
+    };
+    document.addEventListener('keydown', wrapFocus);
+    return () => document.removeEventListener('keydown', wrapFocus);
+  }, [overlay]); // The active tab is focused only when entering the overlay.
   const select = (next: Tab, focus = false) => {
     setTab(next);
     localStorage.setItem(TAB_KEY, next);
@@ -62,7 +80,7 @@ export function SidePanel({ overlay = false }: { overlay?: boolean }) {
   };
   return <>
     <PanelResizer />
-    <aside className="side-panel" aria-label="Side panel">
+    <aside ref={panel} className="side-panel" aria-label="Side panel">
       <header className="side-panel-top drag" />
       <div className="side-panel-tabs" role="tablist" aria-label="Side panel"
         onKeyDown={(e) => {

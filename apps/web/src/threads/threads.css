@@ -233,13 +233,6 @@
   height: auto;
   min-height: 44px;
 }
-.row.open .row-main:focus-visible .row-title {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
 /* Renaming edits the title in place. */
 .row.renaming .row-actions {
   display: none;
