@@ -18,7 +18,7 @@ import type { Harness, HarnessTurn, TurnResources } from './harness.js';
 import { providerOf, turnEnv } from './harnessEnv.js';
 import type { ThreadState } from './state.js';
 import { AGENT_TOOL_LABEL, isAgentTool, runSubagent, type AgentInput, type SubagentTurn } from './subagents.js';
-import { assertResumable, endTurn, retryOf, startTurn, type Thread, type TurnOutcome } from './thread.js';
+import { assertResumable, endTurn, RESTART_NOTICE, retryOf, startTurn, type Thread, type TurnOutcome } from './thread.js';
 import { TurnTranscript, type TranscriptChange } from './transcript.js';
 import type { BuiltinTool } from '../harnesses/builtinTools.js';
 import { afterGoalTurn, CONTINUE_PROMPT, goalInstructions, goalTurnStarted, newGoalPrompt, parseGoalCommand } from '../goals/goal.js';
@@ -263,7 +263,12 @@ export class Turns {
       this.liveInputs.delete(thread.id);
       try {
         await deps.secrets.endTurn(turnId);
-        if (delivering) {
+        // Shutdown, not Stop: the turn continues when accio starts again (see `Threads.close`).
+        const restarting = outcome === 'interrupted' && state.closing && !!state.require(thread.id).resumeAfterRestart;
+        if (delivering && restarting) {
+          // The request stays authorized; its resumed turn checks what already happened before repeating it.
+          await state.update(thread.id, t => t.delivery?.status === 'running' ? { ...t, delivery: { ...t.delivery, status: 'queued' } } : t);
+        } else if (delivering) {
           const current = state.require(thread.id);
           try {
             if (outcome !== 'completed') throw new UserError('Delivery paused. Check the conversation, then request Ship again.');
@@ -275,7 +280,9 @@ export class Turns {
           }
         }
         if (outcome === 'interrupted') {
-          await transcripts.add(thread.id, { kind: 'notice', id: `${turnId}:stop`, turnId, tone: 'info', text: 'Stopped.' });
+          await transcripts.add(thread.id, restarting
+            ? { kind: 'notice', id: `${turnId}:restart`, turnId, tone: 'info', text: RESTART_NOTICE }
+            : { kind: 'notice', id: `${turnId}:stop`, turnId, tone: 'info', text: 'Stopped.' });
         }
         for (const item of transcript.unfinishedTools(outcome === 'interrupted' ? 'interrupted' : 'error')) await transcripts.add(thread.id, item);
         if (outcome === 'completed') await transcripts.add(thread.id, { kind: 'finished', id: `${turnId}:finished`, turnId, ms: Date.now() - startedAt });

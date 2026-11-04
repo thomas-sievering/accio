@@ -63,6 +63,7 @@ export class Threads {
   private naming: ThreadNaming;
   private changelog: Changelog;
   private restartCandidates = new Set<string>();
+  private restartDeliveries = new Set<string>();
 
   constructor(
     home: string,
@@ -126,7 +127,7 @@ export class Threads {
       if (candidates.has(thread.id) || (await state.transcripts.get(thread.id)).items.length > 0) started.push(thread);
     }
     const { threads, interrupted } = recoverAfterRestart(started);
-    state.list = threads.map(t => t.delivery?.status === 'delivered' && t.delivery.completedAt && t.status === 'interrupted' ? { ...t, status: 'idle' } : t.delivery?.status === 'running' ? { ...t, delivery: { ...t.delivery, status: 'blocked', detail: 'Delivery was interrupted. Check the conversation and request Ship again to continue safely.' } } : t.delivery?.status === 'queued' && t.status === 'idle' ? { ...t, status: 'interrupted' } : t);
+    state.list = threads.map(t => t.delivery?.status === 'delivered' && t.delivery.completedAt && t.status === 'interrupted' ? { ...t, status: 'idle' } : t);
     const recoveredRelease = await this.deliveries.recoverReleases();
     for (const thread of interrupted) {
       const live = await state.transcripts.get(thread.id);
@@ -143,7 +144,9 @@ export class Threads {
     }
     if (bound || recoveredRelease || interrupted.length || started.length < stored.length || state.list.some(t => t.delivery?.status === 'blocked')) await state.file.write(state.list);
     await this.deliveries.resumeObservation();
-    this.restartCandidates = new Set(state.list.filter(t => t.status === 'interrupted' && t.resumeAfterRestart && t.sessionId && !t.delivery).map(t => t.id));
+    this.restartCandidates = new Set(state.list.filter(t => t.status === 'interrupted' && t.resumeAfterRestart && t.sessionId).map(t => t.id));
+    // A Ship requested while no turn was left to finish, such as a scripted ship cut off by the restart.
+    this.restartDeliveries = new Set(state.list.filter(t => t.status === 'idle' && t.delivery?.status === 'queued').map(t => t.id));
   }
 
   /** Called once tools are listening, and again when an offline hub reconnects. */
@@ -163,6 +166,11 @@ export class Threads {
         await state.transcripts.add(id, { kind: 'notice', id: `${randomUUID()}:restart`, turnId: 'restart', tone: 'error',
           text: `Could not automatically resume this thread: ${error instanceof Error ? error.message : String(error)}` });
       }
+    }
+    for (const id of this.restartDeliveries) {
+      if (state.closing) return;
+      this.restartDeliveries.delete(id);
+      if (state.get(id)) await this.deliveries.dispatch(id).catch(error => console.error('[delivery] continuing after restart failed', error));
     }
   }
 
@@ -526,7 +534,7 @@ export class Threads {
     await this.naming.close();
     this.deliveries.close();
     // Persist intent before aborting. An already-aborted controller belongs to an explicit Stop.
-    state.list = state.list.map(t => t.resumeAfterRestart !== false && state.running.has(t.id) && !state.running.get(t.id)!.signal.aborted && t.sessionId && !t.delivery
+    state.list = state.list.map(t => t.resumeAfterRestart !== false && state.running.has(t.id) && !state.running.get(t.id)!.signal.aborted && (t.sessionId || t.delivery?.status === 'running')
       ? { ...t, resumeAfterRestart: true } : t);
     try { await state.file.write(state.list); }
     finally { for (const controller of state.running.values()) controller.abort(); }

@@ -188,7 +188,7 @@ export class Deliveries {
     let handover: string | undefined;
     try {
       await state.track(async () => {
-        const started = await state.update(threadId, t => ({ ...t, delivery: { ...t.delivery!, status: 'running', detail: undefined, step: undefined, startedAt: now() } }));
+        const started = await state.update(threadId, t => ({ ...t, resumeAfterRestart: undefined, delivery: { ...t.delivery!, status: 'running', detail: undefined, step: undefined, startedAt: now() } }));
         try {
           const result = await scriptedShip({
             workspace: started.workspace!, baseBranch: started.delivery!.baseBranch, testCommand, signal: controller.signal,
@@ -203,6 +203,9 @@ export class Deliveries {
         } catch (error) {
           if (controller.signal.aborted) {
             if (this.cancelled.has(threadId)) await state.update(threadId, t => ({ ...t, delivery: undefined }));
+            // Shutdown, not Stop: run the script again when accio starts. Nothing was published unless its push finished.
+            else if (state.closing && state.require(threadId).resumeAfterRestart) await state.update(threadId, t => ({ ...t, resumeAfterRestart: undefined,
+              delivery: { ...t.delivery!, status: 'queued', startedAt: undefined, step: undefined } }));
             else await state.update(threadId, t => ({ ...t, delivery: { ...t.delivery!, status: 'blocked', detail: 'Shipping stopped. Request Ship again to continue.' } }));
           } else await this.recordWait(threadId, error instanceof UserError ? error : new UserError((error as Error).message));
         }

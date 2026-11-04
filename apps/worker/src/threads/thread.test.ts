@@ -46,6 +46,15 @@ describe('thread lifecycle', () => {
     expect(interrupted.map((t) => t.id)).toEqual([running.id]);
   });
 
+  it('keeps a Ship cut off by a crash requested, so it continues after the restart', () => {
+    const delivery = { id: 'd', workVersion: 0, mode: 'ship' as const, policy: 'direct' as const, baseBranch: 'main', requestedAt: 'x', status: 'running' as const, startedAt: 'x', step: { name: 'verify' as const, at: 'x' } };
+    const turn = { ...startTurn(t0, 'a', 'now'), sessionId: 's', delivery };
+    const { threads: [resumed, noSession, scripted] } = recoverAfterRestart([turn, { ...turn, sessionId: null }, { ...t0, delivery }]);
+    expect(resumed).toMatchObject({ status: 'interrupted', resumeAfterRestart: true, delivery: { status: 'queued', startedAt: 'x' } });
+    expect(noSession).toMatchObject({ resumeAfterRestart: false, delivery: { status: 'blocked' } });
+    expect(scripted).toMatchObject({ status: 'idle', delivery: { status: 'queued', startedAt: undefined, step: undefined } });
+  });
+
   it('resumes only interrupted threads', () => {
     expect(() => assertResumable(t0)).toThrow(/Only an interrupted/);
     expect(() => assertResumable({ ...t0, status: 'interrupted' })).not.toThrow();
