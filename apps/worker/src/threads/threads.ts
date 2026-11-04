@@ -50,6 +50,8 @@ import { changeHarness, readThreadPage } from './handoff.js';
 /** Threads on this machine, their transcripts, and the turns running in them. */
 export class Threads {
   get runningCount() { return this.state.running.size; }
+  /** This machine's threads, as clients see them. */
+  views() { return this.state.views(); }
   profileReferences() { return this.state.list.map((thread) => thread.profileId); }
   resources?: ResourceManager;
   onRepairFinished?: (toolId: string) => void;

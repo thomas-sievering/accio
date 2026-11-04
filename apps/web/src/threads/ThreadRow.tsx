@@ -18,7 +18,9 @@ import { useThreads, type ThreadActions } from './threads';
 export function ThreadRow({ thread: t, place, withinProject = false }: { thread: ThreadView; place: ShelfPlace; withinProject?: boolean }) {
   const { selectedId, select, now, act } = useThreads();
   const { state } = useProjects();
-  const project = state?.projects.find((p) => p.id === t.projectId)?.name;
+  const project = state?.projects.find((p) => p.id === t.projectId)?.name ?? t.projectName;
+  // GLOSSARY: Relay. Another machine's thread names its machine; offline, it stays listed but greyed.
+  const where = t.machine ? `${project ?? 'No project'} · ${t.machine.name}${t.machine.online ? '' : ' (offline)'}` : project ?? 'No project';
   // Every row has the same layout; only open rows carry the live status mark.
   // Working rows keep the full open look: project mark and the live status.
   const open = place === 'open' || place === 'working';
@@ -61,17 +63,17 @@ export function ThreadRow({ thread: t, place, withinProject = false }: { thread:
   const showState = status.showLabel && (open || !!delivery);
   // Inside one project's dashboard the project goes without saying: no mark, no name.
   const oneLine = withinProject && !showState;
-  const className = `row open${t.id === selectedId ? ' active' : ''}${place === 'settled' ? ' settled' : ''}${withinProject ? ' within-project' : ''}${oneLine ? ' one-line' : ''}`;
+  const className = `row open${t.id === selectedId ? ' active' : ''}${place === 'settled' ? ' settled' : ''}${withinProject ? ' within-project' : ''}${oneLine ? ' one-line' : ''}${t.machine && !t.machine.online ? ' offline' : ''}`;
   const Main = renaming ? 'div' : 'button';
   return (
     <div className={`${className}${renaming ? ' renaming' : ''}`} onContextMenu={onContextMenu}>
-      <Main className="row-main" {...(renaming ? {} : { ...titleTip.props, onClick: () => select(t.id), title: `${t.title} · ${project ?? 'No project'}${showState ? ` · ${statusLine}` : ''}`, 'aria-current': t.id === selectedId ? 'page' as const : undefined })}>
-        {withinProject ? null : t.projectId ? <ProjectMark id={t.projectId} /> : <span className="no-project-mark" />}
+      <Main className="row-main" {...(renaming ? {} : { ...titleTip.props, onClick: () => select(t.id), title: `${t.title} · ${where}${showState ? ` · ${statusLine}` : ''}`, 'aria-current': t.id === selectedId ? 'page' as const : undefined })}>
+        {withinProject ? null : t.projectId ? <ProjectMark id={t.projectId} name={t.projectName} /> : <span className="no-project-mark" />}
         <span className="row-name">
           {renaming ? <RowRename thread={t} /> : <span className="row-title">{t.title}</span>}
           {/* A delivery status takes the whole line: the project mark already names the project. */}
           {!oneLine && <span className={`row-project${showState ? ' with-state' : ''}${delivery && showState ? ' delivery' : ''}`}>
-            {!(delivery && showState) && !withinProject && <span className="row-project-name">{project ?? 'No project'}</span>}
+            {!(delivery && showState) && !withinProject && <span className="row-project-name">{where}</span>}
             {showState && <span className={`row-state tone-${status.tone}`}>
               <span className="row-state-label">{delivery ? shortStatus(status.label) : status.label}</span>
               {delivery?.pullRequest && <span className="row-state-pr">&nbsp;· #{delivery.pullRequest.number}</span>}

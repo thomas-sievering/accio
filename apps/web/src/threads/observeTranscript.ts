@@ -58,12 +58,15 @@ export function observeTranscript(client: Client, threadId: string, publish: (st
     });
   };
   const offStatus = client.onStatus(connect);
+  // A relayed thread's machine reconnected: changes may have been missed, so read it again.
+  const offResync = client.onEvent('thread.resync', (event) => { if (active && event.threadId === threadId) connect(); });
   connect();
   return () => {
     active = false;
     ++generation;
     early = [];
     offStatus();
+    offResync();
     offItem();
     offDelta();
   };

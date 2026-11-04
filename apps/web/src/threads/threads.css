@@ -138,6 +138,9 @@
 .row.settled .row-name {
   color: var(--muted);
 }
+.row.offline .row-main {
+  opacity: 0.55;
+}
 
 .row-status {
   display: flex;

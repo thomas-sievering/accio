@@ -4,6 +4,7 @@ import { ModelSelection } from './models.js';
 import type { AssetUrl, MediaBinding, ThreadAsset, ToolDetails } from './media.js';
 import type { LoadedSkill } from './workspaceSkills.js';
 import type { SecretRequestItem } from './secrets.js';
+import type { RemoteMachine } from './relay.js';
 
 /**
  * GLOSSARY: Thread. A durable conversation, optionally attached to a checkout
@@ -15,6 +16,10 @@ export type ThreadView = {
   projectSetup?: boolean;
   /** The hub that owns this thread's profile; immutable across view switches. */
   hubId?: string;
+  /** GLOSSARY: Relay. Set only on threads another machine owns; actions go to that machine. */
+  machine?: RemoteMachine;
+  /** On a relayed thread whose project has no checkout on this machine, that project's name. */
+  projectName?: string;
   id: string;
   /** Empty for a thread started with No project. */
   checkoutId: string;
@@ -294,4 +299,6 @@ export type ThreadEvents = {
   'thread.item': { threadId: string; cursor: number; item: TranscriptItem };
   /** Streamed text appended to an assistant item. */
   'thread.delta': { threadId: string; cursor: number; itemId: string; text: string };
+  /** Observe the thread again: its relayed stream may have missed changes, such as after its machine reconnected. */
+  'thread.resync': { threadId: string };
 };

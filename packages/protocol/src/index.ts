@@ -17,6 +17,7 @@ export * from './media.js';
 export * from './models.js';
 export * from './profiles.js';
 export * from './projects.js';
+export * from './relay.js';
 export * from './resources.js';
 export * from './rpc.js';
 export * from './secrets.js';

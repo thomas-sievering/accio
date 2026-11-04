@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { access } from 'node:fs/promises';
 import { JsonFile } from '@accio/persistence';
 import { HubClient, hubAddress, remoteSettings, remoteResources, remoteMcp, remoteSecrets, type SecretsAccess, type HubSnapshot, type HarnessInstall } from '@accio/hub';
-import type { HubConnectionView, MachineInfo, MethodName } from '@accio/protocol';
+import type { Events, HubConnectionView, MachineInfo, MethodName } from '@accio/protocol';
 import { Router, UserError, type Broadcast } from '../rpc/router.js';
 import { Profiles } from '../profiles/profiles.js';
 import { Machines } from '../machine/machine.js';
@@ -26,9 +26,10 @@ import { ClaudeModels } from '../harnesses/claudeModels.js';
 import type { ClaudeModelSource } from '../harnesses/catalog.js';
 import { harnessEnv } from '../threads/harnessEnv.js';
 import { configFolderOf } from '../profiles/claudeConfigFolder.js';
+import { Relay } from '../relay/relay.js';
 
 export type SavedHub = { id: string; name: string; url: string; token: string; home: string; local: boolean; managed?: boolean; snapshot?: HubSnapshot };
-export type HubWorkspace = { client: HubClient; router: Router; profiles: Profiles; machines: Machines; models: Models; projects: Projects; threads: Threads; tools: AccioTools; resources: ResourceManager; secrets: SecretsAccess; home: string; initialize(origin: string): void; close(): Promise<void> };
+export type HubWorkspace = { client: HubClient; router: Router; relay: Relay; profiles: Profiles; machines: Machines; models: Models; projects: Projects; threads: Threads; tools: AccioTools; resources: ResourceManager; secrets: SecretsAccess; home: string; initialize(origin: string): void; close(): Promise<void> };
 
 /** One local workspace per hub: identical profile IDs cannot alias local work or configuration. */
 export class HubConnections {
@@ -62,8 +63,22 @@ export class HubConnections {
     const settings = remoteSettings(client);
     const router = new Router(this.global);
     let workspace: HubWorkspace | undefined;
+    const refs: { threads?: Threads; projects?: Projects } = {};
+    const relay = new Relay(record.home, {
+      here: this.here.id,
+      threads: () => refs.threads?.views() ?? [],
+      projects: () => refs.projects?.state() ?? { projects: [], checkouts: [] },
+      router: () => router,
+      machineName: (id) => settings.machine(id)?.name,
+      send: (event, data) => this.send(event, data, record.id),
+    });
     const broadcast: Broadcast = (event, data) => {
-      this.send(event, data, record.id);
+      if (event === 'threads.changed') { relay.localChanged(); this.send(event, relay.merged(data as Events['threads.changed']), record.id); }
+      else {
+        if (event === 'thread.item' || event === 'thread.delta') relay.transcriptEvent(event, data as Events['thread.item']);
+        if (event === 'projects.changed') { relay.localChanged(); relay.announce(); }
+        this.send(event, data, record.id);
+      }
       if ((event === 'projects.changed' || event === 'threads.changed') && workspace) {
         void workspace.profiles.syncReferences().catch(() => {}); this.announce();
       }
@@ -75,7 +90,7 @@ export class HubConnections {
       () => broadcast('models.changed', null));
     const models = new Models(profiles, settings, this.here.id, claudeModels);
     profiles.register(router); machines.register(router); models.register(router, broadcast); registerHarnesses(router, settings, models);
-    const projects = new Projects(record.home, profiles, machines, broadcast); await projects.load(); projects.register(router);
+    const projects = refs.projects = new Projects(record.home, profiles, machines, broadcast); await projects.load(); projects.register(router);
     const projectApps = new ProjectApps(record.home, projects, broadcast); projectApps.register(router);
     const tools = new AccioTools([offerChoice, finishGoalTool((id, outcome, summary) => threads.finishGoal(id, outcome, summary), (id) => threads.goalActive(id)),
       deliveryStepTool((id, step, note) => threads.reportDeliveryStep(id, step, note), (id) => threads.deliveryRunning(id)),
@@ -83,7 +98,10 @@ export class HubConnections {
       projectSettingsTool((id, app) => threads.saveProjectSettings(id, app), (id) => threads.projectSetupRunning(id)),
       readThreadTool((id, offset, limit) => threads.readThread(id, offset, limit), (id) => threads.handedOff(id))]);
     const secrets = remoteSecrets(client);
-    const threads = new Threads(record.home, profiles, projects, this.runners, broadcast, models, machines, secrets, tools, this.deliveryHosting); await threads.load(); threads.register(router);
+    const threads = refs.threads = new Threads(record.home, profiles, projects, this.runners, broadcast, models, machines, secrets, tools, this.deliveryHosting); await threads.load(); threads.register(router);
+    // GLOSSARY: Relay. Other machines' threads join this list; calls about them go to their machine.
+    await relay.load();
+    router.on('threads.list', () => relay.merged()); router.forward = (method, params) => relay.forward(method, params);
     const resources = new ResourceManager(record.home, this.here.id, remoteResources(client), remoteMcp(client), profiles, projects, broadcast, async (tool, detail) => {
       const candidates = tool.repairProfileId ? [profiles.require(tool.repairProfileId)] : profiles.all();
       const profile = candidates.find(p => models.list(p.id).models.length > 0);
@@ -98,11 +116,11 @@ export class HubConnections {
     const continueAfterRestart = () => {
       if (initialized && !this.closing) void threads.continueAfterRestart().catch(error => console.error('[threads] startup recovery failed', error));
     };
-    workspace = { client, router, profiles, machines, models, projects, threads, tools, resources, secrets, home: record.home,
-      initialize: origin => { if (!initialized) void projectApps.load().catch(error => console.error('[project apps] startup failed', error)); tools.listen(record.id === this.defaultId ? origin : `${origin}/hubs/${record.id}`); initialized = true; continueAfterRestart(); if (client.status === 'connected') reconciliation = resources.reconcile().catch(error => console.error('[resources] startup check failed', error)); },
-      close: async () => { await projectApps.close(); await threads.close(); await secrets.close(); await resources.close(); await reconciliation; await profiles.close(); await projects.close(); await client.close(); } };
+    workspace = { client, router, relay, profiles, machines, models, projects, threads, tools, resources, secrets, home: record.home,
+      initialize: origin => { if (!initialized) relay.start(record.url, record.token); if (!initialized) void projectApps.load().catch(error => console.error('[project apps] startup failed', error)); tools.listen(record.id === this.defaultId ? origin : `${origin}/hubs/${record.id}`); initialized = true; continueAfterRestart(); if (client.status === 'connected') reconciliation = resources.reconcile().catch(error => console.error('[resources] startup check failed', error)); },
+      close: async () => { await relay.close(); await projectApps.close(); await threads.close(); await secrets.close(); await resources.close(); await reconciliation; await profiles.close(); await projects.close(); await client.close(); } };
     this.workspaces.set(record.id, workspace);
-    client.onChanged(() => { this.announce(); broadcast('resources.changed', resources.state()); continueAfterRestart(); });
+    client.onChanged(() => { this.announce(); broadcast('resources.changed', resources.state()); relay.announce(); continueAfterRestart(); });
     if (client.status === 'connected') { await profiles.load(); await profiles.syncReferences(); }
     if (this.origin) workspace.initialize(this.origin);
     return workspace;
