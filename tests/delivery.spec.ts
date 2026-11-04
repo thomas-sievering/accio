@@ -115,6 +115,26 @@ test('a conversation with no changes stops Ship without waiting for checks', asy
   await page.screenshot({ path: testInfo.outputPath('nothing-to-ship.png') });
 });
 
+test('a project with a test command ships without a delivery turn', async ({ page, baseURL }, testInfo) => {
+  await page.goto(`${baseURL}/#token=isolated-chat-test-token`);
+  await page.getByRole('button', { name: 'New thread', exact: true }).first().click();
+  await page.getByRole('option', { name: /scripted-project/ }).click();
+  await page.locator('.composer textarea').fill('Build scripted fixture');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect(page.getByText('Scripted feature implemented.', { exact: true })).toBeVisible();
+  const actions = page.locator('.delivery-actions');
+  await page.getByRole('button', { name: 'Ship', exact: true }).click();
+  await expect(actions.getByText('Shipping…', { exact: true })).toBeVisible();
+  await expect(actions.getByRole('button', { name: 'Cancel delivery', exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('scripted-shipping.png') });
+  await expect(actions.getByRole('status')).toContainText('Shipped to main', { timeout: 20_000 });
+  await expect(page.getByText('Scripted shipping works')).toBeVisible();
+  // No model turn ran: no delivery message and no agent reply after Ship.
+  await expect(page.getByText('Ship to main when ready.', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Verification complete. Published the committed change.', { exact: true })).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath('scripted-shipped.png') });
+});
+
 test('Ship menu, queued cancellation, owned preview, delivery, Archive and follow-up work through the real UI', async ({ page, baseURL }, testInfo) => {
   await page.goto(`${baseURL}/#token=isolated-chat-test-token`);
   await page.getByRole('button', { name: 'New thread', exact: true }).first().click();

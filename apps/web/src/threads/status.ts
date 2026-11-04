@@ -100,7 +100,8 @@ export function deliveryStatus(t: ThreadView): DeliveryStatus | undefined {
   const prSuffix = pr ? ` · #${pr.number}` : '';
   const base = {
     target, pullRequest: pr, revision, checkedAt: d.checkedAt, published, followUpsStopped: stopped,
-    canCancel: !published && (d.status === 'queued' || d.status === 'waiting'),
+    // A scripted ship runs without a turn and can be cancelled until it pushes.
+    canCancel: !published && (d.status === 'queued' || d.status === 'waiting' || (d.status === 'running' && t.status !== 'running')),
     // Review-only requests may still continue fixes when later checks fail.
     canStopFollowUps: published && !stopped && !superseded
       && ['queued', 'waiting', 'blocked', 'ready'].includes(d.status),
@@ -128,7 +129,7 @@ export function deliveryStatus(t: ThreadView): DeliveryStatus | undefined {
   }
   if (d.status === 'running') {
     const label = review ? 'Preparing review' : 'Shipping';
-    return { ...base, phase: 'shipping', label, tone: 'working', glyph: t.status === 'running' ? 'spinner' : 'ship', badge: review ? 'Preparing' : 'Shipping' };
+    return { ...base, phase: 'shipping', label, tone: 'working', glyph: 'spinner', badge: review ? 'Preparing' : 'Shipping' };
   }
 
   // Published, ready or blocked: what the last observation established.

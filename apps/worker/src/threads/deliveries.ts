@@ -1,11 +1,16 @@
 import { randomUUID } from 'node:crypto';
-import type { DeliveryMode, ThreadDelivery } from '@accio/protocol';
+import { join } from 'node:path';
+import type { DeliveryMode, ShippedNote, ThreadDelivery } from '@accio/protocol';
 import { samePath } from '../paths.js';
 import type { Projects } from '../projects/projects.js';
 import { UserError } from '../rpc/router.js';
 import { now } from '../time.js';
 import { DeliveryGit, DeliveryPending, DeliveryUnavailable, type DeliveryHosting } from './delivery.js';
+import { reportDeliveryStep } from './deliveryStep.js';
+import { cleanExecutionEnv } from './harnessEnv.js';
 import type { Previews } from './previews.js';
+import { scriptedShip } from './scriptedShip.js';
+import { recordShippedNote } from './shippedNote.js';
 import type { ThreadState } from './state.js';
 import { settle, toView, type Thread } from './thread.js';
 
@@ -15,12 +20,17 @@ export type DeliveryHost = {
   withLifecycle<T>(threadId: string, action: () => Promise<T>): Promise<T>;
   /** A delivery was verified, or was found verified at startup (`backfill`, which adds no shipped note to the thread). */
   delivered(threadId: string, backfill: boolean): Promise<void>;
+  /** A commit message and shipped note from the lightweight naming model. */
+  describeShip(threadId: string, files: string, signal: AbortSignal): Promise<{ message: string; note?: ShippedNote }>;
 };
 
 /** Ship requests, their delivery turns, host observation, auto-settle and workspace archiving (ADR 0015). */
 export class Deliveries {
   readonly git: DeliveryGit;
   private starting = new Set<string>();
+  /** Scripted ships in progress, and those cancelled rather than stopped. */
+  private scripts = new Map<string, AbortController>();
+  private cancelled = new Set<string>();
   private timers = new Map<string, ReturnType<typeof setTimeout>>();
   private checks = new Map<string, Promise<void>>();
 
@@ -88,6 +98,14 @@ export class Deliveries {
   }
 
   async cancel(threadId: string) {
+    const script = this.scripts.get(threadId);
+    if (script) {
+      if (this.state.require(threadId).delivery?.step?.name === 'publish') throw new UserError('Already pushing. The delivery finishes on its own.');
+      // Nothing is published until its push succeeds; the runner aborts its rebase and clears the request.
+      this.cancelled.add(threadId);
+      script.abort();
+      return toView(this.state.require(threadId));
+    }
     if (this.state.lifecycle.has(threadId) || this.starting.has(threadId)) throw new UserError('Wait for the current thread action to finish.');
     const thread = this.state.require(threadId);
     if (!thread.delivery || !['queued', 'waiting', 'blocked', 'ready'].includes(thread.delivery.status)) throw new UserError('Only a queued or paused delivery can be cancelled.');
@@ -140,12 +158,65 @@ export class Deliveries {
   async dispatch(threadId: string) {
     const thread = this.state.require(threadId);
     if (this.state.closing || this.state.lifecycle.has(threadId) || this.state.running.has(threadId) || thread.status === 'running' || thread.delivery?.status !== 'queued' || thread.delivery.followUpsStoppedAt) return;
+    const testCommand = this.scriptable(thread);
+    // Like a turn, the run holds its slot once this returns; the request does not wait for it.
+    if (testCommand) { void this.ship(threadId, testCommand).catch(error => console.error('[delivery] scripted ship failed', error)); return; }
     this.starting.add(threadId);
     try { await this.host.beginTurn(threadId, '', { delivery: true }); }
     catch (error) {
       await this.state.update(threadId, t => t.delivery ? { ...t, delivery: { ...t.delivery, status: 'blocked', detail: (error as Error).message } } : t);
     }
     finally { this.starting.delete(threadId); }
+  }
+
+  /**
+   * GLOSSARY: Scripted ship. A fresh direct Ship in a project with a test command runs
+   * without a model turn. Anything after a handover or for a PR goes to the delivery turn.
+   */
+  private scriptable(thread: Thread): string | undefined {
+    const d = thread.delivery!;
+    if (d.mode !== 'ship' || d.policy !== 'direct' || d.startedAt || !thread.checkoutId || !thread.workspace) return;
+    return this.projects.projectOf(this.projects.checkout(thread.checkoutId)).testCommand?.trim() || undefined;
+  }
+
+  private async ship(threadId: string, testCommand: string) {
+    const { state } = this;
+    // Holding the running slot keeps turns and messages out; Stop and shutdown abort it.
+    const controller = new AbortController();
+    state.running.set(threadId, controller);
+    this.scripts.set(threadId, controller);
+    let handover: string | undefined;
+    try {
+      await state.track(async () => {
+        const started = await state.update(threadId, t => ({ ...t, delivery: { ...t.delivery!, status: 'running', detail: undefined, step: undefined, startedAt: now() } }));
+        try {
+          const result = await scriptedShip({
+            workspace: started.workspace!, baseBranch: started.delivery!.baseBranch, testCommand, signal: controller.signal,
+            env: { ...cleanExecutionEnv(process.env), ACCIO_HOME: join(state.home, 'ship-state', threadId), ACCIO_PORT: '0', ACCIO_HUB_PORT: '0' },
+            report: async (step, note) => { await state.update(threadId, t => ({ ...t, delivery: reportDeliveryStep(t.delivery, step, note, now()) })); },
+            describe: files => this.host.describeShip(threadId, files, controller.signal),
+            fallbackMessage: started.title,
+            note: async (note) => { await state.update(threadId, t => ({ ...t, delivery: recordShippedNote(t.delivery, note) })); },
+          });
+          if (result.kind === 'handover') handover = result.detail;
+          else await this.verify(state.require(threadId), true);
+        } catch (error) {
+          if (controller.signal.aborted) {
+            if (this.cancelled.has(threadId)) await state.update(threadId, t => ({ ...t, delivery: undefined }));
+            else await state.update(threadId, t => ({ ...t, delivery: { ...t.delivery!, status: 'blocked', detail: 'Shipping stopped. Request Ship again to continue.' } }));
+          } else await this.recordWait(threadId, error instanceof UserError ? error : new UserError((error as Error).message));
+        }
+        if (handover !== undefined) await state.update(threadId, t => ({ ...t, delivery: { ...t.delivery!, status: 'queued', step: undefined, detail: handover } }));
+        else if (state.require(threadId).delivery?.status === 'running') await state.update(threadId, t => ({ ...t, delivery: { ...t.delivery!, status: 'waiting' } }));
+      });
+    } finally {
+      if (state.running.get(threadId) === controller) state.running.delete(threadId);
+      this.scripts.delete(threadId);
+      this.cancelled.delete(threadId);
+      if (state.get(threadId)) await state.updateDurably(threadId, t => this.settleDelivered(t)).catch(() => {});
+      this.scheduleCheck(threadId);
+    }
+    if (handover !== undefined) await this.dispatch(threadId);
   }
 
   clearCheck(threadId: string) {
