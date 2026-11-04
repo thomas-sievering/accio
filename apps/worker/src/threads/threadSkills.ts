@@ -23,7 +23,7 @@ export function registerThreadSkills(router: Router, deps: SkillDeps) {
     if (context.threadId) {
       if (context.checkoutId || context.profileId) throw new UserError('Choose a thread or a draft skill context, not both');
       const thread = state.require(context.threadId);
-      return { thread, checkoutId: thread.checkoutId, projectId: thread.projectId || undefined, profileId: thread.profileId, cwd: thread.checkoutId && !thread.workspace?.releasedAt ? state.cwd(thread) : undefined, unavailable: thread.workspace?.releasedAt ? 'This workspace was archived. Repository skills are unavailable until it is restored.' : undefined };
+      return { thread, checkoutId: thread.checkoutId, projectId: thread.projectId || undefined, profileId: thread.profileId, cwd: thread.checkoutId && !thread.workspace?.releasedAt ? state.cwd(thread) : undefined, unavailable: thread.workspace?.releasedAt ? 'This thread’s worktree was released. Repository skills are unavailable until it is restored.' : undefined };
     }
     if (context.checkoutId) {
       const checkout = projects.checkout(context.checkoutId);

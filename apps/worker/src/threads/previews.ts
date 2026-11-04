@@ -50,6 +50,9 @@ export class Previews {
     } catch (error) { await this.stop(threadId); throw error; }
   }
 
+  /** Whether a preview Accio started for this thread is still alive, including one still exiting after a restart. */
+  has(threadId: string) { const record = this.records[threadId]; return !!record && alive(record.pid); }
+
   async stop(threadId: string) {
     const record = this.records[threadId];
     const child = this.children.get(threadId);

@@ -182,6 +182,13 @@ export class DeliveryGit {
     return { ...result, ci: undefined, status: 'delivered', revision, publishedRevision, completedAt: result.completedAt ?? checkedAt, waitingOn: undefined, detail: undefined, observationError: undefined, observationFailures: 0 };
   }
 
+  /** True when the worktree holds no work: still at its start revision on its own branch, with nothing uncommitted or untracked. Ignored files do not count. */
+  async unchanged(workspace: ThreadWorkspace): Promise<boolean> {
+    return await maybeGit(workspace.path, 'rev-parse', 'HEAD') === workspace.startRevision
+      && await maybeGit(workspace.path, 'branch', '--show-current') === workspace.branch
+      && await maybeGit(workspace.path, 'status', '--porcelain', '--untracked-files=all') === '';
+  }
+
   async release(threadId: string, workspace: ThreadWorkspace, revision: string) {
     const expected = resolve(this.home, 'workspaces', threadId);
     if (resolve(workspace.path) !== expected || workspace.branch !== `accio/${threadId}`) throw new UserError('This workspace is not owned by the thread.');

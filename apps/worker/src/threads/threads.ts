@@ -199,7 +199,7 @@ export class Threads {
       })
       .on('threads.fileUrl', async ({ threadId, path }) => {
         const thread = state.require(threadId);
-        if (thread.workspace?.releasedAt) throw new UserError('This workspace was archived. Saved media remains in the conversation; send a follow-up to restore a working copy.');
+        if (thread.workspace?.releasedAt) throw new UserError('This thread’s worktree was released. Saved media remains in the conversation; send a follow-up to restore a working copy.');
         const live = await transcripts.get(threadId);
         state.require(threadId);
         const linked = live.items.some((item) => item.kind === 'assistant' && markdownReferences(item.text).files.includes(path));
@@ -280,7 +280,11 @@ export class Threads {
         return null;
       })
       .on('threads.snooze', ({ threadId, until }) => organize(threadId, t => snooze(t, until)))
-      .on('threads.settle', ({ threadId }) => organize(threadId, t => settle(t, now())))
+      .on('threads.settle', async ({ threadId }) => {
+        const view = await organize(threadId, t => settle(t, now()));
+        void deliveries.releaseIfUnchanged(threadId);
+        return view;
+      })
       .on('threads.reopen', ({ threadId }) => organize(threadId, t => reopen({ ...t, ...(t.delivery ? { delivery: { ...t.delivery, keepOpen: true } } : {}) })))
       .on('threads.rename', async ({ threadId, title }) => {
         this.naming.cancel(threadId);

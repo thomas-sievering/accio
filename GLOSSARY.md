@@ -137,7 +137,7 @@ Hiding a thread until a chosen time, when it comes back.
 _Avoid_: Mute, defer
 
 **Settle**:
-Marking a thread as done in the sidebar, by hand or automatically once its delivery is verified. It stays readable and can be reopened; its owned worktree and processes remain allocated.
+Marking a thread as done in the sidebar, by hand or automatically once its delivery is verified. It stays readable and can be reopened. Settling by hand releases an owned worktree that holds no work: no commits since it started, nothing uncommitted or untracked, no delivery and no running preview. A follow-up then gets a fresh worktree from the latest default branch and continues the same conversation. A worktree holding work stays allocated.
 _Avoid_: Archive, close, resolve
 
 **Ship**:
