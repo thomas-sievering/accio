@@ -12,6 +12,53 @@
 .delivery-split > button:first-child { color: var(--ink); }
 .delivery-queued { border-color: var(--blue); color: var(--ink); }
 .delivery-queued .row-working { width: 12px; height: 12px; }
+/* Queued delivery gets a little celebration, kept around the edge so the label stays clear. */
+.delivery-sparkly {
+  position: relative;
+  isolation: isolate;
+  overflow: visible;
+  border-color: color-mix(in srgb, #c4b5fd 65%, var(--line-2));
+  background: linear-gradient(110deg, #b8dfff12, #c4b5fd1c 55%, #f6d99a14);
+  box-shadow: 0 0 12px #c4b5fd12, inset 0 0 8px #c4b5fd08;
+}
+.delivery-sparkly > button { border-radius: 0 16px 16px 0; }
+.delivery-split > .delivery-sparkles {
+  position: absolute;
+  inset: 0;
+  display: block;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.delivery-sparkles i {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  color: #f6d99a;
+  background: currentColor;
+  clip-path: polygon(50% 0, 62% 37%, 100% 50%, 62% 63%, 50% 100%, 38% 63%, 0 50%, 38% 37%);
+  opacity: 0;
+  animation: delivery-twinkle 3.6s ease-in-out infinite;
+}
+.delivery-sparkles i:nth-child(1) { left: 8%; top: -4px; animation-delay: -0.4s; }
+.delivery-sparkles i:nth-child(2) { left: 28%; top: -6px; width: 5px; height: 5px; color: #c4b5fd; animation-delay: -2.1s; }
+.delivery-sparkles i:nth-child(3) { left: 55%; top: -4px; color: #b8dfff; animation-delay: -1.2s; }
+.delivery-sparkles i:nth-child(4) { right: 12%; top: -5px; width: 9px; height: 9px; animation-delay: -2.8s; }
+.delivery-sparkles i:nth-child(5) { right: -4px; top: 45%; width: 6px; height: 6px; color: #c4b5fd; animation-delay: -1.8s; }
+.delivery-sparkles i:nth-child(6) { right: 19%; bottom: -4px; color: #b8dfff; animation-delay: -0.7s; }
+.delivery-sparkles i:nth-child(7) { left: 47%; bottom: -5px; width: 5px; height: 5px; animation-delay: -2.5s; }
+.delivery-sparkles i:nth-child(8) { left: 17%; bottom: -4px; color: #c4b5fd; animation-delay: -1.5s; }
+.delivery-sparkles i:nth-child(9) { left: -4px; top: 40%; width: 5px; height: 5px; color: #b8dfff; animation-delay: -3.2s; }
+@keyframes delivery-twinkle {
+  0%, 65%, 100% { opacity: 0; transform: translateY(2px) scale(.35) rotate(-20deg); }
+  22% { opacity: .95; transform: translateY(-1px) scale(1.15) rotate(0deg); }
+  42% { opacity: .45; transform: translateY(-3px) scale(.7) rotate(20deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .delivery-sparkles i { animation: none; opacity: .6; }
+}
 .delivery-added, .delivery-complete > svg { color: var(--green); }
 .delivery-removed { color: var(--red); }
 .delivery-complete { color: var(--ink); }
