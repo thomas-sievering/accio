@@ -64,9 +64,3 @@
 .delivery-error button { margin-left: 6px; }
 .delivery-queued { max-width: 100%; }
 .delivery-queued > [role="status"] { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
-.delivery-progress { margin-top: 6px; color: var(--muted); font-size: 12px; }
-.delivery-progress summary { cursor: pointer; }
-.delivery-progress ul { margin: 6px 0; padding-left: 18px; }
-.delivery-progress li { margin: 4px 0; overflow-wrap: anywhere; }
-.delivery-progress li > span:last-child { margin-left: 8px; }
-.delivery-progress small { color: var(--dim); }

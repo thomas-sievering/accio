@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import type { PanelTab } from './SidePanel';
 import type { SettingsRoute } from './Settings';
 
 /**
@@ -13,6 +14,8 @@ export type AppEvents = {
   'transcript.reveal': { threadId: string; itemId: string };
   /** Open settings at a section, such as one MCP server from the side panel. */
   'settings.open': SettingsRoute;
+  /** Open the side panel at a tab, such as Delivery after pressing Ship. */
+  'panel.show': PanelTab;
 };
 
 const prefix = 'accio:';
