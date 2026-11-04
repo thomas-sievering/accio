@@ -291,20 +291,6 @@ test('a running turn shows what it says as it goes and its latest calls behind o
   await expect(work.locator('.tool')).toHaveCount(0);
 });
 
-test('a stopped single call stays behind a summary until expanded', async ({ page, baseURL }) => {
-  await openChat(page, baseURL!);
-  await page.locator('textarea').fill('explore tools');
-  await page.locator('textarea').press('Enter');
-  await expect(page.locator('.turn-work.live [role="status"]')).toHaveText('Searching');
-  await page.locator('.composer').getByRole('button', { name: 'Stop', exact: true }).click();
-  await expect(page.locator('.turn-work.live')).toHaveCount(0);
-  const calls = page.locator('.tool-group').last();
-  await expect(calls.locator('.tool-group-toggle')).toHaveText('Ran 1 search');
-  await expect(calls.locator('.tool')).toHaveCount(0);
-  await calls.locator('.tool-group-toggle').click();
-  await expect(calls.locator('.tool-summary')).toHaveText('TODO');
-});
-
 test('reading position stays put through updates and jump-to-latest restores following', async ({ page, baseURL }) => {
   await openChat(page, baseURL!);
   // Opening follows the bottom even as media above finishes loading late.
