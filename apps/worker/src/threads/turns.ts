@@ -20,6 +20,7 @@ import type { ThreadState } from './state.js';
 import { AGENT_TOOL_LABEL, isAgentTool, runSubagent, type AgentInput, type SubagentTurn } from './subagents.js';
 import { assertResumable, endTurn, RESTART_NOTICE, retryOf, startTurn, type Thread, type TurnOutcome } from './thread.js';
 import { TurnTranscript, type TranscriptChange } from './transcript.js';
+import { handoffContext, withHandoff } from './handoff.js';
 import type { BuiltinTool } from '../harnesses/builtinTools.js';
 import { afterGoalTurn, CONTINUE_PROMPT, goalInstructions, goalTurnStarted, newGoalPrompt, parseGoalCommand } from '../goals/goal.js';
 
@@ -158,7 +159,9 @@ export class Turns {
       const cwd = state.cwd(thread);
       const goalCommand = parseGoalCommand(picked);
       // A /goal message never reaches the harness as typed: Claude Code would run its own /goal.
-      const prompt = delivering && !resume ? deliveryPrompt(thread.workspace!, requested!) : goalCommand?.type === 'set' ? newGoalPrompt(goalCommand.objective) : picked;
+      const ownPrompt = delivering && !resume ? deliveryPrompt(thread.workspace!, requested!) : goalCommand?.type === 'set' ? newGoalPrompt(goalCommand.objective) : picked;
+      // ADR 0017: after a change of harness, the first turn on the new one carries what it missed.
+      const prompt = thread.handoff ? withHandoff(handoffContext((await transcripts.get(threadId)).items, thread.handoff), ownPrompt) : ownPrompt;
       if (delivering && !resume) text = thread.delivery!.mode === 'review' ? 'Prepare for review.' : `Ship to ${thread.delivery!.baseBranch} when ready.`;
       // A refused resource preparation is not a sent message or a failed turn.
       // Reserve the turn above, but publish it only after its tools are ready.
@@ -354,7 +357,8 @@ export class Turns {
     const { state, deps } = this;
     if (change.type === 'tool' && isAgentTool(change.item.name)) change = { ...change, item: { ...change.item, name: AGENT_TOOL_LABEL } };
     if (change.type === 'session') {
-      await state.update(threadId, (t) => ({ ...t, sessionId: change.sessionId }), { quiet: true });
+      // A harness that reports its session has taken the prompt, and with it any handoff.
+      await state.update(threadId, (t) => ({ ...t, sessionId: change.sessionId, handoff: undefined }), { quiet: true });
     } else if (change.type === 'tool' && isChoiceTool(change.item.name)) {
       await this.offerChoice(threadId, change, cwd);
     } else if (change.type === 'tool') {

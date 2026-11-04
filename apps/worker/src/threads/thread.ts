@@ -2,13 +2,17 @@ import { randomUUID } from 'node:crypto';
 import type { ChoicePick, ThreadView, TranscriptItem } from '@accio/protocol';
 import { DEFAULT_MODEL } from '@accio/protocol';
 import { UserError } from '../rpc/router.js';
+import type { LeftHarness, PendingHandoff } from './handoff.js';
 
-/** A thread as stored: what clients see, plus the harness session it continues. */
-export type Thread = ThreadView & { sessionId: string | null; organizationVersion?: number; resumeAfterRestart?: boolean; titleManual?: boolean; titleNeedsRefinement?: boolean };
+/**
+ * A thread as stored: what clients see, plus the harness session it continues, the
+ * sessions of harnesses it has left and a handoff waiting for the next turn (ADR 0017).
+ */
+export type Thread = ThreadView & { sessionId: string | null; leftHarnesses?: Record<string, LeftHarness>; handoff?: PendingHandoff; organizationVersion?: number; resumeAfterRestart?: boolean; titleManual?: boolean; titleNeedsRefinement?: boolean };
 
 export const NEW_THREAD_TITLE = 'New thread';
 
-export function toView({ sessionId: _s, organizationVersion: _o, resumeAfterRestart: _r, titleManual: _m, titleNeedsRefinement: _n, ...view }: Thread): ThreadView {
+export function toView({ sessionId: _s, leftHarnesses: _l, handoff: _h, organizationVersion: _o, resumeAfterRestart: _r, titleManual: _m, titleNeedsRefinement: _n, ...view }: Thread): ThreadView {
   return view;
 }
 

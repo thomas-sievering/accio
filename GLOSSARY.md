@@ -92,7 +92,7 @@ A separate Git working copy and branch allocated to one thread. New threads in c
 _Avoid_: Sandbox, project (for the thread's working copy)
 
 **Thread**:
-A durable conversation with a harness, optionally attached to a project's checkout and owned worktree. It exists from its first message on. It keeps its starting hub, profile and harness; its model can change within that harness. Accounts follow the profile's current selections. A No project thread runs under a profile without a project checkout.
+A durable conversation with a harness, optionally attached to a project's checkout and owned worktree. It exists from its first message on. It keeps its starting hub and profile; its model can change, including to another harness through a handoff. Accounts follow the profile's current selections. A No project thread runs under a profile without a project checkout.
 _Avoid_: Chat, session, agent, conversation
 
 **Turn**:
@@ -106,7 +106,7 @@ A message saved to start a later turn after the current turn finishes. It can be
 Sending a message to the harness during its current turn, without interrupting it or starting a separate turn.
 
 **Handoff**:
-Planned capability to move a thread to another harness with selected history. Currently changing harnesses requires a new thread.
+Moving a thread to another harness by choosing one of its models. The next turn on that harness starts a new session, or resumes the one it left, with the conversation it has not seen, taken from accio's transcript and trimmed to fit. The harness can read the whole thread with the read_thread accio tool (ADR 0017).
 _Avoid_: Switch, transfer, migration
 
 **Running**:

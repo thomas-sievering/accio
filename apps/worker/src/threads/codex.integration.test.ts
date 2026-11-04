@@ -170,7 +170,7 @@ describe('Codex and ChatGPT accounts', () => {
     expect(await c.call('accounts.list', {})).toEqual([]);
   });
 
-  it('interrupts a Codex turn, resumes it, and keeps its harness fixed', async () => {
+  it('interrupts a Codex turn and resumes the same session', async () => {
     const fake = new FakeCodex(); t = await startTestApp({ codexFactory: fake.factory }); const c = await t.connect();
     const { profile } = await signIn(c, fake); fake.holdTurns = true;
     const thread = await c.call('threads.start', { profileId: profile.id, text: 'wait' });
@@ -184,8 +184,6 @@ describe('Codex and ChatGPT accounts', () => {
     await c.call('threads.resume', { threadId: thread.id });
     await c.waitFor('threads.changed', (ts) => ts.some((x) => x.id === thread.id && x.status === 'idle'));
     expect(fake.latest.requests.find((r) => r.method === 'thread/resume')?.params.threadId).toBe('codex-session');
-    await c.signedIn('Personal');
-    await expect(c.call('threads.setModel', { threadId: thread.id, model: { harnessId: 'claudeCode', modelId: 'opus' } })).rejects.toThrow(/harness/);
   });
 
   it('proxies only the selected OpenAI account, replaces forged headers, and retries an expired token once', async () => {

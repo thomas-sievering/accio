@@ -45,6 +45,7 @@ import { agentTool } from './subagents.js';
 import { Turns } from './turns.js';
 import { registerThreadSkills } from './threadSkills.js';
 import { ThreadNaming } from './naming.js';
+import { changeHarness, readThreadPage } from './handoff.js';
 
 /** Threads on this machine, their transcripts, and the turns running in them. */
 export class Threads {
@@ -284,8 +285,9 @@ export class Threads {
         const thread = state.require(threadId);
         if (state.running.has(threadId) || thread.status === 'running') throw new UserError('Wait for this turn to finish before changing its model.');
         const selected = this.models.requireExact(thread.profileId, model);
-        if (selected.harnessId !== thread.model.harnessId) throw new UserError('Start a new thread to change its harness.');
-        return toView(await state.update(threadId, (t) => ({ ...t, model: selected })));
+        // ADR 0017: another harness continues the thread with the history it missed.
+        const lastItemId = selected.harnessId === thread.model.harnessId ? null : (await state.transcripts.get(threadId)).items.at(-1)?.id ?? null;
+        return toView(await state.update(threadId, (t) => ({ ...changeHarness(t, selected.harnessId, lastItemId), model: selected })));
       })
       .on('threads.stop', async ({ threadId }) => {
         const controller = state.running.get(state.require(threadId).id);
@@ -472,6 +474,15 @@ export class Threads {
 
   deliveryRunning(threadId: string) {
     return this.state.get(threadId)?.delivery?.status === 'running';
+  }
+
+  /** ADR 0017. Whether the thread has run on more than one harness, so its turns may need history they never saw. */
+  handedOff(threadId: string) {
+    return Object.keys(this.state.get(threadId)?.leftHarnesses ?? {}).length > 0;
+  }
+
+  async readThread(threadId: string, offset: number, limit: number) {
+    return readThreadPage((await this.state.transcripts.get(threadId)).items, offset, limit);
   }
 
   goalActive(threadId: string) {
