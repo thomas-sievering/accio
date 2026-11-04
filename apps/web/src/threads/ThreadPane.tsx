@@ -12,6 +12,7 @@ import { Composer } from './Composer';
 import { QueueTray } from './QueueTray';
 import { PendingPick, optionName } from './Choice';
 import { DeliveryActions } from './DeliveryActions';
+import { MachinePicker } from './MachinePicker';
 import { ModelPicker } from './ModelPicker';
 import { ThreadNotice } from './ThreadNotice';
 import { ThreadActionsMenu } from './ThreadActionsMenu';
@@ -103,7 +104,6 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
   const local = machines?.find((m) => m.thisMachine);
   const machineId = chosenMachineId ?? local?.id;
   const machine = machines?.find((m) => m.id === machineId);
-  const online = machines?.filter((m) => m.connected) ?? [];
   const unavailable = !machine?.connected;
   const remote = !!machine && !machine.thisMachine;
 
@@ -122,15 +122,13 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
           placeholder={`Ask ${model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}
           onSend={async (text) => select((await client.call('threads.start', checkoutId ? { checkoutId, text, model, machineId } : { profileId: profileId!, text, model, machineId })).id)}
           toolbar={<>
-            <select className="composer-machine" aria-label="Run on machine" value={machineId ?? ''} disabled={!machines} onChange={(e) => setChosenMachineId(e.target.value)}>
-              {!machineId && <option value="">Loading machines…</option>}
-              {chosenMachineId && unavailable && <option value={chosenMachineId} disabled>Selected machine offline</option>}
-              {online.map((m) => <option key={m.id} value={m.id}>{m.name}{m.thisMachine ? ' (local)' : ''}</option>)}
-            </select>
             <ModelPicker profileId={place.profile?.id} value={model} onChange={async (model) => setChoice({ checkoutId, profileId: place.profile?.id, model })} />
             {place.profile && <LimitsIndicator active={active} account={accountForModel(place.profile, model)} onOpen={() => onOpenLimits(place.profile!.id)} />}
           </>}
         />
+        <div className="draft-machine">
+          <MachinePicker machines={machines} value={machineId} onChange={setChosenMachineId} />
+        </div>
       </div>
     </>
   );

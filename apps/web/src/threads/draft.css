@@ -23,3 +23,9 @@
 .hero .composer-wrap {
   margin: 0;
 }
+/* The machine sits under the composer, its text lined up with the textarea's. */
+.draft-machine {
+  align-self: stretch;
+  margin-top: 6px;
+  padding-left: 9px;
+}
