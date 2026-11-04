@@ -9,7 +9,7 @@ const exec = promisify(execFile);
 const git = async (cwd: string, ...args: string[]) => (await exec('git', ['-C', cwd, ...args], { windowsHide: true })).stdout.trim();
 const server = (version: string) => `require('http').createServer((q,s)=>s.end('${version}')).listen(Number(process.env.PORT),'127.0.0.1');\n`;
 
-test('the project dashboard starts the app from main, follows new commits, and lists threads, changelog and logs', async ({ page, baseURL }, info) => {
+test('the project dashboard starts the app from main, follows new commits, and lists threads, commits and logs', async ({ page, baseURL }, info) => {
   test.setTimeout(90_000);
   const { deliveryFolder } = JSON.parse(await readFile(resolve('out', `chat-test-${new URL(baseURL!).port}.json`), 'utf8'));
   const home = dirname(deliveryFolder);
@@ -41,6 +41,7 @@ test('the project dashboard starts the app from main, follows new commits, and l
 
     // The breadcrumb's project name opens the dashboard with the project's threads.
     await page.locator('.thread-project-link', { hasText: 'dashboard-project' }).click();
+    await page.getByRole('menuitem', { name: 'Dashboard', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'dashboard-project' })).toBeVisible();
     await expect(page.locator('.dashboard-rows .row-title', { hasText: 'Delivery follow-up' })).toBeVisible();
 
@@ -68,7 +69,7 @@ test('the project dashboard starts the app from main, follows new commits, and l
     // The thread's own checkout is untouched; the app runs from a checkout of its own.
     expect(await git(folder, 'status', '--porcelain')).toBe('');
 
-    await page.getByRole('tab', { name: 'Changelog' }).click();
+    await page.getByRole('tab', { name: 'Commits' }).click();
     await expect(page.locator('.changelog li').first()).toContainText('Serve v2');
     await expect(page.locator('.changelog li.running')).toContainText('Serve v2');
     await expect(page.locator('.changelog li')).toHaveCount(2);

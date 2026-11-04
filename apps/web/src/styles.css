@@ -18,6 +18,7 @@
 @import "./ui/forms.css";
 @import "./threads/threads.css";
 @import "./threads/delivery.css";
+@import "./changelog/changelog.css";
 @import "./profiles/sign-in.css";
 @import "./app/settings.css";
 @import "./threads/draft.css";

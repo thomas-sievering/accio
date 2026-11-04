@@ -172,6 +172,47 @@ it('restores an explicit archived revision while origin is unavailable', async (
   await expect(stat(join(restored!.path, 'remote-only.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
 });
 
+it('releases an unchanged worktree on Settle and restores a fresh one with the same conversation', async () => {
+  const harness = new FakeHarness();
+  const { c, checkout, source, origin } = await setup(harness);
+  const thread = await c.call('threads.start', { checkoutId: checkout.id, text: 'why do we do x?' });
+  await wait(c, thread.id);
+  // Ignored files, such as installed dependencies, are not work.
+  await writeFile(join(source, '.git', 'info', 'exclude'), 'node_modules/\n');
+  await mkdir(join(thread.workspace!.path, 'node_modules'));
+  await writeFile(join(thread.workspace!.path, 'node_modules', 'dep.js'), 'installed\n');
+  c.events.length = 0;
+  const settled = await c.call('threads.settle', { threadId: thread.id });
+  expect(settled.settledAt).toEqual(expect.any(String));
+  await wait(c, thread.id, x => !!x.workspace?.releasedAt);
+  await expect(stat(thread.workspace!.path)).rejects.toMatchObject({ code: 'ENOENT' });
+  expect(await git(source, 'branch', '--list', thread.workspace!.branch)).toBe('');
+  const { revision } = await advanceOrigin(origin);
+  c.events.length = 0;
+  await c.call('threads.send', { threadId: thread.id, text: 'and y?' });
+  await wait(c, thread.id, x => x.status === 'idle' && !x.workspace?.releasedAt);
+  expect(harness.runs.at(-1)!.sessionId).not.toBeNull();
+  const restored = (await c.call('threads.list', {})).find(x => x.id === thread.id)!;
+  expect(restored).toMatchObject({ settledAt: null, workspace: { startRevision: revision, releasedAt: null } });
+  expect(await readFile(join(restored.workspace!.path, 'remote-only.txt'), 'utf8')).toBe('latest remote work\n');
+});
+
+it.each(['uncommitted', 'committed'])('keeps a settled worktree holding %s work', async (kind) => {
+  const harness = new FakeHarness(async function* (run) {
+    await writeFile(join(run.cwd, 'feature.txt'), 'work\n');
+    if (kind === 'committed') { await git(run.cwd, 'add', '.'); await git(run.cwd, 'commit', '--quiet', '-m', 'work'); }
+    yield* replyWith('done');
+  });
+  const { c, checkout } = await setup(harness);
+  const thread = await c.call('threads.start', { checkoutId: checkout.id, text: 'build' });
+  await wait(c, thread.id);
+  await c.call('threads.settle', { threadId: thread.id });
+  // Archive is refused for undelivered work once the settle check has let go of the thread.
+  await vi.waitFor(() => expect(c.call('threads.archive', { threadId: thread.id })).rejects.toThrow(/Ship the change/));
+  expect((await c.call('threads.list', {}))[0]!.workspace!.releasedAt).toBeNull();
+  expect(await readFile(join(thread.workspace!.path, 'feature.txt'), 'utf8')).toBe('work\n');
+});
+
 it('isolates concurrent threads without copying dirty source changes or sharing a branch', async () => {
   const harness = new FakeHarness();
   const { c, checkout, source } = await setup(harness);

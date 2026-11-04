@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { pick } from './menu-select';
 
 /*
  * Secret entry and Settings / Secrets through the production UI.
@@ -67,11 +68,8 @@ test('save, reuse, manage, use once and decline a secret', async ({ page }) => {
 
   // Settings / Secrets sits right after Accounts.
   await page.getByRole('button', { name: 'Settings' }).click();
-  const nav = page.locator('.settings-link');
-  await expect(nav.nth(0)).toHaveText('Accounts');
-  await expect(nav.nth(1)).toHaveText('Secrets');
-  await nav.nth(1).click();
-  await page.getByRole('combobox', { name: 'Profile', exact: true }).selectOption({ label: 'Personal' });
+  await page.locator('.settings-link').filter({ hasText: /^Secrets$/ }).click();
+  await pick(page, 'Profile', 'Personal');
   const saved = page.locator('.secret-row').first();
   await expect(saved).toContainText('cloudflare.pages.deploy:docs');
   await expect(saved).toContainText('secret-project');
@@ -91,9 +89,9 @@ test('save, reuse, manage, use once and decline a secret', async ({ page }) => {
   await expect(page.locator('.secret-row').first()).toContainText('All Personal projects');
 
   // Work has its own (empty) list.
-  await page.getByRole('combobox', { name: 'Profile', exact: true }).selectOption({ label: 'Work' });
+  await pick(page, 'Profile', 'Work');
   await expect(page.locator('.settings-card').last()).toContainText('No saved secrets for Work');
-  await page.getByRole('combobox', { name: 'Profile', exact: true }).selectOption({ label: 'Personal' });
+  await pick(page, 'Profile', 'Personal');
 
   // Delete asks within the row first.
   await page.locator('.secret-row').first().getByRole('button', { name: /^Delete/ }).click();

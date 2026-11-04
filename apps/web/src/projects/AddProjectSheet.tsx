@@ -5,6 +5,7 @@ import { Sheet } from '../app/Sheet';
 import { useAction } from '../app/useAction';
 import { useProfiles } from '../profiles/profiles';
 import { focusFirstInvalid } from '../resources/Field';
+import { MenuSelect } from '../ui/MenuSelect';
 
 export function AddProjectSheet({ onClose }: { onClose: () => void }) {
   return (
@@ -121,21 +122,12 @@ export function AddProjectForm({ onAdded, onCancel }: { onAdded?: () => void; on
         ) : (
           seen &&
           !onlyProfile && (
-            <label className="field">
+            <div className="field">
               <span>Profile</span>
-              <select value={profileId} onChange={(e) => setProfileId(e.target.value)} aria-invalid={profileProblem ? true : undefined}>
-                <option value="" disabled>
-                  Choose…
-                </option>
-                {profiles.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                    {a.id === seen.suggestedProfileId ? ' (from its folders)' : ''}
-                  </option>
-                ))}
-              </select>
+              <MenuSelect label="Profile" value={profileId} placeholder="Choose…" onChange={setProfileId} invalid={!!profileProblem}
+                options={profiles.map((a) => ({ value: a.id, label: a.name, ...(a.id === seen.suggestedProfileId ? { detail: 'From its folders' } : {}) }))} />
               {profileProblem && <small className="error" role="alert">{profileProblem}</small>}
-            </label>
+            </div>
           )
         )}
       </div>

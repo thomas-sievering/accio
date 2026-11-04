@@ -5,6 +5,7 @@ import { SettingRow, SettingsSection } from '../app/Settings';
 import { useAction } from '../app/useAction';
 import { useProfiles } from '../profiles/profiles';
 import { useThreads } from './threads';
+import { MenuSelect } from '../ui/MenuSelect';
 
 export function NamingSettings() {
   const client = useClient();
@@ -46,14 +47,14 @@ export function NamingSettings() {
           <input aria-label="Automatically name new threads" type="checkbox" checked={settings.automatic} disabled={busy} onChange={event => edit({ automatic: event.target.checked })} />
         </SettingRow>
         <SettingRow title="Naming model" description="Automatic uses a lightweight model from the thread’s provider. A chosen model must be available to the thread’s profile; otherwise the first line stays as its title.">
-          <div className="field naming-model"><select aria-label="Naming model" value={modelValue} disabled={busy} onChange={event => {
-            const model = models.find(model => modelKey({ harnessId: model.harnessId, modelId: model.id }) === event.target.value);
+          <div className="field naming-model"><MenuSelect label="Naming model" value={modelValue} disabled={busy} onChange={value => {
+            const model = models.find(model => modelKey({ harnessId: model.harnessId, modelId: model.id }) === value);
             edit({ model: model ? { harnessId: model.harnessId, modelId: model.id, ...(model.efforts[0] ? { effort: model.efforts[0].id } : {}) } : null });
-          }}>
-            <option value="">Automatic · fast, low-cost model</option>
-            {settings.model && !models.some(model => modelKey({ harnessId: model.harnessId, modelId: model.id }) === modelValue) && <option value={modelValue}>{settings.model.modelId} (unavailable)</option>}
-            {models.map(model => <option key={`${model.harnessId}:${model.id}`} value={modelKey({ harnessId: model.harnessId, modelId: model.id })}>{model.name} · {model.harnessName}</option>)}
-          </select></div>
+          }} options={[
+            { value: '', label: 'Automatic', detail: 'Fast, low-cost model' },
+            ...(settings.model && !models.some(model => modelKey({ harnessId: model.harnessId, modelId: model.id }) === modelValue) ? [{ value: modelValue, label: settings.model.modelId, detail: 'Unavailable' }] : []),
+            ...models.map(model => ({ value: modelKey({ harnessId: model.harnessId, modelId: model.id }), label: model.name, detail: model.harnessName })),
+          ]} /></div>
         </SettingRow>
       </SettingsSection>
       <details className="naming-advanced">
@@ -64,10 +65,10 @@ export function NamingSettings() {
         <p className="note">Appended to the built-in naming prompt for new and regenerated titles. Existing titles stay unchanged.</p>
         <button type="button" className="ghost" disabled={busy || !settings.instructions} onClick={() => edit({ instructions: '' })}>Reset instructions</button>
         <div className="naming-preview">
-          <label className="field"><span>Example thread</span><select aria-label="Example thread" value={selectedThread} disabled={busy || !threads?.length} onChange={event => { setThreadId(event.target.value); setExample(undefined); }}>
-            {!threads?.length && <option value="">Send a message to start a thread first</option>}
-            {threads?.map(thread => <option key={thread.id} value={thread.id}>{thread.title}</option>)}
-          </select></label>
+          <div className="field"><span>Example thread</span><MenuSelect label="Example thread" value={selectedThread} disabled={busy || !threads?.length}
+            placeholder={threads?.length ? 'Choose a thread' : 'Send a message to start a thread first'}
+            onChange={value => { setThreadId(value); setExample(undefined); }}
+            options={threads?.map(thread => ({ value: thread.id, label: thread.title })) ?? []} /></div>
           <button type="button" className="ghost" disabled={busy || !selectedThread} onClick={() => void run(async () => {
             const result = await client.call('threads.previewTitle', { threadId: selectedThread, instructions: settings.instructions, model: settings.model });
             setExample(result.title);

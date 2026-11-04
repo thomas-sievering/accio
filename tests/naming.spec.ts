@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { pick } from './menu-select';
 
 test('automatic naming, inline and sidebar rename, regeneration and settings preview persist', async ({ page, baseURL }, testInfo) => {
   await page.goto(`${baseURL}/#token=isolated-chat-test-token`);
@@ -28,7 +29,7 @@ test('automatic naming, inline and sidebar rename, regeneration and settings pre
   await expect(page.getByRole('checkbox', { name: 'Automatically name new threads' })).toBeChecked();
   await page.getByText('Advanced', { exact: true }).click();
   await page.getByRole('textbox', { name: 'Naming instructions' }).fill('Use German');
-  await page.getByRole('combobox', { name: 'Example thread' }).selectOption({ label: 'Fix login redirects' });
+  await pick(page, 'Example thread', 'Fix login redirects');
   await page.getByRole('button', { name: 'Try instructions', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('Anmeldung reparieren');
   await page.screenshot({ path: testInfo.outputPath('naming-settings.png') });
@@ -39,14 +40,14 @@ test('automatic naming, inline and sidebar rename, regeneration and settings pre
   await page.getByText('Advanced', { exact: true }).click();
   await expect(page.getByRole('textbox', { name: 'Naming instructions' })).toHaveValue('');
   await page.getByRole('textbox', { name: 'Naming instructions' }).fill('Use German');
-  await page.getByRole('combobox', { name: 'Naming model' }).selectOption({ label: 'Claude Haiku · Claude Code' });
+  await pick(page, 'Naming model', /^Claude Haiku\s*Claude Code/);
   await page.getByRole('checkbox', { name: 'Automatically name new threads' }).uncheck();
   await page.getByRole('button', { name: 'Save naming settings', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('Naming settings saved');
   await page.reload();
   await page.getByRole('button', { name: 'Settings', exact: true }).click(); await naming.click();
   await expect(page.getByRole('checkbox', { name: 'Automatically name new threads' })).not.toBeChecked();
-  await expect(page.getByRole('combobox', { name: 'Naming model' })).toHaveValue(JSON.stringify(['claudeCode', 'haiku']));
+  await expect(page.getByRole('button', { name: 'Naming model', exact: true })).toHaveText('Claude Haiku');
   await page.getByText('Advanced', { exact: true }).click();
   await expect(page.getByRole('textbox', { name: 'Naming instructions' })).toHaveValue('Use German');
   await page.getByRole('button', { name: 'Back', exact: true }).click();
@@ -63,7 +64,7 @@ test('automatic naming, inline and sidebar rename, regeneration and settings pre
   // Restore shared fixture preferences for the other browser journeys.
   await page.getByRole('button', { name: 'Settings', exact: true }).click(); await naming.click();
   await page.getByRole('checkbox', { name: 'Automatically name new threads' }).check();
-  await page.getByRole('combobox', { name: 'Naming model' }).selectOption('');
+  await pick(page, 'Naming model', /^Automatic/);
   await page.getByText('Advanced', { exact: true }).click();
   await page.getByRole('button', { name: 'Reset instructions', exact: true }).click();
   await page.getByRole('button', { name: 'Save naming settings', exact: true }).click();

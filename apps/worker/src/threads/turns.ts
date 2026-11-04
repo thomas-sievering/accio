@@ -142,9 +142,12 @@ export class Turns {
       thread = state.require(threadId);
       thread = { ...thread, model: deps.models.require(thread.profileId, thread.model) };
       if (thread.workspace?.releasedAt) {
-        const workspace = await deps.deliveries.git.allocate(threadId, thread.workspace.sourcePath, thread.delivery?.publishedRevision ?? 'HEAD');
+        // An archived delivery restores its published revision with a fresh session.
+        // A worktree released unchanged on Settle held no work: start from the latest default branch and keep the conversation.
+        const archived = !!thread.delivery;
+        const workspace = await deps.deliveries.git.allocate(threadId, thread.workspace.sourcePath, archived ? thread.delivery!.publishedRevision ?? 'HEAD' : undefined);
         if (!workspace) throw new UserError('Could not restore an owned workspace.');
-        thread = { ...thread, workspace, sessionId: null, delivery: undefined };
+        thread = { ...thread, workspace, sessionId: archived ? null : thread.sessionId, delivery: undefined };
       }
       if (delivering) {
         const { step: _previous, ...delivery } = thread.delivery!;

@@ -12,7 +12,7 @@ import { placeOf } from '../threads/shelves';
 import { useThreads } from '../threads/threads';
 import { ProjectMark } from './ProjectMark';
 
-const TABS = [{ id: 'threads', label: 'Threads' }, { id: 'changelog', label: 'Changelog' }, { id: 'logs', label: 'Logs' }] as const;
+const TABS = [{ id: 'threads', label: 'Threads' }, { id: 'commits', label: 'Commits' }, { id: 'logs', label: 'Logs' }] as const;
 type Tab = (typeof TABS)[number]['id'];
 const SETTLED_SHOWN = 10;
 
@@ -58,7 +58,7 @@ export function ProjectDashboard({ project, onClose }: { project: ProjectView; o
           </div>
           <div role="tabpanel">
             {tab === 'threads' ? <Threads project={project} />
-              : tab === 'changelog' ? <Changelog project={project} running={app?.status === 'stopped' ? undefined : app?.commit?.sha} />
+              : tab === 'commits' ? <Commits project={project} running={app?.status === 'stopped' ? undefined : app?.commit?.sha} />
               : <Logs project={project} />}
           </div>
         </div>
@@ -154,7 +154,7 @@ function Threads({ project }: { project: ProjectView }) {
   );
 }
 
-function Changelog({ project, running }: { project: ProjectView; running: string | undefined }) {
+function Commits({ project, running }: { project: ProjectView; running: string | undefined }) {
   const client = useClient();
   const [log, setLog] = useState<ProjectChangelog>();
   const [error, setError] = useState<string>();

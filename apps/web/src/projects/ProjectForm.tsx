@@ -7,7 +7,7 @@ import { useProfiles } from '../profiles/profiles';
 import { useThreads } from '../threads/threads';
 import { useProjects } from './projects';
 import { FolderLink } from './FolderLink';
-import { MenuSelect } from './MenuSelect';
+import { MenuSelect } from '../ui/MenuSelect';
 import { MidPath } from './MidPath';
 import { ResourcePicker } from '../resources/ResourcePicker';
 import { projectKey, toggled, useResources } from '../resources/resources';

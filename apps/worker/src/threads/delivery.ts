@@ -7,6 +7,7 @@ import { UserError } from '../rpc/router.js';
 import { now } from '../time.js';
 import { git, maybeGit } from '../git.js';
 import { DELIVERY_STEP_INSTRUCTIONS } from './deliveryStep.js';
+import { SHIPPED_NOTE_INSTRUCTIONS } from './shippedNote.js';
 
 const exec = promisify(execFile);
 /** Waiting uses machine-side checks; a model is woken only when it has more work. */
@@ -182,6 +183,13 @@ export class DeliveryGit {
     return { ...result, ci: undefined, status: 'delivered', revision, publishedRevision, completedAt: result.completedAt ?? checkedAt, waitingOn: undefined, detail: undefined, observationError: undefined, observationFailures: 0 };
   }
 
+  /** True when the worktree holds no work: still at its start revision on its own branch, with nothing uncommitted or untracked. Ignored files do not count. */
+  async unchanged(workspace: ThreadWorkspace): Promise<boolean> {
+    return await maybeGit(workspace.path, 'rev-parse', 'HEAD') === workspace.startRevision
+      && await maybeGit(workspace.path, 'branch', '--show-current') === workspace.branch
+      && await maybeGit(workspace.path, 'status', '--porcelain', '--untracked-files=all') === '';
+  }
+
   async release(threadId: string, workspace: ThreadWorkspace, revision: string) {
     const expected = resolve(this.home, 'workspaces', threadId);
     if (resolve(workspace.path) !== expected || workspace.branch !== `accio/${threadId}`) throw new UserError('This workspace is not owned by the thread.');
@@ -275,7 +283,7 @@ export function deliveryPrompt(workspace: ThreadWorkspace, delivery: ThreadDeliv
   return `Deliver the current task from this same thread. Work only in the owned worktree ${workspace.path}, branch ${workspace.branch}. Target: origin/${delivery.baseBranch}.\n\n` +
     (delivery.detail ? `Latest delivery update: ${delivery.detail}\n\n` : '') +
     'Finish any remaining implementation. Commit all intended changes, including uncommitted work; preserve unrelated or unpublished work. Fetch origin and integrate the latest target branch. Resolve mechanical conflicts; ask the user before resolving substantive conflicts. Never force push. If a shallow clone floods unrelated add/add conflicts, abort the rebase, unshallow origin, then retry.\n\n' +
-    DELIVERY_STEP_INSTRUCTIONS + '\n\n' +
+    DELIVERY_STEP_INSTRUCTIONS + '\n\n' + SHIPPED_NOTE_INSTRUCTIONS + '\n\n' +
     'Run the full project test suite and any behavior checks needed for this change before publishing. Reuse evidence only while the code and dependencies tested are unchanged. After integration or conflict resolution changes them, verify again. If a failure does not reproduce when you rerun it once, treat it as flaky: name it in your report and continue; do not rerun suites again to prove it. Ignore a failure that does reproduce only after showing the same failure on the current target branch without these changes. If the target advances, integrate, verify and retry, at most three times.\n\n' + action + '\n\n' +
     'Report the published revision, tests and remaining blockers in this conversation. Do not archive the thread, delete the worktree, delete branches, or clean up another thread’s processes. Accio independently verifies delivery and owns cleanup. If blocked or awaiting a user decision, explain it and stop safely.';
 }

@@ -15,6 +15,16 @@ export type HarnessModel = {
 /** One effort level a model accepts, such as 'high'. */
 export type ModelEffort = { id: string; description?: string };
 
+/**
+ * GLOSSARY: Effort. The level a turn runs at when none is chosen: the model's own
+ * default, else medium, else the middle level. Always a real level, never "auto".
+ */
+export function fallbackEffort(model: Pick<HarnessModel, 'efforts' | 'defaultEffort'>): string | undefined {
+  const levels = model.efforts.map((e) => e.id);
+  if (model.defaultEffort && levels.includes(model.defaultEffort)) return model.defaultEffort;
+  return levels.includes('medium') ? 'medium' : levels[Math.floor((levels.length - 1) / 2)];
+}
+
 /** GLOSSARY: Harness. Which ones exist is a shared setting; each machine reports which it has. */
 export type HarnessView = {
   id: string;
@@ -62,6 +72,8 @@ export type ModelView = HarnessModel & {
   harnessId: string; harnessName: string; providerName: string;
   /** The model's own limit is used up: turns on it are refused until it resets. */
   limited?: UsedUpLimit;
+  /** A newer model of the same family replaces it: not offered for new choices, but threads already on it keep running. */
+  older?: true;
 };
 export type ModelsState = {
   models: ModelView[]; favorites: ModelSelection[];

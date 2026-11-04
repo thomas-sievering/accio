@@ -5,13 +5,13 @@ import { ThreadRow } from './ThreadRow';
 import { ThreadShelves } from './ThreadShelves';
 import { useThreads } from './threads';
 
-/** The sidebar body, as in T3 Code: every open thread in one list (not grouped by project), then the shelves. Right-click a thread for its menu. */
+/** The sidebar body, as in T3 Code: threads that came back to you in one list (not grouped by project), then the shelves. Right-click a thread for its menu. */
 export function ThreadList() {
   const { threads, shelves, query, loadError, retryLoad } = useThreads();
   const { visible, state } = useProjects();
   const { filter } = useProfiles();
 
-  const listed = shelves.open.length;
+  const listed = shelves.open.length + shelves.working.length;
   let empty: string | null = null;
   if (state && visible.length === 0 && listed === 0) empty = `No projects${filter === 'all' ? '' : ' for this profile'} yet.`;
   else if (threads && query.trim() && listed === 0) empty = 'No threads found.';

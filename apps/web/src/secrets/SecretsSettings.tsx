@@ -8,6 +8,7 @@ import { useProjects } from '../projects/projects';
 import { accessLabel, useSecretList, useSecretStore, type SecretStore } from './secrets';
 import { focusFirstInvalid } from '../resources/Field';
 import { safeError, valueInputProps, valueProblem } from './secretValue';
+import { MenuSelect } from '../ui/MenuSelect';
 
 /** Where Secrets settings is open: a profile's list, a new secret, or one secret's edit or replace form. */
 export type SecretsRoute = { profileId?: string; secretId?: string; replace?: boolean };
@@ -36,13 +37,11 @@ export function SecretsSettings({ route, onRoute }: { route: SecretsRoute; onRou
       {!formOpen && <p className="note">Tokens and keys a profile’s threads can use. Values can be replaced, never shown.</p>}
 
       {!formOpen && (
-        <label className="field secrets-profile">
+        <div className="field secrets-profile">
           <span>Profile</span>
-          <select aria-label="Profile" value={profile?.id ?? ''} onChange={(e) => onRoute({ profileId: e.target.value })}>
-            {!profile && <option value="">Choose a profile</option>}
-            {profiles.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-        </label>
+          <MenuSelect label="Profile" value={profile?.id ?? ''} placeholder="Choose a profile" onChange={(profileId) => onRoute({ profileId })}
+            options={profiles.map((p) => ({ value: p.id, label: p.name }))} />
+        </div>
       )}
 
       {!profile ? <p className="note">That profile no longer exists. Choose another.</p>
@@ -238,13 +237,12 @@ function SecretForm({ profile: initial, profiles, projects: allProjects, store, 
       <SettingsSection>
         <div className="setting-form">
           {editsMetadata ? <>
-            <label className="field" htmlFor={profileFieldId}>
+            <div className="field">
               <span>Profile</span>
-              <select id={profileFieldId} value={profile.id} disabled={!creating} onChange={(e) => { setProfileId(e.target.value); setChosen([]); }}>
-                {profiles.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+              <MenuSelect id={profileFieldId} label="Profile" value={profile.id} disabled={!creating} onChange={(next) => { setProfileId(next); setChosen([]); }}
+                options={profiles.map((p) => ({ value: p.id, label: p.name }))} />
               <small className="hint">Secrets belong to one profile and are only offered to its threads.</small>
-            </label>
+            </div>
             <label className="field" htmlFor={nameId}>
               <span>Name</span>
               <input id={nameId} type="text" autoComplete="off" value={name} maxLength={160} onChange={(e) => setName(e.target.value)} placeholder="Cloudflare Pages deploy" autoFocus={creating} aria-invalid={tried && problems.name ? true : undefined} required />

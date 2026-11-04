@@ -20,7 +20,8 @@ export function ThreadRow({ thread: t, place }: { thread: ThreadView; place: She
   const { state } = useProjects();
   const project = state?.projects.find((p) => p.id === t.projectId)?.name;
   // Every row has the same layout; only open rows carry the live status mark.
-  const open = place === 'open';
+  // Working rows keep the full open look: project mark and the live status.
+  const open = place === 'open' || place === 'working';
   // Only a running turn can wait on a secret.
   const needsSecret = (useNeedsSecret(t.id) || t.needsSecret === true) && t.status === 'running' && open;
   const openMenu = useThreadMenu();

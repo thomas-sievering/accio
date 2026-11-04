@@ -137,7 +137,7 @@ Hiding a thread until a chosen time, when it comes back.
 _Avoid_: Mute, defer
 
 **Settle**:
-Marking a thread as done in the sidebar, by hand or automatically once its delivery is verified. It stays readable and can be reopened; its owned worktree and processes remain allocated.
+Marking a thread as done in the sidebar, by hand or automatically once its delivery is verified. It stays readable and can be reopened. Settling by hand releases an owned worktree that holds no work: no commits since it started, nothing uncommitted or untracked, no delivery and no running preview. A follow-up then gets a fresh worktree from the latest default branch and continues the same conversation. A worktree holding work stays allocated.
 _Avoid_: Archive, close, resolve
 
 **Ship**:
@@ -146,6 +146,14 @@ Requesting delivery from the owning thread: finish the work, integrate the targe
 **Delivery step**:
 The part of a delivery turn the agent says it is on (commit, integrate, verify or publish), with a short note, reported through the delivery_step accio tool. The Delivery panel shows it with the turn's elapsed time. It is for following along only; accio's own delivery checks never depend on it.
 _Avoid_: Phase, stage
+
+**Shipped note**:
+What a delivery changed and what to try, written by the delivery turn through the shipped_note accio tool for the person who will use the change. Once the delivery is verified, the thread shows it as a turn of its own and the Changelog lists it. A delivered thread with a note waits at the top of the open list until you open it, then settles as usual.
+_Avoid_: Release note, summary, receipt
+
+**Changelog**:
+Every change delivered on a machine, newest first, each with its shipped note, target, PR and revision. It opens from the sidebar footer, following the sidebar's project and profile filters, or for one project from the project name in a thread's header. It can be searched and opens each change's thread while that thread exists. Entries outlive later deliveries, Archive and deletion of their thread; changes delivered before notes existed are listed by thread title.
+_Avoid_: History, activity, release log
 
 **Delivery policy**:
 A project's choice of how Ship publishes: directly onto the target branch, or through a pull request. It applies to new requests; an existing request keeps the policy it was recorded with.
@@ -167,11 +175,11 @@ The app a project runs on one machine from its default branch, in a detached che
 _Avoid_: Owned preview (for a thread's app), dev server, deployment
 
 **Project dashboard**:
-A project's page, opened from the project name in a thread's header: the project app's controls, the project's active and recently settled threads, its changelog (the default branch's commits) and the app's logs.
+A project's page, opened through Dashboard in the menu on the project name in a thread's header: the project app's controls, the project's active and recently settled threads, its commits (the default branch's history, the running commit marked) and the app's logs.
 _Avoid_: Project settings (for this page), overview
 
 **Shelf**:
-A group of threads in the sidebar apart from the open list: Working (a turn is running), Snoozed and Settled.
+A group of threads in the sidebar apart from the open list: Working, Snoozed and Settled. Working holds threads in progress without you: a running turn, or a delivery GitHub is carrying. A thread comes back to the top of the open list when it finishes or needs you, such as for a secret, a review or a manual merge.
 _Avoid_: Folder, inbox, tab
 
 ## Secrets and limits

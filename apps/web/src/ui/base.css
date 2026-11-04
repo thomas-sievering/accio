@@ -60,27 +60,6 @@ button {
   cursor: pointer;
   user-select: none;
 }
-/* One chevron for every native select, in place of the platform arrow. */
-select {
-  appearance: none;
-  padding-right: 30px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%239a9ba3' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  background-size: 12px;
-  cursor: pointer;
-}
-select:hover:not(:disabled) {
-  border-color: var(--dim);
-}
-select:disabled {
-  cursor: default;
-  opacity: 0.6;
-}
-select option {
-  background: var(--raised);
-  color: var(--ink);
-}
 .folder-link {
   text-decoration: none;
   text-underline-offset: 3px;
@@ -101,7 +80,7 @@ pre {
 .drag {
   -webkit-app-region: drag;
 }
-.drag :is(button, input, select, label) {
+.drag :is(button, input, label) {
   -webkit-app-region: no-drag;
 }
 ::-webkit-scrollbar {

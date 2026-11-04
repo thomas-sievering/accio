@@ -4,12 +4,12 @@ import { execFile, fork } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
 import { createRequire } from 'node:module';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { chromium } from 'playwright';
+import { lockDevice, saveDevice, seedLinkedHome } from './device.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
 const require = createRequire(join(root, 'apps/worker/package.json'));
@@ -74,50 +74,6 @@ export async function doctor(runDir) {
   assert(Array.isArray(profiles) && Array.isArray(accounts) && Array.isArray(projects.projects) && Array.isArray(threads));
   return { ok: true, url: instance.url, pid: instance.pid, home: instance.home, build: instance.build, machineId: storedMachine.id,
     counts: { profiles: profiles.length, accounts: accounts.length, projects: projects.projects.length, threads: threads.length } };
-}
-
-// The verify device: one machine identity paired with a real hub (Home server) whose accounts are
-// already signed in. Real-model journeys start from a fresh home that already joined that hub, so
-// provider credentials stay on the hub. One run uses the device at a time.
-const devicePath = resolve(process.env.ACCIO_VERIFY_DEVICE ?? join(homedir(), '.accio-verify', 'device.json'));
-const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
-
-async function lockDevice(runDir) {
-  await mkdir(dirname(devicePath), { recursive: true });
-  const lock = devicePath + '.lock';
-  let announced = false;
-  for (const deadline = Date.now() + 15 * 60_000; ; await delay(1000)) {
-    try {
-      await mkdir(lock);
-      await save(join(lock, 'owner.json'), { pid: process.pid, runDir });
-      return async () => { await rm(lock, { recursive: true, force: true }); };
-    } catch (error) {
-      if (error.code !== 'EEXIST') throw error;
-      const owner = await json(join(lock, 'owner.json')).catch(() => null);
-      if (owner && !alive(owner.pid)) { await rm(lock, { recursive: true, force: true }); continue; }
-      assert(Date.now() < deadline, `The verify device stayed busy for 15 minutes (lock ${lock})`);
-      if (!announced) { console.log(`Waiting for the verify device; another run holds it: ${owner?.runDir ?? lock}`); announced = true; }
-    }
-  }
-}
-
-// Before the server starts: this home is the verify device, already joined to its hub.
-async function seedLinkedHome(home) {
-  const device = await json(devicePath).catch(() => null);
-  assert(device?.machineId && device?.hub?.token, `No verify device at ${devicePath}. Link one first: see "Real model turns" in the 3-verify skill.`);
-  await save(join(home, 'machine.json'), { id: device.machineId });
-  await save(join(home, 'hub-connections.json'), [{ ...device.hub, local: false, home: join(home, 'hubs', device.hub.id) }]);
-  return { url: device.hub.url, name: device.hub.name, machineId: device.machineId };
-}
-
-// After a passing link journey: keep this run's machine identity and its new hub pairing.
-async function saveDevice(home, url) {
-  const { id: machineId } = await json(join(home, 'machine.json'));
-  const hub = (await json(join(home, 'hub-connections.json'))).find((h) => !h.local && h.url.replace(/\/$/, '') === url.replace(/\/$/, ''));
-  assert(hub, `The link journey did not pair with ${url}`);
-  const { id, name, url: saved, token } = hub;
-  await writeFile(devicePath, JSON.stringify({ machineId, hub: { id, name, url: saved, token }, linkedAt: new Date().toISOString() }, null, 2) + '\n', { mode: 0o600 });
-  return { machineId, hubId: id, url: saved };
 }
 
 async function run(journeyFile) {

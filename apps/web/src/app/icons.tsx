@@ -227,6 +227,14 @@ export const Search = () => (
   </svg>
 );
 
+// Chat bubble with an add action, on the shared 16-unit outline grid.
+export const MessageSquarePlus = () => (
+  <svg {...base}>
+    <path d="M14 7.667 V3.333 A1.333 1.333 0 0 0 12.667 2 H3.333 A1.333 1.333 0 0 0 2 3.333 V14 L4.667 11.333 H8" />
+    <path d="M12.667 10 V15.333 M10 12.667 H15.333" />
+  </svg>
+);
+
 // IconMCP: edit
 export const SquarePen = () => (
   <svg {...base}>

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { DeliveryStepName, ParamsOf } from '@accio/protocol';
+import type { DeliveryStepName, ParamsOf, ShippedNote } from '@accio/protocol';
 import type { SecretsAccess } from '@accio/hub';
 import { now } from '../time.js';
 import type { Profiles } from '../profiles/profiles.js';
@@ -36,6 +36,8 @@ import type { AccioTools } from '../tools/tools.js';
 import type { DeliveryHosting } from './delivery.js';
 import { Deliveries } from './deliveries.js';
 import { reportDeliveryStep } from './deliveryStep.js';
+import { recordShippedNote } from './shippedNote.js';
+import { Changelog, changelogEntry } from './changelog.js';
 import { Previews } from './previews.js';
 import { ThreadState } from './state.js';
 import { agentTool } from './subagents.js';
@@ -59,6 +61,7 @@ export class Threads {
   private deliveries: Deliveries;
   private turns: Turns;
   private naming: ThreadNaming;
+  private changelog: Changelog;
   private restartCandidates = new Set<string>();
 
   constructor(
@@ -78,6 +81,7 @@ export class Threads {
     this.previews = new Previews(home);
     this.assets = new ThreadAssets(home, (threadId) => this.state.list.some((thread) => thread.id === threadId));
     this.content = new ThreadContent(home, this.assets);
+    this.changelog = new Changelog(home, broadcast);
     this.secrets = new SecretRequests(home, vault, async (threadId, item) => {
       await this.state.transcripts.add(threadId, item);
       this.state.announce();
@@ -85,6 +89,7 @@ export class Threads {
     this.deliveries = new Deliveries(this.state, projects, this.previews, {
       beginTurn: (threadId, text, options) => this.turns.begin(threadId, text, options),
       withLifecycle: (threadId, action) => this.withLifecycle(threadId, action),
+      delivered: (threadId, backfill) => this.recordShipped(threadId, backfill),
     }, deliveryHosting);
     this.turns = new Turns(this.state, { profiles, projects, models, machines, harnesses, secrets: this.secrets, content: this.content, deliveries: this.deliveries, tools,
       resources: () => this.resources, toolsOff: (harnessId) => builtinToolsOff(harnessId, this.toolOverrides?.()[harnessId]), onWorkFinished: id => this.naming.refine(id), onRepairFinished: (toolId) => this.onRepairFinished?.(toolId) });
@@ -104,6 +109,7 @@ export class Threads {
     const { state } = this;
     await this.secrets.load();
     await this.previews.load();
+    await this.changelog.load();
     const stored = (await state.file.read()).map(fromStored).map(t => ({ ...t,
       queuedMessages: t.queuedMessages?.map(m => ({ ...m, editing: undefined })),
     }));
@@ -199,7 +205,7 @@ export class Threads {
       })
       .on('threads.fileUrl', async ({ threadId, path }) => {
         const thread = state.require(threadId);
-        if (thread.workspace?.releasedAt) throw new UserError('This workspace was archived. Saved media remains in the conversation; send a follow-up to restore a working copy.');
+        if (thread.workspace?.releasedAt) throw new UserError('This thread’s worktree was released. Saved media remains in the conversation; send a follow-up to restore a working copy.');
         const live = await transcripts.get(threadId);
         state.require(threadId);
         const linked = live.items.some((item) => item.kind === 'assistant' && markdownReferences(item.text).files.includes(path));
@@ -256,6 +262,8 @@ export class Threads {
         return { url: await this.previews.open(threadId, thread.workspace.path, command) };
       }))
       .on('threads.archive', ({ threadId }) => deliveries.archive(threadId))
+      .on('threads.readNote', async ({ threadId }) => toView(await deliveries.readNote(threadId)))
+      .on('changelog.list', () => this.changelog.list())
       .on('threads.setModel', async ({ threadId, model }) => {
         await this.models.ready(state.require(threadId).profileId);
         const thread = state.require(threadId);
@@ -280,7 +288,11 @@ export class Threads {
         return null;
       })
       .on('threads.snooze', ({ threadId, until }) => organize(threadId, t => snooze(t, until)))
-      .on('threads.settle', ({ threadId }) => organize(threadId, t => settle(t, now())))
+      .on('threads.settle', async ({ threadId }) => {
+        const view = await organize(threadId, t => settle(t, now()));
+        void deliveries.releaseIfUnchanged(threadId);
+        return view;
+      })
       .on('threads.reopen', ({ threadId }) => organize(threadId, t => reopen({ ...t, ...(t.delivery ? { delivery: { ...t.delivery, keepOpen: true } } : {}) })))
       .on('threads.rename', async ({ threadId, title }) => {
         this.naming.cancel(threadId);
@@ -401,6 +413,22 @@ export class Threads {
   /** The `delivery_step` tool, called by the harness during this thread's delivery turn. */
   async reportDeliveryStep(threadId: string, step: DeliveryStepName, note: string | undefined) {
     await this.state.update(threadId, t => ({ ...t, delivery: reportDeliveryStep(t.delivery, step, note, now()) }));
+  }
+
+  async recordShippedNote(threadId: string, note: ShippedNote) {
+    await this.state.update(threadId, t => ({ ...t, delivery: recordShippedNote(t.delivery, note) }));
+  }
+
+  /**
+   * Logs a verified delivery once in the Changelog and, unless it was only found at startup,
+   * adds its shipped note to the thread as a turn of its own.
+   */
+  private async recordShipped(threadId: string, backfill: boolean) {
+    const thread = this.state.get(threadId);
+    const entry = thread && changelogEntry(thread);
+    if (!entry || !await this.changelog.add(entry) || backfill) return;
+    const id = `shipped:${entry.id}`;
+    await this.state.transcripts.add(threadId, { kind: 'shipped', id, turnId: id, at: entry.deliveredAt, entry });
   }
 
   deliveryRunning(threadId: string) {

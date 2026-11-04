@@ -1,27 +1,24 @@
 import { useLayoutEffect, useRef } from 'react';
-import type { ModelView } from '@accio/protocol';
+import { fallbackEffort, type ModelView } from '@accio/protocol';
 import type { Step } from './steps';
-import { ChevronDown } from '../app/icons';
 
 const NAMES: Record<string, string> = { none: 'None', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
 const effortName = (id: string) => NAMES[id] ?? id.replace(/^./, (c) => c.toUpperCase());
 
 /**
- * GLOSSARY: Effort. The levels a model accepts, lowest first. Without a default the
- * model reports, "Auto" is its own step below the lowest and leaves it to the harness;
- * a step's value is undefined when it stands for the model's default.
+ * GLOSSARY: Effort. The levels a model accepts, lowest first. There is no "auto" step:
+ * an unchosen effort shows the fallback level the turn will actually run at.
  */
 export function effortSteps(model: ModelView, value: string | undefined) {
   const levels = model.efforts.map((e) => e.id);
-  const fallback = model.defaultEffort && levels.includes(model.defaultEffort) ? model.defaultEffort : undefined;
-  const ids: (string | undefined)[] = fallback ? levels : [undefined, ...levels];
-  const steps: Step<string | undefined>[] = ids.map((id) => ({ value: id === fallback ? undefined : id, label: id ? effortName(id) : 'Auto' }));
-  return { steps, index: ids.indexOf(value ?? fallback) };
+  const steps: Step<string>[] = levels.map((id) => ({ value: id, label: effortName(id) }));
+  const chosen = value && levels.includes(value) ? value : fallbackEffort(model);
+  return { steps, index: chosen ? levels.indexOf(chosen) : -1 };
 }
 
-/** A little rolling spring on changes; reserve the labels' width so the chip stays still. */
-export function EffortWord({ steps, index }: { steps: Step<string | undefined>[]; index: number }) {
-  const label = steps[index]?.label ?? 'Auto';
+/** A little rolling spring on changes; every label is laid out underneath so the chip never changes width. */
+export function EffortWord({ steps, index }: { steps: Step<string>[]; index: number }) {
+  const label = steps[index]?.label ?? '';
   const incoming = useRef<HTMLSpanElement>(null);
   const outgoing = useRef<HTMLSpanElement>(null);
   const previous = useRef({ label, index });
@@ -31,9 +28,7 @@ export function EffortWord({ steps, index }: { steps: Step<string | undefined>[]
     previous.current = { label, index };
     if (before.label === label || !incoming.current || !outgoing.current || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const direction = index > before.index ? 1 : -1;
-    // Keep the caret beside the word while reserving the longest label's width.
-    const outgoingLabel = outgoing.current.querySelector('.effort-label');
-    if (outgoingLabel) outgoingLabel.textContent = before.label;
+    outgoing.current.textContent = before.label;
     const exit = outgoing.current.animate([
       { transform: 'translateY(0)', opacity: 1 },
       { transform: `translateY(${-direction * 16}px) scale(0.9)`, opacity: 0 },
@@ -48,8 +43,8 @@ export function EffortWord({ steps, index }: { steps: Step<string | undefined>[]
   }, [label, index]);
 
   return <span className="effort-word" aria-hidden>
-    {steps.map(step => <span className="effort-word-size" key={step.label}>{step.label}<ChevronDown /></span>)}
-    <span ref={outgoing} className="effort-word-out"><span className="effort-label" /><ChevronDown /></span>
-    <span ref={incoming} className="effort-word-current">{label}<ChevronDown /></span>
+    {steps.map(step => <span className="effort-word-size" key={step.label}>{step.label}</span>)}
+    <span ref={outgoing} className="effort-word-out" />
+    <span ref={incoming} className="effort-word-current">{label}</span>
   </span>;
 }

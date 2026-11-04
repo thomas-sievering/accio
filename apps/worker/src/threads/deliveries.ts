@@ -13,6 +13,8 @@ import { settle, toView, type Thread } from './thread.js';
 export type DeliveryHost = {
   beginTurn(threadId: string, text: string, options: { delivery: true }): Promise<void>;
   withLifecycle<T>(threadId: string, action: () => Promise<T>): Promise<T>;
+  /** A delivery was verified, or was found verified at startup (`backfill`, which adds no shipped note to the thread). */
+  delivered(threadId: string, backfill: boolean): Promise<void>;
 };
 
 /** Ship requests, their delivery turns, host observation, auto-settle and workspace archiving (ADR 0015). */
@@ -30,11 +32,13 @@ export class Deliveries {
   async recoverReleases(): Promise<boolean> {
     let recovered = false;
     for (const thread of this.state.list) {
-      if (!thread.workspace?.releaseRequestedAt || thread.workspace.releasedAt || !thread.delivery?.revision) continue;
+      // An Archive releases its delivered revision; an unchanged settled worktree, its start revision.
+      const revision = thread.delivery ? thread.delivery.revision : thread.workspace?.startRevision;
+      if (!thread.workspace?.releaseRequestedAt || thread.workspace.releasedAt || !revision) continue;
       try {
         this.assertWorkspaceUnused(thread);
         await this.previews.stop(thread.id);
-        await this.git.release(thread.id, thread.workspace, thread.delivery.revision);
+        await this.git.release(thread.id, thread.workspace, revision);
         thread.workspace = { ...thread.workspace, releasedAt: now() };
         thread.settledAt = now();
         recovered = true;
@@ -47,6 +51,7 @@ export class Deliveries {
     for (const thread of this.state.list) {
       if (thread.delivery?.status === 'delivered' && thread.delivery.completedAt) {
         await this.state.updateDurably(thread.id, t => this.settleDelivered(t));
+        await this.host.delivered(thread.id, true);
       }
       this.scheduleCheck(thread.id);
     }
@@ -112,6 +117,26 @@ export class Deliveries {
     });
   }
 
+  /** GLOSSARY: Settle. Releases a settled worktree that holds no work. Commits, changes, a delivery or a running preview keep it. */
+  releaseIfUnchanged(threadId: string) {
+    return this.host.withLifecycle(threadId, async () => {
+      const thread = this.state.require(threadId);
+      const workspace = thread.workspace;
+      if (!thread.settledAt || !workspace || workspace.releasedAt || thread.delivery || thread.status === 'running' || this.state.running.has(threadId)
+        || thread.queuedMessages?.length || this.state.messageOps.has(threadId) || this.previews.has(threadId)) return;
+      this.assertWorkspaceUnused(thread);
+      if (!await this.git.unchanged(workspace)) return;
+      // Journal before touching files, as Archive does.
+      await this.state.update(threadId, t => ({ ...t, workspace: { ...t.workspace!, releaseRequestedAt: now() } }), { quiet: true });
+      try { await this.git.release(threadId, workspace, workspace.startRevision); }
+      catch (error) {
+        await this.state.update(threadId, t => ({ ...t, workspace: { ...t.workspace!, releaseRequestedAt: undefined } }), { quiet: true });
+        throw error;
+      }
+      await this.state.update(threadId, t => ({ ...t, workspace: { ...t.workspace!, releasedAt: now() } }));
+    }).catch(() => { /* Busy, or git refused: the worktree stays for a later Settle or Archive. */ });
+  }
+
   async dispatch(threadId: string) {
     const thread = this.state.require(threadId);
     if (this.state.closing || this.state.lifecycle.has(threadId) || this.state.running.has(threadId) || thread.status === 'running' || thread.delivery?.status !== 'queued' || thread.delivery.followUpsStoppedAt) return;
@@ -148,7 +173,7 @@ export class Deliveries {
   private observes(thread: Thread) {
     const d = thread.delivery;
     if (!d || !thread.workspace || thread.workspace.releasedAt || (d.workVersion ?? 0) !== (thread.workVersion ?? 0)) return false;
-    if (d.status === 'delivered') return !!(d.autoSettle && !d.keepOpen && !thread.settledAt);
+    if (d.status === 'delivered') return !!(d.autoSettle && !d.keepOpen && !thread.settledAt && !unreadNote(thread));
     if (d.status === 'queued' || d.status === 'running' || d.pullRequest?.state === 'closed') return false;
     return d.status === 'waiting' || d.status === 'ready' || !!(d.pullRequest || d.pullRequestUrl || d.integratedAt || d.observationError);
   }
@@ -162,7 +187,7 @@ export class Deliveries {
 
   settleDelivered(thread: Thread) {
     const d = thread.delivery;
-    if (d?.status !== 'delivered' || !d.autoSettle || d.keepOpen || d.followUpsStoppedAt || thread.settledAt || thread.status !== 'idle'
+    if (d?.status !== 'delivered' || !d.autoSettle || d.keepOpen || d.followUpsStoppedAt || thread.settledAt || thread.status !== 'idle' || unreadNote(thread)
       || (d.workVersion ?? 0) !== (thread.workVersion ?? 0) || this.state.running.has(thread.id) || this.state.lifecycle.has(thread.id) || !!thread.queuedMessages?.length || this.state.messageOps.has(thread.id)
       || (thread.snoozedUntil && Date.parse(thread.snoozedUntil) > Date.now())) return thread;
     return settle(thread, now());
@@ -205,6 +230,13 @@ export class Deliveries {
     }
     if (!matches()) return;
     await this.state.updateDurably(threadId, t => this.settleDelivered({ ...t, delivery: { ...t.delivery!, ...verified } }));
+    if (verified.status === 'delivered') await this.host.delivered(threadId, false);
+  }
+
+  /** You opened the thread after its delivery: its shipped note is read, so it can settle. */
+  async readNote(threadId: string) {
+    if (!unreadNote(this.state.require(threadId))) return this.state.require(threadId);
+    return this.state.updateDurably(threadId, t => unreadNote(t) ? this.settleDelivered({ ...t, delivery: { ...t.delivery!, noteReadAt: now() } }) : t);
   }
 
   async check(threadId: string, force = false) {
@@ -230,4 +262,10 @@ export class Deliveries {
     const path = thread.workspace!.path;
     if (this.projects.state().checkouts.some(c => samePath(c.path, path)) || this.state.list.some(t => t.id !== thread.id && t.workspace && !t.workspace.releasedAt && (samePath(t.workspace.path, path) || samePath(t.workspace.sourcePath, path)))) throw new UserError('Another checkout or thread still uses this workspace.');
   }
+}
+
+/** A delivered thread whose shipped note you have not seen stays open, so it waits at the top of the inbox. */
+export function unreadNote(thread: Thread): boolean {
+  const d = thread.delivery;
+  return d?.status === 'delivered' && !!d.note && !d.noteReadAt;
 }

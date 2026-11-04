@@ -11,8 +11,8 @@
   width: 100%;
   padding: 3px 8px;
   border-radius: 8px;
-  color: var(--muted);
-  font-size: 13px;
+  color: var(--dim);
+  font-size: 12.5px;
 }
 .tool-group-toggle:hover {
   color: var(--ink);
@@ -32,7 +32,7 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  color: var(--ink);
+  font-weight: 500;
 }
 .tool-group-failed {
   flex: none;

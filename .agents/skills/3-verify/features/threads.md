@@ -18,7 +18,7 @@ Users choose a project or profile, select a model, send prompts, observe streame
 - Sidebar `New thread` button; the idle pane also has `New thread` after setup is complete.
 - Pick a project, then a checkout if multiple exist; alternatively pick `No project`, then a profile if multiple are available.
 - Select an existing thread row to reopen its transcript. Its right-click menu exposes thread actions; hover buttons also expose Stop/Snooze/Settle/Wake/Reopen where applicable.
-- Sidebar `Search threads`, `Filter threads`, and nonempty `Snoozed`/`Settled` shelves (running threads stay in the main list) organize the list.
+- Sidebar `Search threads`, `Filter threads`, and nonempty `Working`/`Snoozed`/`Settled` shelves organize the list. A running thread, or one whose delivery waits on CI or merges itself, sits on `Working`; it returns to the top of the main list about two seconds after it finishes, at once when it fails or needs a secret, review or manual merge.
 
 ## Driving it with Playwright
 

@@ -5,6 +5,15 @@ import { DEFAULT_MODEL } from '@accio/protocol';
 import { FakeHarness, gate, replyWith, SESSION } from '../testing/fakeHarness.js';
 import { fakeClaudeFetch, startTestApp } from '../testing/testApp.js';
 import type { ClaudeModelInfo } from './catalog.js';
+import { markOlder } from './models.js';
+
+describe('older models', () => {
+  it('keeps only the newest of each family', () => {
+    const names = ['GPT-6.1-Sol', 'GPT-6.1 Terra', 'GPT-6-Astra', 'GPT-6-Sol', 'GPT-6-Luna', 'GPT-5.6-Sol', 'GPT-5.6-Terra', 'GPT-5.6-Luna', 'GPT-5.3-Codex', 'GPT-5.3-Codex-Spark'];
+    expect(markOlder(names.map((name) => ({ name }))).filter((m) => !m.older).map((m) => m.name))
+      .toEqual(['GPT-6.1-Sol', 'GPT-6.1 Terra', 'GPT-6-Astra', 'GPT-6-Luna', 'GPT-5.3-Codex', 'GPT-5.3-Codex-Spark']);
+  });
+});
 
 const opus = { harnessId: 'claudeCode', modelId: 'opus' };
 const haiku = { harnessId: 'claudeCode', modelId: 'haiku' };
