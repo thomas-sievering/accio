@@ -2,12 +2,16 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { JsonFile } from '@accio/persistence';
 import { RelaySocket, type RelayRequest } from '@accio/hub';
-import { RELAY_THREAD_METHODS, type Events, type ProjectsState, type RelaySnapshot, type ThreadView } from '@accio/protocol';
+import { RELAY_MACHINE_METHODS, RELAY_THREAD_METHODS, type Events, type ProjectsState, type RelaySnapshot, type ThreadView } from '@accio/protocol';
 import { UserError, type Router } from '../rpc/router.js';
 
 const RELAY_METHODS = new Set<string>(RELAY_THREAD_METHODS);
+const MACHINE_METHODS = new Set<string>(RELAY_MACHINE_METHODS);
 /** Transcripts another machine streams from here at once; the oldest stops when it opens another. */
 const OBSERVED_PER_PEER = 16;
+/** What a machine answers for a method it doesn't serve to others. Older machines answer exactly this. */
+const NOT_RELAYED = 'Not available from another machine.';
+const OLDER = (name: string) => `${name} runs an older Accio. Update it by hand once: git pull, then pnpm start.`;
 
 export type RelayDeps = {
   here: string;
@@ -17,6 +21,8 @@ export type RelayDeps = {
   router: () => Router;
   /** The hub's name for a paired machine; undefined once it is unpaired. */
   machineName: (id: string) => string | undefined;
+  /** Connected to the hub, though maybe not to the relay. */
+  machineConnected?: (id: string) => boolean;
   /** To this hub's clients on this machine. */
   send: <E extends keyof Events>(event: E, data: Events[E]) => void;
 };
@@ -89,6 +95,7 @@ export class Relay {
 
   /** Sends a call about another machine's thread to that machine. Undefined: the thread is this machine's. */
   forward(method: string, params: unknown): Promise<unknown> | undefined {
+    if (MACHINE_METHODS.has(method)) return this.forwardToMachine(method, params);
     const threadId = (params as { threadId?: unknown } | undefined)?.threadId;
     if (typeof threadId !== 'string') return undefined;
     const machineId = this.owners.get(threadId);
@@ -102,6 +109,25 @@ export class Relay {
       (error: Error) => { throw new UserError(error.message); });
   }
 
+  /** Tells every other machine about a change to this machine itself, such as its update. */
+  emit(event: 'update.changed', data: Events['update.changed']) { this.socket?.emit('*', event, data); }
+
+  /** A call about a machine, by `machineId`: undefined when it is this one. */
+  private forwardToMachine(method: string, params: unknown): Promise<unknown> | undefined {
+    const machineId = (params as { machineId?: unknown } | undefined)?.machineId;
+    if (typeof machineId !== 'string' || machineId === this.deps.here) return undefined;
+    const name = this.deps.machineName(machineId);
+    if (!name) return Promise.reject(new UserError('No such machine.'));
+    if (!this.online.has(machineId) || !this.socket) {
+      // Connected to the hub but not to the relay: an Accio from before the relay.
+      return Promise.reject(new UserError(this.deps.machineConnected?.(machineId) ? OLDER(name) : `${name} is offline.`));
+    }
+    return this.socket.call(machineId, method, params).catch((error: Error) => {
+      // A machine from before updates knew only thread methods.
+      throw new UserError(error.message === NOT_RELAYED ? OLDER(name) : error.message);
+    });
+  }
+
   private snapshot(): RelaySnapshot {
     return { threads: this.deps.threads(), projects: this.deps.projects().projects, version: { boot: this.boot, seq: ++this.seq } };
   }
@@ -109,7 +135,9 @@ export class Relay {
   private async serve({ from, method, params }: RelayRequest): Promise<unknown> {
     if (!this.deps.machineName(from)) throw new Error('This machine is not paired with the hub.');
     if (method === 'relay.snapshot') return this.snapshot();
-    if (!RELAY_METHODS.has(method)) throw new Error('Not available from another machine.');
+    if (MACHINE_METHODS.has(method)) {
+      if ((params as { machineId?: unknown } | undefined)?.machineId !== this.deps.here) throw new Error('This call is about another machine.');
+    } else if (!RELAY_METHODS.has(method)) throw new Error(NOT_RELAYED);
     const threadId = (params as { threadId?: unknown } | undefined)?.threadId;
     if (method === 'threads.observe' && typeof threadId === 'string' && this.deps.threads().some((t) => t.id === threadId)) {
       // Subscribe before the snapshot is read, as a local client does; the viewer drops changes through its cursor.
@@ -126,6 +154,10 @@ export class Relay {
   private receive(from: string, event: string, data: unknown) {
     if (from === this.deps.here || !this.deps.machineName(from)) return;
     if (event === 'relay.snapshot') { this.store(from, data as RelaySnapshot); return; }
+    if (event === 'update.changed') {
+      if ((data as Events['update.changed'] | undefined)?.machineId === from) this.deps.send(event, data as Events['update.changed']);
+      return;
+    }
     if (event === 'thread.item' || event === 'thread.delta') {
       const change = data as Events['thread.item'] | Events['thread.delta'];
       if (typeof change?.threadId === 'string' && this.owners.get(change.threadId) === from) this.deps.send(event, change as never);

@@ -40,8 +40,8 @@ export class AccioTools {
   constructor(private tools: AccioTool[]) {}
 
   /** Adds a tool whose implementation needs parts built after the server, such as running turns. */
-  add(tool: AccioTool) {
-    this.tools.push(tool);
+  add(...tools: AccioTool[]) {
+    this.tools.push(...tools);
   }
 
   /** Where the worker listens; known once its transport is up. */
