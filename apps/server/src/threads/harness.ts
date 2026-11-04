@@ -37,7 +37,7 @@ export type HarnessMessage =
       type: 'assistant';
       /** Envelope identity; message.id is shared by completed content-block fragments. */
       uuid?: string;
-      message: { id: string; content: ContentBlock[] };
+      message: { id: string; content: ContentBlock[]; usage?: unknown };
       parent_tool_use_id: string | null;
       session_id: string;
       error?: unknown;

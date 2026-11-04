@@ -146,8 +146,17 @@ export type ChoicePick = { choiceId: string; option: number };
 /** GLOSSARY: Sub-agent. The latest tool call of the sub-agent a running tool started. */
 export type ToolStep = { name: string; summary: string };
 
+/** Anthropic input accounting: fresh input excludes cache reads and writes. */
+export type PromptCacheUsage = {
+  inputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  cacheWrite1hTokens?: number;
+};
+
 export type TranscriptItem =
   | SecretRequestItem
+  | { kind: 'usage'; id: string; turnId: string; provider: 'anthropic'; usage: PromptCacheUsage }
   | { kind: 'user'; id: string; turnId: string; text: string; at: string; resume?: boolean; delivery?: DeliveryMode; pick?: ChoicePick; steered?: boolean; goal?: 'continue' }
   | { kind: 'assistant'; id: string; turnId: string; text: string; media?: MediaBinding[] }
   | { kind: 'tool'; id: string; turnId: string; name: string; summary: string; status: 'running' | 'done' | 'error' | 'interrupted'; output?: string; detailRevision?: number; loadedSkills?: LoadedSkill[]; step?: ToolStep }

@@ -143,7 +143,9 @@ export class TurnTranscript {
 
   private onStream(event: StreamEvent, out: TranscriptChange[]) {
     if (event.type === 'message_start') {
-      this.currentMessageId = (event as { message: { id: string } }).message.id;
+      const message = (event as { message: { id: string; usage?: unknown } }).message;
+      this.currentMessageId = message.id;
+      this.onUsage(message.id, message.usage, out);
       this.message(this.currentMessageId);
       return;
     }
@@ -195,6 +197,7 @@ export class TurnTranscript {
   }
 
   private onAssistant(msg: Extract<HarnessMessage, { type: 'assistant' }>, out: TranscriptChange[]) {
+    this.onUsage(msg.message.id, msg.message.usage, out);
     const message = this.message(msg.message.id);
     const content = msg.message.content;
     const previous = message.envelopes.find((envelope) => msg.uuid
@@ -248,6 +251,27 @@ export class TurnTranscript {
 
   private nextBlockIndex(message: MessageState): number {
     return Math.max(-1, ...message.blocks.keys(), ...message.confirmed) + 1;
+  }
+
+  private usage = new Map<string, string>();
+
+  private onUsage(messageId: string, raw: unknown, out: TranscriptChange[]) {
+    if (!raw || typeof raw !== 'object') return;
+    const value = raw as Record<string, unknown>;
+    const count = (n: unknown): n is number => typeof n === 'number' && Number.isSafeInteger(n) && n >= 0;
+    if (!count(value.input_tokens) || !count(value.cache_read_input_tokens) || !count(value.cache_creation_input_tokens)) return;
+    const creation = value.cache_creation as Record<string, unknown> | undefined;
+    const usage = {
+      inputTokens: value.input_tokens, cacheReadTokens: value.cache_read_input_tokens,
+      cacheWriteTokens: value.cache_creation_input_tokens,
+      ...(count(creation?.ephemeral_1h_input_tokens) ? { cacheWrite1hTokens: creation.ephemeral_1h_input_tokens } : {}),
+    };
+    const key = JSON.stringify(usage);
+    if (this.usage.get(messageId) === key) return;
+    this.usage.set(messageId, key);
+    // Stream starts and SDK content fragments share one response ID. Replace
+    // its accounting rather than adding it again for every fragment.
+    out.push({ type: 'item', item: { kind: 'usage', id: `${this.turnId}:usage:${messageId}`, turnId: this.turnId, provider: 'anthropic', usage } });
   }
 
   private fragmentIndex(message: MessageState, block: ContentBlock): number | undefined {

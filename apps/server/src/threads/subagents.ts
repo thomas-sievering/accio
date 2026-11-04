@@ -48,7 +48,12 @@ export async function runSubagent(turn: SubagentTurn, input: AgentInput, signal:
   const replies = new Map<string, string>();
   let last: string | undefined;
   let error: string | undefined;
-  for await (const msg of turn.harness.run({ ...turn.run, prompt: input.prompt, sessionId: null, signal: stop })) {
+  // Accio helpers start independent SDK queries, so select the helper duration
+  // explicitly instead of inheriting the main conversation's one-hour default.
+  const env = turn.run.env.CLAUDE_CODE_PROMPT_CACHE_TTL ? { ...turn.run.env,
+    CLAUDE_CODE_PROMPT_CACHE_TTL: turn.run.env.CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL ?? '5m',
+  } : turn.run.env;
+  for await (const msg of turn.harness.run({ ...turn.run, env, prompt: input.prompt, sessionId: null, signal: stop })) {
     for (const change of transcript.accept(msg)) {
       if (change.type === 'tool') await onStep({ name: change.item.name, summary: change.item.summary });
       else if (change.type === 'item' && change.item.kind === 'assistant') { replies.set(change.item.id, change.item.text); last = change.item.id; }

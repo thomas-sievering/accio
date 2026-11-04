@@ -42,6 +42,9 @@ export function harnessEnv(base: NodeJS.ProcessEnv, access: HubAccess, configDir
   env.CLAUDE_CONFIG_DIR = configDir;
   env.ANTHROPIC_BASE_URL = access.baseUrl;
   env.ANTHROPIC_AUTH_TOKEN = access.accessKey;
+  // The client sees a proxy key rather than the subscription OAuth login that
+  // would normally select one-hour caching automatically. Helpers keep their defaults.
+  env.CLAUDE_CODE_PROMPT_CACHE_TTL ??= '1h';
   return env;
 }
 

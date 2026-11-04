@@ -45,6 +45,7 @@ it('runs a sub-agent from the agent tool, shows its latest step on the row, and 
   const harness = new FakeHarness(async function* (run) {
     if (!run.tools) {
       // The sub-agent: one shell call, then its reply.
+      expect(run.env.CLAUDE_CODE_PROMPT_CACHE_TTL).toBe('5m');
       yield { type: 'system', subtype: 'init', session_id: 'sub' };
       yield* toolCall('sub-ls', 'Bash', { command: 'ls' });
       stepShown.release();

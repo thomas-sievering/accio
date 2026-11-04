@@ -22,6 +22,7 @@ export type TranscriptBlock =
  * split a run.
  */
 export function layoutTranscript(items: TranscriptItem[], runningTurn?: string): TranscriptBlock[] {
+  items = items.filter((item) => item.kind !== 'usage');
   const blocks: TranscriptBlock[] = [];
   let start = 0;
   for (let end = 1; end <= items.length; end++) {
