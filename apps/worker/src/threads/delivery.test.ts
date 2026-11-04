@@ -318,7 +318,8 @@ it('keeps work when the assistant claims success without publishing it', async (
   await wait(c, thread.id);
   c.events.length = 0;
   await c.call('threads.deliver', { threadId: thread.id, mode: 'ship' });
-  await wait(c, thread.id, x => x.status === 'idle' && x.delivery?.status === 'blocked');
+  // Not delivered: the agent is sent back to push it.
+  await wait(c, thread.id, x => x.status === 'idle' && x.delivery?.status === 'waiting' && x.delivery.waitingOn === 'agent');
   await expect(c.call('threads.archive', { threadId: thread.id })).rejects.toThrow(/Ship the change/);
   expect(await readFile(join(thread.workspace!.path, 'feature.txt'), 'utf8')).toBe('unpublished');
 });
@@ -706,4 +707,49 @@ it('lets only the delivery turn report its step, and shows it on the running del
   await wait(c, thread.id, x => x.status === 'idle' && x.delivery?.status !== 'running');
   expect(listed[0]).not.toContain('delivery_step');
   expect(listed[1]).toContain('delivery_step');
+});
+
+it('waits and starts another delivery turn after one fails on an API error, instead of pausing', async () => {
+  let deliveries = 0;
+  const harness = new FakeHarness(async function* (run) {
+    if (!run.prompt.startsWith('Deliver the current task')) return yield* replyWith('built');
+    if (++deliveries === 1) throw new Error('API Error: Request rejected (429)');
+    await publish(run.cwd);
+    yield* replyWith('done');
+  });
+  const { c, checkout } = await setup(harness);
+  const thread = await c.call('threads.start', { checkoutId: checkout.id, text: 'work' });
+  await wait(c, thread.id);
+  await c.call('threads.deliver', { threadId: thread.id, mode: 'ship' });
+  await wait(c, thread.id, x => x.status !== 'running' && x.delivery?.status === 'waiting');
+  expect((await c.call('threads.list', {})).find(x => x.id === thread.id)!.delivery).toMatchObject({ waitingOn: 'agent', turnFailures: 1 });
+  const notices = (await c.call('threads.transcript', { threadId: thread.id })).flatMap(i => i.kind === 'notice' ? [i.text] : []);
+  expect(notices).toContain('Delivery continues after a short wait.');
+  expect(notices.some(text => text.startsWith('Delivery paused'))).toBe(false);
+  await c.call('threads.checkDelivery', { threadId: thread.id });
+  await wait(c, thread.id, x => x.status === 'idle' && x.delivery?.status === 'delivered');
+  expect(deliveries).toBe(2);
+  expect(harness.runs[2]!.prompt).toContain('stopped on an error');
+});
+
+it('sends the agent back to push when its push lost the race with the target', async () => {
+  let deliveries = 0;
+  const harness = new FakeHarness(async function* (run) {
+    if (!run.prompt.startsWith('Deliver the current task')) return yield* replyWith('built');
+    if (++deliveries === 1) {
+      await writeFile(join(run.cwd, 'feature.txt'), 'feature\n');
+      await git(run.cwd, 'add', '.');
+      await git(run.cwd, 'commit', '--quiet', '-m', 'thread work');
+    } else await publish(run.cwd);
+    yield* replyWith('done');
+  });
+  const { c, checkout } = await setup(harness);
+  const thread = await c.call('threads.start', { checkoutId: checkout.id, text: 'work' });
+  await wait(c, thread.id);
+  await c.call('threads.deliver', { threadId: thread.id, mode: 'ship' });
+  await wait(c, thread.id, x => x.status !== 'running' && x.delivery?.status === 'waiting');
+  expect((await c.call('threads.list', {})).find(x => x.id === thread.id)!.delivery).toMatchObject({ waitingOn: 'agent' });
+  await c.call('threads.checkDelivery', { threadId: thread.id });
+  await wait(c, thread.id, x => x.status === 'idle' && x.delivery?.status === 'delivered');
+  expect(harness.runs[2]!.prompt).toContain('This revision has not reached main yet. Rebase onto the latest main and push again.');
 });

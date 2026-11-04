@@ -197,7 +197,7 @@ it('runs a scripted ship cut off by a restart again once accio is back', async (
   await expect(git(origin, 'show', 'main:hold.txt')).rejects.toThrow();
 });
 
-it('rebases and tests again when the target moves before the push', async () => {
+it('rebases and pushes without retesting when the target moves before the push', async () => {
   const { c, harness, origin, checkout, runs, counter } = await setup(working('feature.txt'));
   const writer = join(t.home, 'racer');
   await git(t.home, 'clone', '--quiet', origin, writer);
@@ -212,7 +212,7 @@ it('rebases and tests again when the target moves before the push', async () => 
   await wait(c, thread.id, x => x.status === 'idle');
   await c.call('threads.deliver', { threadId: thread.id, mode: 'ship' });
   await wait(c, thread.id, x => x.delivery?.status === 'delivered');
-  expect(await runs()).toBe(2);
+  expect(await runs()).toBe(1);
   expect(harness.runs).toHaveLength(1);
   expect(await git(origin, 'show', 'main:other.txt')).toBe('raced');
   expect(await git(origin, 'show', 'main:feature.txt')).toBe('feature');

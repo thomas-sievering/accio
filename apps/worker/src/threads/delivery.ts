@@ -12,7 +12,7 @@ import { SHIPPED_NOTE_INSTRUCTIONS } from './shippedNote.js';
 const exec = promisify(execFile);
 /** Waiting uses machine-side checks; a model is woken only when it has more work. */
 export class DeliveryPending extends UserError {
-  constructor(message: string, readonly continueAgent = false, readonly waitingOn: 'checks' | 'review' | 'merge' = 'checks', readonly ci?: DeliveryCI) { super(message); }
+  constructor(message: string, readonly continueAgent = false, readonly waitingOn: 'checks' | 'review' | 'merge' | 'agent' = 'checks', readonly ci?: DeliveryCI) { super(message); }
 }
 /** Failed observations are retried without granting the agent more publication authority. */
 export class DeliveryUnavailable extends UserError {}
@@ -188,7 +188,11 @@ export class DeliveryGit {
     }
     try { await git(workspace.path, 'fetch', '--quiet', 'origin', `refs/heads/${delivery.baseBranch}:refs/remotes/origin/${delivery.baseBranch}`); }
     catch { throw new DeliveryUnavailable('Could not read the latest target branch on origin. Retrying without publishing again.'); }
-    if (await maybeGit(workspace.path, 'merge-base', '--is-ancestor', publishedRevision, `refs/remotes/origin/${delivery.baseBranch}`) === null) throw new UserError('This revision has not reached the target branch. The workspace has been kept.');
+    if (await maybeGit(workspace.path, 'merge-base', '--is-ancestor', publishedRevision, `refs/remotes/origin/${delivery.baseBranch}`) === null) {
+      // A direct push that lost the race with the target is unfinished work, not a blocker.
+      if (!pr && delivery.mode === 'ship') throw new DeliveryPending(`This revision has not reached ${delivery.baseBranch} yet. Rebase onto the latest ${delivery.baseBranch} and push again.`, true, 'agent');
+      throw new UserError('This revision has not reached the target branch. The workspace has been kept.');
+    }
     await record({ publishedRevision, integratedAt: result.integratedAt ?? checkedAt });
     if (slug) {
       try { await verifyGitHubChecks(workspace.sourcePath, slug, publishedRevision, result.integratedAt ?? delivery.requestedAt, this.hosting); }
@@ -312,6 +316,6 @@ export function deliveryPrompt(workspace: ThreadWorkspace, delivery: ThreadDeliv
     (delivery.detail ? `Latest delivery update: ${delivery.detail}\n\n` : '') +
     'Finish any remaining implementation. Commit all intended changes, including uncommitted work; preserve unrelated or unpublished work. Fetch origin and integrate the latest target branch. Resolve mechanical conflicts; ask the user before resolving substantive conflicts. Never force push. If a shallow clone floods unrelated add/add conflicts, abort the rebase, unshallow origin, then retry.\n\n' +
     DELIVERY_STEP_INSTRUCTIONS + '\n\n' + SHIPPED_NOTE_INSTRUCTIONS + '\n\n' +
-    'Run the full project test suite and any behavior checks needed for this change before publishing. Reuse evidence only while the code and dependencies tested are unchanged. After integration or conflict resolution changes them, verify again. If a failure does not reproduce when you rerun it once, treat it as flaky: name it in your report and continue; do not rerun suites again to prove it. Ignore a failure that does reproduce only after showing the same failure on the current target branch without these changes. If the target advances, integrate, verify and retry, at most three times.\n\n' + action + '\n\n' +
+    'Run the full project test suite and any behavior checks needed for this change before publishing. Reuse evidence only while your changes are unchanged: a clean rebase onto a newer target keeps it, resolving a conflict does not. If a failure does not reproduce when you rerun it once, treat it as flaky: name it in your report and continue; do not rerun suites again to prove it. Ignore a failure that does reproduce only after showing the same failure on the current target branch without these changes. If a push is rejected because the target advanced, rebase onto it and, when the rebase is clean, push again right away without re-running tests; CI on the target checks the result and Accio sends any failure back to you. Keep retrying until the push lands.\n\n' + action + '\n\n' +
     'Report the published revision, tests and remaining blockers in this conversation. Do not archive the thread, delete the worktree, delete branches, or clean up another thread’s processes. Accio independently verifies delivery and owns cleanup. If blocked or awaiting a user decision, explain it and stop safely.';
 }

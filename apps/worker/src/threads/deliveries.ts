@@ -236,7 +236,8 @@ export class Deliveries {
     if (this.state.closing || !this.observes(thread)) return;
     const delivery = thread.delivery!;
     const quiet = delivery.status === 'ready' || (delivery.waitingOn === 'merge' && !delivery.integratedAt);
-    const delay = delivery.observationError ? Math.min(15 * 60_000, 30_000 * 2 ** Math.min(delivery.observationFailures ?? 0, 5)) : quiet ? 2 * 60_000 : 30_000;
+    const failures = delivery.turnError ? delivery.turnFailures : delivery.observationError ? delivery.observationFailures : undefined;
+    const delay = failures !== undefined ? Math.min(15 * 60_000, 30_000 * 2 ** Math.min(failures, 5)) : quiet ? 2 * 60_000 : 30_000;
     const timer = setTimeout(() => {
       this.timers.delete(threadId);
       void this.check(threadId).catch(error => console.error('[delivery] checking delivery failed', error));
@@ -265,6 +266,21 @@ export class Deliveries {
       || (d.workVersion ?? 0) !== (thread.workVersion ?? 0) || this.state.running.has(thread.id) || this.state.lifecycle.has(thread.id) || !!thread.queuedMessages?.length || this.state.messageOps.has(thread.id)
       || (thread.snoozedUntil && Date.parse(thread.snoozedUntil) > Date.now())) return thread;
     return settle(thread, now());
+  }
+
+  /**
+   * A delivery turn failed without being stopped, usually on a rate limit or API error.
+   * Within the hour of automatic work, wait with backoff and start another delivery turn.
+   * Returns false when the budget is spent, so the caller pauses the delivery instead.
+   */
+  async retryTurn(threadId: string): Promise<boolean> {
+    const d = this.state.require(threadId).delivery;
+    if (!d || d.followUpsStoppedAt || Date.now() - Date.parse(d.requestedAt) >= 60 * 60_000) return false;
+    await this.state.update(threadId, t => ({ ...t, delivery: { ...t.delivery!, status: 'waiting', waitingOn: 'agent', ci: undefined,
+      turnError: 'The last delivery turn stopped on an error.', turnFailures: (t.delivery!.turnFailures ?? 0) + 1,
+      detail: 'The last delivery turn stopped on an error, such as a rate limit. Check what already happened before repeating it.' } }));
+    this.scheduleCheck(threadId);
+    return true;
   }
 
   async recordWait(threadId: string, error: Error) {
@@ -329,7 +345,10 @@ export class Deliveries {
     if (!thread.delivery || !thread.workspace || thread.workspace.releasedAt) return;
     if (this.state.running.has(threadId) || this.state.lifecycle.has(threadId) || this.checks.size >= 2) { this.scheduleCheck(threadId); return; }
     const check = this.state.track(async () => {
-      if (thread.delivery?.status === 'delivered') {
+      if (thread.delivery?.status === 'waiting' && thread.delivery.turnError) {
+        // Nothing to observe: the failed turn's work is unfinished. Start another.
+        await this.state.update(threadId, t => t.delivery?.turnError ? { ...t, delivery: { ...t.delivery, status: 'queued', turnError: undefined } } : t);
+      } else if (thread.delivery?.status === 'delivered') {
         await this.state.updateDurably(threadId, t => this.settleDelivered(t));
       } else if (this.observes(thread) || (force && !['queued', 'running'].includes(thread.delivery!.status)
         && (thread.workVersion ?? 0) === (thread.delivery!.workVersion ?? 0))) await this.verify(thread, false, true);
