@@ -117,22 +117,33 @@ const kinds: Record<string, Kind> = {
   WebFetch: 'fetch',
   Task: 'agent', Agent: 'agent',
 };
-const doing: Record<Kind, string> = { run: 'Running', read: 'Reading', edit: 'Editing', search: 'Searching', fetch: 'Fetching', agent: 'Running agent:', other: 'Using' };
+const doing: Record<Kind, string> = { run: 'Running', read: 'Reading files', edit: 'Editing files', search: 'Searching', fetch: 'Fetching page', agent: 'Running agent', other: 'Using' };
 
-/** A running sub-agent adds its own latest step: "Running agent: Count the files · Reading delivery.ts". */
+/** A running sub-agent adds its latest activity without exposing tool inputs. */
 function describeLive(item: ToolItem): string {
   return item.step ? `${describeActivity(item)} · ${describeActivity(item.step)}` : describeActivity(item);
 }
 
-/** "Running pnpm test", "Reading README.md", "Using linear · get_issue". */
+/** Top-level activity keeps tool inputs behind the work fold. */
 export function describeActivity(item: Pick<ToolItem, 'name' | 'summary'>): string {
   const kind = kinds[item.name] ?? 'other';
+  if (kind === 'run') return `Running ${commandProgram(item.summary)}`;
   if (kind === 'other') return `${doing.other} ${toolLabel(item.name)}`;
-  return item.summary ? `${doing[kind]} ${toolSummary(item)}` : `${doing[kind]}…`;
+  if (item.name === 'Write') return 'Writing files';
+  return doing[kind];
 }
 
 export function toolSummary(item: Pick<ToolItem, 'name' | 'summary'>): string {
   return item.name === 'Shell' || item.name === 'Bash' ? shellCommandSummary(item.summary, true) : item.summary;
+}
+
+/** Show the executable, never its arguments or the surrounding shell script. */
+function commandProgram(summary: string): string {
+  const script = shellCommandSummary(summary, true).trim();
+  const token = /^(?:&\s+)?(?:"([^"\r\n]+)"|'([^'\r\n]+)'|([^\s;&|<>]+))/.exec(script);
+  const program = (token?.[1] ?? token?.[2] ?? token?.[3] ?? '').split(/[\\/]/).at(-1)!.replace(/\.exe$/i, '');
+  if (!/^[\w][\w.+-]*$/.test(program) || /^(?:sh|bash|zsh|dash|ksh|fish|powershell|pwsh|cmd)$/i.test(program)) return 'command';
+  return program;
 }
 
 /** MCP tools arrive as mcp__server__tool (Claude) or server/tool (Codex). */
