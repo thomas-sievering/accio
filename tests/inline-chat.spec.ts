@@ -59,7 +59,8 @@ for (const submit of ['Enter', 'Send'] as const) {
     const pending = page.locator('.draft-starting');
     await expect(pending.locator('.msg.user')).toHaveText(text);
     await expect(pending.getByRole('status')).toHaveText('Starting thread…');
-    await expect(input).toBeHidden();
+    // The composer settles at the foot, emptied and out of reach until the start completes.
+    await expect(page.locator('.hero.starting')).toHaveAttribute('inert', '');
     // Enter again while startup is held cannot create a duplicate thread.
     await page.keyboard.press('Enter');
     expect(starts).toBe(1);

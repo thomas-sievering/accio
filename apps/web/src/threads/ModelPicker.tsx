@@ -7,6 +7,9 @@ import { EffortWord, effortSteps } from './EffortControl';
 import { useSteps, useWheelSteps } from './steps';
 import { prettyModelName } from './modelName';
 
+/** Each profile's model list as last loaded, shared by every picker. */
+const lastModels = new Map<string, ModelsState>();
+
 /**
  * GLOSSARY: Effort. One chip for what a thread runs: the model and a muted effort word.
  * Scrolling over it, or the up and down keys, change the effort; clicking lists the
@@ -33,7 +36,8 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState('favorites');
   const [position, setPosition] = useState<CSSProperties>({});
-  const data = loaded && loaded.profileId === profileId ? loaded.state : undefined;
+  // The last list seen for this profile, so a remounted picker (a draft becoming its thread) shows effort at once.
+  const data = loaded && loaded.profileId === profileId ? loaded.state : profileId ? lastModels.get(profileId) : undefined;
 
   useEffect(() => {
     if (!profileId || status !== 'open') return;
@@ -42,6 +46,7 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
     const refresh = () => {
       const request = ++revision;
       void client.call('models.list', { profileId }).then((state) => {
+        if (request === revision) lastModels.set(profileId, state);
         if (active && request === revision) { setLoaded({ profileId, state }); setError(undefined); }
       }, (err: Error) => { if (active && request === revision) setError(err.message); });
     };
@@ -97,6 +102,7 @@ export function ModelPicker({ profileId, harnessId, value, onChange, disabled = 
     setError(undefined);
     try {
       const state = await client.call('models.favorite', { profileId, model, favorite: next });
+      lastModels.set(profileId, state);
       setLoaded({ profileId, state });
     } catch (err) { setError((err as Error).message); }
     finally { setBusy(false); }

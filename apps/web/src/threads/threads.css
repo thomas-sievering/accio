@@ -265,6 +265,18 @@
 .shelf + .shelf {
   margin-top: 6px;
 }
+/* A shelf that appears (a first thread starting work) opens into place rather than popping in. */
+.shelf {
+  interpolate-size: allow-keywords;
+  animation: shelf-in 320ms var(--ease-settle);
+}
+@keyframes shelf-in {
+  from { height: 0; opacity: 0; overflow: clip; }
+  to { overflow: clip; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shelf { animation: none; }
+}
 .shelf-head {
   display: flex;
   align-items: center;
@@ -781,6 +793,8 @@
 .effort-trigger:hover:not(:disabled) { background: var(--hover); color: var(--ink); }
 .effort-trigger:hover:not(:disabled) .effort-word { color: inherit; }
 .effort-trigger:disabled { cursor: default; opacity: 0.6; }
+/* A turn starting or ending dims and restores the chips gently; the press keeps its scale. */
+.composer-bar :is(.model-trigger, .effort-trigger) { transition: opacity 200ms ease, scale 420ms var(--ease-settle); }
 .effort-menu .menu-item { justify-content: space-between; }
 .model-trigger svg { fill: currentColor; }
 .menu.effort-menu { position: fixed; inset: auto; position-area: none; position-try-fallbacks: none; width: 160px; margin: 0; }
