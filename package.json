@@ -16,6 +16,8 @@
     "test:limits": "pnpm build && playwright test --project limits",
     "verify": "pnpm build && node .agents/skills/3-verify/scripts/verify.mjs",
     "verify:doctor": "node .agents/skills/3-verify/scripts/verify.mjs doctor",
+    "verify:link-hub": "pnpm build && node .agents/skills/3-verify/scripts/verify.mjs .agents/skills/3-verify/scripts/link-hub.mjs",
+    "verify:real": "pnpm build && node .agents/skills/3-verify/scripts/verify.mjs .agents/skills/3-verify/scripts/real-turn.mjs",
     "typecheck": "tsc -b && tsc -p apps/web",
     "postinstall": "node scripts/ensure-electron.mjs"
   },

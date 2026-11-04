@@ -10,5 +10,7 @@ export default defineConfig({
       '@accio/hub': fileURLToPath(new URL('./apps/hub/src/index.ts', import.meta.url)),
     },
   },
-  test: { include: ['apps/*/src/**/*.test.ts', 'packages/*/src/**/*.test.ts'] },
+  // Several server tests create real git worktrees and take ~4s on Windows; vitest's 5s default
+  // fails them whenever parallel agents load the machine.
+  test: { include: ['apps/*/src/**/*.test.ts', 'packages/*/src/**/*.test.ts'], testTimeout: 20_000 },
 });
