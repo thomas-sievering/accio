@@ -114,6 +114,36 @@ export type ThreadDelivery = {
   startedAt?: string;
   /** What the current delivery turn last reported doing; cleared when one starts. */
   step?: DeliveryStep;
+  /** GLOSSARY: Shipped note. What the delivery turn says changed and what to try, through the shipped_note accio tool. */
+  note?: ShippedNote;
+  /** When you opened the thread after its delivery with a note; it settles automatically only then. */
+  noteReadAt?: string;
+};
+
+/** GLOSSARY: Shipped note. Written for the person who will try the change, not for reviewers. */
+export type ShippedNote = {
+  /** One line on what changed for the user, e.g. "Running threads sit on Working below the inbox". */
+  summary: string;
+  /** Short things to try, each one sentence. */
+  test: string[];
+};
+
+/** GLOSSARY: Changelog. One delivered change, kept after its thread moves on or is deleted. */
+export type ChangelogEntry = {
+  /** The delivery's id, so each delivery is logged once. */
+  id: string;
+  threadId: string;
+  /** Empty for a No project thread. */
+  projectId: string;
+  profileId: string;
+  /** The thread's title when it was delivered. */
+  title: string;
+  /** Absent when the delivery turn wrote no note, as for changes delivered before notes existed. */
+  note?: ShippedNote;
+  target: string;
+  pullRequest?: { number: number; url: string };
+  revision?: string;
+  deliveredAt: string;
 };
 
 export type DeliveryCI = {
@@ -171,6 +201,8 @@ export type TranscriptItem =
   /** GLOSSARY: Choice. Screenshots the harness offers; you pick one in your next message. */
   | { kind: 'choice'; id: string; turnId: string; question: string; options: ChoiceOption[] }
   | { kind: 'notice'; id: string; turnId: string; tone: 'info' | 'error'; text: string }
+  /** GLOSSARY: Shipped note. Added once a delivery is verified on its target; it stands as its own turn. */
+  | { kind: 'shipped'; id: string; turnId: string; at: string; entry: ChangelogEntry }
   /** Closes a completed turn; `ms` is how long the harness worked on it. */
   | { kind: 'finished'; id: string; turnId: string; ms: number };
 
@@ -239,10 +271,15 @@ export const threadMethods = {
   'threads.regenerateTitle': method<typeof ThreadId, ThreadView>(ThreadId),
   'threads.previewTitle': method<typeof PreviewTitle, { title: string }>(PreviewTitle),
   'threads.delete': method<typeof ThreadId, null>(ThreadId),
+  /** Records that you saw a delivered thread's shipped note; the thread then settles as usual. */
+  'threads.readNote': method<typeof ThreadId, ThreadView>(ThreadId),
+  /** GLOSSARY: Changelog. Every delivered change on this machine, newest first. */
+  'changelog.list': method<z.ZodObject<{}>, ChangelogEntry[]>(z.object({})),
 };
 
 export type ThreadEvents = {
   'threads.changed': ThreadView[];
+  'changelog.changed': ChangelogEntry[];
   /** A transcript item was added or replaced. */
   'thread.item': { threadId: string; cursor: number; item: TranscriptItem };
   /** Streamed text appended to an assistant item. */

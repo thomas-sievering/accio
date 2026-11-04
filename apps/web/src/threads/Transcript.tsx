@@ -1,4 +1,5 @@
 import { createContext, memo, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { ShippedNote } from '../changelog/ShippedNote';
 import type { TranscriptItem } from '@accio/protocol';
 import { AssistantMarkdown } from './AssistantMarkdown';
 import { SecretRequestCard } from '../secrets/SecretRequestCard';
@@ -214,6 +215,8 @@ const Item = memo(function Item({ threadId, item, preparing, picked, pickName }:
       return <SecretRequestCard threadId={threadId} item={item} onOpenSecrets={onOpenSecrets} />;
     case 'finished':
       return <div className="turn-finished">Worked for {formatDuration(item.ms)}</div>;
+    case 'shipped':
+      return <div data-item-id={item.id}><ShippedNote entry={item.entry} inThread /></div>;
   }
 });
 

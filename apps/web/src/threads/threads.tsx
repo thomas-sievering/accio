@@ -5,7 +5,7 @@ import { useLiveState, useLocalState } from '../app/useLive';
 import { useProjects } from '../projects/projects';
 import { useProfiles } from '../profiles/profiles';
 import { observeTranscript, type TranscriptState } from './observeTranscript';
-import { filterThreads, nextMorning, shelveThreads, type ThreadShelves } from './shelves';
+import { createPlacementTracker, filterThreads, nextMorning, shelveThreads, type ThreadShelves } from './shelves';
 
 type ThreadsCtx = {
   threads: ThreadView[] | undefined;
@@ -19,7 +19,7 @@ type ThreadsCtx = {
   openDraft: (checkoutId: string, profileId?: string) => void;
   /** Counts thread and draft openings, so a view over the main pane can close on any of them, even reselecting the open thread. */
   navigation: number;
-  /** The open list (running threads included) plus the Snoozed and Settled shelves, after the project scope and search. */
+  /** The open list plus the Working, Snoozed and Settled shelves, after the project scope and search. */
   shelves: ThreadShelves;
   /** The one project the sidebar is narrowed to, or '' for every visible project. */
   projectScope: string;
@@ -57,6 +57,7 @@ export function ThreadsProvider({ children }: { children: ReactNode }) {
   const projectScope = visible.some((p) => p.id === storedScope) ? storedScope : '';
   const now = useMinuteClock();
   useMoveLegacyShelfMarks(threads);
+  const placement = usePlacement(threads, now);
 
   const value = useMemo<ThreadsCtx>(
     () => ({
@@ -78,7 +79,7 @@ export function ThreadsProvider({ children }: { children: ReactNode }) {
       shelves: shelveThreads(filterThreads(
         (threads ?? []).filter((t) => t.projectId || filter === 'all' || t.profileId === filter),
         new Set(projectScope ? [projectScope] : ['', ...visible.map((p) => p.id)]), query,
-      ), now),
+      ), now, placement),
       projectScope,
       setProjectScope,
       query,
@@ -93,9 +94,26 @@ export function ThreadsProvider({ children }: { children: ReactNode }) {
     }),
     // The setters are stable in behaviour; recreate only when data changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [client, threads, loadError, retryLoad, selectedId, draft, navigation, now, visible, projectScope, query, filter],
+    [client, threads, placement, loadError, retryLoad, selectedId, draft, navigation, now, visible, projectScope, query, filter],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+/**
+ * Observes every thread (before scope and search) so a thread that just finished is held on
+ * Working briefly and a return is timed once, then re-places when a hold runs out.
+ */
+function usePlacement(threads: ThreadView[] | undefined, now: Date) {
+  const [observe] = useState(createPlacementTracker);
+  const [expired, setExpired] = useState(0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const placement = useMemo(() => observe(threads ?? [], Date.now()), [observe, threads, now, expired]);
+  useEffect(() => {
+    if (placement.nextDeadline === undefined) return;
+    const timer = setTimeout(() => setExpired((n) => n + 1), Math.max(0, placement.nextDeadline - Date.now()));
+    return () => clearTimeout(timer);
+  }, [placement]);
+  return placement;
 }
 
 export function useThreads(): ThreadsCtx {
