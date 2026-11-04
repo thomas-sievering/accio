@@ -16,7 +16,7 @@ On Ship, the worker runs the steps itself. It starts an agent turn only at the f
 commit ─► fetch ─► rebase ─► test ─► push ─► (existing verify / observe)
   │                  │         │       │
   │               conflict   fails   rejected (main moved)
-  │                  │         │       └─► back to fetch, at most 3 times
+  │                  │         │       └─► back to fetch, push without retesting, at most 10 times
   └──────────────────┴─────────┴──────────► agent turn with deliveryPrompt + detail
 ```
 
@@ -25,8 +25,8 @@ commit ─► fetch ─► rebase ─► test ─► push ─► (existing verif
 1. **Wait for idle.** A Ship clicked during a turn stays queued, as today. The scripted run starts only when the thread is idle with no queued messages.
 2. **Commit.** If the worktree has uncommitted or untracked (non-ignored) files, `git add -A` and commit. The lightweight model already chosen for thread naming (`namingModel` in `naming.ts`) writes the commit message and the shipped note in one call, from the thread transcript and the diff stat. Without a lightweight model, use the thread title as the message and skip the note. Never spend a coding-model turn on this.
 3. **Fetch and rebase** onto `origin/<base>`. On conflict, run `git rebase --abort` and hand over with the conflicting file list. Accio never resolves conflicts itself.
-4. **Test.** Run the project's **test command** in the worktree, with the same isolated environment previews get (`PORT`, `ACCIO_HOME`, `ACCIO_PORT=0`, `ACCIO_HUB_PORT=0`). The output is not shown in the thread; only a handover uses it. On failure, rerun once (the flaky rule the prompt already states). If it fails again, hand over with the output tail. Skip the run when the rebase didn't change `HEAD` and the tests already passed on this exact revision in this delivery.
-5. **Push.** Direct policy: `git push origin HEAD:refs/heads/<base>` without force. If the push is rejected because `main` moved, go back to step 3, at most 3 times in total, then hand over. Any other push error blocks the delivery with the Git message.
+4. **Test.** Run the project's **test command** in the worktree, with the same isolated environment previews get (`PORT`, `ACCIO_HOME`, `ACCIO_PORT=0`, `ACCIO_HUB_PORT=0`). The output is not shown in the thread; only a handover uses it. On failure, rerun once (the flaky rule the prompt already states). If it fails again, hand over with the output tail. Test only once per delivery: after the tests pass, a later clean rebase onto a `main` that moved is pushed without another run. A slow suite would otherwise lose every race with a busy `main`. CI on `main` checks the result, and a failure there wakes the agent as before.
+5. **Push.** Direct policy: `git push origin HEAD:refs/heads/<base>` without force. If the push is rejected because `main` moved, go back to step 3, at most 10 times in total, then hand over. The delivery turn follows the same rule: a clean rebase is pushed straight away, and a push that still lost the race wakes the agent again instead of blocking. Any other push error blocks the delivery with the Git message.
 6. **Verify.** Call the existing `Deliveries.verify`. Nothing changes from here on.
 
 Each step sets `delivery.step` directly, so the Delivery panel shows the same commit → integrate → verify → publish progress without the `delivery_step` tool.

@@ -271,8 +271,13 @@ export class Turns {
         } else if (delivering) {
           const current = state.require(thread.id);
           try {
-            if (outcome !== 'completed') throw new UserError('Delivery paused. Check the conversation, then request Ship again.');
-            await deps.deliveries.verify(current, true);
+            // Only a Stop pauses delivery; a failed turn (a rate limit, say) is retried after a wait.
+            if (outcome === 'failed' && await deps.deliveries.retryTurn(thread.id)) {
+              await transcripts.add(thread.id, { kind: 'notice', id: `${turnId}:delivery`, turnId, tone: 'info', text: 'Delivery continues after a short wait.' });
+            } else {
+              if (outcome !== 'completed') throw new UserError('Delivery paused. Check the conversation, then request Ship again.');
+              await deps.deliveries.verify(current, true);
+            }
           } catch (error) {
             const detail = (error as Error).message;
             await deps.deliveries.recordWait(thread.id, error as Error);

@@ -27,7 +27,8 @@ export type ScriptedShip = {
 
 export type ScriptedShipResult = { kind: 'published' } | { kind: 'handover'; detail: string };
 
-export const PUSH_ATTEMPTS = 3;
+/** Each retry is a fetch, a clean rebase and a push, so a busy target rarely exhausts them. */
+export const PUSH_ATTEMPTS = 10;
 const TEST_TIMEOUT = 30 * 60_000;
 const OUTPUT_TAIL = 3000;
 
@@ -85,7 +86,9 @@ async function steps(run: ScriptedShip): Promise<ScriptedShipResult> {
     }
 
     const revision = await git('rev-parse', 'HEAD');
-    if (revision !== tested) {
+    // Test once. A later clean rebase onto a target that moved is pushed without retesting,
+    // or a slow suite loses every race; CI on the target checks the result and a failure wakes the agent.
+    if (!tested) {
       await run.report('verify', `Running ${run.testCommand}`);
       let result = await runCommand(run.testCommand, path, run.env, signal);
       if (!result.ok) {
@@ -107,7 +110,7 @@ async function steps(run: ScriptedShip): Promise<ScriptedShipResult> {
       if (!/\[rejected\]|non-fast-forward|fetch first/i.test(text)) throw new UserError(`Pushing to ${baseBranch} failed: ${tail(text, 500)}`);
     }
   }
-  return { kind: 'handover', detail: `${baseBranch} moved during each of ${PUSH_ATTEMPTS} push attempts. The worktree holds the last tested commit.` };
+  return { kind: 'handover', detail: `${baseBranch} moved during each of ${PUSH_ATTEMPTS} push attempts. The worktree holds the last rebased commit.` };
 }
 
 async function gitIn(cwd: string, signal: AbortSignal, ...args: string[]): Promise<string> {

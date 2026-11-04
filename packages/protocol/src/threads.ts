@@ -104,6 +104,9 @@ export type ThreadDelivery = {
   checkedAt?: string;
   observationError?: string;
   observationFailures?: number;
+  /** A delivery turn ended on an API or harness error (a rate limit, say); a new one starts after a backoff. */
+  turnError?: string;
+  turnFailures?: number;
   /** Publication is recorded even while checks on the target are pending. */
   integratedAt?: string;
   completedAt?: string;
