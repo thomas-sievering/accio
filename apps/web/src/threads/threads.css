@@ -161,16 +161,18 @@
   height: 18px;
 }
 .row.open {
-  height: 44px;
+  height: 54px;
 }
 .row.open .row-main {
-  gap: 10px;
+  gap: 12px;
+  padding-inline-start: 10px;
   padding-inline-end: 62px;
 }
 .row.open .row-name {
   display: flex;
   flex-direction: column;
-  line-height: 17px;
+  gap: 3px;
+  line-height: 18px;
 }
 .row.open .row-title {
   overflow: hidden;
@@ -181,8 +183,8 @@
   gap: 4px;
   min-width: 0;
   margin: 0;
-  font-size: 11px;
-  line-height: 14px;
+  font-size: 11.5px;
+  line-height: 15px;
 }
 /* When narrow, the project name (with its separator) gives way before the status does. */
 .row-project-name {
