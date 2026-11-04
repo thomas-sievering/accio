@@ -898,3 +898,16 @@ div.model-picker-empty b { color: var(--ink); font-weight: 500; }
   background: color-mix(in srgb, var(--red) 8%, transparent);
   color: var(--red);
 }
+/* GLOSSARY: Goal. One line above the composer, like the queue tray. */
+.goal-bar { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 32px; margin: 0 10px; padding: 4px 8px; background: var(--raised); border: 1px solid var(--line); border-bottom: 0; border-radius: 9px 9px 0 0; font-size: 12px; }
+.goal-bar + .queue-tray { border-radius: 0; }
+.goal-bar > svg { width: 13px; height: 13px; flex: none; color: var(--blue); }
+.goal-bar.achieved > svg { color: var(--green); }
+.goal-bar.paused > svg { color: var(--amber); }
+.goal-objective { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-strong); }
+.goal-state { max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dim); }
+.goal-bar button { flex: none; padding: 4px; color: var(--muted); border-radius: 4px; }
+.goal-bar button:hover:not(:disabled) { color: var(--ink-strong); background: var(--raised-2); }
+.goal-bar button svg { width: 13px; height: 13px; }
+.goal-bar .error { margin: 0; }
+.goal-continue { align-self: center; color: var(--dim); font-size: 12px; }

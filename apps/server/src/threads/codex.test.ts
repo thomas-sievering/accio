@@ -90,3 +90,14 @@ it('gives Codex accio tools on start and on resume, and keeps tool arguments str
   expect(fake.latest.options.config).toContain('mcp_servers.remote.url="https://example.test/mcp"');
   expect(fake.latest.requests.find(r => r.method === 'thread/resume')?.params).toMatchObject({ config: expected, developerInstructions: expect.stringContaining('Enabled skill: browser') });
 });
+
+it('starts app-server with switched-off built-in tools removed', async () => {
+  home = await mkdtemp(join(tmpdir(), 'accio-tools-codex-'));
+  const fake = new FakeCodex();
+  const iterator = codexHarness(fake.factory).run({ cwd: home, prompt: 'hi', sessionId: null, signal: new AbortController().signal,
+    env: { CODEX_HOME: home, ACCIO_OPENAI_URL: 'http://127.0.0.1:1234/openai', ACCIO_OPENAI_KEY: 'key' },
+    toolsOff: [{ id: 'goals', name: 'Goals', description: '', tools: ['get_goal'], default: 'off', config: ['features.goals=false'] }] })[Symbol.asyncIterator]();
+  await iterator.next();
+  expect(fake.latest.options.config).toContain('features.goals=false');
+  while (!(await iterator.next()).done) { /* drain */ }
+});

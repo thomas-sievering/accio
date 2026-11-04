@@ -18,7 +18,7 @@ const HARD_STOP_AFTER_MS = 3000;
  * the checkout's own .claude folder and CLAUDE.md.
  */
 export const claudeCode: Harness = {
-  async *run({ cwd, prompt, sessionId, model, effort, modelName, env, tools, signal, resourceInstructions, mcps, requestSecret, secretPurposes, registerSteer }: HarnessTurn) {
+  async *run({ cwd, prompt, sessionId, model, effort, modelName, env, tools, signal, resourceInstructions, mcps, requestSecret, secretPurposes, registerSteer, toolsOff = [] }: HarnessTurn) {
     if (signal.aborted) return;
     const abortController = new AbortController();
     const stderr: string[] = [];
@@ -36,6 +36,8 @@ export const claudeCode: Harness = {
         permissionMode: 'bypassPermissions',
         allowDangerouslySkipPermissions: true,
         settingSources: ['user', 'project', 'local'],
+        // Removed from the model's context, not only refused (docs/plans/harness-tools.md).
+        ...(toolsOff.length ? { disallowedTools: toolsOff.flatMap((t) => t.tools) } : {}),
         mcpServers: mcps || tools || requestSecret ? { ...mcps,
           ...(tools ? { [ACCIO_MCP_SERVER]: { type: 'http' as const, url: tools.url, headers: { Authorization: tools.authorization } } } : {}),
           ...(requestSecret ? { [SECRET_MCP_SERVER]: secretMcpServer(requestSecret) } : {}),

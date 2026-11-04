@@ -10,7 +10,7 @@ import { ACCIO_MCP_SERVER } from '../tools/tools.js';
 /** Codex runs on this machine. Only the profile's scoped proxy key reaches it. */
 export function codexHarness(factory: CodexFactory = startCodex): Harness {
   return {
-    async *run({ cwd, prompt, sessionId, model, effort, modelName, env, tools, signal, resourceInstructions, mcps, requestSecret, secretPurposes, registerSteer }) {
+    async *run({ cwd, prompt, sessionId, model, effort, modelName, env, tools, signal, resourceInstructions, mcps, requestSecret, secretPurposes, registerSteer, toolsOff = [] }) {
       if (signal.aborted) return;
       const home = env.CODEX_HOME;
       const baseUrl = env.ACCIO_OPENAI_URL;
@@ -23,6 +23,8 @@ export function codexHarness(factory: CodexFactory = startCodex): Harness {
         'model_providers.accio.env_key="ACCIO_OPENAI_KEY"', 'model_providers.accio.wire_api="responses"',
         'model_providers.accio.supports_websockets=false',
         'approval_policy="never"', 'sandbox_mode="danger-full-access"',
+        // Built-in tools switched off; app-server reads them at launch, so they hold on resume too.
+        ...toolsOff.flatMap((t) => t.config ?? []),
         ...Object.entries(mcps ?? {}).flatMap(([id, mcp]) => {
           // Override keys are dot-separated paths, not TOML key expressions.
           // IDs are validated as bare keys by the protocol.

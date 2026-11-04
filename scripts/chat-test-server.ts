@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
 import { closeWhenOrphaned } from './fixtureLifetime.js';
 import { startApp } from '../apps/server/src/app.js';
-import { FakeHarness, SESSION, replyWith } from '../apps/server/src/testing/fakeHarness.js';
+import { FakeHarness, SESSION, replyWith, toolCall } from '../apps/server/src/testing/fakeHarness.js';
 import { fakeClaudeFetch, TestClient } from '../apps/server/src/testing/testApp.js';
 import type { HarnessMessage } from '../apps/server/src/threads/harness.js';
 import { DeliveryGit, DeliveryPending } from '../apps/server/src/threads/delivery.js';
@@ -34,7 +34,25 @@ DeliveryGit.prototype.verify = async function(workspace, delivery, observed) {
   }
   return verifyDelivery.call(this, workspace, delivery, observed);
 };
+/** Calls an accio tool the way Claude Code or Codex would, over the turn's MCP access. */
+async function callAccioTool(run: { tools?: { url: string; authorization: string } }, name: string, args: unknown) {
+  await fetch(run.tools!.url, { method: 'POST', headers: { 'content-type': 'application/json', authorization: run.tools!.authorization },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }) });
+}
+const goalTurns = new Map<string, number>();
 const harness = new FakeHarness(async function* (run) {
+  // GLOSSARY: Goal. "/goal fixture …" works for three turns, then reports achieved; "/goal blocked fixture" reports blocked first.
+  const goal = /Goal for this thread: (.+)/.exec(run.resourceInstructions ?? '')?.[1];
+  if (goal?.includes('fixture')) {
+    const turn = goalTurns.set(goal, (goalTurns.get(goal) ?? 0) + 1).get(goal)!;
+    await setTimeout(400);
+    // Resuming restarts the turn count, so "blocked" blocks on the goal's own first prompt only.
+    if (goal.startsWith('blocked') && run.prompt.startsWith('New goal')) await callAccioTool(run, 'finish_goal', { outcome: 'blocked', summary: 'Need the fixture token' });
+    else if (goal.startsWith('blocked') || turn === 3) await callAccioTool(run, 'finish_goal', { outcome: 'achieved', summary: 'Fixture verified' });
+    yield* toolCall('Bash', { command: `check ${turn}` }, `goal-${goal}-${turn}`);
+    yield* replyWith(`Goal turn ${turn}.`);
+    return;
+  }
   if (run.prompt === 'Build CI progress fixture') {
     ciPolls.set(run.cwd, 0);
     await writeFile(join(run.cwd, 'ci-fixture.txt'), 'CI progress');
@@ -263,6 +281,8 @@ const thread = await client.call('threads.start', { profileId: 'personal', text:
 await client.waitFor('threads.changed', (threads) => threads.some((entry) => entry.id === thread.id && entry.status === 'idle'));
 const choice = await client.call('threads.start', { profileId: 'personal', text: 'Choice fixture' });
 await client.waitFor('threads.changed', (threads) => threads.some((entry) => entry.id === choice.id && entry.status === 'idle'));
+const goalThread = await client.call('threads.start', { profileId: 'personal', text: 'Goal fixture' });
+await client.waitFor('threads.changed', (threads) => threads.some((entry) => entry.id === goalThread.id && entry.status === 'idle'));
 // MCP tab: a remote server that still needs signing in, and a local one.
 await client.call('mcp.save', { id: 'docs-search', name: 'docs-search', transport: 'http', url: 'https://mcp.example.test/docs', args: [], auth: 'oauth' });
 await client.call('mcp.save', { id: 'local-db', name: 'local-db', transport: 'stdio', command: 'db-mcp', args: ['--readonly'], auth: 'none' });

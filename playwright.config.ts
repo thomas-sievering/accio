@@ -3,7 +3,7 @@ import { createServer } from 'node:net';
 
 /** Browser suites. Each project drives its own fixture server (`scripts/<project>-test-server.ts`, started by tests/servers.ts). */
 const suites = {
-  chat: { testMatch: ['inline-chat.spec.ts', 'delivery.spec.ts', 'delivery-merge.spec.ts', 'effort.spec.ts', 'skills-panel.spec.ts'], timeout: 30_000 },
+  chat: { testMatch: ['inline-chat.spec.ts', 'delivery.spec.ts', 'delivery-merge.spec.ts', 'effort.spec.ts', 'skills-panel.spec.ts', 'goal.spec.ts'], timeout: 30_000 },
   limits: { testMatch: ['limits.spec.ts'], timeout: 90_000 },
   secrets: { testMatch: ['secret-ui.spec.ts'], timeout: 45_000 },
 };

@@ -8,6 +8,7 @@ import { Profiles } from '../profiles/profiles.js';
 import { Machines } from '../machine/machine.js';
 import { Models } from '../harnesses/models.js';
 import { registerHarnesses } from '../harnesses/harnesses.js';
+import { finishGoalTool } from '../goals/goal.js';
 import { Projects } from '../projects/projects.js';
 import { Threads } from '../threads/threads.js';
 import type { Harness } from '../threads/harness.js';
@@ -70,7 +71,7 @@ export class HubConnections {
     const models = new Models(profiles, settings, this.here.id, claudeModels);
     profiles.register(router); machines.register(router); models.register(router, broadcast); registerHarnesses(router, settings, models);
     const projects = new Projects(record.home, profiles, machines, broadcast); await projects.load(); projects.register(router);
-    const tools = new AccioTools([offerChoice]);
+    const tools = new AccioTools([offerChoice, finishGoalTool((id, outcome, summary) => threads.finishGoal(id, outcome, summary), (id) => threads.goalActive(id))]);
     const secrets = remoteSecrets(client);
     const threads = new Threads(record.home, profiles, projects, this.runners, broadcast, models, machines, secrets, tools, this.deliveryHosting); await threads.load(); threads.register(router);
     const resources = new ResourceManager(record.home, this.here.id, remoteResources(client), remoteMcp(client), profiles, projects, broadcast, async (tool, detail) => {
@@ -80,7 +81,7 @@ export class HubConnections {
       const folder = resources.tools.folder(tool);
       return (await threads.start({ profileId: profile.id, machineId: this.here.id, text: `Repair ${tool.name} on this machine\n\nDiagnose the failure, fix the installation, test it and verify the result. Work on this machine only.\nPackage: ${tool.package}@${tool.version}\nExecutable: ${tool.executable}\nManaged installation folder: ${folder}\nInstall with npm install --prefix <that folder> ${tool.package}@${tool.version}. Keep the installation inside that folder.\nHealth check arguments: ${JSON.stringify(tool.checkArgs)}\nFailure:\n${detail}\n\nAccio will rerun the health check after this thread completes. Report what you changed and the commands and results that prove it works.` }, { repairToolId: tool.id })).id;
     }, this.resourceCommand);
-    resources.register(router); threads.resources = resources; threads.onRepairFinished = id => resources.tools.afterRepair(id);
+    resources.register(router); threads.resources = resources; threads.toolOverrides = () => settings.harnessTools(); threads.onRepairFinished = id => resources.tools.afterRepair(id);
     profiles.setReferenceSource(() => [...projects.state().projects.map((p) => p.profileId), ...threads.profileReferences()]);
     let reconciliation: Promise<unknown> = Promise.resolve();
     let initialized = false;

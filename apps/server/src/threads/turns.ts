@@ -19,8 +19,12 @@ import { providerOf, turnEnv } from './harnessEnv.js';
 import type { ThreadState } from './state.js';
 import { assertResumable, endTurn, retryOf, startTurn, type Thread, type TurnOutcome } from './thread.js';
 import { TurnTranscript, type TranscriptChange } from './transcript.js';
+import type { BuiltinTool } from '../harnesses/builtinTools.js';
+import { afterGoalTurn, CONTINUE_PROMPT, goalInstructions, goalTurnStarted, newGoalPrompt, parseGoalCommand } from '../goals/goal.js';
 
-export type TurnOptions = { resume?: boolean; retry?: boolean; delivery?: boolean; pick?: ChoicePick; queuedId?: string };
+export type TurnOptions = { resume?: boolean; retry?: boolean; delivery?: boolean; pick?: ChoicePick; queuedId?: string;
+  /** GLOSSARY: Goal. A turn accio starts itself to keep working toward the goal. */
+  goalContinue?: boolean };
 
 export type TurnDeps = {
   profiles: Profiles;
@@ -33,6 +37,8 @@ export type TurnDeps = {
   deliveries: Deliveries;
   tools?: AccioTools;
   resources: () => ResourceManager | undefined;
+  /** GLOSSARY: Built-in tools. Read as each turn starts, so a change applies from the next turn. */
+  toolsOff: (harnessId: string) => BuiltinTool[];
   onRepairFinished: (toolId: string) => void;
 };
 
@@ -77,13 +83,14 @@ export class Turns {
     return preparation;
   }
 
-  async steer(id: string, text: string, pick?: ChoicePick) {
+  /** `prompt` replaces what the harness reads, such as for a `/goal` message; the transcript keeps `text`. */
+  async steer(id: string, text: string, pick?: ChoicePick, prompt?: string) {
     const input = this.liveInputs.get(id);
     const send = input?.send;
     if (!input || !send) throw new UserError('The agent is starting or finishing. Try sending again in a moment.');
-    const prompt = pick ? pickPrompt((await this.state.transcripts.get(id)).items, pick, text) : text;
-    if (prompt === undefined) throw new UserError('That option is no longer available');
-    await send(prompt);
+    const harnessText = prompt ?? (pick ? pickPrompt((await this.state.transcripts.get(id)).items, pick, text) : text);
+    if (harnessText === undefined) throw new UserError('That option is no longer available');
+    await send(harnessText);
     await this.state.transcripts.add(id, { kind: 'user', id: randomUUID(), turnId: input.turnId, text, at: now(), steered: true, ...(pick ? { pick } : {}) });
     await this.state.transcripts.flush(id);
   }
@@ -139,7 +146,9 @@ export class Turns {
         if (thread.delivery && ['delivered', 'ready', 'waiting'].includes(thread.delivery.status)) { deps.deliveries.clearCheck(threadId); thread = { ...thread, delivery: { ...thread.delivery, status: 'blocked', detail: 'New work needs to be shipped before archiving.' } }; }
       }
       const cwd = state.cwd(thread);
-      const prompt = delivering && !resume ? deliveryPrompt(thread.workspace!, thread.delivery!) : picked;
+      const goalCommand = parseGoalCommand(picked);
+      // A /goal message never reaches the harness as typed: Claude Code would run its own /goal.
+      const prompt = delivering && !resume ? deliveryPrompt(thread.workspace!, thread.delivery!) : goalCommand?.type === 'set' ? newGoalPrompt(goalCommand.objective) : picked;
       if (delivering && !resume) text = thread.delivery!.mode === 'review' ? 'Prepare for review.' : `Ship to ${thread.delivery!.baseBranch} when ready.`;
       let next = startTurn(thread, text, now());
       const turnId = randomUUID();
@@ -147,8 +156,9 @@ export class Turns {
       state.starting.delete(thread.id);
       next = await state.update(thread.id, t => ({ ...next,
         queuedMessages: options.queuedId ? t.queuedMessages?.filter(m => m.id !== options.queuedId) : t.queuedMessages,
+        goal: goalTurnStarted(t.goal),
       }));
-      await transcripts.add(thread.id, { kind: 'user', id: `${turnId}:u`, turnId, text, at: now(), ...(resume ? { resume } : {}), ...(delivering ? { delivery: thread.delivery!.mode } : {}), ...(pick ? { pick } : {}) });
+      await transcripts.add(thread.id, { kind: 'user', id: `${turnId}:u`, turnId, text, at: now(), ...(resume ? { resume } : {}), ...(delivering ? { delivery: thread.delivery!.mode } : {}), ...(pick ? { pick } : {}), ...(options.goalContinue ? { goal: 'continue' as const } : {}) });
       const env = turnEnv(state.home, thread.profileId, thread.model.harnessId, access);
       resources = await deps.resources()?.prepare(thread.profileId, thread.projectId, env, { repair: !!thread.repairToolId, cwd });
       if (controller.signal.aborted || state.closing) throw new UserError('Turn interrupted before starting');
@@ -158,7 +168,8 @@ export class Turns {
       const grant = deps.tools?.grant(thread.id);
       const turnResources = resources;
       this.liveInputs.set(thread.id, { turnId });
-      const turn = this.run(next, turnId, { cwd, prompt, env: resources?.env ?? env, signal: controller.signal, ...(grant ? { tools: grant.access } : {}), resourceInstructions: resources?.instructions, mcps: resources?.mcps }, delivering, resources?.skills).finally(() => { turnResources?.release(); grant?.revoke(); });
+      const instructions = [resources?.instructions, goalInstructions(next.goal)].filter(Boolean).join('\n\n') || undefined;
+      const turn = this.run(next, turnId, { cwd, prompt, env: resources?.env ?? env, signal: controller.signal, ...(grant ? { tools: grant.access } : {}), resourceInstructions: instructions, mcps: resources?.mcps }, delivering, resources?.skills).finally(() => { turnResources?.release(); grant?.revoke(); });
       resources = undefined;
       this.turns.add(turn);
       void turn.then(() => this.turns.delete(turn), (err) => {
@@ -187,6 +198,8 @@ export class Turns {
     const transcript = new TurnTranscript(turnId);
     const startedAt = Date.now();
     let outcome: TurnOutcome | null = null;
+    /** GLOSSARY: Goal. A turn on a goal that used no tools pauses it. */
+    let usedTools = false;
     try {
       if (run.signal.aborted) {
         outcome = 'interrupted';
@@ -198,11 +211,12 @@ export class Turns {
         profileName: deps.profiles.require(thread.profileId).name, projectId: thread.projectId || null,
         projectName: deps.projects.state().projects.find(p => p.id === thread.projectId)?.name ?? 'No project',
         machineName: deps.machines.views().find(m => m.thisMachine)?.name ?? 'This machine', signal: run.signal });
-      for await (const msg of harness.run({ ...run, sessionId: thread.sessionId, model: thread.model.modelId, effort: deps.models.effort(thread.profileId, thread.model), requestSecret, modelName: deps.models.modelName(thread.profileId, thread.model),
+      for await (const msg of harness.run({ ...run, sessionId: thread.sessionId, model: thread.model.modelId, toolsOff: deps.toolsOff(thread.model.harnessId), effort: deps.models.effort(thread.profileId, thread.model), requestSecret, modelName: deps.models.modelName(thread.profileId, thread.model),
         registerSteer: send => { const input = this.liveInputs.get(thread.id); if (input?.turnId === turnId) input.send = send; },
         secretPurposes: deps.secrets.purposes(thread.profileId, thread.projectId || null) })) {
         for (const change of transcript.accept(msg)) {
           if (change.type === 'end') outcome = change.outcome;
+          if (change.type === 'tool') usedTools = true;
           await this.apply(thread.id, change, run.cwd, skills);
         }
       }
@@ -256,8 +270,14 @@ export class Turns {
       } finally {
         // A storage failure must never leave a finished turn holding its slot.
         state.running.delete(thread.id);
-        await state.updateDurably(thread.id, t => deps.deliveries.settleDelivered(endTurn(t.delivery?.status === 'running'
-          ? { ...t, delivery: { ...t.delivery, status: 'waiting' } } : t, outcome ?? 'failed', now())));
+        let goalContinues = false;
+        await state.updateDurably(thread.id, t => {
+          const goal = afterGoalTurn(t.goal, outcome ?? 'failed', usedTools);
+          goalContinues = goal.continue;
+          const ended = { ...t, goal: goal.goal };
+          return deps.deliveries.settleDelivered(endTurn(ended.delivery?.status === 'running'
+            ? { ...ended, delivery: { ...ended.delivery, status: 'waiting' } } : ended, outcome ?? 'failed', now()));
+        });
         await deps.deliveries.receipt(thread.id);
         deps.deliveries.scheduleCheck(thread.id);
         // Every turn spends the account's allowance, so a model it used up is marked as soon as possible.
@@ -265,9 +285,22 @@ export class Turns {
         if (thread.repairToolId && outcome === 'completed') deps.onRepairFinished(thread.repairToolId);
         if (outcome === 'completed') {
           await this.dispatchQueued(thread.id);
+          if (goalContinues) await this.continueGoal(thread.id);
           await deps.deliveries.dispatch(thread.id);
         }
       }
+    }
+  }
+
+  /** GLOSSARY: Goal. Starts the next turn unless something else already did or the thread cannot take one. */
+  async continueGoal(threadId: string) {
+    const { state } = this;
+    const thread = state.get(threadId);
+    if (!thread || thread.goal?.status !== 'active' || state.closing || state.running.has(threadId) || state.lifecycle.has(threadId)
+      || thread.status === 'running' || thread.queuedMessages?.length || thread.delivery?.status === 'queued') return;
+    try { await this.begin(threadId, CONTINUE_PROMPT, { goalContinue: true }); }
+    catch (error) {
+      await state.update(threadId, t => t.goal?.status === 'active' ? { ...t, goal: { ...t.goal, status: 'paused', detail: (error as Error).message } } : t);
     }
   }
 

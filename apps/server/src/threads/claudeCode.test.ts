@@ -127,3 +127,12 @@ it("points Claude at this turn's accio tools", async () => {
   expect(queryMock.mock.calls[2]![0].options.mcpServers).toMatchObject({ accio: { url: tools.url }, remote });
   expect(queryMock.mock.calls[2]![0].options.systemPrompt.append).toContain('Enabled skill: browser');
 });
+
+it('removes switched-off built-in tools from the model by name', async () => {
+  const q = query(); queryMock.mockReturnValue(q);
+  const iterator = claudeCode.run({ cwd: '.', prompt: 'hi', sessionId: null, env: {}, signal: new AbortController().signal,
+    toolsOff: [{ id: 'cron', name: 'Cron', description: '', tools: ['CronCreate', 'CronList'], default: 'off' }] })[Symbol.asyncIterator]();
+  const output = iterator.next();
+  expect(queryMock.mock.calls[0]![0].options.disallowedTools).toEqual(['CronCreate', 'CronList']);
+  q.close(); await output;
+});
