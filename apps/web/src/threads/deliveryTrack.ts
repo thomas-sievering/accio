@@ -1,4 +1,4 @@
-import type { DeliveryCI, ThreadView } from '@accio/protocol';
+import type { DeliveryCI, DeliveryStepName, ThreadView } from '@accio/protocol';
 import { deliveryStatus } from './status';
 
 /**
@@ -15,6 +15,8 @@ export type Station = {
   label: string;
   state: StationState;
   detail?: string;
+  /** A second line: what the agent says it is doing. */
+  note?: string;
   link?: string;
   /** Live CI jobs, on the station whose checks are the open question. */
   ci?: DeliveryCI;
@@ -22,7 +24,7 @@ export type Station = {
 
 export type DeliveryTrack = { route: string; stations: Station[] };
 
-export function deliveryTrack(t: ThreadView): DeliveryTrack | undefined {
+export function deliveryTrack(t: ThreadView, now = new Date()): DeliveryTrack | undefined {
   const d = t.delivery;
   const status = deliveryStatus(t);
   if (!d || !status) return undefined;
@@ -42,9 +44,12 @@ export function deliveryTrack(t: ThreadView): DeliveryTrack | undefined {
   if (d.status === 'queued') {
     prepare.state = t.status === 'running' ? 'waiting' : 'todo';
     prepare.detail = status.phase === 'paused' ? 'Paused · resume the thread' : 'Starts when the turn ends';
-  } else if (d.status === 'running') {
+  } else if (d.status === 'running' && d.step?.name !== 'publish') {
+    const elapsed = d.startedAt ? since(d.startedAt, now) : undefined;
+    const step = d.step && PREPARE_STEPS.indexOf(d.step.name);
     prepare.state = 'active';
-    prepare.detail = 'Agent is working';
+    prepare.detail = [d.step ? `${stepLabel(d.step.name, d.baseBranch)} · ${step! + 1} of ${PREPARE_STEPS.length}` : 'Agent is working', elapsed].filter(Boolean).join(' · ');
+    prepare.note = d.step?.note;
   } else if (blocked && !status.published) {
     prepare.state = 'failed';
     prepare.detail = d.detail ?? 'Needs attention';
@@ -53,6 +58,13 @@ export function deliveryTrack(t: ThreadView): DeliveryTrack | undefined {
   const publish: Station = viaPr
     ? { id: 'publish', label: 'Pull request', state: pr ? 'done' : 'todo', ...(pr ? { detail: `#${pr.number}`, link: pr.url } : {}) }
     : { id: 'publish', label: `Push to ${target}`, state: pushed ? 'done' : 'todo', ...(status.revision ? { detail: status.revision } : {}) };
+
+  // The agent said it is publishing: preparation is behind it.
+  if (d.status === 'running' && d.step?.name === 'publish' && !pushed && !pr) {
+    publish.state = 'active';
+    publish.detail = 'Agent is publishing';
+    publish.note = d.step.note;
+  }
 
   const stations = [prepare, publish];
   if (viaPr) {
@@ -87,4 +99,17 @@ export function deliveryTrack(t: ThreadView): DeliveryTrack | undefined {
     if (open) open.detail = 'Status unavailable · last known';
   }
   return { route: viaPr ? `To ${target} via PR` : `To ${target}`, stations };
+}
+
+/** The reported steps that make up Prepare; publish moves the track to its own station. */
+const PREPARE_STEPS: DeliveryStepName[] = ['commit', 'integrate', 'verify'];
+
+function stepLabel(step: DeliveryStepName, target: string): string {
+  return step === 'commit' ? 'Commit' : step === 'integrate' ? `Integrate ${target}` : 'Verify';
+}
+
+function since(iso: string, now: Date): string {
+  const minutes = Math.max(0, Math.floor((now.getTime() - Date.parse(iso)) / 60_000));
+  if (minutes < 1) return 'under 1m';
+  return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 }

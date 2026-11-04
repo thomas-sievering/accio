@@ -68,6 +68,10 @@ export type ThreadWorkspace = {
 };
 
 export type DeliveryMode = 'ship' | 'review';
+/** GLOSSARY: Delivery step. The parts of a delivery turn, in order; the agent reports each through the delivery_step accio tool. */
+export const DELIVERY_STEPS = ['commit', 'integrate', 'verify', 'publish'] as const;
+export type DeliveryStepName = typeof DELIVERY_STEPS[number];
+export type DeliveryStep = { name: DeliveryStepName; at: string; note?: string };
 export type DeliveryPullRequest = {
   host: 'github.com';
   repository: string;
@@ -106,6 +110,10 @@ export type ThreadDelivery = {
   keepOpen?: boolean;
   followUpsStoppedAt?: string;
   ci?: DeliveryCI;
+  /** When the current delivery turn started; reset by each delivery turn. */
+  startedAt?: string;
+  /** What the current delivery turn last reported doing; cleared when one starts. */
+  step?: DeliveryStep;
 };
 
 export type DeliveryCI = {

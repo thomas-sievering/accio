@@ -32,6 +32,7 @@
 .station-done .station-text b { color: var(--ink); }
 .station-active .station-text b, .station-waiting .station-text b { color: var(--ink-strong); }
 .station-failed .station-text b, .station-failed .station-text span { color: var(--red); }
+.station-text .station-note { color: var(--muted); }
 .station-text a { color: var(--dim); }
 .station-text a:hover { color: var(--ink); }
 .station .delivery-progress { grid-column: 2; margin-top: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }

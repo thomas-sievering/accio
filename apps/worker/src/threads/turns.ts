@@ -146,7 +146,10 @@ export class Turns {
         if (!workspace) throw new UserError('Could not restore an owned workspace.');
         thread = { ...thread, workspace, sessionId: null, delivery: undefined };
       }
-      if (delivering) thread = { ...thread, delivery: { ...thread.delivery!, status: 'running', detail: undefined } };
+      if (delivering) {
+        const { step: _previous, ...delivery } = thread.delivery!;
+        thread = { ...thread, delivery: { ...delivery, status: 'running', detail: undefined, startedAt: now() } };
+      }
       const cwd = state.cwd(thread);
       const goalCommand = parseGoalCommand(picked);
       // A /goal message never reaches the harness as typed: Claude Code would run its own /goal.

@@ -26,6 +26,17 @@ describe('deliveryTrack', () => {
     expect(deliveryTrack(t)!.stations[0]!.detail).toBe('Starts when the turn ends');
   });
 
+  it('shows the reported step, its place, elapsed time and note while preparing', () => {
+    const now = new Date('2026-11-03T10:06:30Z');
+    const running = (step?: ThreadDelivery['step']) => thread({ status: 'running', startedAt: '2026-11-03T10:00:00Z', ...(step ? { step } : {}) }, { status: 'running' });
+    expect(deliveryTrack(running(), now)!.stations[0]).toMatchObject({ state: 'active', detail: 'Agent is working · 6m' });
+    const verifying = deliveryTrack(running({ name: 'verify', at: '2026-11-03T10:05:00Z', note: 'Rerunning the failing test on main' }), now)!;
+    expect(verifying.stations[0]).toMatchObject({ state: 'active', detail: 'Verify · 3 of 3 · 6m', note: 'Rerunning the failing test on main' });
+    expect(deliveryTrack(running({ name: 'integrate', at: '2026-11-03T10:05:00Z' }), now)!.stations[0]!.detail).toBe('Integrate main · 2 of 3 · 6m');
+    const publishing = deliveryTrack(running({ name: 'publish', at: '2026-11-03T10:06:00Z', note: 'Opening the pull request' }), now)!;
+    expect(publishing.stations.slice(0, 2)).toMatchObject([{ state: 'done' }, { state: 'active', detail: 'Agent is publishing', note: 'Opening the pull request' }]);
+  });
+
   it('opens Checks with live CI while a PR waits on them', () => {
     const track = deliveryTrack(thread({ pullRequest: pr(), waitingOn: 'checks', ci }))!;
     expect(track.route).toBe('To main via PR');

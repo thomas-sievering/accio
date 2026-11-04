@@ -140,6 +140,10 @@ _Avoid_: Archive, close, resolve
 **Ship**:
 Requesting delivery from the owning thread: finish the work, integrate the target branch, verify and publish under the project's direct or pull-request policy. A request made during work waits for that turn to finish. It authorizes publication under its recorded policy.
 
+**Delivery step**:
+The part of a delivery turn the agent says it is on (commit, integrate, verify or publish), with a short note, reported through the delivery_step accio tool. The Delivery panel shows it with the turn's elapsed time. It is for following along only; accio's own delivery checks never depend on it.
+_Avoid_: Phase, stage
+
 **Delivery policy**:
 A project's choice of how Ship publishes: directly onto the target branch, or through a pull request. It applies to new requests; an existing request keeps the policy it was recorded with.
 _Avoid_: Merge mode, strategy
