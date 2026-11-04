@@ -2,14 +2,14 @@
 
 A personal app that runs coding threads in harnesses such as Claude Code across several of your own machines, and keeps each profile, such as work and personal, strictly apart.
 
-## Machines
+## Hub, machines and roles
 
 **Machine**:
-One running accio server together with the computer, files and settings it controls.
+A connected computer, together with its files and settings. It can run a client, a worker, or both. Being connected does not mean it can run turns; that requires a worker.
 _Avoid_: Environment, host, node
 
 **Hub**:
-An independent service that holds profiles, provider accounts and shared settings, trusts paired machines, and forwards their model requests to the selected accounts. A machine can save several hubs, such as Home server and Local dev; each client window selects one. Hubs have separate state and durable identities. The general thread relay is future work.
+The service that connects clients and workers, holds profiles, provider accounts and shared settings, trusts paired machines and clients, and forwards workers' model requests to the selected accounts. It never runs turns itself. Each client window uses one hub at a time, with multiple machines connected to that hub. A machine can save several independent hubs, such as Home server and Local dev; hubs have separate state and durable identities. The general thread relay is future work.
 _Avoid_: Home machine, accio hub, accio proxy, CLI proxy, gateway, master, connector
 
 **Pairing**:
@@ -17,11 +17,15 @@ Trusting a machine or client once so it can reach the hub and receive the shared
 _Avoid_: Linking, registering
 
 **Client**:
-An app window you use to talk to machines. It holds no threads of its own.
-_Avoid_: Frontend, desktop
+The app you use to read threads, send prompts and change settings. It holds no threads of its own and does not execute turns; a worker does that. A client can run on a machine with or without a worker. Planned iOS and standalone web apps are clients only. Currently the desktop app combines a client with a local worker, and the web client is served by a worker.
+_Avoid_: Thin client (in UI text), frontend, desktop (for the role)
+
+**Worker**:
+The process on a machine that runs harnesses, executes turns and provides access to that machine's files and tools. It can run alongside a client or on its own. It remains a worker while idle; it does not need a running turn. The current implementation is `apps/worker`, started by the desktop app or headlessly with `pnpm worker`.
+_Avoid_: Server (for the role), machine (for the process), agent, sub-agent
 
 **Relay**:
-The hub passing messages between a client and a machine, or between two machines, so you can read and drive a thread on any machine from anywhere. The thread stays on its own machine; nothing is copied.
+The hub passing messages between a client and a worker, or between workers on different machines, so you can read and drive a thread from any client. The thread stays on its worker's machine; nothing is copied. General thread relay is planned, not yet implemented.
 _Avoid_: Sync (for threads), tunnel
 
 **Shared settings**:

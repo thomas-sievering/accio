@@ -44,7 +44,7 @@ export class AccioTools {
     this.tools.push(tool);
   }
 
-  /** Where the machine server listens; known once its transport is up. */
+  /** Where the worker listens; known once its transport is up. */
   listen(origin: string) {
     this.origin = origin;
   }

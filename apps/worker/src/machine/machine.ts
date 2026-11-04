@@ -7,7 +7,7 @@ import type { Broadcast, Router } from '../rpc/router.js';
 import { UserError } from '../rpc/router.js';
 import { JsonFile } from '@accio/persistence';
 
-export const SERVER_VERSION = '0.1.0';
+export const WORKER_VERSION = '0.1.0';
 
 /** This machine's stable id, created on first start. The hub knows the machine by it. */
 export async function loadMachineId(home: string): Promise<string> {
@@ -20,7 +20,7 @@ export async function loadMachineId(home: string): Promise<string> {
 }
 
 export function machineInfo(id: string): MachineInfo {
-  return { id, name: hostname(), platform: platform(), version: SERVER_VERSION };
+  return { id, name: hostname(), platform: platform(), version: WORKER_VERSION };
 }
 
 /**

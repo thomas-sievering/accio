@@ -2,7 +2,7 @@
 
 One compact row above the composer: change counts, **Ship ▾**, and **Open app** when the project has a preview command.
 
-Decisions are in [ADR 0015](../adr/0015-threads-own-delivery-with-optional-pull-requests.md). Browser coverage: `tests/delivery.spec.ts` and `tests/delivery-merge.spec.ts`; server coverage: `apps/server/src/threads/deliveryObservation.test.ts`.
+Decisions are in [ADR 0015](../adr/0015-threads-own-delivery-with-optional-pull-requests.md). Browser coverage: `tests/delivery.spec.ts` and `tests/delivery-merge.spec.ts`; server coverage: `apps/worker/src/threads/deliveryObservation.test.ts`.
 
 - **Ship** finishes the task, integrates the latest default branch, verifies it and publishes. Clicking during work queues a durable request; **×** cancels that request without stopping the work. A queued request survives disconnects. After a server restart, resume the interrupted work explicitly.
 - **Prepare for review** runs the same preparation and opens a PR, without permission to merge. The workspace stays available for review fixes.

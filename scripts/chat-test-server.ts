@@ -4,12 +4,12 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
 import { closeWhenOrphaned } from './fixtureLifetime.js';
-import { startApp } from '../apps/server/src/app.js';
-import { FakeHarness, SESSION, replyWith, toolCall } from '../apps/server/src/testing/fakeHarness.js';
-import { fakeClaudeFetch, TestClient } from '../apps/server/src/testing/testApp.js';
-import type { HarnessMessage } from '../apps/server/src/threads/harness.js';
-import { DeliveryGit, DeliveryPending } from '../apps/server/src/threads/delivery.js';
-import { git } from '../apps/server/src/git.js';
+import { startApp } from '../apps/worker/src/app.js';
+import { FakeHarness, SESSION, replyWith, toolCall } from '../apps/worker/src/testing/fakeHarness.js';
+import { fakeClaudeFetch, TestClient } from '../apps/worker/src/testing/testApp.js';
+import type { HarnessMessage } from '../apps/worker/src/threads/harness.js';
+import { DeliveryGit, DeliveryPending } from '../apps/worker/src/threads/delivery.js';
+import { git } from '../apps/worker/src/git.js';
 
 const home = await mkdtemp(join(tmpdir(), 'accio-chat-browser-'));
 // Disposable encryption for this isolated fixture, including headless Linux runners.

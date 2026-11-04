@@ -5,7 +5,7 @@
   "scripts": {
     "build": "pnpm -r build",
     "start": "pnpm build && pnpm --filter @accio/desktop start",
-    "server": "pnpm --filter \"@accio/server...\" --filter @accio/web build && node apps/server/dist/main.js",
+    "worker": "pnpm --filter \"@accio/worker...\" --filter @accio/web build && node apps/worker/dist/main.js",
     "hub": "pnpm --filter \"@accio/hub...\" build && node apps/hub/dist/main.js",
     "hub:pair": "node apps/hub/dist/main.js --pair",
     "dev:hub": "node scripts/dev-hub.mjs",

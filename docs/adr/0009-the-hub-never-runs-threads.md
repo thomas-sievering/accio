@@ -1,6 +1,6 @@
 # The hub never runs threads
 
-The hub stores, forwards and relays: profiles, accounts, shared settings, the proxy that threads' requests go through, and messages between machines and clients. It never runs a harness, a thread or a turn, and it has no checkouts. Threads run only on machines, that is, wherever an accio server runs: inside the desktop app, or headless with `pnpm server` on a computer nobody sits at. A computer that should run threads and also host the hub, such as the VPS, runs both: the hub and a headless accio server, which pairs with the hub like any other machine.
+The hub stores, forwards and relays: profiles, accounts, shared settings, the proxy that threads' requests go through, and messages between machines and clients. It never runs a harness, a thread or a turn, and it has no checkouts. Threads run only on machines, that is, wherever an accio worker runs: inside the desktop app, or headless with `pnpm worker` on a computer nobody sits at. A computer that should run threads and also host the hub, such as the VPS, runs both: the hub and a headless accio worker, which pairs with the hub like any other machine.
 
 ## Considered Options
 
@@ -8,6 +8,6 @@ The hub stores, forwards and relays: profiles, accounts, shared settings, the pr
 
 ## Consequences
 
-- The hub's code (`apps/hub`) does not depend on harnesses, threads or checkouts. Anything that runs a turn belongs in `apps/server`.
-- Running threads on an always-on computer means pairing a headless accio server there as a machine. It is not a feature of the hub.
+- The hub's code (`apps/hub`) does not depend on harnesses, threads or checkouts. Anything that runs a turn belongs in `apps/worker`.
+- Running threads on an always-on computer means pairing a headless accio worker there as a machine. It is not a feature of the hub.
 - The hub is a standalone service (ADR 0014); a desktop without a saved hub starts a managed local one. Where it is hosted changes nothing for threads.
