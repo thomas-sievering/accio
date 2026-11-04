@@ -24,6 +24,11 @@ export type MachineView = MachineInfo & {
   harnesses: HarnessInstall[];
   /** Profile id → folders on this machine whose new projects default to that profile. */
   profileFolders: Record<string, string[]>;
+  /**
+   * GLOSSARY: Relay. Set on another machine while it is on the relay, so new threads can start there:
+   * the repositories (repo keys) it has a checkout of.
+   */
+  relay?: { repos: string[] };
 };
 
 const SetProfileFolders = z.object({

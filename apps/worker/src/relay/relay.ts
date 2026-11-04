@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { JsonFile } from '@accio/persistence';
 import { RelaySocket, type RelayRequest } from '@accio/hub';
-import { RELAY_MACHINE_METHODS, RELAY_THREAD_METHODS, type Events, type ProjectsState, type RelaySnapshot, type ThreadView } from '@accio/protocol';
+import { RELAY_MACHINE_METHODS, RELAY_THREAD_METHODS, type Events, type MachineView, type ParamsOf, type ProjectsState, type RelaySnapshot, type ThreadView } from '@accio/protocol';
 import { UserError, type Router } from '../rpc/router.js';
 
 const RELAY_METHODS = new Set<string>(RELAY_THREAD_METHODS);
@@ -17,6 +17,8 @@ export type RelayDeps = {
   here: string;
   threads: () => ThreadView[];
   projects: () => ProjectsState;
+  /** The hub's machines, as `machines.list` returns them before the relay adds to them. */
+  machines: () => MachineView[];
   /** This machine's router, which serves requests from the others. */
   router: () => Router;
   /** The hub's name for a paired machine; undefined once it is unpaired. */
@@ -93,8 +95,20 @@ export class Relay {
     for (const [peer, threads] of this.observers) if (threads.includes(data.threadId)) this.socket?.emit(peer, event, data);
   }
 
+  /** The hub's machines, each other machine on the relay marked with the repositories it can start threads in. */
+  machines(views: MachineView[] = this.deps.machines()): MachineView[] {
+    return views.map(({ relay: _, ...machine }) => {
+      if (machine.thisMachine || machine.id === this.deps.here || !this.online.has(machine.id)) return machine;
+      const snapshot = this.remote.get(machine.id);
+      if (!snapshot?.checkouts) return machine;
+      const repos = new Set(snapshot.checkouts.map((c) => snapshot.projects.find((p) => p.id === c.projectId)?.repoKey).filter((key): key is string => !!key));
+      return { ...machine, relay: { repos: [...repos].sort() } };
+    });
+  }
+
   /** Sends a call about another machine's thread to that machine. Undefined: the thread is this machine's. */
   forward(method: string, params: unknown): Promise<unknown> | undefined {
+    if (method === 'threads.start') return this.startThere(params as ParamsOf<'threads.start'>);
     if (MACHINE_METHODS.has(method)) return this.forwardToMachine(method, params);
     const threadId = (params as { threadId?: unknown } | undefined)?.threadId;
     if (typeof threadId !== 'string') return undefined;
@@ -107,6 +121,41 @@ export class Relay {
     return this.socket.call(machineId, method, params).then(
       (result) => isThreadView(result) ? this.decorate(machineId, result) : result,
       (error: Error) => { throw new UserError(error.message); });
+  }
+
+  /**
+   * Starts a thread on the machine it names, in that machine's checkout of the same repository.
+   * Undefined: it starts here.
+   */
+  private startThere(input: ParamsOf<'threads.start'>): Promise<unknown> | undefined {
+    const { machineId, text, model } = input;
+    if (!machineId || machineId === this.deps.here) return undefined;
+    const name = this.deps.machineName(machineId);
+    const snapshot = this.remote.get(machineId);
+    // Not on the relay: threads.start says whether it is unknown, offline or on an earlier build.
+    if (!name || !this.online.has(machineId) || !this.socket || !snapshot) return undefined;
+    if (!snapshot.checkouts) return Promise.reject(new UserError(OLDER(name)));
+    let params: ParamsOf<'threads.start'>;
+    if ('checkoutId' in input) {
+      const { projects, checkouts } = this.deps.projects();
+      const project = projects.find((p) => p.id === checkouts.find((c) => c.id === input.checkoutId)?.projectId);
+      if (!project) return Promise.reject(new UserError('No such checkout'));
+      const there = project.repoKey ? snapshot.projects.find((p) => p.repoKey === project.repoKey) : undefined;
+      const checkout = there && snapshot.checkouts.find((c) => c.projectId === there.id);
+      if (!checkout) return Promise.reject(new UserError(`${name} has no checkout of ${project.name}. Add one there first.`));
+      params = { checkoutId: checkout.id, text, ...(model ? { model } : {}) };
+    } else params = { profileId: input.profileId, text, ...(model ? { model } : {}) };
+    return this.socket.call(machineId, 'threads.start', params).then((result) => {
+      if (!isThreadView(result)) return result;
+      // List it before the owner's next snapshot arrives, so the client can open it straight away.
+      const current = this.remote.get(machineId);
+      if (current && !current.threads.some((t) => t.id === result.id)) {
+        this.remote.set(machineId, { ...current, threads: [result, ...current.threads] });
+        this.index();
+        this.announce();
+      }
+      return this.decorate(machineId, result);
+    }, (error: Error) => { throw new UserError(error.message); });
   }
 
   /** Tells every other machine about a change to this machine itself, such as its update. */
@@ -129,7 +178,8 @@ export class Relay {
   }
 
   private snapshot(): RelaySnapshot {
-    return { threads: this.deps.threads(), projects: this.deps.projects().projects, version: { boot: this.boot, seq: ++this.seq } };
+    const { projects, checkouts } = this.deps.projects();
+    return { threads: this.deps.threads(), projects, checkouts, version: { boot: this.boot, seq: ++this.seq } };
   }
 
   private async serve({ from, method, params }: RelayRequest): Promise<unknown> {
@@ -144,6 +194,10 @@ export class Relay {
       const threads = (this.observers.get(from) ?? []).filter((id) => id !== threadId);
       threads.push(threadId);
       this.observers.set(from, threads.slice(-OBSERVED_PER_PEER));
+    }
+    if (method === 'threads.start' && params && typeof params === 'object') {
+      const { machineId: _, ...own } = params as Record<string, unknown>;
+      params = own;
     }
     const response = await this.deps.router().handle({ id: 0, method, params }, { local: true });
     if (!response) throw new Error('Invalid request');
@@ -170,6 +224,7 @@ export class Relay {
     for (const id of this.online) if (!next.has(id)) this.observers.delete(id);
     this.online = next;
     this.announce();
+    this.announceMachines();
     for (const id of joined) {
       void this.socket?.call(id, 'relay.snapshot', {}).then((snapshot) => {
         this.store(id, snapshot as RelaySnapshot);
@@ -187,6 +242,7 @@ export class Relay {
     this.remote.set(machineId, snapshot);
     this.index();
     this.announce();
+    this.announceMachines();
     clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(() => { void this.file.write({ machines: Object.fromEntries(this.remote) }).catch(() => {}); }, 500);
     this.saveTimer.unref?.();
@@ -196,6 +252,16 @@ export class Relay {
     this.owners.clear();
     for (const [machineId, snapshot] of this.remote) for (const thread of snapshot.threads) this.owners.set(thread.id, machineId);
     for (const thread of this.deps.threads()) this.owners.delete(thread.id);
+  }
+
+  private machinesShown = '';
+  /** Tells clients when another machine joins or leaves the relay, or changes the repositories it has. */
+  private announceMachines() {
+    const machines = this.machines();
+    const shown = JSON.stringify(machines.map((m) => [m.id, m.relay]));
+    if (shown === this.machinesShown) return;
+    this.machinesShown = shown;
+    this.deps.send('machines.changed', machines);
   }
 
   private shown = '';

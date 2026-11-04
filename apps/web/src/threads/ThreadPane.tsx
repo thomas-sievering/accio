@@ -116,12 +116,14 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
   const model = choice?.checkoutId === checkoutId && choice.profileId === place.profile?.id ? choice.model : defaultModel(place.profile);
   const machines = useLive(() => client.call('machines.list', {}), 'machines.changed');
   const [chosenMachineId, setChosenMachineId] = useState<string>();
+  // GLOSSARY: Relay. Another machine can run it when it is on the relay with a checkout of the same repository.
+  const repoKey = place.project?.repoKey;
+  const startable = machines?.filter((m) => m.thisMachine || (m.relay && (!checkoutId || (!!repoKey && m.relay.repos.includes(repoKey)))));
   const local = machines?.find((m) => m.thisMachine);
   const machineId = chosenMachineId ?? local?.id;
-  const machine = machines?.find((m) => m.id === machineId);
+  const machine = startable?.find((m) => m.id === machineId);
   // Until the list loads, a send goes to this machine, as the server does without a machine id.
   const unavailable = !!machines && !machine?.connected;
-  const remote = !!machine && !machine.thisMachine;
   const [starting, setStarting] = useState<string>();
 
   return (
@@ -132,12 +134,11 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
       <div className={`hero${starting !== undefined ? ' starting' : ''}`} inert={starting !== undefined}>
         <h1>{checkoutId ? `What should we build in ${place.project?.name ?? 'this checkout'}?` : 'What should we build?'}</h1>
         <ThreadNotice profile={place.profile} model={model} onOpenProfile={onOpenProfile} />
-        {remote && <p className="note" role="status">Running threads on another machine is not available yet. Choose this machine to start a thread.</p>}
         {chosenMachineId && unavailable && <p className="note" role="status">The selected machine is offline. Choose an online machine.</p>}
         <Composer
           target="draft"
           draftId={`new:${checkoutId}:${profileId ?? ''}`}
-          disabled={starting !== undefined || !place.profile || !accountForModel(place.profile, model)?.signedIn || unavailable || remote}
+          disabled={starting !== undefined || !place.profile || !accountForModel(place.profile, model)?.signedIn || unavailable}
           placeholder={`Ask ${model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}
           onSend={async (text) => {
             const shown = viewTransition('thread-start', () => setStarting(text));
@@ -159,7 +160,7 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
           </>}
         />
         <div className="draft-machine">
-          <MachinePicker machines={machines} value={machineId} onChange={setChosenMachineId} />
+          <MachinePicker machines={startable} value={machineId} onChange={setChosenMachineId} />
         </div>
       </div>
     </>

@@ -1,6 +1,6 @@
 # Thread relay
 
-Status: slices 1 and 2 implemented, 2026-11-04 (`apps/worker/src/relay`, `apps/hub/src/relayClient.ts`, the hub's `/relay` socket). Implements **Relay** from the [glossary](../../GLOSSARY.md) within [ADR 0001](../adr/0001-machines-connect-outbound-to-the-hub.md) and [ADR 0009](../adr/0009-the-hub-never-runs-threads.md).
+Status: slices 1 to 3 implemented, 2026-11-04 (`apps/worker/src/relay`, `apps/hub/src/relayClient.ts`, the hub's `/relay` socket). Implements **Relay** from the [glossary](../../GLOSSARY.md) within [ADR 0001](../adr/0001-machines-connect-outbound-to-the-hub.md) and [ADR 0009](../adr/0009-the-hub-never-runs-threads.md).
 
 ## Problem
 
@@ -32,6 +32,7 @@ A paired machine can now run full-permission turns on every other paired machine
 
 - A machine publishes a `relay.snapshot` (its threads and projects, ordered by `{ boot, seq }`) to every machine on the relay on each change, and answers one for every machine that joins. The viewing worker caches the last snapshot per machine in `relay-cache.json`.
 - A forwarded `threads.observe` registers the caller as an observer before the snapshot is read, as a local client does. The owner streams `thread.item` and `thread.delta` to at most 16 observed threads per machine. When the owner reconnects, the viewer emits `thread.resync` so the open transcript observes again.
+- Each snapshot carries the machine's checkouts too. `machines.list` marks another machine on the relay with `relay.repos`, the repositories it has a checkout of, and `MachinePicker` offers it for drafts in one of those repositories, or for any No project draft. `threads.start` with another machine's id goes to that machine with its own checkout of the same repository; the viewer lists the returned thread at once, before the owner's next snapshot.
 - Frames over 256 KB are split into chunks; the hub caps one WebSocket message at 1 MiB.
 - This design takes from T3 Code: the remote thread is paired with its owning machine, the forwarded methods are a typed allowlist, a cursor dedupes events against the snapshot, and reconnects back off with jitter. Unlike T3 Code, where clients connect to each environment directly, accio's hub carries the traffic (ADR 0001).
 - `node --import tsx scripts/relay-test-server.ts` starts a hub, a "MacBook" with a scripted harness and a "PC" serving the web client, and prints the PC's URL.
@@ -42,7 +43,7 @@ Each slice is usable on the PC and the MacBook on their own, and each is verifie
 
 1. **See them.** Hub `/relay` socket, worker relay client, merged `threads.list` with machine labels and a machine filter in the sidebar, and the cached greyed list for offline machines. Opening a remote thread shows its transcript live (`threads.observe` and streamed events). Read-only.
 2. **Drive them.** Forward the thread actions: send, steering, queued messages, stop, resume, retry, snooze, settle, rename, model and goal. Ship and Prepare for review are worker-side work, so they forward too.
-3. **Start them.** Merged projects with each machine's checkouts. `MachinePicker` offers connected machines with a checkout of the chosen project, and No project threads offer any connected machine.
+3. **Start them.** `MachinePicker` offers connected machines with a checkout of the chosen project, and No project threads offer any connected machine. A project with checkouts only on another machine is not listed here yet, so a thread starts there only from a project this machine has too.
 4. **Media.** Images, attachments and `threads.assetUrl`/`fileUrl` across the relay, through a hub-forwarded HTTP stream rather than WebSocket frames.
 5. **The rest.** Secret requests, choices, project apps and dashboards, the Changelog across machines, and **Open app** for owned previews on another machine, which needs port forwarding.
 

@@ -65,11 +65,12 @@ export class HubConnections {
     const settings = remoteSettings(client);
     const router = new Router(this.global);
     let workspace: HubWorkspace | undefined;
-    const refs: { threads?: Threads; projects?: Projects } = {};
+    const refs: { threads?: Threads; projects?: Projects; machines?: Machines } = {};
     const relay = new Relay(record.home, {
       here: this.here.id,
       threads: () => refs.threads?.views() ?? [],
       projects: () => refs.projects?.state() ?? { projects: [], checkouts: [] },
+      machines: () => refs.machines?.views() ?? [],
       router: () => router,
       machineName: (id) => settings.machine(id)?.name,
       machineConnected: (id) => settings.machines().some((m) => m.id === id && m.connected),
@@ -80,14 +81,14 @@ export class HubConnections {
       else {
         if (event === 'thread.item' || event === 'thread.delta') relay.transcriptEvent(event, data as Events['thread.item']);
         if (event === 'projects.changed') { relay.localChanged(); relay.announce(); }
-        this.send(event, data, record.id);
+        this.send(event, event === 'machines.changed' ? relay.machines(data as Events['machines.changed']) : data, record.id);
       }
       if ((event === 'projects.changed' || event === 'threads.changed') && workspace) {
         void workspace.profiles.syncReferences().catch(() => {}); this.announce();
       }
     };
     const profiles = new Profiles(record.home, client, broadcast);
-    const machines = new Machines(this.here, settings, broadcast);
+    const machines = refs.machines = new Machines(this.here, settings, broadcast);
     const claudeModels = new ClaudeModels(this.claudeModelSource,
       async (profileId) => harnessEnv(process.env, await profiles.hubAccess(profileId, 'anthropic'), configFolderOf(record.home, profileId)),
       () => broadcast('models.changed', null));
@@ -121,7 +122,9 @@ export class HubConnections {
     const threads = refs.threads = new Threads(record.home, profiles, projects, this.runners, broadcast, models, machines, secrets, tools, this.deliveryHosting); await threads.load(); threads.register(router);
     // GLOSSARY: Relay. Other machines' threads join this list; calls about them go to their machine.
     await relay.load();
-    router.on('threads.list', () => relay.merged()); router.forward = (method, params) => relay.forward(method, params);
+    router.on('threads.list', () => relay.merged());
+    router.on('machines.list', async () => { await machines.refresh(); return relay.machines(); });
+    router.forward = (method, params) => relay.forward(method, params);
     const resources = new ResourceManager(record.home, this.here.id, remoteResources(client), remoteMcp(client), profiles, projects, broadcast, async (tool, detail) => {
       const candidates = tool.repairProfileId ? [profiles.require(tool.repairProfileId)] : profiles.all();
       const profile = candidates.find(p => models.list(p.id).models.length > 0);

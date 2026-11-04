@@ -1,5 +1,5 @@
 import type { MethodName } from './index.js';
-import type { ProjectView } from './projects.js';
+import type { CheckoutView, ProjectView } from './projects.js';
 import type { ThreadView } from './threads.js';
 
 /**
@@ -25,6 +25,8 @@ export type RelayHubFrame =
 export type RelaySnapshot = {
   threads: ThreadView[];
   projects: ProjectView[];
+  /** Absent from machines on an earlier build: no thread can start there. */
+  checkouts?: CheckoutView[];
   /** Orders snapshots from one machine: a new `boot` replaces, otherwise the higher `seq` wins. */
   version: { boot: string; seq: number };
 };
@@ -35,10 +37,11 @@ export type RemoteMachine = { id: string; name: string; online: boolean };
 /**
  * Thread methods a machine serves to the others through the relay. Anything not
  * listed, such as hubs.*, secrets.* or pairing, never runs for another machine.
+ * `threads.start` arrives naming the serving machine's own checkout or a profile.
  * Methods that hand out local HTTP URLs (assets, files, previews) wait for a relayed stream.
  */
 export const RELAY_THREAD_METHODS = [
-  'threads.observe', 'threads.transcript', 'threads.toolDetails', 'threads.deliverySummary',
+  'threads.start', 'threads.observe', 'threads.transcript', 'threads.toolDetails', 'threads.deliverySummary',
   'threads.send', 'threads.queued', 'threads.stop', 'threads.resume', 'threads.retry',
   'threads.deliver', 'threads.cancelDelivery', 'threads.checkDelivery', 'threads.archive',
   'threads.goal', 'threads.setModel', 'threads.snooze', 'threads.settle', 'threads.reopen',
