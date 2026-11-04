@@ -8,6 +8,7 @@ import { ResourcePicker } from '../resources/ResourcePicker';
 import { Field, focusFirstInvalid } from '../resources/Field';
 import { toggled, useResources } from '../resources/resources';
 import { hasSignedInAccount, profileSave, selectionOf, useProfiles } from './profiles';
+import { MenuSelect } from '../ui/MenuSelect';
 
 /** Profiles select accounts configured in Accounts settings. */
 export function ProfilesSettings({
@@ -149,13 +150,10 @@ function ProviderAccounts({ provider, accounts, selected, inUseId, onChange }: {
       )}
       {chosen.length === 0 && <small className="hint">No {provider.account} selected.</small>}
       {rest.length > 0 && (
-        <label className="field">
-          <span className="visually-hidden">{add}</span>
-          <select value="" onChange={(e) => e.target.value && onChange([...selected, e.target.value])} disabled={!accounts}>
-            <option value="">{add}…</option>
-            {rest.map((a) => <option key={a.id} value={a.id}>{a.name}{a.email ? ` · ${a.email}` : ''}{a.signedIn ? '' : ' · Signed out'}</option>)}
-          </select>
-        </label>
+        <div className="field">
+          <MenuSelect label={add} value="" placeholder={`${add}…`} disabled={!accounts} onChange={(id) => onChange([...selected, id])}
+            options={rest.map((a) => ({ value: a.id, label: a.name, detail: a.signedIn ? a.email ?? 'Signed in' : 'Signed out' }))} />
+        </div>
       )}
     </div>
   );

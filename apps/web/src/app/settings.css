@@ -323,10 +323,10 @@
 .naming-instructions { display: grid; gap: 8px; }
 .naming-instructions textarea { width: 100%; resize: vertical; }
 .naming-preview { display: flex; align-items: end; gap: 12px; margin-top: 20px; }
-.naming-preview label { display: grid; gap: 8px; min-width: 0; }
-.naming-preview select { max-width: 350px; }
+.naming-preview .field { display: grid; gap: 8px; min-width: 0; }
+.naming-preview .menu-select { width: 350px; max-width: 100%; }
 .naming-model, .naming-preview .field, .naming-instructions { margin: 0; }
-.naming-model select { max-width: 280px; }
+.naming-model .menu-select { max-width: 280px; }
 
 /* A profile's accounts at one provider, in order of use. */
 .profile-accounts {

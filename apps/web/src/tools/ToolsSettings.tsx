@@ -9,6 +9,7 @@ import { hasSignedInAccount, useProfiles } from '../profiles/profiles';
 import { LoadError, slugId, useDraft, useResources } from '../resources/resources';
 import { Field, focusFirstInvalid } from '../resources/Field';
 import { readiness, ToolStatusCard } from './ToolStatusCard';
+import { MenuSelect } from '../ui/MenuSelect';
 
 /** `npm view @playwright/cli version` on 2026-11-03. Editable before saving. */
 const PLAYWRIGHT_CLI = { name: 'Playwright CLI', package: '@playwright/cli', version: '0.1.23', executable: 'playwright-cli', checkArgs: ['--version'] };
@@ -152,13 +153,11 @@ function ToolForm({ tool, taken, onSaved, onDone, after }: { tool?: ToolDefiniti
       <p className="note">Saving installs and checks this tool on this machine. Managed tools are available to every profile and project on the machine.</p>
       <SettingsSection title="Repair">
         <div className="setting-form">
-          <label className="field" title="When a check fails, Accio starts a thread on that machine that fixes the install, then checks again">
+          <div className="field" title="When a check fails, Accio starts a thread on that machine that fixes the install, then checks again">
             <span>Repair threads run as</span>
-            <select value={value.repairProfileId ?? ''} onChange={(e) => set('repairProfileId', e.target.value || undefined)}>
-              <option value="">Any signed-in profile</option>
-              {profiles.map((p) => <option key={p.id} value={p.id}>{p.name}{hasSignedInAccount(p) ? '' : ' · Signed out'}</option>)}
-            </select>
-          </label>
+            <MenuSelect label="Repair threads run as" value={value.repairProfileId ?? ''} onChange={(next) => set('repairProfileId', next || undefined)}
+              options={[{ value: '', label: 'Any signed-in profile' }, ...profiles.map((p) => ({ value: p.id, label: p.name, ...(hasSignedInAccount(p) ? {} : { detail: 'Signed out' }) }))]} />
+          </div>
           {repairWarning && <small className="warn" role="status">{repairWarning}</small>}
         </div>
       </SettingsSection>

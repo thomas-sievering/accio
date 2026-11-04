@@ -8,6 +8,7 @@ import { SignIn } from '../profiles/SignIn';
 import { AddProjectForm, AddProjectSheet } from '../projects/AddProjectSheet';
 import { useProjects } from '../projects/projects';
 import { PairHubForm } from '../hub/PairHubForm';
+import { MenuSelect } from '../ui/MenuSelect';
 
 /**
  * What a thread needs, one question at a time: a hub, a profile, a provider
@@ -174,10 +175,10 @@ function SetUpAccount({ profile, onAddProject, addedProject, onBack }: { profile
         </button>
       ))}
     </div>
-    {existing.length > 0 && <label className="field"><span>{provider.name} account</span><select value={selected} onChange={(e) => setSelected(e.target.value)}>
-      <option value="">New account</option>
-      {existing.map((a) => <option value={a.id} key={a.id}>{a.name}</option>)}
-    </select></label>}
+    {existing.length > 0 && <div className="field"><span>{provider.name} account</span>
+      <MenuSelect label={`${provider.name} account`} value={selected} onChange={setSelected}
+        options={[{ value: '', label: 'New account' }, ...existing.map((a) => ({ value: a.id, label: a.name }))]} />
+    </div>}
     <button type="submit" className="ghost primary first-run-next" disabled={busy || !accounts}>Continue</button>
     {error && <p className="error">{error}</p>}
     <div className="first-run-links"><button type="button" className="link" onClick={onBack}>Back</button>{projectFirst && <><span aria-hidden="true">·</span>{projectFirst}</>}</div>

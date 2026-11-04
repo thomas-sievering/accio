@@ -10,6 +10,7 @@ import { isOptional, LoadError, scopeSummary, shortRevision, slugId, useResource
 import { ScopeEditor } from '../resources/ScopeEditor';
 import { Field, focusFirstInvalid } from '../resources/Field';
 import { MidPath } from '../projects/MidPath';
+import { MenuSelect } from '../ui/MenuSelect';
 
 const activeRevision = (state: ResourcesState, sourceId: string) => state.skills.find((s) => s.sourceId === sourceId)?.revision;
 
@@ -235,13 +236,12 @@ function SkillRow({ skill }: { skill: SkillEntry }) {
         <div className="setting-form skill-panel">
           {checkouts.length === 0 ? <p className="note">Add a project on this machine first.</p> : (
             <>
-              <label className="field">
+              <div className="field">
                 <span>Checkout on this machine</span>
-                <select value={checkoutId} onChange={(e) => { setCheckoutId(e.target.value); setCopied(undefined); }} disabled={copy.busy}>
-                  <option value="">Choose a checkout…</option>
-                  {checkouts.map((c) => <option key={c.id} value={c.id}>{c.project} · {c.path}</option>)}
-                </select>
-              </label>
+                <MenuSelect label="Checkout on this machine" value={checkoutId} placeholder="Choose a checkout…" disabled={copy.busy}
+                  onChange={(next) => { setCheckoutId(next); setCopied(undefined); }}
+                  options={checkouts.map((c) => ({ value: c.id, label: c.project, detail: c.path }))} />
+              </div>
               <small className="hint">Copies this revision’s files to <code>.agents/skills/{skill.name.replace(/[^a-zA-Z0-9_-]/g, '-')}</code>. An existing skill folder there is never overwritten.</small>
               {copied && <p className="note" role="status">Copied to <code>{copied}</code>. Commit it to share it with the project.</p>}
               {copy.error && <p className="error" role="alert">{copy.error}</p>}

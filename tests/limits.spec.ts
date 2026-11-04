@@ -1,4 +1,5 @@
 import { expect, test, type WebSocketRoute } from '@playwright/test';
+import { pick } from './menu-select';
 
 test('limits follow profiles and shared accounts through sign-in, retry, reset, settings and composer navigation', async ({ page, context, baseURL }, testInfo) => {
   const errors: string[] = [];
@@ -43,8 +44,8 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
   const selectAccounts = async (name: string, claude: string, chatgpt: string) => {
     await settings('Profiles');
     await page.getByRole('button', { name: new RegExp(`^${name} `) }).click();
-    await page.getByRole('combobox', { name: 'Add Claude account' }).selectOption({ label: `${claude} · ${claude === 'Shared Claude' ? 'shared' : 'work'}@example.com` });
-    await page.getByRole('combobox', { name: 'Add ChatGPT account' }).selectOption({ label: `${chatgpt} · shared-chatgpt@example.com` });
+    await pick(page, 'Add Claude account', new RegExp(`^${claude}\\s*${claude === 'Shared Claude' ? 'shared' : 'work'}@example\\.com`));
+    await pick(page, 'Add ChatGPT account', new RegExp(`^${chatgpt}\\s*shared-chatgpt@example\\.com`));
     await button('Save').click();
   };
 
@@ -204,7 +205,7 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
   await button('Close limits').click();
   await settings('Profiles');
   await page.getByRole('button', { name: /^Personal / }).click();
-  await page.getByRole('combobox', { name: 'Add another Claude account' }).selectOption({ label: 'Unused Claude · expired@example.com' });
+  await pick(page, 'Add another Claude account', /^Unused Claude\s*expired@example\.com/);
   const claudeList = page.getByRole('list', { name: 'Anthropic · Claude accounts' });
   await expect(claudeList.getByRole('listitem')).toHaveText([/^Shared Claude.*In use$/, /^Unused Claude/]);
   await button('Save').click();

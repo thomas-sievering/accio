@@ -7,6 +7,7 @@ import { useAction } from '../app/useAction';
 import { LoadError, slugId, useDraft, useResources } from '../resources/resources';
 import { Field, focusFirstInvalid } from '../resources/Field';
 import { mcpDefinition } from './mcp';
+import { MenuSelect } from '../ui/MenuSelect';
 
 const blank = (): McpDefinition => ({ id: '', name: '', transport: 'http', url: '', command: '', args: [], auth: 'none', oauthClientId: undefined });
 const authLabel = { none: 'No sign-in', bearer: 'Bearer token', oauth: 'OAuth sign-in' } as const;
@@ -105,14 +106,11 @@ function McpForm({ mcp, taken, onSaved, onDone }: { mcp?: McpView; taken: string
                 <Field label="Server URL" error={show('url')}>
                   {(p) => <input {...p} type="url" value={value.url ?? ''} onChange={(e) => set('url', e.target.value)} placeholder="https://mcp.example.com/mcp" spellCheck={false} required />}
                 </Field>
-                <label className="field">
+                <div className="field">
                   <span>Authentication</span>
-                  <select value={value.auth} onChange={(e) => set('auth', e.target.value as McpDefinition['auth'])}>
-                    <option value="none">{authLabel.none}</option>
-                    <option value="bearer">{authLabel.bearer}</option>
-                    <option value="oauth">{authLabel.oauth}</option>
-                  </select>
-                </label>
+                  <MenuSelect label="Authentication" value={value.auth} onChange={(auth) => set('auth', auth)}
+                    options={(['none', 'bearer', 'oauth'] as const).map((auth) => ({ value: auth, label: authLabel[auth] }))} />
+                </div>
                 {value.auth === 'oauth' && (
                   <label className="field">
                     <span>OAuth client ID (optional)</span>
