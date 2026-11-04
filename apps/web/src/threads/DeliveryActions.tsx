@@ -97,7 +97,10 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
         {!receipt && summary && (summary.added > 0 || summary.removed > 0) && <span className="delivery-pill delivery-diff" title={`${summary.files} changed ${summary.files === 1 ? 'file' : 'files'}`} aria-label={`${summary.added} lines added, ${summary.removed} lines removed`}>
           <span className="delivery-added">+{summary.added}</span><span className="delivery-removed">−{summary.removed}</span>
         </span>}
-        {status?.phase === 'queued' || status?.phase === 'paused' ? <span className={`delivery-split delivery-queued`}>
+        {status?.phase === 'queued' || status?.phase === 'paused' ? <span className={`delivery-split delivery-queued${status.phase === 'queued' ? ' delivery-sparkly' : ''}`}>
+          {status.phase === 'queued' && <span className="delivery-sparkles" aria-hidden="true">
+            {Array.from({ length: 9 }, (_, i) => <i key={i} />)}
+          </span>}
             <span role="status"><StatusGlyphIcon glyph={status.glyph} tone={status.tone} />{status.label}</span>
           {status.canCancel && <button disabled={busy} aria-label="Cancel queued delivery" title="Cancel queued delivery" onClick={() => call('threads.cancelDelivery')}><Close /></button>}
         </span> : status?.phase === 'shipping' ? <span className="delivery-pill delivery-queued" role="status"><StatusGlyphIcon glyph={status.glyph} tone={status.tone} />{status.label}…</span>
