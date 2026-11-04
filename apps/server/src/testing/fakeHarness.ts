@@ -42,3 +42,9 @@ export function gate() {
   const opened = new Promise<void>((r) => (release = r));
   return { opened, release };
 }
+
+/** One completed tool call, as Claude Code reports it. */
+export function* toolCall(name: string, input: unknown = {}, id = `tool-${name}`, sessionId = SESSION): Iterable<HarnessMessage> {
+  yield { type: 'assistant', parent_tool_use_id: null, session_id: sessionId, message: { id: `msg-${id}`, content: [{ type: 'tool_use', id, name, input }] } };
+  yield { type: 'user', parent_tool_use_id: null, session_id: sessionId, message: { content: [{ type: 'tool_result', tool_use_id: id, content: 'ok' }] } };
+}

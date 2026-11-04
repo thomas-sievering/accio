@@ -66,3 +66,13 @@ it('orders connection and disconnection even when the first write is pending', a
   await Promise.all([settings.machineConnected({ ...hello, id: 'other' }), settings.machineDisconnected('other')]);
   expect(settings.machines().find((m) => m.id === 'other')?.connected).toBe(false);
 });
+
+it('keeps built-in tool overrides per harness and rejects unknown harnesses', async () => {
+  const settings = await setup();
+  await settings.setHarnessTools('claudeCode', { web: false });
+  await settings.setHarnessTools('codex', { goals: true });
+  await expect(settings.setHarnessTools('other', {})).rejects.toThrow('No harness other');
+  const reloaded = new SharedSettings(home);
+  await reloaded.load();
+  expect(reloaded.harnessTools()).toEqual({ claudeCode: { web: false }, codex: { goals: true } });
+});

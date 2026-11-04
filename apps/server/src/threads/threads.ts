@@ -9,6 +9,8 @@ import type { Projects } from '../projects/projects.js';
 import { UserError, type Broadcast, type Router } from '../rpc/router.js';
 import type { Harness } from './harness.js';
 import type { ResourceManager } from '../resources/resources.js';
+import { builtinToolsOff, type BuiltinToolOverrides } from '../harnesses/builtinTools.js';
+import { finishGoal, newGoal, newGoalPrompt, parseGoalCommand, pauseGoal, resumeGoal, type GoalCommand } from '../goals/goal.js';
 import type { Models } from '../harnesses/models.js';
 import { providerOf } from './harnessEnv.js';
 import {
@@ -44,6 +46,8 @@ export class Threads {
   profileReferences() { return this.state.list.map((thread) => thread.profileId); }
   resources?: ResourceManager;
   onRepairFinished?: (toolId: string) => void;
+  /** The hub's built-in tool overrides; accio's defaults apply until it is set. */
+  toolOverrides?: () => BuiltinToolOverrides;
   readonly assets: ThreadAssets;
   readonly secrets: SecretRequests;
   private state: ThreadState;
@@ -78,7 +82,7 @@ export class Threads {
       withLifecycle: (threadId, action) => this.withLifecycle(threadId, action),
     }, deliveryHosting);
     this.turns = new Turns(this.state, { profiles, projects, models, machines, harnesses, secrets: this.secrets, content: this.content, deliveries: this.deliveries, tools,
-      resources: () => this.resources, onRepairFinished: (toolId) => this.onRepairFinished?.(toolId) });
+      resources: () => this.resources, toolsOff: (harnessId) => builtinToolsOff(harnessId, this.toolOverrides?.()[harnessId]), onRepairFinished: (toolId) => this.onRepairFinished?.(toolId) });
     projects.onRemoveThreads((id) => this.deleteThreads(this.state.list.filter((t) => t.checkoutId === id)));
     projects.onCheckInUse((checkoutId) => this.countUsing((t) => t.checkoutId === checkoutId));
     projects.onCheckProjectInUse((projectId) => this.countUsing((t) => t.projectId === projectId));
@@ -202,6 +206,8 @@ export class Threads {
         if (state.running.has(threadId) && mode !== 'queue' && !turns.canSteer(threadId)) {
           throw new UserError('The agent is starting or finishing. Try sending again in a moment.');
         }
+        const goal = parseGoalCommand(text);
+        if (goal && !pick) return this.withMessages(threadId, () => this.goalCommand(threadId, goal, text));
         return this.withMessages(threadId, async () => {
           this.assertMessageAllowed(threadId);
           if (!state.running.has(threadId)) await turns.begin(threadId, text, { pick });
@@ -228,6 +234,10 @@ export class Threads {
           await turns.dispatchQueued(threadId);
         }
         return null;
+      }))
+      .on('threads.goal', ({ threadId, action }) => this.withMessages(threadId, async () => {
+        await this.goalCommand(threadId, { type: action }, `/goal ${action}`);
+        return toView(state.require(threadId));
       }))
       .on('threads.deliverySummary', ({ threadId }) => deliveries.summary(threadId))
       .on('threads.deliver', ({ threadId, mode }) => deliveries.request(threadId, mode))
@@ -300,6 +310,9 @@ export class Threads {
         const selected = model ? this.models.requireExact(profileId, choice) : this.models.require(profileId, choice);
         // GLOSSARY: a thread keeps the profile it started with for its whole life.
         const thread = newThread({ checkoutId: checkout?.id ?? '', projectId: project?.id ?? '', profileId, hubId: this.profiles.client.id, model: selected }, now());
+        const goal = parseGoalCommand(text);
+        if (goal && goal.type !== 'set') throw new UserError('Start a thread with /goal <objective>.');
+        if (goal?.type === 'set') thread.goal = newGoal(goal.objective, now());
         if (options.repairToolId) { thread.repairToolId = options.repairToolId; thread.title = `Repair ${options.repairToolId}`; }
         if (checkout) thread.workspace = await this.deliveries.git.allocate(thread.id, checkout.path);
         if (!checkout) await mkdir(join(state.home, 'workspaces', thread.id), { recursive: true });
@@ -330,6 +343,43 @@ export class Threads {
         releaseProfile();
       }
     });
+  }
+
+  /**
+   * GLOSSARY: Goal. `/goal <objective>` sets it and starts (or steers) work toward it;
+   * pause, resume and clear change it without a message to the harness. Pausing lets
+   * a running turn finish; only the automatic next turn is skipped.
+   */
+  private async goalCommand(threadId: string, command: GoalCommand, text: string) {
+    const { state, turns } = this;
+    const thread = state.require(threadId);
+    if (command.type === 'set') {
+      this.assertMessageAllowed(threadId);
+      const goal = newGoal(command.objective, now());
+      await state.update(threadId, t => ({ ...t, goal }));
+      if (!state.running.has(threadId)) await turns.begin(threadId, text);
+      else await turns.steer(threadId, text, undefined, newGoalPrompt(command.objective));
+    } else if (command.type === 'clear') {
+      if (!thread.goal) throw new UserError('This thread has no goal.');
+      await state.update(threadId, ({ goal: _, ...t }) => t);
+    } else if (command.type === 'pause') {
+      const goal = pauseGoal(thread.goal);
+      await state.update(threadId, t => ({ ...t, goal }));
+    } else {
+      const goal = resumeGoal(thread.goal);
+      await state.update(threadId, t => ({ ...t, goal }));
+      if (!state.running.has(threadId)) { this.assertMessageAllowed(threadId); await turns.continueGoal(threadId); }
+    }
+    return null;
+  }
+
+  /** The `finish_goal` tool, called by the harness during a turn of this thread. */
+  async finishGoal(threadId: string, outcome: 'achieved' | 'blocked', summary: string) {
+    await this.state.update(threadId, t => ({ ...t, goal: finishGoal(t.goal, outcome, summary) }));
+  }
+
+  goalActive(threadId: string) {
+    return this.state.get(threadId)?.goal?.status === 'active';
   }
 
   private withMessages<T>(id: string, action: () => Promise<T>): Promise<T> {

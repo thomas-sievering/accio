@@ -16,7 +16,7 @@ import { SidebarResizer } from './Resizer';
 import { HubSelector } from '../hub/HubSelector';
 
 /** Where Settings is open. `profileId` opens one profile ('new' to add one). */
-export type SettingsRoute = { section: 'profiles'; profileId?: string } | { section: 'accounts'; accountId?: string } | ({ section: 'secrets' } & SecretsRoute) | { section: 'hub' } | { section: 'harnesses' } | { section: 'systemPrompt' } | { section: 'machines'; machineId?: string }
+export type SettingsRoute = { section: 'profiles'; profileId?: string } | { section: 'accounts'; accountId?: string } | ({ section: 'secrets' } & SecretsRoute) | { section: 'hub' } | { section: 'harnesses'; harnessId?: string } | { section: 'systemPrompt' } | { section: 'machines'; machineId?: string }
   | { section: 'tools'; toolId?: string } | { section: 'mcps'; mcpId?: string } | { section: 'skills'; sourceId?: string };
 type Section = SettingsRoute['section'];
 
@@ -60,7 +60,8 @@ export function Settings({ route, onRoute, onClose, onOpenThread }: { route: Set
     : mcpId ? (mcpId === 'new' ? 'New MCP server' : resources?.mcps.find((m) => m.id === mcpId)?.name)
       : sourceId ? (sourceId === 'new' ? 'New skill source' : resources?.sources.find((s) => s.id === sourceId)?.name)
         : undefined;
-  const detailLabel = profileLabel || accountLabel || secretLabel || resourceLabel;
+  const harnessLabel = route.section === 'harnesses' && route.harnessId ? 'Built-in tools' : undefined;
+  const detailLabel = profileLabel || accountLabel || secretLabel || resourceLabel || harnessLabel;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -131,7 +132,7 @@ export function Settings({ route, onRoute, onClose, onOpenThread }: { route: Set
             {route.section === 'accounts' && <AccountsSettings accountId={accountId} onOpen={(id) => onRoute({ section: 'accounts', accountId: id })} onBack={() => onRoute({ section: 'accounts' })} />}
             {route.section === 'secrets' && <SecretsSettings route={route} onRoute={(r) => onRoute({ section: 'secrets', ...r })} />}
             {route.section === 'hub' && <HubSettings />}
-            {route.section === 'harnesses' && <HarnessesSettings />}
+            {route.section === 'harnesses' && <HarnessesSettings harnessId={route.harnessId} onOpen={(harnessId) => onRoute({ section: 'harnesses', harnessId })} onBack={() => onRoute({ section: 'harnesses' })} />}
             {route.section === 'systemPrompt' && <SystemPromptSettings />}
             {route.section === 'tools' && <ToolsSettings key={toolId ?? ''} toolId={toolId} onOpen={(id) => onRoute({ section: 'tools', toolId: id })} onBack={() => onRoute({ section: 'tools' })} onOpenThread={onOpenThread} />}
             {route.section === 'mcps' && <McpSettings key={mcpId ?? ''} mcpId={mcpId} onOpen={(id) => onRoute({ section: 'mcps', mcpId: id })} onBack={() => onRoute({ section: 'mcps' })} />}

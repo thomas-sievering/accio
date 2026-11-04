@@ -81,7 +81,7 @@ export class HubClient {
   async close() { this.stopped = true; clearTimeout(this.retry); this.ws?.terminate(); }
 }
 
-export type SettingsAccess = Pick<SharedSettings, 'profiles' | 'machines' | 'machine' | 'modelFavorites' | 'setModelFavorite' | 'onMachinesChanged' | 'machineConnected' | 'machineDisconnected' | 'renameMachine' | 'setProfileFolders'> & { refresh?: () => Promise<void> };
+export type SettingsAccess = Pick<SharedSettings, 'profiles' | 'machines' | 'machine' | 'modelFavorites' | 'setModelFavorite' | 'harnessTools' | 'setHarnessTools' | 'onMachinesChanged' | 'machineConnected' | 'machineDisconnected' | 'renameMachine' | 'setProfileFolders'> & { refresh?: () => Promise<void> };
 
 /** Synchronous read views with writes committed by the hub over the connection. */
 export function remoteSettings(client: HubClient): SettingsAccess {
@@ -92,6 +92,8 @@ export function remoteSettings(client: HubClient): SettingsAccess {
     machine: (id) => client.snapshot?.machines.find((m) => m.id === id),
     modelFavorites: (id) => client.snapshot?.favorites[id] ?? [],
     onMachinesChanged: (listener) => client.onChanged(listener),
+    harnessTools: () => client.snapshot?.harnessTools ?? {},
+    setHarnessTools: async (harnessId, tools) => { await client.call('harnesses.setTools', { harnessId, tools }); },
     setModelFavorite: async (profileId, model, favorite) => { await client.call('models.favorite', { profileId, model, favorite }); },
     machineConnected: async (hello) => { await client.call('machine.hello', hello); },
     machineDisconnected: async () => {},

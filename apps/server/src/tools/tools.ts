@@ -15,6 +15,8 @@ export type AccioTool<Shape extends z.ZodRawShape = z.ZodRawShape> = {
   name: string;
   description: string;
   input: Shape;
+  /** Listed and callable only when this says so for the turn's thread, so a turn sees just the tools it can use. */
+  available?: (threadId: string) => boolean;
   call: (args: z.infer<z.ZodObject<Shape>>, context: { threadId: string }) => Promise<string> | string;
 };
 
@@ -94,9 +96,9 @@ export class AccioTools {
         return rpcResult(id, {});
       case 'tools/list':
         // Claude Code would otherwise defer MCP tools behind its tool search; accio's are few and named in the system prompt.
-        return rpcResult(id, { tools: this.tools.map(({ name, description, input }) => ({ name, description, inputSchema: inputSchema(input), _meta: { 'anthropic/alwaysLoad': true } })) });
+        return rpcResult(id, { tools: this.tools.filter((t) => !t.available || t.available(threadId)).map(({ name, description, input }) => ({ name, description, inputSchema: inputSchema(input), _meta: { 'anthropic/alwaysLoad': true } })) });
       case 'tools/call': {
-        const tool = this.tools.find((t) => t.name === params?.name);
+        const tool = this.tools.find((t) => t.name === params?.name && (!t.available || t.available(threadId)));
         if (!tool) return rpcError(id, -32602, `Unknown tool: ${String(params?.name)}`);
         const args = z.object(tool.input).safeParse(params?.arguments ?? {});
         if (!args.success) return rpcResult(id, toolResult(z.prettifyError(args.error), true));

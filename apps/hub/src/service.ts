@@ -22,6 +22,8 @@ export type HubSnapshot = {
   profiles: ProfileView[]; accounts: AccountView[];
   machines: ReturnType<SharedSettings['machines']>;
   favorites: Record<string, { harnessId: string; modelId: string }[]>;
+  /** Absent in snapshots cached before built-in tool switches existed. */
+  harnessTools?: Record<string, Record<string, boolean>>;
   models: Record<string, CodexModel[]>;
   resources: ResourcesState;
   limits: AccountLimitsView[];
@@ -34,6 +36,9 @@ export type HubServiceOptions = {
 };
 const SecretId = z.string().min(1).max(160);
 const SecretScope = z.object({ profileId: SecretId, projectId: SecretId.nullable(), slot: SecretSlot });
+const settingCalls = {
+  'harnesses.setTools': z.object({ harnessId: z.string().min(1).max(64), tools: z.record(z.string().regex(/^[a-z][a-z0-9-]{0,63}$/), z.boolean()) }),
+};
 const secretCalls = {
   'secrets.resolve': SecretScope,
   'secrets.bind': z.object({ id: SecretId, scope: SecretScope }),
@@ -63,7 +68,7 @@ export async function startHubService(opts: HubServiceOptions) {
   function snapshot(): HubSnapshot {
     const profiles = settings.profiles();
     return { hubId: trust.id, protocol: HUB_PROTOCOL, revision, epoch, profiles: profileViews(profiles, hub), accounts: hub.accountViews(), machines: settings.machines(),
-      favorites: Object.fromEntries(profiles.map((p) => [p.id, settings.modelFavorites(p.id)])),
+      favorites: Object.fromEntries(profiles.map((p) => [p.id, settings.modelFavorites(p.id)])), harnessTools: settings.harnessTools(),
       models: Object.fromEntries(profiles.map((p) => [p.id, hub.codexModels(p.id)])), resources: resources.state(), limits: hub.limits.views(), secrets: profiles.flatMap(p => secrets.list(p.id)) };
   }
   function announce() { revision++; for (const ws of sockets.clients) if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ revision })); }
@@ -78,7 +83,7 @@ export async function startHubService(opts: HubServiceOptions) {
     return pending;
   }
   async function execute(machineId: string, method: string, raw: any): Promise<unknown> {
-    const schema = (methods as Record<string, any>)[method]?.params ?? (secretCalls as Record<string, z.ZodType>)[method];
+    const schema = (methods as Record<string, any>)[method]?.params ?? (secretCalls as Record<string, z.ZodType>)[method] ?? (settingCalls as Record<string, z.ZodType>)[method];
     const parsed = schema?.safeParse(raw);
     if (parsed && !parsed.success) throw new SignInError('Invalid hub request parameters');
     const p = parsed ? parsed.data : raw;
@@ -200,6 +205,7 @@ export async function startHubService(opts: HubServiceOptions) {
       case 'machines.rename': await settings.renameMachine(p.machineId, p.name); return null;
       case 'machines.setProfileFolders': await settings.setProfileFolders(p.machineId, p.profileId, p.folders); return null;
       case 'models.favorite': await settings.setModelFavorite(p.profileId, p.model, p.favorite); return null;
+      case 'harnesses.setTools': await settings.setHarnessTools(p.harnessId, p.tools); return null;
       default: throw new SignInError(`Unknown hub method ${method}`);
     }
   }

@@ -10,6 +10,7 @@ Users choose a project or profile, select a model, send prompts, observe streame
 - `threads-stop`: stop from composer/row/menu; resume interruptions; retry failed turns.
 - `threads-find`: title search, clear, profile/project filters and clear filter chip.
 - `threads-organize`: rename, snooze/wake, settle/reopen, shelf expansion/paging, confirmed deletion.
+- `threads-goal`: `/goal <objective>` in the composer shows the Goal bar (`getByRole('region', { name: 'Goal' })`); accio continues turns ("Continuing toward the goal" dividers) until finish_goal reports achieved or blocked; Pause, Resume and Clear goal buttons and `/goal pause|resume|clear`. Covered by `tests/goal.spec.ts` in `pnpm test:chat` with the scripted harness calling the real MCP tool; real-provider goals need a signed-in account.
 - `threads-delivery`: owned Git worktrees, Ship/review intent, cancellation, remote verification, preview ownership and safe Archive.
 
 ## How to get to it (user POV)

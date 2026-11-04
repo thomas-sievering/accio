@@ -10,6 +10,7 @@ import { ProjectMark } from '../projects/ProjectMark';
 import { useProjects } from '../projects/projects';
 import { Composer } from './Composer';
 import { QueueTray } from './QueueTray';
+import { GoalBar } from './GoalBar';
 import { PendingPick, optionName } from './Choice';
 import { DeliveryActions } from './DeliveryActions';
 import { MachinePicker } from './MachinePicker';
@@ -66,7 +67,7 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
       <Composer
         key={thread.id}
         disabled={savingModel || thread.delivery?.status === 'queued' || thread.delivery?.status === 'running' || !place.profile || !accountForModel(place.profile, thread.model)?.signedIn}
-        actions={<><DeliveryActions key={thread.id} thread={thread} project={place.project} canRun={!!place.profile && !!accountForModel(place.profile, thread.model)?.signedIn} /><QueueTray thread={thread} /></>}
+        actions={<><DeliveryActions key={thread.id} thread={thread} project={place.project} canRun={!!place.profile && !!accountForModel(place.profile, thread.model)?.signedIn} /><GoalBar thread={thread} /><QueueTray thread={thread} /></>}
         target={thread.id}
         draftId={`thread:${thread.id}`}
         onStop={running ? async () => void (await client.call('threads.stop', { threadId: thread.id })) : undefined}
