@@ -412,6 +412,9 @@
   align-self: stretch;
   min-width: 0;
   max-width: 100%;
+  margin-block: 4px;
+  color: var(--ink-strong);
+  font-size: 14.5px;
 }
 .msg.assistant > :first-child {
   margin-top: 0;
@@ -472,8 +475,8 @@
   max-width: 100%;
   padding: 3px 8px;
   border-radius: 8px;
-  color: var(--muted);
-  font-size: 13px;
+  color: var(--dim);
+  font-size: 12.5px;
 }
 .tool button:disabled {
   cursor: default;
@@ -482,10 +485,10 @@
   color: var(--ink);
   background: var(--hover);
 }
+/* Tool rows stay quieter than the prose around them. */
 .tool-name {
   flex: none;
-  font-weight: 600;
-  color: var(--ink);
+  font-weight: 500;
 }
 /* A bullet per call, coloured only when the call needs attention. */
 .tool:not(.running) .tool-name::before {
@@ -527,7 +530,7 @@
   text-overflow: ellipsis;
   font-family: 'Cascadia Code', Consolas, monospace;
   font-size: 12px;
-  color: var(--muted);
+  color: inherit;
 }
 /* A running sub-agent's latest step, after its task. */
 .tool-step {
