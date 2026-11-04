@@ -3,7 +3,7 @@ import type { AccountView, ProviderId } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { SettingLink, SettingsFooter, SettingsSection, StatusPill } from '../app/Settings';
 import { Field, focusFirstInvalid } from '../resources/Field';
-import { Plus, ProviderLogo } from '../app/icons';
+import { ProviderLogo } from '../app/icons';
 import { useAction } from '../app/useAction';
 import { AccountLimits } from '../limits/AccountLimits';
 import { useLimits, useWatchLimits } from '../limits/limits';
@@ -17,17 +17,15 @@ export function AccountsSettings({ accountId, onOpen, onBack }: { accountId?: st
   if (accountId === 'new' || accountId === 'new-openai' || account) return <AccountForm key={accountId} account={account} providerId={account?.providerId ?? (accountId === 'new-openai' ? 'openai' : 'anthropic')} onSaved={(a) => (account ? onBack() : onOpen(a.id))} onDone={onBack} />;
   return <>
     <p className="note">Name an account, sign in, then select it in a profile.</p>
-    <SettingsSection title="Anthropic">
+    <SettingsSection title="Anthropic" add={{ label: 'Add Claude account', onClick: () => onOpen('new') }}>
       {accounts.filter((a) => a.providerId === 'anthropic').map((a) => <SettingLink key={a.id} icon={<ProviderLogo providerId="anthropic" />} title={a.name} description={[a.email, a.organization].filter(Boolean).join(' · ') || undefined} onClick={() => onOpen(a.id)}>
         <StatusPill tone={a.signedIn ? 'ok' : 'warn'}>{a.signedIn ? 'Signed in' : 'Signed out'}</StatusPill>
       </SettingLink>)}
-      <SettingLink icon={<Plus />} title="Add Claude account" chevron={false} onClick={() => onOpen('new')} />
     </SettingsSection>
-    <SettingsSection title="OpenAI">
+    <SettingsSection title="OpenAI" add={{ label: 'Add ChatGPT account', onClick: () => onOpen('new-openai') }}>
       {accounts.filter((a) => a.providerId === 'openai').map((a) => <SettingLink key={a.id} icon={<ProviderLogo providerId="openai" />} title={a.name} description={a.email ?? undefined} onClick={() => onOpen(a.id)}>
         <StatusPill tone={a.signedIn ? 'ok' : 'warn'}>{a.signedIn ? 'Signed in' : 'Signed out'}</StatusPill>
       </SettingLink>)}
-      <SettingLink icon={<Plus />} title="Add ChatGPT account" chevron={false} onClick={() => onOpen('new-openai')} />
     </SettingsSection>
   </>;
 }

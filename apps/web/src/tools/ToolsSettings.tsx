@@ -1,7 +1,7 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { ToolDefinition, type MachineView, type ToolStatus } from '@accio/protocol';
 import { useClient } from '../app/connection';
-import { Plus, Wrench } from '../app/icons';
+import { Wrench } from '../app/icons';
 import { SettingLink, SettingsFooter, SettingsSection } from '../app/Settings';
 import { useAction } from '../app/useAction';
 import { useLive } from '../app/useLive';
@@ -35,7 +35,7 @@ export function ToolsSettings({ toolId, onOpen, onBack, onOpenThread }: { toolId
   return (
     <>
       <p className="note">Managed npm tools. Accio installs each tool’s exact version into its own folder on every machine, checks it, and adds it to every thread’s PATH on that machine. A failed check starts a repair thread.</p>
-      <SettingsSection>
+      <SettingsSection add={{ label: 'Add tool', onClick: () => onOpen('new') }}>
         {[...state.tools].sort((a, b) => a.name.localeCompare(b.name)).map((t) => {
           const status = state.toolStatuses.find((s) => s.toolId === t.id && s.machineId === here?.id);
           const r = readiness(here, status);
@@ -45,7 +45,6 @@ export function ToolsSettings({ toolId, onOpen, onBack, onOpenThread }: { toolId
             </SettingLink>
           );
         })}
-        <SettingLink icon={<Plus />} title="Add tool" description="An npm package pinned to an exact version." chevron={false} onClick={() => onOpen('new')} />
       </SettingsSection>
     </>
   );

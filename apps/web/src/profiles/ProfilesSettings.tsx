@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { accountInUse, type AccountView, type ProfileView } from '@accio/protocol';
 import { useClient } from '../app/connection';
-import { ArrowUp, Close, Plus, ProviderLogo, User } from '../app/icons';
+import { ArrowUp, Close, ProviderLogo, User } from '../app/icons';
 import { SettingLink, SettingsFooter, SettingsSection } from '../app/Settings';
 import { useAction } from '../app/useAction';
 import { ResourcePicker } from '../resources/ResourcePicker';
@@ -32,12 +32,11 @@ export function ProfilesSettings({
 
   return (<>
     <p className="note">A profile groups the accounts and projects for one side of your life, such as personal or work.</p>
-    <SettingsSection>
+    <SettingsSection add={{ label: 'Add profile', onClick: () => onOpen('new') }}>
       {profiles.map((p) => (
         <SettingLink key={p.id} icon={<User />} title={p.name} warn={!hasSignedInAccount(p)} onClick={() => onOpen(p.id)}
           description={p.providers.flatMap((provider) => provider.accounts.map((a) => `${a.name}${a.signedIn ? '' : ' · Signed out'}`)).join(', ') || 'No account selected'} />
       ))}
-      <SettingLink icon={<Plus />} title="Add profile" chevron={false} onClick={() => onOpen('new')} />
     </SettingsSection>
   </>);
 }
