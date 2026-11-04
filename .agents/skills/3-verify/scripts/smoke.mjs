@@ -66,10 +66,11 @@ export default async function smoke({ page, runDir, home, fixture, action, captu
   await action('accounts/profiles: select the named account and reopen it', async () => {
     await section('Profiles').click();
     await profileRow('Verify personal').click();
-    await page.getByRole('combobox', { name: /OpenAI · ChatGPT account/ }).selectOption({ label: 'Verify ChatGPT · Signed out' });
+    await button('Add ChatGPT account').click();
+    await page.getByRole('menu', { name: 'Add ChatGPT account', exact: true }).getByRole('menuitemradio', { name: /^Verify ChatGPT/ }).click();
     await button('Save').click();
     await page.getByRole('button', { name: 'Verify personal Verify ChatGPT · Signed out', exact: true }).click();
-    assert.match(await page.getByRole('combobox', { name: /OpenAI · ChatGPT account/ }).locator('option:checked').innerText(), /Verify ChatGPT/);
+    await page.getByRole('list', { name: 'OpenAI · ChatGPT accounts' }).getByText('Verify ChatGPT', { exact: true }).waitFor();
     await button('Cancel').click();
   });
   await capture('accounts-selected');
