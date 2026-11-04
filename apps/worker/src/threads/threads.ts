@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { ParamsOf } from '@accio/protocol';
+import type { DeliveryStepName, ParamsOf } from '@accio/protocol';
 import type { SecretsAccess } from '@accio/hub';
 import { now } from '../time.js';
 import type { Profiles } from '../profiles/profiles.js';
@@ -35,6 +35,7 @@ import { SecretRequests } from '../secrets/secrets.js';
 import type { AccioTools } from '../tools/tools.js';
 import type { DeliveryHosting } from './delivery.js';
 import { Deliveries } from './deliveries.js';
+import { reportDeliveryStep } from './deliveryStep.js';
 import { Previews } from './previews.js';
 import { ThreadState } from './state.js';
 import { agentTool } from './subagents.js';
@@ -395,6 +396,15 @@ export class Threads {
   /** The `finish_goal` tool, called by the harness during a turn of this thread. */
   async finishGoal(threadId: string, outcome: 'achieved' | 'blocked', summary: string) {
     await this.state.update(threadId, t => ({ ...t, goal: finishGoal(t.goal, outcome, summary) }));
+  }
+
+  /** The `delivery_step` tool, called by the harness during this thread's delivery turn. */
+  async reportDeliveryStep(threadId: string, step: DeliveryStepName, note: string | undefined) {
+    await this.state.update(threadId, t => ({ ...t, delivery: reportDeliveryStep(t.delivery, step, note, now()) }));
+  }
+
+  deliveryRunning(threadId: string) {
+    return this.state.get(threadId)?.delivery?.status === 'running';
   }
 
   goalActive(threadId: string) {

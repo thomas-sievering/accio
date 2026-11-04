@@ -104,6 +104,24 @@ it.each([false, true])('starts concurrent threads from fresh origin without chan
   expect(next.workspace!.startRevision).not.toBe(revision);
 });
 
+it('counts only the thread’s own lines after it integrates newer target work', async () => {
+  const { c, origin, checkout } = await setup();
+  const thread = await c.call('threads.start', { checkoutId: checkout.id, text: 'work' });
+  await wait(c, thread.id);
+  const cwd = thread.workspace!.path;
+  await writeFile(join(cwd, 'mine.txt'), 'one\ntwo\n');
+  await git(cwd, 'add', '.');
+  await git(cwd, 'commit', '--quiet', '-m', 'thread work');
+  const { writer } = await advanceOrigin(origin);
+  await writeFile(join(writer, 'theirs.txt'), Array.from({ length: 50 }, (_, i) => `line ${i}`).join('\n') + '\n');
+  await git(writer, 'add', '.');
+  await git(writer, 'commit', '--quiet', '-m', 'more remote work');
+  await git(writer, 'push', '--quiet', 'origin', 'HEAD:refs/heads/main');
+  await git(cwd, 'fetch', '--quiet', 'origin');
+  await git(cwd, 'rebase', '--quiet', 'origin/main');
+  expect(await c.call('threads.deliverySummary', { threadId: thread.id })).toMatchObject({ added: 2, removed: 0, files: 1 });
+});
+
 it('discovers a changed remote default branch even with a stale origin/HEAD and narrow fetch refspec', async () => {
   const { c, source, origin, checkout } = await setup();
   const { revision } = await advanceOrigin(origin, 'release/next');
@@ -527,4 +545,30 @@ it('wakes the same owning thread for actionable check failures with the original
   expect(harness.runs).toHaveLength(3);
   expect(harness.runs[2]!.prompt).toContain('NEVER merge');
   expect(harness.runs[2]!.cwd).toBe(thread.workspace!.path);
+});
+
+it('lets only the delivery turn report its step, and shows it on the running delivery', async () => {
+  const listed: string[][] = [];
+  const reported = gate();
+  const harness = new FakeHarness(async function* (run) {
+    const mcp = (method: string, params?: unknown) => fetch(run.tools!.url, { method: 'POST', headers: { 'content-type': 'application/json', authorization: run.tools!.authorization },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) }).then(r => r.json() as Promise<{ result: any }>);
+    listed.push((await mcp('tools/list')).result.tools.map((t: { name: string }) => t.name));
+    if (run.prompt.startsWith('Deliver the current task')) {
+      await mcp('tools/call', { name: 'delivery_step', arguments: { step: 'verify', note: 'Running the suite' } });
+      await reported.opened;
+      await publish(run.cwd);
+    }
+    yield* replyWith('done');
+  });
+  const { c, checkout } = await setup(harness);
+  const thread = await c.call('threads.start', { checkoutId: checkout.id, text: 'build feature' });
+  await wait(c, thread.id);
+  await c.call('threads.deliver', { threadId: thread.id, mode: 'ship' });
+  const running = await wait(c, thread.id, x => x.delivery?.step?.name === 'verify');
+  reported.release();
+  expect(running.find(x => x.id === thread.id)!.delivery).toMatchObject({ status: 'running', startedAt: expect.any(String), step: { name: 'verify', note: 'Running the suite' } });
+  await wait(c, thread.id, x => x.status === 'idle' && x.delivery?.status !== 'running');
+  expect(listed[0]).not.toContain('delivery_step');
+  expect(listed[1]).toContain('delivery_step');
 });

@@ -13,7 +13,7 @@ import './delivery-panel.css';
  */
 export function DeliveryPanel({ thread }: { thread: ThreadView }) {
   const { now } = useThreads();
-  const track = deliveryTrack(thread);
+  const track = deliveryTrack(thread, now);
   const status = deliveryStatus(thread);
   if (!track || !status) return <p className="side-panel-empty">Ship this thread to follow its delivery here.</p>;
   return <div className="delivery-panel">
@@ -30,6 +30,7 @@ export function DeliveryPanel({ thread }: { thread: ThreadView }) {
             {s.detail && (s.link
               ? <a href={s.link} target="_blank" rel="noreferrer">{s.detail} ↗</a>
               : <span>{s.detail}</span>)}
+            {s.note && <span className="station-note">{s.note}</span>}
           </div>
           {s.ci && <DeliveryProgress ci={s.ci} />}
         </li>

@@ -6,6 +6,7 @@ import type { DeliveryCI, DeliveryPullRequest, DeliverySummary, ThreadDelivery, 
 import { UserError } from '../rpc/router.js';
 import { now } from '../time.js';
 import { git, maybeGit } from '../git.js';
+import { DELIVERY_STEP_INSTRUCTIONS } from './deliveryStep.js';
 
 const exec = promisify(execFile);
 /** Waiting uses machine-side checks; a model is woken only when it has more work. */
@@ -87,7 +88,10 @@ export class DeliveryGit {
     const empty = { available: false, added: 0, removed: 0, files: 0, previewAvailable: false };
     if (!workspace) return { ...empty, reason: 'Shipping needs an owned Git worktree. Start a new thread in a committed Git project.' };
     if (workspace.releasedAt) return empty;
-    const diff = await maybeGit(workspace.path, 'diff', '--numstat', workspace.startRevision, '--');
+    // After integrating the target, the start revision would count everyone else's merged work too.
+    const target = await maybeGit(workspace.path, 'symbolic-ref', '--quiet', 'refs/remotes/origin/HEAD');
+    const base = (target && await maybeGit(workspace.path, 'merge-base', 'HEAD', target)) || workspace.startRevision;
+    const diff = await maybeGit(workspace.path, 'diff', '--numstat', base, '--');
     if (diff === null) return { ...empty, reason: 'The thread’s worktree is unavailable.' };
     const result = { ...empty };
     for (const line of diff.split('\n').filter(Boolean)) {
@@ -271,6 +275,7 @@ export function deliveryPrompt(workspace: ThreadWorkspace, delivery: ThreadDeliv
   return `Deliver the current task from this same thread. Work only in the owned worktree ${workspace.path}, branch ${workspace.branch}. Target: origin/${delivery.baseBranch}.\n\n` +
     (delivery.detail ? `Latest delivery update: ${delivery.detail}\n\n` : '') +
     'Finish any remaining implementation. Commit all intended changes, including uncommitted work; preserve unrelated or unpublished work. Fetch origin and integrate the latest target branch. Resolve mechanical conflicts; ask the user before resolving substantive conflicts. Never force push. If a shallow clone floods unrelated add/add conflicts, abort the rebase, unshallow origin, then retry.\n\n' +
-    'Run the full project test suite and any behavior checks needed for this change before publishing. Reuse evidence only while the code and dependencies tested are unchanged. After integration or conflict resolution changes them, verify again. Ignore a failing check only after proving the same failure on the current target branch without these changes. If the target advances, integrate, verify and retry, at most three times.\n\n' + action + '\n\n' +
+    DELIVERY_STEP_INSTRUCTIONS + '\n\n' +
+    'Run the full project test suite and any behavior checks needed for this change before publishing. Reuse evidence only while the code and dependencies tested are unchanged. After integration or conflict resolution changes them, verify again. If a failure does not reproduce when you rerun it once, treat it as flaky: name it in your report and continue; do not rerun suites again to prove it. Ignore a failure that does reproduce only after showing the same failure on the current target branch without these changes. If the target advances, integrate, verify and retry, at most three times.\n\n' + action + '\n\n' +
     'Report the published revision, tests and remaining blockers in this conversation. Do not archive the thread, delete the worktree, delete branches, or clean up another thread’s processes. Accio independently verifies delivery and owns cleanup. If blocked or awaiting a user decision, explain it and stop safely.';
 }
