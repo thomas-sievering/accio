@@ -90,3 +90,65 @@
 .menu-confirm .menu-item {
   justify-content: center;
 }
+
+/* MenuSelect: a field-sized trigger whose options open in the app's menu. */
+.menu-select {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 14px;
+  text-align: start;
+}
+.menu-select > span {
+  min-width: 0;
+  overflow: clip;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.menu-select-placeholder {
+  color: var(--dim);
+}
+.menu-select:hover:not(:disabled),
+.menu-select[aria-expanded="true"] {
+  border-color: var(--dim);
+}
+.menu-select:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: -1px;
+}
+.menu-select[aria-invalid="true"] {
+  border-color: var(--red);
+}
+.menu-select:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.menu-select > svg {
+  flex: none;
+  color: var(--dim);
+}
+.menu.menu-select-list {
+  width: anchor-size(width, 240px);
+  min-width: 180px;
+  max-width: calc(100vw - 16px);
+  max-height: min(320px, 60vh);
+  overflow-y: auto;
+}
+.menu-select-list .menu-item[aria-checked="true"] {
+  background: var(--active);
+}
+.menu-select-list .menu-text b {
+  font-weight: inherit;
+}
+.menu-select-empty {
+  margin: 6px 8px;
+  color: var(--dim);
+}
