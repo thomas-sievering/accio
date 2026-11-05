@@ -146,6 +146,12 @@ describe('describeActivity', () => {
     ['', 'command'],
     ['$(echo gh) pr view', 'command'],
     ['bash -c "$TASK"', 'command'],
+    ['cd C:/repo; pnpm test 2>&1 | grep FAIL', 'pnpm'],
+    ['cd /repo && git status', 'git'],
+    ['cd /repo 2>&1; export CI=1; NODE_ENV=test sudo -E npx vitest', 'npx'],
+    ['Set-Location C:\\repo; Get-Content README.md', 'Get-Content'],
+    ['cd "C:/my repo"\npnpm build', 'pnpm'],
+    ['cd /repo', 'command'],
   ])('shows only the program for %s', (summary, program) => {
     expect(describeActivity({ name: 'Bash', summary })).toBe(`Running ${program}`);
   });
