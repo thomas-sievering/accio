@@ -31,8 +31,11 @@ const Screenshot = z.object({
 export const updateMethods = {
   'update.status': method<typeof MachineId, UpdateView>(MachineId),
   'update.start': method<typeof MachineId, UpdateView>(MachineId),
-  /** GLOSSARY: App screenshot. A PNG of a machine's Accio window, base64-encoded. */
-  'app.screenshot': method<typeof Screenshot, { png: string }>(Screenshot),
+  /**
+   * GLOSSARY: App screenshot. A PNG of a machine's Accio window, base64-encoded. `note` says when
+   * it shows less than the whole window, such as the page without its title bar buttons, and why.
+   */
+  'app.screenshot': method<typeof Screenshot, { png: string; note?: string }>(Screenshot),
 };
 
 export type UpdateEvents = { 'update.changed': UpdateView };

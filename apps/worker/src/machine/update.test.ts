@@ -21,7 +21,7 @@ const fakePnpm = (fail: string[] = []): UpdateDeps['pnpm'] => ({
 
 function fakeHost() {
   const host = { relaunched: 0, scripts: [] as (string | undefined)[] };
-  const desktop: DesktopHost = { relaunch: () => { host.relaunched++; }, capture: async (script) => { host.scripts.push(script); return PNG; } };
+  const desktop: DesktopHost = { relaunch: () => { host.relaunched++; }, capture: async (script) => { host.scripts.push(script); return { png: PNG, note: 'Captured the page only.' }; } };
   return { host, desktop };
 }
 
@@ -111,8 +111,9 @@ describe('updating a machine’s Accio', () => {
     await commit('two');
 
     await expect.poll(() => pc.call('update.status', { machineId: macId }).then((v) => v.state, () => 'waiting'), { timeout: 10_000 }).toBe('behind');
-    const { png } = await pc.call('app.screenshot', { machineId: macId, script: 'openSettings()' });
+    const { png, note } = await pc.call('app.screenshot', { machineId: macId, script: 'openSettings()' });
     expect(Buffer.from(png, 'base64')).toEqual(PNG);
+    expect(note).toBe('Captured the page only.');
     expect(host.scripts).toEqual(['openSettings()']);
 
     const restarting = pc.waitFor('update.changed', (v) => v.machineId === macId && v.state === 'restarting', 10_000);

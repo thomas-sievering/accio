@@ -33,11 +33,11 @@ export function machineTools(deps: MachineToolDeps) {
     },
     call: async ({ machine: name, script }) => {
       const target = resolve(name);
-      const { png } = await deps.call('app.screenshot', { machineId: target.id, ...(script ? { script } : {}) });
+      const { png, note } = await deps.call('app.screenshot', { machineId: target.id, ...(script ? { script } : {}) });
       await mkdir(deps.folder, { recursive: true });
       const path = join(deps.folder, `${slug(target.name)}-${new Date().toISOString().replace(/[:.]/g, '-')}.png`);
       await writeFile(path, Buffer.from(png, 'base64'));
-      return `Saved a screenshot of Accio on ${target.name} to ${path}`;
+      return `Saved a screenshot of Accio on ${target.name} to ${path}${note ? `\n\n${note}` : ''}`;
     },
   });
 

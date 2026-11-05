@@ -15,3 +15,13 @@ it('finds the machine the user mentioned by its @ handle', async () => {
   expect(call).toHaveBeenCalledWith('app.screenshot', { machineId: 'm1' });
   await expect(screenshot!.call({ machine: '@desk' }, context)).rejects.toThrow("No machine named @desk. Machines: Thomas's Laptop.");
 });
+
+it('says when the screenshot left out part of the window, and why', async () => {
+  const call = vi.fn(async () => ({ png: '', note: 'Captured the page only: no permission.' }));
+  const [screenshot] = machineTools({
+    here: 'here', machines: () => [], call: call as never,
+    folder: await mkdtemp(join(tmpdir(), 'accio-shots-')),
+  });
+  const context = { threadId: 't', signal: new AbortController().signal };
+  expect(await screenshot!.call({}, context)).toContain('Captured the page only: no permission.');
+});

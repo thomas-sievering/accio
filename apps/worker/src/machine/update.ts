@@ -1,7 +1,7 @@
 import type { UpdateView } from '@accio/protocol';
 import type { CommandRunner } from '../resources/process.js';
 import { UserError } from '../rpc/router.js';
-import type { DesktopHost } from './desktop.js';
+import type { AppScreenshot, DesktopHost } from './desktop.js';
 
 export type UpdateDeps = {
   machineId: string;
@@ -75,7 +75,7 @@ export class Updates {
   }
 
   /** A PNG of this machine's Accio window. */
-  async screenshot(script?: string): Promise<Buffer> {
+  async screenshot(script?: string): Promise<AppScreenshot> {
     if (!this.deps.host) throw new UserError('Only the desktop app can take screenshots.');
     return this.deps.host.capture(script);
   }

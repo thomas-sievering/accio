@@ -106,7 +106,10 @@ export class HubConnections {
     if (updates) {
       router.on('update.status', () => updates.status())
         .on('update.start', () => updates.start())
-        .on('app.screenshot', async ({ script }) => ({ png: (await updates.screenshot(script)).toString('base64') }));
+        .on('app.screenshot', async ({ script }) => {
+          const { png, note } = await updates.screenshot(script);
+          return { png: png.toString('base64'), ...(note ? { note } : {}) };
+        });
       tools.add(...machineTools({
         here: this.here.id,
         machines: () => settings.machines(),

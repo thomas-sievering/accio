@@ -1,4 +1,4 @@
-import { app, BrowserWindow, desktopCapturer, dialog, ipcMain, screen, shell, systemPreferences } from 'electron';
+import { app, BrowserWindow, desktopCapturer, dialog, ipcMain, screen, shell, systemPreferences, type NativeImage } from 'electron';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { dirname, isAbsolute, join } from 'node:path';
@@ -58,9 +58,11 @@ async function answerWorker(message: DesktopMessage, reply: (message: DesktopMes
       // Lets the view the script opened finish rendering.
       await new Promise((resolve) => setTimeout(resolve, 400));
     }
-    const image = (await captureWindow(win)) ?? await win.webContents.capturePage();
+    const whole = await captureWindow(win);
+    const image = 'image' in whole ? whole.image : await win.webContents.capturePage();
     if (image.isEmpty()) throw new Error('The window captured as empty; it may be hidden.');
-    reply({ type: 'captured', id: message.id, png: image.toPNG().toString('base64') });
+    const note = 'image' in whole ? undefined : `Captured the page only, without the window's title bar buttons: ${whole.reason}`;
+    reply({ type: 'captured', id: message.id, png: image.toPNG().toString('base64'), ...(note ? { note } : {}) });
   } catch (error) {
     reply({ type: 'captured', id: message.id, error: error instanceof Error ? error.message : String(error) });
   }
@@ -68,22 +70,37 @@ async function answerWorker(message: DesktopMessage, reply: (message: DesktopMes
 
 /**
  * The whole window as the OS draws it, with its native close, minimize and maximize buttons,
- * which `capturePage` leaves out because they aren't part of the page. Undefined when the OS
- * won't give it: macOS needs Screen Recording permission, and asking would put a prompt on a
+ * which `capturePage` leaves out because they aren't part of the page. Otherwise why the OS
+ * wouldn't give it: macOS needs Screen Recording permission, and asking would put a prompt on a
  * machine nobody may be sitting at, so without it the page alone is captured.
  */
-async function captureWindow(win: BrowserWindow) {
-  if (process.platform === 'darwin' && systemPreferences.getMediaAccessStatus('screen') !== 'granted') return undefined;
+async function captureWindow(win: BrowserWindow): Promise<{ image: NativeImage } | { reason: string }> {
+  if (process.platform === 'darwin') {
+    const status = systemPreferences.getMediaAccessStatus('screen');
+    if (status !== 'granted') {
+      return { reason: `Screen Recording permission is ${status} for ${appBundle()}. Allow it in System Settings → Privacy & Security → Screen & System Audio Recording, then restart Accio. If Accio was started from a terminal, allow that terminal app instead.` };
+    }
+  }
   try {
     const bounds = win.getBounds();
     const { scaleFactor } = screen.getDisplayMatching(bounds);
     const thumbnailSize = { width: Math.round(bounds.width * scaleFactor), height: Math.round(bounds.height * scaleFactor) };
     const sources = await desktopCapturer.getSources({ types: ['window'], thumbnailSize });
-    const image = sources.find((source) => source.id === win.getMediaSourceId())?.thumbnail;
-    return image && !image.isEmpty() ? image : undefined;
-  } catch {
-    return undefined;
+    // `window:<id>:<n>`: the trailing number can differ between the two on macOS, the window id can't.
+    const windowId = (id: string) => id.split(':').slice(0, 2).join(':');
+    const source = sources.find((candidate) => windowId(candidate.id) === windowId(win.getMediaSourceId()));
+    if (!source) return { reason: `the OS listed ${sources.length} windows, none of them Accio's (${win.getMediaSourceId()}).` };
+    if (source.thumbnail.isEmpty()) return { reason: 'the OS returned an empty image of the window.' };
+    return { image: source.thumbnail };
+  } catch (error) {
+    return { reason: `capturing the window failed: ${error instanceof Error ? error.message : String(error)}.` };
   }
+}
+
+/** The app macOS asks Screen Recording permission for: the .app bundle this Electron runs from. */
+function appBundle() {
+  const bundle = process.execPath.match(/^(.*?\.app)\//)?.[1];
+  return bundle ?? process.execPath;
 }
 
 type WindowState = { x: number; y: number; width: number; height: number; maximized: boolean };

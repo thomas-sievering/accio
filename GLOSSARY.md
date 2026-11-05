@@ -41,7 +41,7 @@ What a machine or hub runs, as `0.1.<n>`, where n counts the commits it was buil
 _Avoid_: Commit hash (in UI text), build number
 
 **App screenshot**:
-A PNG of a machine's Accio desktop window, which a thread takes through the app_screenshot accio tool, on its own machine or another one through the relay. A script can run in the window first to open the view to capture.
+A PNG of a machine's Accio desktop window, which a thread takes through the app_screenshot accio tool, on its own machine or another one through the relay. A script can run in the window first to open the view to capture. It shows the whole window with its title bar buttons; when the OS won't give that, such as on macOS without Screen Recording permission, it shows the page only and says why.
 _Avoid_: Capture (as a noun), snapshot
 
 **Shared settings**:
