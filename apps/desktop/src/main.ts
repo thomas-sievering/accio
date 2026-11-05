@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, desktopCapturer, dialog, ipcMain, screen, shell, systemPreferences } from 'electron';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { dirname, isAbsolute, join } from 'node:path';
@@ -57,11 +57,31 @@ async function answerWorker(message: DesktopMessage, reply: (message: DesktopMes
       // Lets the view the script opened finish rendering.
       await new Promise((resolve) => setTimeout(resolve, 400));
     }
-    const image = await win.webContents.capturePage();
+    const image = (await captureWindow(win)) ?? await win.webContents.capturePage();
     if (image.isEmpty()) throw new Error('The window captured as empty; it may be hidden.');
     reply({ type: 'captured', id: message.id, png: image.toPNG().toString('base64') });
   } catch (error) {
     reply({ type: 'captured', id: message.id, error: error instanceof Error ? error.message : String(error) });
+  }
+}
+
+/**
+ * The whole window as the OS draws it, with its native close, minimize and maximize buttons,
+ * which `capturePage` leaves out because they aren't part of the page. Undefined when the OS
+ * won't give it: macOS needs Screen Recording permission, and asking would put a prompt on a
+ * machine nobody may be sitting at, so without it the page alone is captured.
+ */
+async function captureWindow(win: BrowserWindow) {
+  if (process.platform === 'darwin' && systemPreferences.getMediaAccessStatus('screen') !== 'granted') return undefined;
+  try {
+    const bounds = win.getBounds();
+    const { scaleFactor } = screen.getDisplayMatching(bounds);
+    const thumbnailSize = { width: Math.round(bounds.width * scaleFactor), height: Math.round(bounds.height * scaleFactor) };
+    const sources = await desktopCapturer.getSources({ types: ['window'], thumbnailSize });
+    const image = sources.find((source) => source.id === win.getMediaSourceId())?.thumbnail;
+    return image && !image.isEmpty() ? image : undefined;
+  } catch {
+    return undefined;
   }
 }
 
