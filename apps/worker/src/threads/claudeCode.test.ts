@@ -67,6 +67,21 @@ it('closes the query after completion and removes its stop listener', async () =
   expect(q.interrupt).not.toHaveBeenCalled();
 });
 
+it('keeps the turn open past the empty result of a background-task notification', async () => {
+  // A resumed session reports a background shell its previous process left running,
+  // and answers that notice with its own empty result before reading the prompt.
+  const q = query();
+  q.next.mockResolvedValueOnce({ done: false, value: { type: 'system', subtype: 'task_notification', status: 'stopped' } });
+  q.next.mockResolvedValueOnce({ done: false, value: { type: 'result', subtype: 'success', is_error: false, result: '', num_turns: 0, origin: { kind: 'task-notification' } } });
+  q.next.mockResolvedValueOnce({ done: false, value: { type: 'assistant', message: { content: [{ type: 'text', text: 'banana' }] } } });
+  q.next.mockResolvedValueOnce({ done: false, value: { type: 'result', subtype: 'success', is_error: false, result: 'banana', num_turns: 1 } });
+  queryMock.mockReturnValue(q);
+  const seen: unknown[] = [];
+  for await (const message of claudeCode.run({ cwd: '.', prompt: 'hello', sessionId: 's', env: {}, signal: new AbortController().signal })) seen.push(message);
+  expect(seen.map((m: any) => m.type)).toEqual(['system', 'assistant', 'result']);
+  expect(seen.at(-1)).toMatchObject({ result: 'banana' });
+});
+
 it('waits for query cleanup before a stopped turn finishes', async () => {
   const q = query();
   const cleaning = deferred<void>();

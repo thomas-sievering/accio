@@ -64,7 +64,10 @@ export class HubClient {
     try { response = await fetch(this.url + path, { method: body === undefined ? 'GET' : 'POST', redirect: 'error', signal: AbortSignal.timeout(30_000),
       headers: { ...(authenticated ? { authorization: `Bearer ${this.token}` } : {}), ...(body === undefined ? {} : { 'content-type': 'application/json' }) }, body: body === undefined ? undefined : JSON.stringify(body) }); }
     catch { throw Object.assign(new Error('Hub is unavailable. Check its address and connection.'), { network: true }); }
-    const data = await response.json() as any;
+    // A proxy in front of the hub answers with an HTML page while the hub restarts.
+    let data: any;
+    try { data = await response.json(); }
+    catch { throw Object.assign(new Error(`Hub is unavailable (HTTP ${response.status}). Try again in a moment.`), { status: response.status }); }
     if (!response.ok) throw Object.assign(new Error(typeof data.error === 'string' ? data.error : `Hub request failed (${response.status})`), { status: response.status });
     return data;
   }

@@ -102,6 +102,9 @@ export const claudeCode: Harness = {
         next.catch(() => {}); // may reject after we stop listening
         const step = await Promise.race([next, stopped]);
         if (step === 'stopped' || step.done) return;
+        // A resumed session answers a notice about a background task its previous
+        // process left behind with an empty result of its own, before the prompt.
+        if (step.value.type === 'result' && step.value.origin?.kind === 'task-notification') continue;
         if (step.value.type === 'result') {
           registerSteer?.(undefined);
           yield step.value as HarnessMessage;
