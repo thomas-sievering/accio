@@ -21,7 +21,7 @@ const Result = z.object({ title: z.string().trim().min(1).max(120), needsRefinem
 export function namingModel(models: ModelView[], harnessId: string): ModelSelection | undefined {
   const candidates = models.filter(m => !m.limited && m.harnessId === harnessId);
   const small = candidates.find(m => /haiku|nano/i.test(`${m.id} ${m.name}`))
-    ?? candidates.find(m => /mini|flash|spark/i.test(`${m.id} ${m.name}`));
+    ?? candidates.find(m => /mini|flash|spark|\bgpt-\d+(?:\.\d+)*-luna\b/i.test(`${m.id} ${m.name}`));
   if (!small) return;
   const effort = ['none', 'minimal', 'low'].find(e => small.efforts.some(item => item.id === e));
   return { harnessId: small.harnessId, modelId: small.id, ...(effort ? { effort } : {}) };

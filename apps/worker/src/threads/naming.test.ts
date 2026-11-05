@@ -23,6 +23,17 @@ async function setup(generate: NonNullable<Harness['generateText']>) {
 }
 const named = (title: string, needsRefinement = false) => JSON.stringify({ title, needsRefinement });
 
+it.each(['6', '6.1', '6.1.2', '7', '10.2'])('selects GPT-%s-Luna for automatic thread naming', version => {
+  const base = { providerId: 'openai' as const, harnessId: 'codex', harnessName: 'Codex', providerName: 'OpenAI', efforts: [{ id: 'low' }], description: '' };
+  const models = [
+    { ...base, id: 'gpt-6.1-sol', name: 'GPT-6.1-Sol' },
+    { ...base, id: `gpt-${version}-luna`, name: `GPT-${version}-Luna` },
+    { ...base, id: 'gpt-5.6-luna', name: 'GPT-5.6-Luna', older: true },
+  ];
+  expect(namingModel(models, 'codex')).toEqual({ harnessId: 'codex', modelId: `gpt-${version}-luna`, effort: 'low' });
+  expect(namingModel(models.map(m => ({ ...m, limited: { label: 'Limit', resetsAt: null } })), 'codex')).toBeUndefined();
+});
+
 it('names asynchronously with a small model, outside the coding workspace, without adding a turn', async () => {
   const pending = deferred<string>();
   const { c, harness, home } = await setup(() => pending.promise);
