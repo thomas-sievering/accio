@@ -30,9 +30,10 @@ export function Composer({
   draftId,
   profileId,
   model,
+  handsOffImages,
 }: {
-  /** `images` are upload ids, in the order they were pasted. */
-  onSend: (text: string, mode: 'steer' | 'queue' | undefined, images: string[]) => Promise<void>;
+  /** `images` are upload ids, in the order they were pasted; `previews` their local copies. */
+  onSend: (text: string, mode: 'steer' | 'queue' | undefined, images: string[], previews: string[]) => Promise<void>;
   /** Set while a turn runs; Stop stays beside Send. */
   onStop?: () => Promise<void>;
   disabled: boolean;
@@ -50,6 +51,8 @@ export function Composer({
   profileId?: string;
   /** The model the message goes to, which must read any pasted image. */
   model?: ModelSelection;
+  /** Sending hands the images' local copies to `onSend` to free, and each image travels into the sent message. */
+  handsOffImages?: boolean;
 }) {
   const client = useClient();
   const { threads, shelves, selectedId, select } = useThreads();
@@ -91,7 +94,9 @@ export function Composer({
   const [imageError, setImageError] = useState<string>();
   const shown = useRef(images);
   shown.current = images;
-  useEffect(() => () => { for (const image of shown.current) URL.revokeObjectURL(image.url); }, []);
+  /** Images whose local copies a send has handed off; closing the composer mid-send leaves them alone. */
+  const handedOff = useRef<PendingImage[]>([]);
+  useEffect(() => () => { for (const image of shown.current) if (!handedOff.current.includes(image)) URL.revokeObjectURL(image.url); }, []);
   const listed = model && models?.models.find((m) => m.harnessId === model.harnessId && m.id === model.modelId);
   const refusalFor = (mimeType: string) => listed && !readsImage(listed, mimeType) ? imageRefusal(listed.name, listed.imageTypes ?? [], mimeType) : undefined;
   // A model chosen after pasting may not read what is already here.
@@ -176,17 +181,19 @@ export function Composer({
     if (!sendable || disabled || sending.current) return;
     const sent = images;
     sending.current = true;
+    if (handsOffImages) handedOff.current = sent;
     try {
       await run(async () => {
-        await onSend(value, mode, sent.map((image) => image.uploadId!));
+        await onSend(value, mode, sent.map((image) => image.uploadId!), sent.map((image) => image.url));
         // Sent from a composer that has since closed (a started draft): forget its saved text too.
         if (!input.current || input.current.value === text) setText('');
         setImages((current) => current.filter((image) => !sent.includes(image)));
-        for (const image of sent) URL.revokeObjectURL(image.url);
+        if (!handsOffImages) for (const image of sent) URL.revokeObjectURL(image.url);
         setImageError(undefined);
       });
     } finally {
       sending.current = false;
+      handedOff.current = [];
     }
   };
 
@@ -203,7 +210,8 @@ export function Composer({
             {attachment.label}
             <button type="button" aria-label={`Remove ${attachment.label}`} onClick={attachment.onRemove}><Close /></button>
           </span>}
-          {images.map((image) => <span key={image.key} className={`composer-image${image.uploadId ? '' : ' uploading'}`}>
+          {images.map((image, index) => <span key={image.key} className={`composer-image${image.uploadId ? '' : ' uploading'}`}
+            style={handsOffImages ? { viewTransitionName: `sent-image-${index}`, viewTransitionClass: 'sent-image' } : undefined}>
             <img src={image.url} alt={image.name} />
             <button type="button" aria-label={`Remove ${image.name}`} onClick={() => removeImage(image.key)}><Close /></button>
           </span>)}
