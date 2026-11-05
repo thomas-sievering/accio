@@ -137,13 +137,48 @@ export function toolSummary(item: Pick<ToolItem, 'name' | 'summary'>): string {
   return item.name === 'Shell' || item.name === 'Bash' ? shellCommandSummary(item.summary, true) : item.summary;
 }
 
-/** Show the executable, never its arguments or the surrounding shell script. */
+/** Steps that only prepare the shell; the command is named after what runs next. */
+const setupPrograms = new Set(['cd', 'pushd', 'popd', 'export', 'set', 'unset', 'source', '.', 'alias', 'shopt', 'setopt', 'ulimit', 'umask',
+  'set-location', 'push-location', 'pop-location', 'sl']);
+/** Prefixes that run the next word as the program. */
+const wrappers = new Set(['sudo', 'env', 'time', 'nohup', 'nice', 'command', 'exec', 'builtin', 'noglob', 'nocorrect']);
+const shells = /^(?:sh|bash|zsh|dash|ksh|fish|powershell|pwsh|cmd)$/i;
+
+/** Show the program doing the work, never its arguments or the surrounding shell script. */
 function commandProgram(summary: string): string {
-  const script = shellCommandSummary(summary, true).trim();
-  const token = /^(?:&\s+)?(?:"([^"\r\n]+)"|'([^'\r\n]+)'|([^\s;&|<>]+))/.exec(script);
-  const program = (token?.[1] ?? token?.[2] ?? token?.[3] ?? '').split(/[\\/]/).at(-1)!.replace(/\.exe$/i, '');
-  if (!/^[\w][\w.+-]*$/.test(program) || /^(?:sh|bash|zsh|dash|ksh|fish|powershell|pwsh|cmd)$/i.test(program)) return 'command';
-  return program;
+  for (const segment of shellSegments(shellCommandSummary(summary, true))) {
+    const words = segment.match(/"[^"\r\n]*"|'[^'\r\n]*'|\S+/g) ?? [];
+    let index = words[0] === '&' ? 1 : 0;
+    while (index < words.length && (/^[A-Za-z_]\w*=/.test(words[index]!) || wrappers.has(words[index]!)
+      || (index > 0 && wrappers.has(words[index - 1]!) && words[index]!.startsWith('-')))) index++;
+    const program = (words[index] ?? '').replace(/^(["'])(.*)\1$/, '$2').split(/[\\/]/).at(-1)!.replace(/\.exe$/i, '');
+    if (!program) continue;
+    if (setupPrograms.has(program.toLowerCase())) continue;
+    if (!/^[\w][\w.+-]*$/.test(program) || shells.test(program)) return 'command';
+    return program;
+  }
+  return 'command';
+}
+
+/** Top-level commands of a script, split on ; && || | & and newlines outside quotes. */
+function shellSegments(script: string): string[] {
+  const segments: string[] = [];
+  let current = '';
+  let quote: string | undefined;
+  for (let index = 0; index < script.length; index++) {
+    const char = script[index]!;
+    if (quote) { if (char === quote) quote = undefined; current += char; continue; }
+    if (char === '"' || char === "'") { quote = char; current += char; continue; }
+    // A leading & is PowerShell's call operator and 2>&1 a redirection, not separators.
+    if (/[;|\n]/.test(char) || (char === '&' && current.trim() && !/[<>]$/.test(current) && script[index + 1] !== '>')) {
+      segments.push(current);
+      current = '';
+      if (script[index + 1] === char) index++;
+      continue;
+    }
+    current += char;
+  }
+  return [...segments, current].map((segment) => segment.trim()).filter(Boolean);
 }
 
 /** MCP tools arrive as mcp__server__tool (Claude) or server/tool (Codex). */
