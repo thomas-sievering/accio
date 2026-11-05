@@ -20,14 +20,7 @@ const machine = z.string().trim().max(200).optional().describe("Name or id of th
 
 /** GLOSSARY: App screenshot and Update, as accio tools: any thread can look at and update Accio on each paired machine. */
 export function machineTools(deps: MachineToolDeps) {
-  const resolve = (name?: string) => {
-    if (!name) return { id: deps.here, name: 'this machine' };
-    const all = deps.machines();
-    const found = all.find((m) => m.id === name) ?? all.find((m) => m.name.toLowerCase() === name.toLowerCase())
-      ?? findMentionedMachine(all, name);
-    if (!found) throw new Error(`No machine named ${name}. Machines: ${all.map((m) => m.name).join(', ')}.`);
-    return found;
-  };
+  const resolve = (name?: string) => name ? findMachine(deps.machines(), name) : { id: deps.here, name: 'this machine' };
 
   const screenshot = accioTool({
     name: 'app_screenshot',
@@ -76,6 +69,14 @@ export function machineTools(deps: MachineToolDeps) {
   });
 
   return [screenshot, update];
+}
+
+/** The machine a tool argument names by id, name or @handle; throws listing the machines when none matches. */
+export function findMachine<T extends Pick<MachineView, 'id' | 'name'>>(all: T[], name: string): T {
+  const found = all.find((m) => m.id === name) ?? all.find((m) => m.name.toLowerCase() === name.toLowerCase())
+    ?? findMentionedMachine(all, name);
+  if (!found) throw new Error(`No machine named ${name}. Machines: ${all.map((m) => m.name).join(', ')}.`);
+  return found;
 }
 
 function slug(name: string) { return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'machine'; }

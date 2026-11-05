@@ -152,6 +152,10 @@ _Avoid_: Task, objective (for the whole thing), loop
 A helper turn that a thread's harness starts through the `agent` accio tool for one self-contained task, such as independent research or a black-box check. It runs on the thread's model, or on a model you mention, with the same profile and working folder and a fresh context, and gives back only its final reply. It is not a thread and keeps no transcript; while it works, its latest step shows on the parent's Agent row. Sub-agents get no accio tools, so they cannot start sub-agents of their own.
 _Avoid_: Subthread, child thread, worker, helper thread
 
+**Started thread**:
+A new thread that another thread starts through the start_thread accio tool, when you ask for one, for example on another machine. Unlike a sub-agent it is a full thread: it has its own transcript, shows in the list, and you follow it and talk to it yourself. It starts in the same project, on the thread's machine or in another machine's checkout of the same repository, cloned there if needed, and on the starting thread's model unless you mention another. The starting thread does not wait for it.
+_Avoid_: Child thread, spawned thread, sub-thread
+
 **Model mention**:
 Naming a model in a message with `@` and its handle, such as `@sonnet` or `@sol`, so sub-agents for that work run on it, on either harness. The handle is the model's family; when two offered models share one, both add their version, such as `@opus-5.5`. Typing `@` in the composer lists the profile's models, then the online machines; the sent message keeps the text and shows each mention as a chip. The thread's own model does not change.
 _Avoid_: Tag, model reference
