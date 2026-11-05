@@ -13,7 +13,7 @@ import type { DeliveryHosting } from './threads/delivery.js';
 import { sdkClaudeModels, type ClaudeModelSource } from './harnesses/catalog.js';
 import { Updates, pnpmHere, type UpdateDeps } from './machine/update.js';
 import { desktopHost } from './machine/desktop.js';
-import { appCheckout } from './machine/checkout.js';
+import { appCheckout, checkoutVersion } from './machine/checkout.js';
 import { runCommand } from './resources/process.js';
 
 export type AppOptions = { home: string; host: string; port: number; token: string; hubPort: number; webRoot?: string };
@@ -23,11 +23,14 @@ export type AppDeps = { resourceCommand: CommandRunner; mcpFetch: Fetch; harness
 export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
   let send: (event: any, data: any, hubId?: string) => void = () => {};
   await renameAccountsToProfiles(opts.home);
-  const here = machineInfo(await loadMachineId(opts.home));
+  // GLOSSARY: Update. Tests pass their own checkout; nothing else looks for one.
+  const root = deps.updates ? deps.updates.root : await appCheckout();
+  // The version this Accio started on, here and for its local hub.
+  const version = root ? await checkoutVersion(root) : undefined;
+  const here = { ...machineInfo(await loadMachineId(opts.home)), ...(version ? { version } : {}) };
   const codex = await codexInstall();
   const harnesses = [await claudeCodeInstall(), ...(codex.version ? [codex] : [])];
-  // GLOSSARY: Update. Tests pass their own checkout and host; nothing else looks for one.
-  const updates = new Updates({ machineId: here.id, run: runCommand, pnpm: pnpmHere(), host: desktopHost(), ...(deps.updates ?? { root: await appCheckout() }) });
+  const updates = new Updates({ machineId: here.id, run: runCommand, pnpm: pnpmHere(), host: desktopHost(), ...(deps.updates ?? { root }) });
   const connections = new HubConnections(opts.home, here, harnesses, { claudeCode: deps.harness ?? claudeCode, codex: deps.codexHarness ?? codexHarness(deps.codexFactory) }, (...args) => send(...args), deps.resourceCommand, deps.claudeModels ?? (deps.harness ? undefined : sdkClaudeModels), deps.deliveryHosting, updates);
   await connections.load();
   const shouldStartLocal = !connections.initialized || connections.saved.some((s) => s.managed);
@@ -36,7 +39,7 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
     if (shouldStartLocal) {
       const settings = new SharedSettings(opts.home);
       await moveProfilesToHub(opts.home, here, settings); await settings.close();
-      local = await startHubService({ home: opts.home, host: '127.0.0.1', port: opts.hubPort, claudeFetch: deps.claudeFetch, codexFactory: deps.codexFactory, anthropicUrl: deps.anthropicUrl, openaiUrl: deps.openaiUrl, openaiFetch: deps.openaiFetch, mcpFetch: deps.mcpFetch });
+      local = await startHubService({ home: opts.home, host: '127.0.0.1', port: opts.hubPort, claudeFetch: deps.claudeFetch, codexFactory: deps.codexFactory, anthropicUrl: deps.anthropicUrl, openaiUrl: deps.openaiUrl, openaiFetch: deps.openaiFetch, mcpFetch: deps.mcpFetch, ...(version ? { version } : {}) });
       const saved = connections.saved.find((s) => s.managed);
       if (saved) { if (saved.id !== local.trust.id) throw new Error('The managed local hub identity has changed. Restore its state before reconnecting.'); saved.url = local.url; }
       else {

@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import type { MachineView } from '@accio/protocol';
-import { useClient } from '../app/connection';
+import { useClient, useHubs } from '../app/connection';
 import { useLive } from '../app/useLive';
-import { Chevron, Monitor } from '../app/icons';
+import { Chevron, Hub, Monitor } from '../app/icons';
 import { SettingRow, SettingsFooter, SettingsSection, StatusPill } from '../app/Settings';
 import { Field } from '../resources/Field';
 import { useProfiles } from '../profiles/profiles';
@@ -11,7 +11,7 @@ import { useAction } from '../app/useAction';
 import { useResources } from '../resources/resources';
 import { ToolStatusCard } from '../tools/ToolStatusCard';
 import { OnboardMachine } from './OnboardMachine';
-import { MachineUpdate } from './MachineUpdate';
+import { MachineUpdate, useMachineUpdate } from './MachineUpdate';
 
 /** The machines known to the hub, including those currently offline. */
 export function MachineSettings({ machineId, onOpen, onBack, onOpenThread }: { machineId?: string; onOpen: (id: string) => void; onBack: () => void; onOpenThread: (threadId: string) => void }) {
@@ -24,22 +24,47 @@ export function MachineSettings({ machineId, onOpen, onBack, onOpenThread }: { m
   return (
     <>
       <p className="note">Workers connected to this hub run coding turns. Open a machine to manage its name, tools and profile folders.</p>
+      <HubRow />
       <SettingsSection add={!onboarding ? { label: 'Add machine', onClick: () => setOnboarding(true) } : undefined}>
         {machines.length === 0 && <SettingRow title="No machines connected yet" />}
-        {machines.map((m) => (
-          <button key={m.id} className="setting setting-link" onClick={() => onOpen(m.id)}>
-            <span className="menu-icon"><Monitor /></span>
-            <span className="setting-text">
-              <b>{m.name}{m.thisMachine ? ' (this machine)' : ''}</b>
-              <small>{m.platform} · {m.harnesses.length} harness{m.harnesses.length === 1 ? '' : 'es'}</small>
-            </span>
-            <StatusPill tone={m.connected ? 'ok' : undefined}>{m.connected ? 'Connected' : 'Offline'}</StatusPill>
-            <Chevron />
-          </button>
-        ))}
+        {machines.map((m) => <MachineRow key={m.id} machine={m} onOpen={() => onOpen(m.id)} />)}
       </SettingsSection>
       {onboarding && <OnboardMachine onClose={() => { setOnboarding(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.settings-add')?.focus()); }} />}
     </>
+  );
+}
+
+/** GLOSSARY: Hub. The hub these machines connect to, with the Accio version it runs. */
+function HubRow() {
+  const { hubs, selectedId } = useHubs();
+  const hub = hubs.find((h) => h.id === selectedId);
+  if (!hub) return null;
+  const where = hub.local ? 'Hub on this machine' : `Hub at ${new URL(hub.url).host}`;
+  return (
+    <SettingsSection>
+      <SettingRow icon={<Hub />} title={hub.name} description={hub.version ? `${where} · ${hub.version}` : where}>
+        <StatusPill tone={hub.status === 'connected' ? 'ok' : hub.error ? 'bad' : undefined}>{hub.status === 'connected' ? 'Connected' : hub.status === 'connecting' ? 'Connecting' : 'Offline'}</StatusPill>
+      </SettingRow>
+    </SettingsSection>
+  );
+}
+
+/** One machine: opens its settings, and updates its Accio when main is ahead. */
+function MachineRow({ machine: m, onOpen }: { machine: MachineView; onOpen: () => void }) {
+  const { view, canUpdate, start, busy, error } = useMachineUpdate(m);
+  const progress = error ?? (view?.state === 'updating' ? `${view.detail ?? 'Updating'}…` : view?.state === 'restarting' ? 'Restarting…' : view?.state === 'failed' ? 'Update failed' : undefined);
+  const details = [m.platform, `${m.harnesses.length} harness${m.harnesses.length === 1 ? '' : 'es'}`, m.version, progress].filter(Boolean);
+  return (
+    <div className="setting setting-link machine-row">
+      <span className="menu-icon"><Monitor /></span>
+      <span className="setting-text">
+        <button type="button" className="machine-row-open" onClick={onOpen}><b>{m.name}{m.thisMachine ? ' (this machine)' : ''}</b></button>
+        <small>{details.join(' · ')}</small>
+      </span>
+      {canUpdate && <button type="button" className="ghost machine-row-action" disabled={busy} title={`${view!.behind} commit${view!.behind === 1 ? '' : 's'} behind main`} onClick={start}>Update</button>}
+      <StatusPill tone={m.connected ? 'ok' : undefined}>{m.connected ? 'Connected' : 'Offline'}</StatusPill>
+      <Chevron />
+    </div>
   );
 }
 

@@ -416,3 +416,29 @@
   width: 14px;
   height: 14px;
 }
+/* A row that opens on click and holds its own buttons: the name's button covers the row. */
+.machine-row {
+  position: relative;
+}
+.machine-row-open {
+  text-align: start;
+  font: inherit;
+  color: inherit;
+}
+.machine-row-open::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+.machine-row-open:focus-visible {
+  outline: none;
+}
+.machine-row:has(.machine-row-open:focus-visible) {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
+  border-radius: 8px;
+}
+.machine-row-action {
+  position: relative;
+  z-index: 1;
+}

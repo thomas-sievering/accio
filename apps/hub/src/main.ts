@@ -8,7 +8,7 @@ if (process.argv.includes('--pair')) {
   const pair = await HubTrust.createCode(home);
   console.log(`Pairing code: ${pair.code}\nExpires: ${new Date(pair.expiresAt).toISOString()}`);
 } else {
-  const service = await startHubService({ home, host: process.env.ACCIO_HOST ?? '127.0.0.1', port: Number(process.env.ACCIO_HUB_PORT ?? 47322), publicUrl: process.env.ACCIO_PUBLIC_URL });
+  const service = await startHubService({ home, host: process.env.ACCIO_HOST ?? '127.0.0.1', port: Number(process.env.ACCIO_HUB_PORT ?? 47322), publicUrl: process.env.ACCIO_PUBLIC_URL, version: process.env.ACCIO_VERSION || undefined });
   console.log(`ACCIO_HUB_READY ${JSON.stringify({ hubId: service.trust.id, port: service.port })}`);
   console.log(`Hub: ${process.env.ACCIO_PUBLIC_URL ?? service.url}`);
   if (!service.trust.paired) console.log(`First-device pairing code: ${(await service.createPairingCode()).code} (valid for 10 minutes)`);

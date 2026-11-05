@@ -10,6 +10,8 @@ export type HubConnectionView = {
   error?: string;
   local: boolean;
   running: number;
+  /** The Accio version the hub runs, once connected; absent for a hub that doesn't know it. */
+  version?: string;
 };
 
 const PairHub = z.object({ name: z.string().trim().min(1).max(80), url: z.string().url(), code: z.string().trim().min(1) });
