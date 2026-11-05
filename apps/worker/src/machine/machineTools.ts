@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
-import type { MachineView, ParamsOf, ResultOf, UpdateView } from '@accio/protocol';
+import { findMentionedMachine, type MachineView, type ParamsOf, type ResultOf, type UpdateView } from '@accio/protocol';
 import { accioTool } from '../tools/tools.js';
 
 type Call = <M extends 'update.status' | 'update.start' | 'app.screenshot'>(method: M, params: ParamsOf<M>) => Promise<ResultOf<M>>;
@@ -16,14 +16,15 @@ export type MachineToolDeps = {
   timeoutMs?: number;
 };
 
-const machine = z.string().trim().max(200).optional().describe('Name or id of the machine, as in Settings → Machines. Defaults to this machine.');
+const machine = z.string().trim().max(200).optional().describe("Name or id of the machine, as in Settings → Machines, or one the user mentioned with @, such as '@laptop'. Defaults to this machine.");
 
 /** GLOSSARY: App screenshot and Update, as accio tools: any thread can look at and update Accio on each paired machine. */
 export function machineTools(deps: MachineToolDeps) {
   const resolve = (name?: string) => {
     if (!name) return { id: deps.here, name: 'this machine' };
     const all = deps.machines();
-    const found = all.find((m) => m.id === name) ?? all.find((m) => m.name.toLowerCase() === name.toLowerCase());
+    const found = all.find((m) => m.id === name) ?? all.find((m) => m.name.toLowerCase() === name.toLowerCase())
+      ?? findMentionedMachine(all, name);
     if (!found) throw new Error(`No machine named ${name}. Machines: ${all.map((m) => m.name).join(', ')}.`);
     return found;
   };

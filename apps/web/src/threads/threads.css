@@ -1019,7 +1019,7 @@ div.model-picker-empty b { color: var(--ink); font-weight: 500; }
 .effort-particles i { position: absolute; left: 0; top: 0; border-radius: 50%; opacity: 0; }
 .effort-particles i.star { border-radius: 0; clip-path: polygon(50% 0, 62% 37%, 100% 50%, 62% 63%, 50% 100%, 38% 63%, 0 50%, 38% 37%); }
 
-/* GLOSSARY: Model mention. The @ menu: a plain list above the composer, starting under the @. */
+/* GLOSSARY: Model mention, Machine mention. The @ menu: a plain list above the composer, starting under the @. */
 .mention-menu {
   position: absolute;
   bottom: calc(100% + 6px);
@@ -1039,5 +1039,8 @@ div.model-picker-empty b { color: var(--ink); font-weight: 500; }
 .mention-option svg { flex: none; width: 13px; height: 13px; }
 .mention-option[aria-selected="true"] { background: var(--raised-2); color: var(--ink-strong); }
 .mention-option.limited { opacity: 0.5; }
+.mention-option.first-machine { position: relative; margin-top: 7px; }
+.mention-option.first-machine::before { content: ""; position: absolute; top: -4px; left: 4px; right: 4px; border-top: 1px solid var(--line-2); }
+.mention-option small { margin-left: auto; color: var(--muted); font-size: 11px; }
 .mention { display: inline-flex; align-items: baseline; gap: 4px; padding: 0 5px; border-radius: 5px; background: var(--raised); color: var(--ink-strong); white-space: nowrap; }
 .mention svg { align-self: center; width: 11px; height: 11px; }

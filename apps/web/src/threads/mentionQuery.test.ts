@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ModelView } from '@accio/protocol';
+import type { MachineView, ModelView } from '@accio/protocol';
 import { mentionAt, mentionOptions } from './mentionQuery';
 
 const model = (id: string, name: string, harnessId = 'claudeCode'): ModelView => ({
@@ -32,5 +32,19 @@ describe('mentionOptions', () => {
     expect(mentionOptions(state, 's').map((o) => o.handle)).toEqual(['sol', 'sonnet']);
     expect(mentionOptions(state, 'max').map((o) => o.handle)).toEqual(['codex-max']);
     expect(mentionOptions(state, 'gpt').map((o) => o.handle)).toEqual(['sol', 'codex-max']);
+  });
+});
+
+describe('machine mentions', () => {
+  const machine = (id: string, name: string, connected = true): MachineView => ({
+    id, name, connected, thisMachine: false, platform: 'win32', version: '', lastSeen: '', harnesses: [], profileFolders: {},
+  });
+  const state = { models: [model('opus', 'Claude Opus 5.5')], favorites: [], usedUp: [] };
+  const machines = [machine('m1', 'Studio Laptop'), machine('m2', 'Desk', false), machine('m3', 'Opus')];
+
+  it('lists online machines after the models, never one a model handle hides', () => {
+    expect(mentionOptions(state, '', machines).map((o) => o.handle)).toEqual(['opus', 'studio-laptop']);
+    expect(mentionOptions(state, 'lap', machines).map((o) => o.handle)).toEqual(['studio-laptop']);
+    expect(mentionOptions(undefined, 'st', machines).map((o) => o.handle)).toEqual(['studio-laptop']);
   });
 });

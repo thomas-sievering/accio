@@ -153,8 +153,12 @@ A helper turn that a thread's harness starts through the `agent` accio tool for 
 _Avoid_: Subthread, child thread, worker, helper thread
 
 **Model mention**:
-Naming a model in a message with `@` and its handle, such as `@sonnet` or `@sol`, so sub-agents for that work run on it, on either harness. The handle is the model's family; when two offered models share one, both add their version, such as `@opus-5.5`. Typing `@` in the composer lists the profile's models; the sent message keeps the text and shows each mention as a chip. The thread's own model does not change.
+Naming a model in a message with `@` and its handle, such as `@sonnet` or `@sol`, so sub-agents for that work run on it, on either harness. The handle is the model's family; when two offered models share one, both add their version, such as `@opus-5.5`. Typing `@` in the composer lists the profile's models, then the online machines; the sent message keeps the text and shows each mention as a chip. The thread's own model does not change.
 _Avoid_: Tag, model reference
+
+**Machine mention**:
+Naming a machine in a message with `@` and its handle, such as `@laptop`, so the turn's machine tools, such as App screenshot and Update, act on that machine. The handle is the machine's name in lowercase words joined by dashes; when two machines share one, both add the start of their id. A model's handle wins over a machine's. The thread keeps running where it is.
+_Avoid_: Machine tag, target
 
 **Snooze**:
 Hiding a thread until a chosen time, when it comes back.

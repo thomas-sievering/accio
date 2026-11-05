@@ -4,6 +4,7 @@ import { ArrowUp, Close, Queue, StopSquare } from '../app/icons';
 import { useAppEvent } from '../app/appEvents';
 import { useAction } from '../app/useAction';
 import { useClient } from '../app/connection';
+import { useLive } from '../app/useLive';
 import { useThreads } from './threads';
 import { caretLeft, MentionMenu } from './Mentions';
 import { mentionAt, mentionOptions } from './mentionQuery';
@@ -15,7 +16,7 @@ type PendingImage = { key: string; name: string; mimeType: string; url: string; 
 
 /**
  * Enter steers the running turn; Ctrl+Enter queues. Shift+Enter adds a line.
- * Typing @ lists the profile's models to mention (GLOSSARY: Model mention).
+ * Typing @ lists the profile's models and the online machines to mention (GLOSSARY: Model mention, Machine mention).
  * Pasted images go above the message when the model reads them (GLOSSARY: Image attachment).
  */
 export function Composer({
@@ -65,12 +66,13 @@ export function Composer({
   const input = useRef<HTMLTextAreaElement>(null);
   const queuing = !!onStop && controlHeld;
   const { data: models } = useModels(profileId);
+  const machines = useLive(() => client.call('machines.list', {}), 'machines.changed');
   const [caret, setCaret] = useState<number>();
   const [highlight, setHighlight] = useState(0);
   /** The @ whose menu Escape closed; it stays closed until the caret leaves it. */
   const [dismissed, setDismissed] = useState<number>();
   const mention = caret === undefined ? undefined : mentionAt(text, caret);
-  const options = mention && mention.start !== dismissed ? mentionOptions(models, mention.query) : [];
+  const options = mention && mention.start !== dismissed ? mentionOptions(models, mention.query, machines) : [];
   const active = Math.min(highlight, options.length - 1);
   const pickMention = (handle: string) => {
     const el = input.current;

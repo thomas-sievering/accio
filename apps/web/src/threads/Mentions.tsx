@@ -1,24 +1,32 @@
 import { createContext, useContext } from 'react';
-import { splitMentions, type ModelView } from '@accio/protocol';
-import { ProviderLogo } from '../app/icons';
+import { splitMentions, type MachineView, type ModelView } from '@accio/protocol';
+import { Monitor, ProviderLogo } from '../app/icons';
 import { PrettyName } from './ModelPicker';
+import type { MentionOption } from './mentionQuery';
 
 /**
- * The menu that opens while typing `@`: a plain list of models, the highlighted one
- * picked with Enter or Tab. It sits above the composer, starting under the @.
+ * The menu that opens while typing `@`: a plain list of models, then online machines
+ * under a divider, the highlighted one picked with Enter or Tab. It sits above the
+ * composer, starting under the @.
  */
 export function MentionMenu({ options, active, left, onPick, onHover }: {
-  options: { model: ModelView; handle: string }[]; active: number; left: number;
+  options: MentionOption[]; active: number; left: number;
   onPick: (handle: string) => void; onHover: (index: number) => void;
 }) {
-  return <div className="mention-menu" role="listbox" aria-label="Mention a model" style={{ left }}>
-    {options.map(({ model, handle }, i) => <div key={handle} role="option" aria-selected={i === active} id={`mention-${handle}`}
-      className={`mention-option${model.limited ? ' limited' : ''}`} title={model.limited ? `${model.limited.label} is used up` : `@${handle}`}
-      // The textarea keeps focus, and with it the caret.
-      onMouseDown={(e) => e.preventDefault()} onMouseEnter={() => onHover(i)} onClick={() => onPick(handle)}>
-      <ProviderLogo providerId={model.providerId} />
-      <PrettyName name={model.name} />
-    </div>)}
+  return <div className="mention-menu" role="listbox" aria-label="Mention a model or machine" style={{ left }}>
+    {options.map((option, i) => {
+      const limited = 'model' in option && option.model.limited;
+      const firstMachine = 'machine' in option && (i === 0 || 'model' in options[i - 1]!);
+      return <div key={option.handle} role="option" aria-selected={i === active} id={`mention-${option.handle}`}
+        className={`mention-option${limited ? ' limited' : ''}${firstMachine && i > 0 ? ' first-machine' : ''}`}
+        title={limited ? `${limited.label} is used up` : `@${option.handle}`}
+        // The textarea keeps focus, and with it the caret.
+        onMouseDown={(e) => e.preventDefault()} onMouseEnter={() => onHover(i)} onClick={() => onPick(option.handle)}>
+        {'model' in option
+          ? <><ProviderLogo providerId={option.model.providerId} /><PrettyName name={option.model.name} /></>
+          : <><Monitor /><span className="mention-machine">{option.machine.name}</span>{option.machine.thisMachine && <small>This machine</small>}</>}
+      </div>;
+    })}
   </div>;
 }
 
@@ -38,16 +46,18 @@ export function caretLeft(textarea: HTMLTextAreaElement, index: number): number 
   return left;
 }
 
-/** The models a transcript's mentions are matched against: its thread's profile's. */
-export const MentionModels = createContext<ModelView[]>([]);
+/** What a transcript's mentions are matched against: its thread's profile's models, and the known machines. */
+export const MentionTargets = createContext<{ models: ModelView[]; machines: MachineView[] }>({ models: [], machines: [] });
 
-/** A sent message with each mention of an offered model shown as a chip; the text itself is unchanged. */
+/** A sent message with each mention of an offered model or a known machine shown as a chip; the text itself is unchanged. */
 export function MentionText({ text }: { text: string }) {
-  const models = useContext(MentionModels);
-  if (!models.length || !text.includes('@')) return <>{text}</>;
-  return <>{splitMentions(text, models).map((part, i) => 'model' in part
+  const { models, machines } = useContext(MentionTargets);
+  if ((!models.length && !machines.length) || !text.includes('@')) return <>{text}</>;
+  return <>{splitMentions(text, models, machines).map((part, i) => 'model' in part
     ? <span key={i} className="mention" title={`${part.model.name} · ${part.text}`}>
       <ProviderLogo providerId={part.model.providerId} /><PrettyName name={part.model.name} />
     </span>
-    : part.text)}</>;
+    : 'machine' in part
+      ? <span key={i} className="mention" title={`Machine ${part.machine.name} · ${part.text}`}><Monitor />{part.machine.name}</span>
+      : part.text)}</>;
 }

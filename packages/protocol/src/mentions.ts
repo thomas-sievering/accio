@@ -53,15 +53,36 @@ export function findMentionedModel<T extends Mentionable>(models: T[], handle: s
 /** `@handle` at the start or after whitespace; a sentence's closing full stop is not part of it. */
 export const MENTION = /(?<=^|\s)@([a-z0-9](?:[a-z0-9.-]*[a-z0-9])?)/gi;
 
-/** The text split into plain runs and the mentions of offered models in it. */
-export function splitMentions<T extends Mentionable>(text: string, models: T[]): ({ text: string } | { text: string; model: T })[] {
-  const parts: ({ text: string } | { text: string; model: T })[] = [];
+/**
+ * GLOSSARY: Machine mention. The handle you type after @ to name a machine, such as
+ * `@laptop`: its name in lowercase words joined by dashes. Two machines sharing one
+ * both add the start of their id, such as `@laptop-3f2a`.
+ */
+export function machineHandles<T extends { id: string; name: string }>(machines: T[]): { machine: T; handle: string }[] {
+  const counts = new Map<string, number>();
+  const base = (m: T) => m.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'machine';
+  for (const m of machines) counts.set(base(m), (counts.get(base(m)) ?? 0) + 1);
+  return machines.map((machine) => ({ machine, handle: counts.get(base(machine))! > 1 ? `${base(machine)}-${machine.id.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 4)}` : base(machine) }));
+}
+
+/** The machine a handle names, with or without its leading @. */
+export function findMentionedMachine<T extends { id: string; name: string }>(machines: T[], handle: string): T | undefined {
+  const wanted = handle.replace(/^@/, '').toLowerCase();
+  return machineHandles(machines).find((h) => h.handle === wanted)?.machine;
+}
+
+export type MentionPart<M, C> = { text: string } | { text: string; model: M } | { text: string; machine: C };
+
+/** The text split into plain runs and the mentions of offered models and known machines in it; a model's handle wins. */
+export function splitMentions<M extends Mentionable, C extends { id: string; name: string } = never>(text: string, models: M[], machines: C[] = []): MentionPart<M, C>[] {
+  const parts: MentionPart<M, C>[] = [];
   let at = 0;
   for (const match of text.matchAll(MENTION)) {
     const model = findMentionedModel(models, match[1]!);
-    if (!model) continue;
+    const machine = model ? undefined : findMentionedMachine(machines, match[1]!);
+    if (!model && !machine) continue;
     if (match.index > at) parts.push({ text: text.slice(at, match.index) });
-    parts.push({ text: match[0], model });
+    parts.push(model ? { text: match[0], model } : { text: match[0], machine: machine! });
     at = match.index + match[0].length;
   }
   if (at < text.length) parts.push({ text: text.slice(at) });
