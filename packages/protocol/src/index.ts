@@ -15,6 +15,7 @@ export * from './hub.js';
 export * from './limits.js';
 export * from './machine.js';
 export * from './media.js';
+export * from './pastes.js';
 export * from './mentions.js';
 export * from './models.js';
 export * from './profiles.js';

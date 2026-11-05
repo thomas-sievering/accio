@@ -11,6 +11,7 @@ import type { HarnessMessage } from '../apps/worker/src/threads/harness.js';
 import { DeliveryGit, DeliveryPending } from '../apps/worker/src/threads/delivery.js';
 import { git } from '../apps/worker/src/git.js';
 import { PROJECT_APP_TIMING } from '../apps/worker/src/projects/projectApps.js';
+import { lineCount, pastesIn, typedText } from '../packages/protocol/src/pastes.js';
 
 const home = await mkdtemp(join(tmpdir(), 'accio-chat-browser-'));
 // Disposable encryption for this isolated fixture, including headless Linux runners.
@@ -61,6 +62,9 @@ const goalTurns = new Map<string, number>();
 const harness = new FakeHarness(async function* (run) {
   // GLOSSARY: Image attachment. Says how many images arrived with the message.
   if (run.images?.length) { yield* replyWith(`Saw ${run.images.length} image${run.images.length > 1 ? 's' : ''}.`); return; }
+  // GLOSSARY: Pasted text. Says how much pasted text arrived whole, and what was typed after it.
+  const pasted = pastesIn(run.prompt);
+  if (pasted.length) { yield* replyWith(`Read ${pasted.map(lineCount).join(' + ')} pasted lines, then: ${typedText(run.prompt) || 'nothing typed'}`); return; }
   if (run.prompt === 'Cache usage fixture') {
     const message = { id: 'cache-response', content: [{ type: 'text' as const, text: 'Cache usage recorded.' }],
       usage: { input_tokens: 100, cache_read_input_tokens: 800, cache_creation_input_tokens: 100,

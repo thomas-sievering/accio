@@ -2,6 +2,7 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import type { ModelSelection, ModelView, ShippedNote, ThreadNamingSettings, TranscriptItem } from '@accio/protocol';
+import { pasteGist, splitPastes } from '@accio/protocol';
 import type { Models } from '../harnesses/models.js';
 import type { Profiles } from '../profiles/profiles.js';
 import { UserError } from '../rpc/router.js';
@@ -31,10 +32,15 @@ export function namingContext(items: TranscriptItem[], initial: boolean): string
   const messages = items.filter(item => (item.kind === 'user' && !item.resume && !item.delivery) || item.kind === 'assistant');
   const first = messages.find(item => item.kind === 'user');
   if (!first || !('text' in first)) return '';
-  const original = `Original request:\n${first.text.slice(0, 3000)}`;
+  const original = `Original request:\n${namingText(first.text).slice(0, 3000)}`;
   if (initial) return original;
-  const recent = messages.filter(item => item !== first).map(item => `${item.kind}: ${'text' in item ? item.text.slice(0, 2000) : ''}`).join('\n\n');
+  const recent = messages.filter(item => item !== first).map(item => `${item.kind}: ${'text' in item ? namingText(item.text).slice(0, 2000) : ''}`).join('\n\n');
   return `${original}\n\nRecent conversation:\n${recent.slice(-5000)}`;
+}
+
+/** GLOSSARY: Pasted text. Each paste shortened to its first line, so a long log leaves room for what was asked about it. */
+function namingText(text: string): string {
+  return splitPastes(text).map(part => part.kind === 'text' ? part.text : `[Pasted text: ${pasteGist(part.text).slice(0, 200)}]`).join('\n\n');
 }
 
 export function namingPrompt(context: string, instructions: string, previousTitle?: string) {

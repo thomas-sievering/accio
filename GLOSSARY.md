@@ -122,6 +122,10 @@ A message saved to start a later turn after the current turn finishes. It can be
 An image pasted into the composer and sent with a message. It is kept with the thread, shown in the message and given to the harness both as an image and as a saved file it can open. Only models that read its type can receive it.
 _Avoid_: Upload, file (in UI text)
 
+**Pasted text**:
+A long text paste (4,000 characters or 60 lines) that the composer keeps out of the message box as a chip. It is sent inside the message, before the typed text, as a fenced block the harness reads as plain text, and the thread shows it folded to its size and first line. Ctrl+Shift+V pastes it into the message instead, and the chip puts it back there.
+_Avoid_: Attachment, file (in UI text)
+
 **Steering**:
 Sending a message to the harness during its current turn, without interrupting it or starting a separate turn.
 

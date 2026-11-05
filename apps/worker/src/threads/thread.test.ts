@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_MODEL, type TranscriptItem } from '@accio/protocol';
+import { DEFAULT_MODEL, joinPastes, type TranscriptItem } from '@accio/protocol';
 import {
   RESUME_PROMPT,
   assertResumable,
@@ -70,6 +70,11 @@ describe('thread lifecycle', () => {
 
   it('shortens long titles', () => {
     expect(titleFrom('x'.repeat(80))).toHaveLength(60);
+  });
+
+  it('names a thread by what was typed, not by Pasted text', () => {
+    expect(titleFrom(joinPastes(['Error: boom\n  at main'], 'Why does this crash?'))).toBe('Why does this crash?');
+    expect(titleFrom(joinPastes(['\nError: boom\n  at main'], ''))).toBe('Error: boom');
   });
 
   it('drops threads from before a first message was required, and keeps every other', () => {

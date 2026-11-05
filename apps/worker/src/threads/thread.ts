@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { ChoicePick, ThreadAsset, ThreadView, TranscriptItem } from '@accio/protocol';
-import { DEFAULT_MODEL } from '@accio/protocol';
+import { DEFAULT_MODEL, pasteGist, pastesIn, typedText } from '@accio/protocol';
 import { UserError } from '../rpc/router.js';
 import type { LeftHarness, PendingHandoff } from './handoff.js';
 
@@ -83,8 +83,9 @@ export function startTurn(thread: Thread, firstText: string, now: string): Threa
   };
 }
 
+/** The first typed line; a message of only Pasted text is named by the paste's first line. */
 export function titleFrom(text: string): string {
-  const line = text.trim().split('\n')[0]!.trim();
+  const line = typedText(text).trim().split('\n')[0]!.trim() || pasteGist(pastesIn(text)[0] ?? '');
   return line.length > 60 ? `${line.slice(0, 59)}…` : line || NEW_THREAD_TITLE;
 }
 

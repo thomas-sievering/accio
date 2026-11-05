@@ -15,7 +15,8 @@ import { RevealContext, useReveal, type Reveal } from './reveal';
 const revealFrames = 30;
 const NO_MODELS: never[] = [];
 import { Choice, optionName } from './Choice';
-import { MentionTargets, MentionText } from './Mentions';
+import { MentionTargets } from './Mentions';
+import { UserMessageText } from './PastedText';
 import { useModels } from './useModels';
 import { useThreads } from './threads';
 
@@ -213,7 +214,7 @@ const Item = memo(function Item({ threadId, item, preparing, picked, pickName }:
         {item.steered && <span className="msg-pick">Steered mid-turn</span>}
         {pickName && <span className="msg-pick">✓ {pickName}</span>}
         {item.images && <MessageImages threadId={threadId} images={item.images} />}
-        {item.text && <MentionText text={item.text} />}
+        {item.text && <UserMessageText text={item.text} />}
       </div>;
     case 'choice':
       return <Choice threadId={threadId} item={item} picked={picked} />;

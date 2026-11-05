@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ClipboardEvent, type FormEvent, type ReactNode } from 'react';
-import { IMAGES_PER_MESSAGE, imageRefusal, readsImage, type ModelSelection } from '@accio/protocol';
+import { foldsPaste, IMAGES_PER_MESSAGE, imageRefusal, joinPastes, normalizePaste, readsImage, type ModelSelection } from '@accio/protocol';
 import { ArrowUp, Close, Queue, StopSquare } from '../app/icons';
 import { useAppEvent } from '../app/appEvents';
 import { useAction } from '../app/useAction';
@@ -10,6 +10,7 @@ import { caretLeft, MentionMenu } from './Mentions';
 import { mentionAt, mentionOptions } from './mentionQuery';
 import { useModels } from './useModels';
 import { base64, pastedImages, prepareImage } from './pastedImage';
+import { PasteChip } from './PastedText';
 
 /** GLOSSARY: Image attachment. A pasted image in the composer; it can be sent once uploaded. */
 type PendingImage = { key: string; name: string; mimeType: string; url: string; uploadId?: string };
@@ -18,6 +19,7 @@ type PendingImage = { key: string; name: string; mimeType: string; url: string; 
  * Enter steers the running turn; Ctrl+Enter queues. Shift+Enter adds a line.
  * Typing @ lists the profile's models and the online machines to mention (GLOSSARY: Model mention, Machine mention).
  * Pasted images go above the message when the model reads them (GLOSSARY: Image attachment).
+ * A long text paste becomes a chip that sends before the message; Ctrl+Shift+V keeps it in the box (GLOSSARY: Pasted text).
  */
 export function Composer({
   onSend,
@@ -61,6 +63,22 @@ export function Composer({
   // Unsent text survives a restart; sending or clearing it removes the copy.
   const [text, updateText] = useState(() => localStorage.getItem(storageKey) ?? '');
   const setText = (value: string) => { updateText(value); if (value) localStorage.setItem(storageKey, value); else localStorage.removeItem(storageKey); };
+  const pastesKey = `${storageKey}:pastes`;
+  // GLOSSARY: Pasted text. Kept beside the draft text, so a restart keeps them too.
+  const [pastes, updatePastes] = useState<string[]>(() => {
+    try { const saved: unknown = JSON.parse(localStorage.getItem(pastesKey) ?? '[]'); return Array.isArray(saved) ? saved.filter((p): p is string => typeof p === 'string') : []; }
+    catch { return []; }
+  });
+  const setPastes = (next: (current: string[]) => string[]) => updatePastes((current) => {
+    const value = next(current);
+    try { if (value.length) localStorage.setItem(pastesKey, JSON.stringify(value)); else localStorage.removeItem(pastesKey); }
+    catch { /* Too large to keep across a restart; it still sends. */ }
+    return value;
+  });
+  /** Set by Ctrl+Shift+V just before its paste event, which then keeps long text in the box. */
+  const pasteInline = useRef(0);
+  const [pasteHint, setPasteHint] = useState(false);
+  const pasteShortcut = /Mac/.test(navigator.platform) ? '⌘⇧V' : 'Ctrl+Shift+V';
   const [controlHeld, setControlHeld] = useState(false);
   const { busy, error, run } = useAction();
   const sending = useRef(false);
@@ -105,7 +123,7 @@ export function Composer({
   // A model chosen after pasting may not read what is already here.
   const refused = images.map((image) => refusalFor(image.mimeType)).find(Boolean);
   const uploading = images.some((image) => !image.uploadId);
-  const sendable = (!!text.trim() || !!attachment || images.length > 0) && !uploading && !refused;
+  const sendable = (!!text.trim() || !!attachment || images.length > 0 || pastes.length > 0) && !uploading && !refused;
   const repairThread = error?.includes('A repair thread was started')
     ? threads?.filter((t) => t.repairToolId).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
     : undefined;
@@ -150,9 +168,37 @@ export function Composer({
     el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
   }, [text]);
 
+  /** Puts `insert` at the cursor, replacing the selection. */
+  const insertAtCursor = (insert: string) => {
+    const el = input.current;
+    if (!el) return;
+    const next = text.slice(0, el.selectionStart) + insert + text.slice(el.selectionEnd);
+    const end = el.selectionStart + insert.length;
+    setText(next);
+    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(end, end); });
+  };
+  const editPaste = (index: number) => {
+    const paste = pastes[index];
+    if (paste === undefined) return;
+    setPastes((current) => current.filter((_, i) => i !== index));
+    setPasteHint(false);
+    const el = input.current;
+    const before = el ? text.slice(0, el.selectionStart) : text;
+    insertAtCursor(`${before && !before.endsWith('\n') ? '\n' : ''}${paste}\n`);
+  };
+
   const paste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
     const files = pastedImages(event.clipboardData);
-    if (!files.length) return;
+    const inline = Date.now() - pasteInline.current < 1000;
+    pasteInline.current = 0;
+    if (!files.length) {
+      const pasted = event.clipboardData.getData('text/plain');
+      if (inline || !foldsPaste(pasted) || !normalizePaste(pasted).trim()) return;
+      event.preventDefault();
+      setPastes((current) => [...current, normalizePaste(pasted)]);
+      setPasteHint(true);
+      return;
+    }
     event.preventDefault();
     setImageError(undefined);
     // Reserve places before any await, so two quick pastes respect the limit together.
@@ -183,14 +229,17 @@ export function Composer({
     const value = text.trim();
     if (!sendable || disabled || sending.current) return;
     const sent = images;
+    const sentPastes = pastes;
     sending.current = true;
     if (handsOffImages) handedOff.current = sent;
     try {
       await run(async () => {
-        await onSend(value, mode, sent.map((image) => image.uploadId!), sent.map((image) => image.url));
+        await onSend(joinPastes(sentPastes, value), mode, sent.map((image) => image.uploadId!), sent.map((image) => image.url));
         // Sent from a composer that has since closed (a started draft): forget its saved text too.
         if (!input.current || input.current.value === text) setText('');
         setImages((current) => current.filter((image) => !sent.includes(image)));
+        setPastes((current) => current.filter((paste) => !sentPastes.includes(paste)));
+        setPasteHint(false);
         if (!handsOffImages) for (const image of sent) URL.revokeObjectURL(image.url);
         setImageError(undefined);
       });
@@ -207,8 +256,11 @@ export function Composer({
         {/* A send refused for a broken tool points at the repair already under way. */}
         {repairThread && <> <button type="button" className="link" onClick={() => select(repairThread.id)}>Open repair thread</button></>}
       </p>}
+      {pasteHint && pastes.length > 0 && !(error || refused || imageError) && <p className="composer-hint" role="status">
+        Long paste kept as Pasted text, sent before your message. <kbd>{pasteShortcut}</kbd> pastes into the message instead.
+      </p>}
       <form className="composer" onSubmit={(e: FormEvent) => { e.preventDefault(); void submit(queuing ? 'queue' : 'steer'); }}>
-        {(attachment || images.length > 0) && <div className="composer-chips">
+        {(attachment || images.length > 0 || pastes.length > 0) && <div className="composer-chips">
           {attachment && <span className="composer-chip">
             {attachment.label}
             <button type="button" aria-label={`Remove ${attachment.label}`} onClick={attachment.onRemove}><Close /></button>
@@ -218,6 +270,8 @@ export function Composer({
             <img src={image.url} alt={image.name} />
             <button type="button" aria-label={`Remove ${image.name}`} onClick={() => removeImage(image.key)}><Close /></button>
           </span>)}
+          {pastes.map((paste, index) => <PasteChip key={index} text={paste} onEdit={() => editPaste(index)}
+            onRemove={() => { setPastes((current) => current.filter((_, i) => i !== index)); setPasteHint(false); input.current?.focus(); }} />)}
         </div>}
         {options.length > 0 && mention && <MentionMenu options={options} active={active} onPick={pickMention} onHover={setHighlight}
           left={Math.min((input.current?.offsetLeft ?? 0) + (input.current ? caretLeft(input.current, mention.start) : 0), (input.current?.parentElement?.clientWidth ?? 0) - 240)} />}
@@ -238,6 +292,7 @@ export function Composer({
           onFocus={trackCaret}
           onBlur={() => setCaret(undefined)}
           onKeyDown={(e) => {
+            if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && (e.key.toLowerCase() === 'v' || e.code === 'KeyV')) pasteInline.current = Date.now();
             if (options.length > 0 && !e.nativeEvent.isComposing) {
               if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
                 e.preventDefault();
