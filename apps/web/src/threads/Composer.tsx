@@ -22,6 +22,7 @@ import { composerKey, useDraft } from './drafts';
 export function Composer({
   onSend,
   onStop,
+  stopDisabled,
   disabled,
   placeholder,
   toolbar,
@@ -32,11 +33,14 @@ export function Composer({
   profileId,
   model,
   handsOffImages,
+  imagesUnavailable,
 }: {
   /** `images` are upload ids, in the order they were pasted; `previews` their local copies. */
   onSend: (text: string, mode: 'steer' | 'queue' | undefined, images: string[], previews: string[]) => Promise<void>;
   /** Set while a turn runs; Stop stays beside Send. */
   onStop?: () => Promise<void>;
+  /** Stop depends on reachability, independently of whether another message can send. */
+  stopDisabled?: boolean;
   disabled: boolean;
   placeholder: string;
   /** Shown left of the send button. */
@@ -54,6 +58,7 @@ export function Composer({
   model?: ModelSelection;
   /** Sending hands the images' local copies to `onSend` to free, and each image travels into the sent message. */
   handsOffImages?: boolean;
+  imagesUnavailable?: string;
 }) {
   const client = useClient();
   const { threads, shelves, selectedId, select } = useThreads();
@@ -97,7 +102,7 @@ export function Composer({
   };
   const [imageError, setImageError] = useState<string>();
   const listed = model && models?.models.find((m) => m.harnessId === model.harnessId && m.id === model.modelId);
-  const refusalFor = (mimeType: string) => listed && !readsImage(listed, mimeType) ? imageRefusal(listed.name, listed.imageTypes ?? [], mimeType) : undefined;
+  const refusalFor = (mimeType: string) => imagesUnavailable ?? (listed && !readsImage(listed, mimeType) ? imageRefusal(listed.name, listed.imageTypes ?? [], mimeType) : undefined);
   // A model chosen after pasting may not read what is already here.
   const refused = images.map((image) => refusalFor(image.mimeType)).find(Boolean);
   const uploading = images.some((image) => !image.uploadId);
@@ -179,6 +184,7 @@ export function Composer({
     }
     event.preventDefault();
     setImageError(undefined);
+    if (imagesUnavailable) { setImageError(imagesUnavailable); return; }
     // Reserve places before any await, so two quick pastes respect the limit together.
     const room = IMAGES_PER_MESSAGE - images.length;
     if (files.length > room) setImageError(`A message can carry ${IMAGES_PER_MESSAGE} images.`);
@@ -193,7 +199,7 @@ export function Composer({
         const { uploadId } = await client.call('threads.upload', { name, mimeType: blob.type as 'image/png', data: await base64(blob) });
         setImages((current) => current.map((image) => image.key === key ? { ...image, mimeType: blob.type, uploadId } : image));
       })().catch((cause: unknown) => {
-        setImages((current) => current.filter((image) => image.key !== key));
+        setImages((current) => current.filter((image) => { if (image.key === key) URL.revokeObjectURL(image.url); return image.key !== key; }));
         setImageError(cause instanceof Error ? cause.message : String(cause));
       });
     }
@@ -302,6 +308,7 @@ export function Composer({
             <button
               type="button"
               className="send stop"
+              disabled={stopDisabled || busy}
               aria-label="Stop"
               onClick={() => void run(onStop)}
             >

@@ -2,6 +2,7 @@ import type { ProfileView, ThreadView, ModelSelection } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { useAction } from '../app/useAction';
 import { accountForModel, defaultModel } from '../profiles/profiles';
+import { useThreadAvailability } from './useThreadAvailability';
 
 /**
  * The one slot above the composer for "this thread can't go on by itself right
@@ -23,13 +24,16 @@ export function ThreadNotice({
   onOpenProfile: (profileId: string) => void;
 }) {
   const client = useClient();
+  const { unavailable } = useThreadAvailability(thread);
   const { busy, error, run } = useAction();
 
   let text: React.ReactNode;
   let action: { label: string; run: () => unknown } | undefined;
   let tone = 'warn';
   const selected = model ?? thread?.model ?? defaultModel(profile);
-  if (!profile) {
+  if (unavailable) {
+    text = unavailable;
+  } else if (!profile) {
     text = 'The profile this thread started with no longer exists.';
     tone = 'error';
   } else if (!accountForModel(profile, selected)?.signedIn) {

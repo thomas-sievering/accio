@@ -425,3 +425,74 @@ test('a choice shows screenshots full size and sends the pick with feedback', as
   await expect(page.locator('.choice-option.selected')).toHaveCount(1);
   await expect(page.locator('.composer-chip')).toHaveCount(0);
 });
+
+
+test('choice screenshots show grant errors and offer recovery', async ({ page, baseURL }) => {
+  let failGrants = true;
+  const disconnect: (() => void)[] = [];
+  await page.routeWebSocket('**/ws?*', socket => {
+    const server = socket.connectToServer();
+    disconnect.push(() => { socket.close(); server.close(); });
+    socket.onMessage(message => {
+      const request = JSON.parse(String(message));
+      if (request.method === 'threads.assetUrl' && failGrants) socket.send(JSON.stringify({ type: 'response', id: request.id, ok: false, error: 'Screenshot grant unavailable' }));
+      else server.send(message);
+    });
+  });
+  await page.goto(`${baseURL}/#token=${token}`);
+  await page.locator('.sidebar').getByRole('button', { name: /Choice fixture/ }).click();
+  await expect(page.locator('.choice-missing')).toHaveCount(3);
+  await expect(page.locator('.choice-missing').first()).toContainText('Screenshot grant unavailable');
+  failGrants = false;
+  await page.getByRole('button', { name: 'Retry screenshot', exact: true }).first().click();
+  await expect.poll(() => page.getByAltText('List rows').evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(480);
+  disconnect.splice(0).forEach(close => close());
+  await expect(page.locator('.choice-missing')).toHaveCount(0);
+  for (const label of ['List rows', 'Cards', 'Grouped by provider']) await expect.poll(() => page.getByAltText(label).evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(480);
+});
+
+
+test('reconnecting preserves a renewed video source and playback position', async ({ page, baseURL }) => {
+  let connections = 0;
+  let failObserve = false;
+  const disconnect: (() => void)[] = [];
+  await page.routeWebSocket('**/ws?*', socket => {
+    connections++;
+    const server = socket.connectToServer();
+    disconnect.push(() => { socket.close(); server.close(); });
+    socket.onMessage(message => {
+      const request = JSON.parse(String(message));
+      if (request.method === 'threads.observe' && failObserve) socket.send(JSON.stringify({ type: 'response', id: request.id, ok: false, error: 'Snapshot temporarily unavailable' }));
+      else server.send(message);
+    });
+  });
+  await openChat(page, baseURL!);
+  const video = page.locator('video[aria-label="Demo clip"]');
+  await video.scrollIntoViewIfNeeded();
+  await expect.poll(() => video.evaluate((el: HTMLVideoElement) => el.readyState)).toBeGreaterThanOrEqual(3);
+  const source = await video.getAttribute('src');
+  await page.route('**/thread-assets/*', route => route.request().url() === source ? route.fulfill({ status: 404 }) : route.continue());
+  await video.evaluate((el: HTMLVideoElement) => el.load());
+  await expect(video).not.toHaveAttribute('src', source!);
+  await expect.poll(() => video.evaluate((el: HTMLVideoElement) => el.readyState)).toBeGreaterThanOrEqual(3);
+  await video.evaluate((el: HTMLVideoElement) => { el.currentTime = 1.2; el.pause(); });
+  await expect.poll(() => video.evaluate((el: HTMLVideoElement) => Math.abs(el.currentTime - 1.2))).toBeLessThan(0.15);
+  const renewed = await video.getAttribute('src');
+  const before = connections;
+  disconnect.splice(0).forEach(close => close());
+  await expect.poll(() => connections).toBeGreaterThan(before);
+  // Reconnection is established by an enabled model control; no reload or navigation.
+  await expect(page.getByRole('button', { name: /^Select model:/ })).toBeEnabled();
+  await expect(video).toHaveAttribute('src', renewed!);
+  expect(await video.evaluate((el: HTMLVideoElement) => Math.abs(el.currentTime - 1.2))).toBeLessThan(0.15);
+  expect(await video.evaluate((el: HTMLVideoElement) => el.paused)).toBe(true);
+  failObserve = true;
+  disconnect.splice(0).forEach(close => close());
+  const refreshError = page.locator('.notice-bar', { hasText: 'Could not refresh transcript' });
+  await expect(refreshError).toContainText('Snapshot temporarily unavailable');
+  failObserve = false;
+  await refreshError.getByRole('button', { name: 'Retry', exact: true }).click();
+  await expect(refreshError).toHaveCount(0);
+  await expect(video).toHaveAttribute('src', renewed!);
+  expect(await video.evaluate((el: HTMLVideoElement) => Math.abs(el.currentTime - 1.2))).toBeLessThan(0.15);
+});

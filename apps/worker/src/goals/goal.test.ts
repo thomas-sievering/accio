@@ -13,10 +13,10 @@ it('reads /goal commands and leaves other messages alone', () => {
 
 it('keeps going after turns that did work, with no turn limit, and pauses on anything else', () => {
   const goal = { ...goalTurnStarted(newGoal('ship it', 'now'))!, turns: 500 };
-  expect(afterGoalTurn(goal, 'completed', true)).toEqual({ goal, continue: true });
-  expect(afterGoalTurn(goal, 'completed', false)).toMatchObject({ goal: { status: 'paused', detail: 'No progress in the last turn.' }, continue: false });
-  expect(afterGoalTurn(goal, 'interrupted', true).goal).toMatchObject({ status: 'paused', detail: 'Stopped.' });
-  expect(afterGoalTurn(goal, 'failed', true).goal).toMatchObject({ status: 'paused', detail: 'The last turn failed.' });
+  expect(afterGoalTurn(goal, 'completed', true)).toEqual(goal);
+  expect(afterGoalTurn(goal, 'completed', false)).toMatchObject({ status: 'paused', detail: 'No progress in the last turn.' });
+  expect(afterGoalTurn(goal, 'interrupted', true)).toMatchObject({ status: 'paused', detail: 'Stopped.' });
+  expect(afterGoalTurn(goal, 'failed', true)).toMatchObject({ status: 'paused', detail: 'The last turn failed.' });
   expect(resumeGoal({ ...goal, status: 'paused', detail: 'Stopped.' })).toMatchObject({ status: 'active', turns: 500, detail: undefined });
 });
 
@@ -24,7 +24,7 @@ it('stops when the harness reports the goal achieved or blocked', () => {
   const goal = newGoal('ship it', 'now');
   const achieved = finishGoal(goal, 'achieved', 'All 12 tests pass');
   expect(achieved).toMatchObject({ status: 'achieved', detail: 'All 12 tests pass' });
-  expect(afterGoalTurn(achieved, 'completed', true)).toEqual({ goal: achieved, continue: false });
+  expect(afterGoalTurn(achieved, 'completed', true)).toEqual(achieved);
   expect(finishGoal(goal, 'blocked', 'Need a token')).toMatchObject({ status: 'paused', detail: 'Need a token' });
   expect(() => resumeGoal(achieved)).toThrow('achieved');
   expect(() => pauseGoal(achieved)).toThrow('no active goal');

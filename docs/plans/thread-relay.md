@@ -1,6 +1,6 @@
 # Thread relay
 
-Status: slices 1 to 3 implemented, 2026-11-04 (`apps/worker/src/relay`, `apps/hub/src/relayClient.ts`, the hub's `/relay` socket). Implements **Relay** from the [glossary](../../GLOSSARY.md) within [ADR 0001](../adr/0001-machines-connect-outbound-to-the-hub.md) and [ADR 0009](../adr/0009-the-hub-never-runs-threads.md).
+Historical implementation plan, written 2026-11-04. The slices below record the original proposal, not the current support contract. Current support: thread reads/actions, starts on another machine and saved-media viewing are implemented. Sending images, thread skills and owned-preview forwarding remain local. Consult `packages/protocol/src/relay.ts` for the method allowlist, `apps/worker/src/relay/relay.ts` for routing/media transport, and [thread verification](../../.agents/skills/3-verify/features/threads.md) for current UI behavior. Implements **Relay** from the [glossary](../../GLOSSARY.md) within [ADR 0001](../adr/0001-machines-connect-outbound-to-the-hub.md) and [ADR 0009](../adr/0009-the-hub-never-runs-threads.md).
 
 ## Problem
 

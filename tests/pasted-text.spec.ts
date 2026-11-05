@@ -71,3 +71,29 @@ test('a long paste folds into Pasted text, reaches the model whole and shows fol
   await expect(message.getByRole('button', { name: 'Show less' })).toBeVisible();
   await expect(message.locator('.msg-text')).not.toHaveClass(/folded/);
 });
+
+
+test('the starting transcript already folds pasted text', async ({ page, baseURL }) => {
+  let release: (() => void) | undefined;
+  await page.routeWebSocket('**/ws?*', socket => {
+    const server = socket.connectToServer();
+    socket.onMessage(message => {
+      if (JSON.parse(String(message)).method === 'threads.start') release = () => server.send(message);
+      else server.send(message);
+    });
+  });
+  await page.goto(`${baseURL}/#token=${token}`);
+  await page.locator('.sidebar').getByRole('button', { name: 'New thread', exact: true }).click();
+  await page.getByRole('option', { name: 'No project', exact: true }).click();
+  if (await page.getByRole('combobox', { name: 'Search profiles' }).isVisible()) await page.getByRole('option', { name: 'Personal', exact: true }).click();
+  await pasteText(page, log);
+  await page.locator('.composer textarea').fill('What failed?');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  const starting = page.locator('.draft-starting');
+  await expect(starting.locator('.paste-card')).toContainText('200 lines');
+  await expect(starting.locator('.paste-card pre')).toBeHidden();
+  await expect(starting.locator('.msg-text')).toHaveText('What failed?');
+  release!();
+  await expect(starting).toHaveCount(0);
+  await expect(page.locator('.msg.user .paste-card')).toContainText('200 lines');
+});

@@ -9,6 +9,7 @@ test('requires an explicit browser scope and preserves grep as one argument', ()
   assert.throws(() => parseArgs([]), /Select the browser files/);
   assert.throws(() => parseArgs(['--project=unknown', 'delivery.spec.ts']), /Choose project/);
   assert.throws(() => parseArgs(['../delivery.spec.ts']), /Unknown argument/);
+  assert.equal(parseArgs(['relay.spec.ts', '--project=relay']).project, 'relay');
   const options = parseArgs(['tests/delivery.spec.ts', '--skip-build', '--grep', 'CI wait|Ship menu']);
   const steps = plan(options, 'pnpm.cjs');
   assert.deepEqual(steps.map(step => step.name), ['typecheck', 'web-unit', 'browser']);

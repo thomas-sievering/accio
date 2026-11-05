@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { findMentionedModel, modelHandles, type ModelSelection, type ModelView, type ParamsOf, type ThreadView } from '@accio/protocol';
+import type { ModelSelection, ModelView, ParamsOf, ThreadView } from '@accio/protocol';
+import { mentionedModel } from '../harnesses/models.js';
 import { accioTool } from '../tools/tools.js';
 
 export const START_THREAD_TOOL = 'start_thread';
@@ -39,17 +40,10 @@ export function startThreadTool(deps: StartThreadDeps) {
       const caller = deps.caller(threadId);
       if (!caller) throw new Error('This thread is not on this machine.');
       const target = deps.machine(machineName);
-      const model = handle ? mentioned(deps.models(caller.profileId), handle, caller.model) : caller.model;
+      const model = handle ? mentionedModel(deps.models(caller.profileId), handle, caller.model.effort).selection : caller.model;
       const where = caller.checkoutId ? { checkoutId: caller.checkoutId } : { profileId: caller.profileId };
       const started = await deps.start({ ...where, text: message, model, ...(target ? { machineId: target.id } : {}) });
       return `Started thread "${started.title}" (${started.id}) on ${target?.name ?? 'this machine'}. It runs on its own and shows in the thread list.`;
     },
   });
-}
-
-function mentioned(models: ModelView[], handle: string, current: ModelSelection): ModelSelection {
-  const model = findMentionedModel(models, handle);
-  if (!model) throw new Error(`No model is called @${handle.replace(/^@/, '')}. Mention one of: ${modelHandles(models).map((h) => `@${h.handle}`).join(', ')}.`);
-  // The effort carries over where the model accepts it; threads.start drops it otherwise.
-  return { harnessId: model.harnessId, modelId: model.id, ...(current.effort ? { effort: current.effort } : {}) };
 }

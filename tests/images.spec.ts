@@ -93,3 +93,52 @@ test('a new thread with something in its composer waits in the inbox as a Draft'
   await expect(drafts).toHaveCount(0);
   await expect(page.locator('.composer textarea')).toHaveValue('');
 });
+
+test('saved message images recover failed grants, reconnects and repeated expiry', async ({ page, baseURL }) => {
+  let failGrants = false;
+  const disconnect: (() => void)[] = [];
+  await page.routeWebSocket('**/ws?*', socket => {
+    const server = socket.connectToServer();
+    disconnect.push(() => { socket.close(); server.close(); });
+    socket.onMessage(message => {
+      const request = JSON.parse(String(message));
+      if (request.method === 'threads.assetUrl' && failGrants) socket.send(JSON.stringify({ type: 'response', id: request.id, ok: false, error: 'Image grant unavailable' }));
+      else server.send(message);
+    });
+  });
+  await page.goto(`${baseURL}/#token=${token}`);
+  await page.locator('.sidebar').getByRole('button', { name: 'New thread', exact: true }).click();
+  await page.getByRole('option', { name: 'No project', exact: true }).click();
+  if (await page.getByRole('combobox', { name: 'Search profiles' }).isVisible()) await page.getByRole('option', { name: 'Personal', exact: true }).click();
+  await pasteImage(page);
+  await expect(page.locator('.composer-image')).not.toHaveClass(/uploading/);
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect(page.locator('.msg.user .msg-image img')).toBeVisible();
+  await expect(page.locator('.draft-starting')).toHaveCount(0);
+  await expect(page.locator('.msg.assistant').last()).toContainText('Saw 1 image.');
+  failGrants = true;
+  await page.reload();
+  await expect(page.locator('.msg-image-missing')).toContainText('Image grant unavailable');
+  failGrants = false;
+  await page.locator('.msg-image-missing').getByRole('button', { name: 'Retry', exact: true }).click();
+  const image = page.locator('.msg.user .msg-image img');
+  await expect.poll(() => image.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
+  const expired = new Set<string>();
+  await page.route('**/thread-assets/*', route => expired.has(route.request().url()) ? route.fulfill({ status: 404 }) : route.continue());
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const old = await image.getAttribute('src');
+    const expiredSource = `${old}?expired=${attempt}`;
+    expired.add(expiredSource);
+    // A distinct request avoids Chromium's decoded-image cache when simulating expiry.
+    await image.evaluate((img: HTMLImageElement, src) => { img.src = src; }, expiredSource);
+    await expect.poll(async () => { const src = await image.getAttribute('src'); return src !== old && !expired.has(src!); }).toBe(true);
+    await expect.poll(() => image.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
+  }
+  // An error on a remount must retry itself when the same connection opens again.
+  failGrants = true;
+  await page.reload();
+  await expect(page.locator('.msg-image-missing')).toContainText('Image grant unavailable');
+  failGrants = false;
+  disconnect.splice(0).forEach(close => close());
+  await expect.poll(() => image.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
+});

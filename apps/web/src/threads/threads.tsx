@@ -6,6 +6,7 @@ import { useProjects } from '../projects/projects';
 import { useProfiles } from '../profiles/profiles';
 import { observeTranscript, type TranscriptState } from './observeTranscript';
 import { createPlacementTracker, filterThreads, nextMorning, shelveThreads, type ThreadShelves } from './shelves';
+import { clearFirstMessages } from './sentImages';
 
 type ThreadsCtx = {
   threads: ThreadView[] | undefined;
@@ -43,6 +44,7 @@ const Ctx = createContext<ThreadsCtx | null>(null);
 
 export function ThreadsProvider({ children }: { children: ReactNode }) {
   const client = useClient();
+  useEffect(() => () => clearFirstMessages(client), [client]);
   const { value: threads, error: loadError, retry: retryLoad } = useLiveState(() => client.call('threads.list', {}), 'threads.changed');
   const [selectedId, setSelected] = useLocalState<string>('accio.thread', '');
   const draftKey = `accio:${client.hubId}:draft`;
@@ -120,13 +122,17 @@ export function useThreads(): ThreadsCtx {
   return c;
 }
 
-/** A selected transcript; retry starts a fresh observation of the current connection. */
+/** Keep the selected transcript painted while a fresh observation or retry catches up. */
 export function useTranscript(threadId: string): TranscriptState & { retry: () => void } {
   const client = useClient();
   const [attempt, setAttempt] = useState(0);
-  const [state, setState] = useState<TranscriptState & { threadId: string }>({ threadId });
-  useEffect(() => observeTranscript(client, threadId, (next) => setState({ ...next, threadId })), [client, threadId, attempt]);
-  return { ...(state.threadId === threadId ? state : {}), retry: () => setAttempt((n) => n + 1) };
+  const [state, setState] = useState<TranscriptState & { threadId: string; client: typeof client }>({ threadId, client });
+  useEffect(() => observeTranscript(client, threadId, (next) => setState(previous => ({
+    ...next, threadId, client,
+    items: next.items ?? (previous.threadId === threadId && previous.client === client ? previous.items : undefined),
+  }))), [client, threadId, attempt]);
+  const current = state.threadId === threadId && state.client === client ? state : undefined;
+  return { items: current?.items, error: current?.error, retry: () => setAttempt((n) => n + 1) };
 }
 
 /**

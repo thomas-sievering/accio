@@ -38,7 +38,7 @@ export type RemoteMachine = { id: string; name: string; online: boolean };
  * Thread methods a machine serves to the others through the relay. Anything not
  * listed, such as hubs.*, secrets.* or pairing, never runs for another machine.
  * `threads.start` arrives naming the serving machine's own checkout or a profile.
- * Methods that hand out local HTTP URLs (assets, files, previews) wait for a relayed stream.
+ * Saved assets/files use the media transport in relay.ts on the worker; local previews and skills are not relayed.
  */
 export const RELAY_THREAD_METHODS = [
   'threads.start', 'threads.observe', 'threads.transcript', 'threads.toolDetails', 'threads.media', 'threads.deliverySummary',

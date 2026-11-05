@@ -10,6 +10,7 @@ import { RowRename, useRenaming, useThreadMenu } from './ThreadMenu';
 import { snoozeThread } from './SnoozeNotice';
 import { wakeText, type ShelfPlace } from './shelves';
 import { useThreads, type ThreadActions } from './threads';
+import { useThreadAvailability } from './useThreadAvailability';
 
 /**
  * Compact rows keep project identity and activity secondary to the title.
@@ -40,6 +41,7 @@ export function ThreadRow({ thread: t, place, withinProject = false }: { thread:
     } else openMenu(t, e.clientX, e.clientY);
   };
 
+  const { unavailable } = useThreadAvailability(t);
   const actions = (
     <span className="row-actions">
       {hoverActions(t, place).map((a) => (
@@ -48,7 +50,8 @@ export function ThreadRow({ thread: t, place, withinProject = false }: { thread:
           className="row-action"
           // Pointer shortcuts only; the keyboard reaches the same actions through the row menu (Shift+F10).
           tabIndex={-1}
-          title={a.title}
+          disabled={!!unavailable}
+          title={unavailable ?? a.title}
           aria-label={a.label}
           onClick={() => void (a.run === 'snooze' ? snoozeThread(act, t.id) : act[a.run](t.id)).catch((e: Error) => console.error(e.message))}
         >

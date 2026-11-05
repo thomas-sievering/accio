@@ -17,7 +17,7 @@ pnpm verify:ui delivery.spec.ts delivery-merge.spec.ts
 Replace the example files with the browser tests covering the changed interactions.
 The command builds and typechecks the workspace, runs web unit tests, then runs those browser files
 on the selected fixture project (default `chat`). Use `--project=limits` or
-`--project=secrets` for those fixtures. It saves full stdout/stderr, commands, exit
+`--project=secrets` or `--project=relay` for those fixtures. It saves full stdout/stderr, commands, exit
 codes, revision, working-tree status and timings under the printed
 `out/verify-ui/<run>/report.json` path, and stops at the first failed stage. Browser
 artifacts also belong to that run, so retries keep earlier traces. Empty browser

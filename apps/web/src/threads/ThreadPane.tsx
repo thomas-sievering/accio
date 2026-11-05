@@ -24,9 +24,11 @@ import { Transcript } from './Transcript';
 import { CacheUsage } from './CacheUsage';
 import { useReportPendingSecrets } from '../secrets/pendingSecrets';
 import { viewTransition } from '../ui/viewTransition';
-import { keepSentImages } from './sentImages';
+import { firstMessage, forgetFirstMessage, keepFirstMessage } from './sentImages';
 import { useThreads, useTranscript } from './threads';
 import { newThreadDraftId } from './drafts';
+import { useThreadAvailability, remoteImagesReason } from './useThreadAvailability';
+import { UserMessageText } from './PastedText';
 
 /** Where a thread runs, looked up once for the header, the notice and the composer. */
 function usePlace(checkoutId: string, profileId?: string, projectId?: string) {
@@ -41,9 +43,12 @@ function usePlace(checkoutId: string, profileId?: string, projectId?: string) {
 
 export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits, onOpenSecrets }: { thread: ThreadView; active?: boolean; onOpenProfile: (profileId: string) => void; onOpenLimits: (profileId: string) => void; onOpenSecrets?: (profileId: string) => void }) {
   const client = useClient();
+  const { unavailable, imagesUnavailable } = useThreadAvailability(thread);
   const place = usePlace(thread.checkoutId, thread.profileId, thread.machine ? thread.projectId : undefined);
   const { items, error, retry } = useTranscript(thread.id);
   useReportPendingSecrets(thread.id, items);
+  const starting = firstMessage(client, thread.id);
+  useEffect(() => { if (items) forgetFirstMessage(client, thread.id); }, [client, thread.id, items]);
   const running = thread.status === 'running';
   const [savingModel, setSavingModel] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -63,7 +68,7 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
   return (
     <>
       <PaneHeader title={thread.title} titleEditor={renaming ? <TitleEdit thread={thread} className="header-rename" onDone={() => setRenaming(false)} /> : <EditableTitle key={thread.id} thread={thread} />} {...place} checkout={thread.workspace && !thread.workspace.releasedAt && place.checkout ? { ...place.checkout, path: thread.workspace.path } : place.checkout} actions={<ThreadActionsMenu key={thread.id} thread={thread} items={items} onRename={() => setRenaming(true)} />} projectName={thread.projectName} machine={thread.machine} />
-      {!visibleItems && !error && startedWith.has(thread.id) ? <StartingTranscript {...startedWith.get(thread.id)!} /> : visibleItems ? <PendingPick.Provider value={{ pick, setPick, enabled: !running }}>
+      {!visibleItems && !error && starting ? <StartingTranscript {...starting} /> : visibleItems ? <PendingPick.Provider value={{ pick, setPick, enabled: !running && !unavailable }}>
         <Transcript threadId={thread.id} items={visibleItems} working={running} onOpenSecrets={onOpenSecrets} />
       </PendingPick.Provider> : (
         <div className="empty">
@@ -73,14 +78,19 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
           </>}
         </div>
       )}
+      {visibleItems && error && <div className="notice-bar error" role="alert">
+        <span>Could not refresh transcript: {error}</span><button className="ghost" onClick={retry}>Retry</button>
+      </div>}
       <ThreadNotice thread={thread} profile={place.profile} detail={detail} onOpenProfile={onOpenProfile} />
       <Composer
         key={thread.id}
-        disabled={savingModel || thread.delivery?.status === 'queued' || thread.delivery?.status === 'running' || !place.profile || !accountForModel(place.profile, thread.model)?.signedIn}
+        imagesUnavailable={imagesUnavailable}
+        disabled={!!unavailable || savingModel || thread.delivery?.status === 'queued' || thread.delivery?.status === 'running' || !place.profile || !accountForModel(place.profile, thread.model)?.signedIn}
         actions={<><DeliveryActions key={thread.id} thread={thread} project={place.project} canRun={!!place.profile && !!accountForModel(place.profile, thread.model)?.signedIn} /><GoalBar thread={thread} /><QueueTray thread={thread} /></>}
         target={thread.id}
         draftId={`thread:${thread.id}`}
         profileId={thread.profileId}
+        stopDisabled={!!unavailable}
         onStop={running ? async () => void (await client.call('threads.stop', { threadId: thread.id })) : undefined}
         placeholder={running ? 'Enter steers · Ctrl+Enter queues' : thread.settledAt ? 'Send a message to reopen this thread…' : `Ask ${thread.model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}
         attachment={pick && pickLabel ? { label: pickLabel, onRemove: () => setPick(undefined) } : undefined}
@@ -90,7 +100,7 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
           setPick(undefined);
         }}
         toolbar={<>
-          <ModelPicker key={thread.id} profileId={thread.profileId} value={thread.model} disabled={running} onChange={async (model) => {
+          <ModelPicker key={thread.id} profileId={thread.profileId} value={thread.model} disabled={running || !!unavailable} onChange={async (model) => {
             setSavingModel(true);
             try { await client.call('threads.setModel', { threadId: thread.id, model }); }
             finally { setSavingModel(false); }
@@ -142,6 +152,7 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
           target="draft"
           draftId={newThreadDraftId(checkoutId, profileId)}
           profileId={place.profile?.id}
+          imagesUnavailable={machine && !machine.thisMachine ? remoteImagesReason : undefined}
           handsOffImages
           disabled={!!starting || !place.profile || !accountForModel(place.profile, model)?.signedIn || unavailable}
           placeholder={`Ask ${model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}
@@ -151,8 +162,7 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
             try {
               const images = uploads.length ? { images: uploads } : {};
               const thread = await client.call('threads.start', checkoutId ? { checkoutId, text, model, machineId, ...images } : { profileId: profileId!, text, model, machineId, ...images });
-              startedWith.set(thread.id, { text, images: previews });
-              keepSentImages(thread.id, previews);
+              keepFirstMessage(client, thread.id, text, previews);
               await shown;
               if (open.current) await viewTransition('thread-open', () => select(thread.id));
             } catch (error) {
@@ -178,9 +188,6 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
 /** A first message as sent: its text and the local copies of its images. */
 type FirstMessage = { text: string; images: string[] };
 
-/** First messages of threads started here, shown until their transcript arrives so the swap from the draft is still. */
-const startedWith = new Map<string, FirstMessage>();
-
 /** The first message and a live row, laid out as the transcript will be once the turn reports. */
 function StartingTranscript({ text, images }: FirstMessage) {
   return <div className="transcript-scroll draft-starting" aria-busy="true">
@@ -188,7 +195,7 @@ function StartingTranscript({ text, images }: FirstMessage) {
       <div className="msg user">
         {images.length > 0 && <div className="msg-images">{images.map((url, index) =>
           <button key={url} type="button" className="msg-image" tabIndex={-1} style={{ viewTransitionName: `sent-image-${index}`, viewTransitionClass: 'sent-image' }}><img src={url} alt="" /></button>)}</div>}
-        {text}
+        <UserMessageText text={text} />
       </div>
       <div className="turn-work live">
         <button className="turn-work-toggle" disabled><span className="turn-work-activity" role="status">Starting thread…</span></button>

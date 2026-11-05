@@ -37,6 +37,10 @@ export function ModelPicker({ profileId, value, onChange, disabled = false }: {
     panel.current?.hidePopover();
   }, [profileId]);
 
+  useEffect(() => {
+    if (disabled || status !== 'open') { panel.current?.hidePopover(); effortMenu.current?.hidePopover(); }
+  }, [disabled, status]);
+
   const models = data?.models ?? [];
   const fallbackName = value.modelId === 'default' ? `${value.harnessId === 'codex' ? 'Codex' : 'Claude Code'} default` : value.modelId;
   const favorites = new Set(data?.favorites.map(modelKey));

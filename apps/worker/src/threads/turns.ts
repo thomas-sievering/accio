@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { fallbackEffort, findMentionedModel, mediaKind, mediaMimeType, modelHandles, normalizeMarkdownSource, type ChoicePick, type ModelSelection, type ThreadAsset, type WorkspaceSkill } from '@accio/protocol';
-import type { Models } from '../harnesses/models.js';
-import { usedUpMessage } from '../harnesses/modelLimits.js';
+import { mediaKind, mediaMimeType, normalizeMarkdownSource, type ChoicePick, type ModelSelection, type ThreadAsset, type WorkspaceSkill } from '@accio/protocol';
+import { mentionedModel, type Models } from '../harnesses/models.js';
 import type { Machines } from '../machine/machine.js';
 import type { Profiles } from '../profiles/profiles.js';
 import type { Projects } from '../projects/projects.js';
@@ -121,6 +120,13 @@ export class Turns {
     catch (error) {
       await state.transcripts.add(id, { kind: 'notice', id: randomUUID(), turnId: 'queue', tone: 'error', text: `Queued message could not start: ${(error as Error).message}` });
     }
+  }
+
+  /** A released thread takes queued messages, then its goal, then any queued delivery. */
+  async dispatchPending(threadId: string) {
+    await this.dispatchQueued(threadId);
+    await this.continueGoal(threadId);
+    await this.deps.deliveries.dispatch(threadId);
   }
 
   private async imageFiles(threadId: string, images: readonly ThreadAsset[]): Promise<HarnessImage[]> {
@@ -321,11 +327,9 @@ export class Turns {
       } finally {
         // A storage failure must never leave a finished turn holding its slot.
         state.running.delete(thread.id);
-        let goalContinues = false;
         await state.updateDurably(thread.id, t => {
           const goal = afterGoalTurn(t.goal, outcome ?? 'failed', usedTools);
-          goalContinues = goal.continue;
-          const ended = { ...t, goal: goal.goal };
+          const ended = { ...t, goal };
           return deps.deliveries.settleDelivered(endTurn(ended.delivery?.status === 'running'
             ? { ...ended, delivery: { ...ended.delivery, status: 'waiting' } } : ended, outcome ?? 'failed', now()));
         });
@@ -335,9 +339,7 @@ export class Turns {
         if (thread.repairToolId && outcome === 'completed') deps.onRepairFinished(thread.repairToolId);
         if (outcome === 'completed') {
           if (!delivering) deps.onWorkFinished?.(thread.id);
-          await this.dispatchQueued(thread.id);
-          if (goalContinues) await this.continueGoal(thread.id);
-          await deps.deliveries.dispatch(thread.id);
+          await this.dispatchPending(thread.id);
         }
       }
     }
@@ -387,9 +389,7 @@ export class Turns {
   private async subagentOn(live: { turn: SubagentTurn; profileId: string; model: ModelSelection }, handle: string): Promise<SubagentTurn> {
     const { deps, state } = this;
     const models = deps.models.list(live.profileId).models;
-    const model = findMentionedModel(models, handle);
-    if (!model) throw new Error(`No model is called @${handle.replace(/^@/, '')}. Mention one of: ${modelHandles(models).map(h => `@${h.handle}`).join(', ')}.`);
-    if (model.limited) throw new Error(usedUpMessage(model.limited));
+    const { model, selection } = mentionedModel(models, handle, live.model.effort);
     if (model.harnessId === live.model.harnessId && model.id === live.model.modelId) return live.turn;
     const harness = deps.harnesses[model.harnessId];
     if (!harness) throw new Error(`${model.harnessName} is not installed on this machine.`);
@@ -400,8 +400,7 @@ export class Turns {
       env = Object.fromEntries(Object.entries(turnEnv(state.home, live.profileId, model.harnessId, access)).filter(([key]) => key.toLowerCase() !== 'path'));
       if (path) env.PATH = path;
     }
-    const effort = live.model.effort && model.efforts.some(e => e.id === live.model.effort) ? live.model.effort : fallbackEffort(model);
-    return { ...live.turn, harness, run: { ...live.turn.run, env, model: model.id, effort, modelName: model.name, toolsOff: deps.toolsOff(model.harnessId) } };
+    return { ...live.turn, harness, run: { ...live.turn.run, env, model: model.id, effort: selection.effort, modelName: model.name, toolsOff: deps.toolsOff(model.harnessId) } };
   }
 
   private async apply(threadId: string, change: TranscriptChange, cwd: string, skills: WorkspaceSkill[] = []) {

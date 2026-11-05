@@ -7,6 +7,7 @@ import { useThreads } from '../threads/threads';
 import { useAppEvent } from './appEvents';
 import { PanelRight } from './icons';
 import { PanelResizer } from './Resizer';
+import { useThreadAvailability } from '../threads/useThreadAvailability';
 
 const KEY = 'accio.panelOpen';
 const TAB_KEY = 'accio.panelTab';
@@ -60,6 +61,8 @@ export function SidePanel({ overlay = false }: { overlay?: boolean }) {
   const tabRefs = useRef<Partial<Record<Tab, HTMLButtonElement | null>>>({});
   const panel = useRef<HTMLElement>(null);
   const thread = threads?.find((t) => t.id === selectedId);
+  const { reason } = useThreadAvailability(thread);
+  const skillsUnavailable = !draft && thread ? reason('threads.skills') : undefined;
   // A draft has no thread yet: its skills come from the checkout (or the profile, without one).
   const context: SkillContext | undefined = draft
     ? draft.checkoutId ? { checkoutId: draft.checkoutId, ...(draft.profileId ? { profileId: draft.profileId } : {}) } : draft.profileId ? { profileId: draft.profileId } : undefined
@@ -113,7 +116,7 @@ export function SidePanel({ overlay = false }: { overlay?: boolean }) {
           : !context
           ? <p className="side-panel-empty">Open a thread or start one to see its {tab === 'mcp' ? 'MCP servers' : 'skills'}.</p>
           : tab === 'skills'
-            ? <SkillsPanel key={key} context={context} composer={draft ? 'draft' : thread!.id} />
+            ? skillsUnavailable ? <p className="side-panel-empty">{skillsUnavailable}</p> : <SkillsPanel key={key} context={context} composer={draft ? 'draft' : thread!.id} />
             : <McpPanel />}
       </div>
     </aside>

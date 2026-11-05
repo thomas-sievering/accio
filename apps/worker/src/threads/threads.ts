@@ -279,7 +279,7 @@ export class Threads {
           if (action === 'save' && !text && !message.images?.length) throw new UserError('Write a message before saving.');
           await this.changeQueue(threadId, queue => action === 'remove' ? queue.filter(m => m.id !== messageId)
             : queue.map(m => m.id !== messageId ? m : { ...m, text: action === 'save' ? text! : m.text, editing: action === 'edit' }));
-          await turns.dispatchQueued(threadId);
+          await turns.dispatchPending(threadId);
         }
         return null;
       }))
@@ -555,8 +555,7 @@ export class Threads {
       // Preview startup can overlap the end of work. Release its reservation
       // before dispatching work that waited behind it.
       if (state.list.find(t => t.id === id)?.status === 'idle') {
-        await this.turns.dispatchQueued(id);
-        await this.deliveries.dispatch(id);
+        await this.turns.dispatchPending(id);
       }
     }
   }

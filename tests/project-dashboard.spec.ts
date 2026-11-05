@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { execFile } from 'node:child_process';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { TestClient } from '../apps/worker/src/testing/testApp.js';
@@ -96,5 +97,39 @@ test('the project dashboard starts the app from main, follows new commits, and l
     await client.call('projectApps.stop', { projectId: checkout.projectId }).catch(() => {});
     await client.call('checkouts.remove', { id: checkout.id, deleteThreads: true }).catch(() => {});
     client.close();
+  }
+});
+
+
+test('all settled project threads remain reachable beyond the first page', async ({ page, baseURL }) => {
+  test.setTimeout(60_000);
+  const folder = await mkdtemp(join(tmpdir(), 'accio-settled-browser-'));
+  const client = await TestClient.open(`${baseURL!.replace('http:', 'ws:')}/ws?token=isolated-chat-test-token`);
+  let checkoutId: string | undefined;
+  try {
+    const checkout = await client.call('checkouts.add', { path: folder, profileId: 'personal' });
+    checkoutId = checkout.id;
+    for (let index = 0; index < 12; index++) {
+      const thread = await client.call('threads.start', { checkoutId: checkout.id, text: `Settled history ${index}` });
+      await expect.poll(async () => (await client.call('threads.list', {})).find(t => t.id === thread.id)?.status).toBe('idle');
+      await client.call('threads.settle', { threadId: thread.id });
+    }
+    await page.goto(`${baseURL}/#token=isolated-chat-test-token`);
+    await page.locator('.sidebar').getByRole('button', { name: 'New thread', exact: true }).click();
+    await page.getByRole('option', { name: new RegExp(folder.split(/[\\/]/).at(-1)!) }).click();
+    await page.locator('.thread-project-link').click();
+    await page.getByRole('menuitem', { name: 'Dashboard', exact: true }).click();
+    const fold = page.locator('.dashboard-fold').filter({ has: page.locator('summary', { hasText: 'Settled' }) });
+    await expect(fold).not.toHaveAttribute('open', '');
+    await fold.locator('summary').click();
+    await expect(fold.locator('.row-main')).toHaveCount(10);
+    await fold.getByRole('button', { name: 'Show 2 more settled threads', exact: true }).click();
+    await expect(fold.locator('.row-main')).toHaveCount(12);
+    await fold.locator('.row-main').last().click();
+    await expect(page.locator('.msg.user')).toContainText('Settled history');
+  } finally {
+    if (checkoutId) await client.call('checkouts.remove', { id: checkoutId, deleteThreads: true }).catch(() => {});
+    client.close();
+    await rm(folder, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
   }
 });

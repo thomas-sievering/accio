@@ -41,7 +41,9 @@ async function machine(name: string, port: number, harness: FakeHarness, webRoot
 const macHarness = new FakeHarness(async function* (run) {
   const steps = /long/i.test(run.prompt) ? 6 : 1;
   for (let step = 1; step <= steps; step++) {
-    if (steps > 1) await sleep(1500);
+    if (steps > 1) {
+      try { await sleep(1500, undefined, { signal: run.signal }); } catch { return; }
+    }
     yield* toolCall('Bash', { command: `step ${step}` }, `${randomUUID()}`);
   }
   yield* replyWith(`MacBook here. You said: ${run.prompt.slice(0, 80)}`);
@@ -71,6 +73,7 @@ const close = async () => {
   await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
   process.exit();
 };
+process.on('message', message => { if ((message as { type?: string })?.type === 'shutdown') void close(); });
 process.on('SIGINT', () => void close());
 process.on('SIGTERM', () => void close());
 /** Stops the MacBook only, to see its threads go offline on the PC. */

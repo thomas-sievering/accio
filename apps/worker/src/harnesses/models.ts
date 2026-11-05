@@ -1,4 +1,4 @@
-import { DEFAULT_MODEL, accountInUse, fallbackEffort, imageRefusal, modelKey, readsImage, type HarnessModel, type ModelSelection, type ModelsState, type ModelView } from '@accio/protocol';
+import { DEFAULT_MODEL, accountInUse, fallbackEffort, findMentionedModel, imageRefusal, modelHandles, modelKey, readsImage, type HarnessModel, type ModelSelection, type ModelsState, type ModelView } from '@accio/protocol';
 import { HARNESSES, type SettingsAccess } from '@accio/hub';
 import type { Profiles } from '../profiles/profiles.js';
 import { UserError, type Broadcast, type Router } from '../rpc/router.js';
@@ -27,6 +27,16 @@ export function markOlder<T extends { name: string }>(models: T[]): (T & { older
     if (!seen.has(family)) { seen.add(family); return m; }
     return { ...m, older: true };
   });
+}
+
+/** A mentioned model inherits effort only when it accepts it; explicit user choices stay strict. */
+export function mentionedModel(models: ModelView[], handle: string, inheritedEffort?: string) {
+  const model = findMentionedModel(models, handle);
+  if (!model) throw new UserError(`No model is called @${handle.replace(/^@/, '')}. Mention one of: ${modelHandles(models).map(h => `@${h.handle}`).join(', ')}.`);
+  if (model.limited) throw new UserError(usedUpMessage(model.limited));
+  const effort = inheritedEffort && model.efforts.some(e => e.id === inheritedEffort) ? inheritedEffort : fallbackEffort(model);
+  const selection: ModelSelection = { harnessId: model.harnessId, modelId: model.id, ...(effort ? { effort } : {}) };
+  return { model, selection };
 }
 
 /** Choices are scoped to one profile and the machine that will execute the turn. */

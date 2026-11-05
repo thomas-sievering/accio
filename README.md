@@ -27,7 +27,7 @@ pnpm hub            # standalone hub (port 47322; ACCIO_HOME, ACCIO_HUB_PORT ove
 pnpm hub:pair       # issue a fresh first-device or recovery pairing code
 pnpm test           # vitest
 pnpm typecheck
-pnpm test:e2e       # build, then every Playwright suite (chat, limits, secrets)
+pnpm test:e2e       # build, then every Playwright suite (chat, limits, secrets, relay)
 pnpm test:chat      # ...or one suite: test:chat, test:limits, test:secrets
 pnpm verify         # build, drive the real UI in isolation, retain proof in out/verify
 ```

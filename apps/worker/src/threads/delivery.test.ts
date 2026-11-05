@@ -2,7 +2,7 @@ import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import { JsonFile } from '@accio/persistence';
-import { FakeHarness, gate, replyWith, SESSION } from '../testing/fakeHarness.js';
+import { FakeHarness, gate, replyWith, SESSION, toolCall } from '../testing/fakeHarness.js';
 import { RESTART_NOTICE, RESUME_PROMPT } from './thread.js';
 import { startTestApp, type TestClient } from '../testing/testApp.js';
 import { DeliveryGit, DeliveryPending, deliveryPrompt } from './delivery.js';
@@ -538,6 +538,44 @@ it.each(['registering', 'missing', 'no workflows', 'passed'] as const)('handles 
     expect(await manager.verify(workspace, intent)).toMatchObject({ status: 'ready', revision });
   }
   expect(await stat(workspace.path)).toBeDefined();
+});
+
+it('continues an active goal once preview startup releases the thread', async () => {
+  const finish = gate();
+  const harness = new FakeHarness(async function* (_run, n) {
+    if (n === 1) {
+      await finish.opened;
+      yield* toolCall('Bash', { command: 'work toward the goal' });
+    }
+    yield* replyWith('done');
+  });
+  const { c, checkout, source } = await setup(harness);
+  const entered = join(t.home, 'preview-starting');
+  const ready = join(t.home, 'preview-ready');
+  await writeFile(join(source, 'preview.cjs'), `
+    const fs = require('fs');
+    fs.writeFileSync(${JSON.stringify(entered)}, 'starting');
+    const timer = setInterval(() => {
+      if (!fs.existsSync(${JSON.stringify(ready)})) return;
+      clearInterval(timer);
+      require('http').createServer((req,res) => res.end('ready')).listen(Number(process.env.PORT), '127.0.0.1');
+    }, 25);
+  `);
+  await git(source, 'add', '.'); await git(source, 'commit', '--quiet', '-m', 'preview'); await git(source, 'push', '--quiet');
+  await c.call('projects.setDelivery', { projectId: checkout.projectId, deliveryPolicy: 'direct', previewCommand: 'node preview.cjs' });
+  const thread = await c.call('threads.start', { checkoutId: checkout.id, text: '/goal finish the work' });
+  const preview = c.call('threads.openPreview', { threadId: thread.id });
+  try {
+    await expect.poll(() => readFile(entered, 'utf8').catch(() => ''), { timeout: 8000 }).toBe('starting');
+    finish.release();
+    await wait(c, thread.id, x => x.status === 'idle' && x.goal?.status === 'active');
+    expect(harness.runs).toHaveLength(1);
+    await writeFile(ready, 'ready');
+    await preview;
+    await expect.poll(() => harness.runs.length).toBe(2);
+    await wait(c, thread.id, x => x.status === 'idle' && x.goal?.status === 'paused');
+    expect(harness.runs[1]!.prompt).toBe('Continue working toward the goal.');
+  } finally { finish.release(); await writeFile(ready, 'ready'); await preview; }
 });
 
 it('runs previews with independent ports/state and stops only the archived thread’s owned process tree', async () => {

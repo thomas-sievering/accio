@@ -1,8 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
-import type { ChoiceOption, ChoicePick, ThreadAsset, TranscriptItem } from '@accio/protocol';
-import { useClient } from '../app/connection';
+import type { ChoiceOption, ChoicePick, TranscriptItem } from '@accio/protocol';
 import { Check, Chevron, Close } from '../app/icons';
-import { assetUrl } from './assetUrl';
+import { useSavedAsset } from './useSavedAsset';
 
 type ChoiceItem = Extract<TranscriptItem, { kind: 'choice' }>;
 
@@ -44,9 +43,7 @@ export function Choice({ threadId, item, picked }: { threadId: string; item: Cho
       {item.options.map((option, index) => (
         <div key={index} className={`choice-option${selected === index ? ' selected' : ''}`}>
           <div className="choice-frame">
-            <button className="choice-open" aria-label={`View ${optionName(item, index)}`} onClick={() => setOpen(index)}>
-              <OptionImage threadId={threadId} option={option} />
-            </button>
+            <OptionImage threadId={threadId} option={option} label={optionName(item, index)} onOpen={() => setOpen(index)} />
           </div>
           {toggle
             ? <button className="choice-caption" aria-pressed={selected === index}
@@ -66,23 +63,13 @@ export function Choice({ threadId, item, picked }: { threadId: string; item: Cho
   </div>;
 }
 
-function OptionImage({ threadId, option }: { threadId: string; option: ChoiceOption }) {
-  const url = useAssetUrl(threadId, option.asset);
-  const [failed, setFailed] = useState(false);
-  if (option.error || failed) return <span className="choice-missing">{option.error ?? 'This screenshot could not be loaded.'}</span>;
-  return url ? <img src={url} alt={option.label} onError={() => setFailed(true)} /> : <span className="choice-missing" role="status">Loading…</span>;
-}
-
-function useAssetUrl(threadId: string, asset?: ThreadAsset) {
-  const client = useClient();
-  const [url, setUrl] = useState<string>();
-  useEffect(() => {
-    if (!asset) return;
-    let active = true;
-    void assetUrl(client, threadId, asset.id).then((result) => { if (active) setUrl(result.url); }, () => {});
-    return () => { active = false; };
-  }, [client, threadId, asset?.id]);
-  return url;
+function OptionImage({ threadId, option, label, onOpen }: { threadId: string; option: ChoiceOption; label?: string; onOpen?: () => void }) {
+  const saved = useSavedAsset(threadId, option.asset?.id);
+  if (option.error || saved.error) return <span className="choice-missing" role="alert">{option.error ?? saved.error}
+    {!option.error && <button onClick={saved.retry}>Retry screenshot</button>}
+  </span>;
+  const image = saved.url ? <img src={saved.url} alt={option.label} onLoad={saved.loaded} onError={saved.failed} /> : <span className="choice-missing" role="status">Loading…</span>;
+  return onOpen ? <button className="choice-open" aria-label={`View ${label}`} onClick={onOpen}>{image}</button> : image;
 }
 
 /** Full-size, one option at a time: arrows browse, the one button picks and returns to the composer. */

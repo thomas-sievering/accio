@@ -59,7 +59,7 @@ export function ProjectDashboard({ project, onClose }: { project: ProjectView; o
             <Threads project={project} />
             <Shipped project={project} entries={entries} running={app?.status === 'stopped' ? undefined : app?.commit?.sha} />
             <ChangelogFold projectId={project.id} entries={entries} />
-            <Settled project={project} />
+            <Settled key={project.id} project={project} />
           </ThreadMenuProvider>
         </div>
       </div>
@@ -179,6 +179,7 @@ function Threads({ project }: { project: ProjectView }) {
 
 /** Settled threads stay folded: history you can reach, out of the way. */
 function Settled({ project }: { project: ProjectView }) {
+  const [shown, setShown] = useState(SETTLED_SHOWN);
   const { threads } = useThreads();
   const settled = (threads ?? []).filter((t) => t.projectId === project.id && t.settledAt)
     .sort((a, b) => b.settledAt!.localeCompare(a.settledAt!));
@@ -187,8 +188,9 @@ function Settled({ project }: { project: ProjectView }) {
     <details className="dashboard-section dashboard-fold">
       <summary className="dashboard-heading"><ChevronDown />Settled <span className="dashboard-count">{settled.length}</span></summary>
       <div className="rows dashboard-rows">
-        {settled.slice(0, SETTLED_SHOWN).map((t) => <ThreadRow key={t.id} thread={t} place="settled" withinProject />)}
+        {settled.slice(0, shown).map((t) => <ThreadRow key={t.id} thread={t} place="settled" withinProject />)}
       </div>
+      {settled.length > shown && <button type="button" className="ghost dashboard-more" onClick={() => setShown(n => n + SETTLED_SHOWN)}>Show {Math.min(SETTLED_SHOWN, settled.length - shown)} more settled threads</button>}
     </details>
   );
 }

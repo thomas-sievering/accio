@@ -8,7 +8,7 @@ import type { RemoteMachine } from './relay.js';
 
 /**
  * GLOSSARY: Thread. A durable conversation, optionally attached to a checkout
- * and owned worktree. Its starting hub, profile and harness stay fixed.
+ * and owned worktree. Its starting hub and profile stay fixed; choosing another harness hands off the next turn.
  */
 export type ThreadView = {
   repairToolId?: string;

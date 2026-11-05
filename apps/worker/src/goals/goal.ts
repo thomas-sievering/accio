@@ -34,20 +34,18 @@ export function goalTurnStarted(goal: ThreadGoal | undefined): ThreadGoal | unde
   return goal?.status === 'active' ? { ...goal, turns: goal.turns + 1 } : goal;
 }
 
-export type GoalNext = { goal: ThreadGoal | undefined; continue: boolean };
-
 /**
  * After a turn ends: keep going on a completed turn that did some work, pause on
  * anything else. There is no turn limit, as in Claude Code and Codex; a turn that
  * used no tools is the stall guard, since it only talked. A goal the harness
  * finished during the turn is left as it is.
  */
-export function afterGoalTurn(goal: ThreadGoal | undefined, outcome: 'completed' | 'interrupted' | 'failed', usedTools: boolean): GoalNext {
-  if (goal?.status !== 'active') return { goal, continue: false };
-  if (outcome === 'interrupted') return { goal: { ...goal, status: 'paused', detail: 'Stopped.' }, continue: false };
-  if (outcome === 'failed') return { goal: { ...goal, status: 'paused', detail: 'The last turn failed.' }, continue: false };
-  if (!usedTools) return { goal: { ...goal, status: 'paused', detail: 'No progress in the last turn.' }, continue: false };
-  return { goal, continue: true };
+export function afterGoalTurn(goal: ThreadGoal | undefined, outcome: 'completed' | 'interrupted' | 'failed', usedTools: boolean): ThreadGoal | undefined {
+  if (goal?.status !== 'active') return goal;
+  if (outcome === 'interrupted') return { ...goal, status: 'paused', detail: 'Stopped.' };
+  if (outcome === 'failed') return { ...goal, status: 'paused', detail: 'The last turn failed.' };
+  if (!usedTools) return { ...goal, status: 'paused', detail: 'No progress in the last turn.' };
+  return goal;
 }
 
 export function resumeGoal(goal: ThreadGoal | undefined): ThreadGoal {

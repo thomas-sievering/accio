@@ -203,11 +203,13 @@ test('Ship menu, queued cancellation, owned preview, delivery, Archive and follo
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Ship', exact: true }).click();
   await expect(actions.getByText('Ships when done', { exact: true })).toBeVisible();
+  await expect(page.locator('.composer').getByRole('button', { name: 'Stop', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'Cancel queued delivery' }).click();
   await expect(actions.getByText('Ships when done', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Stop', exact: true }).first()).toBeVisible();
   await page.getByRole('button', { name: 'Ship', exact: true }).click();
   await expect(actions.getByText('Ships when done', { exact: true })).toBeVisible();
+  await expect(page.locator('.composer').getByRole('button', { name: 'Stop', exact: true })).toBeEnabled();
   await page.screenshot({ path: testInfo.outputPath('ship-queued.png') });
   const opened = page.waitForEvent('popup');
   await page.getByRole('button', { name: 'Open app', exact: true }).click();
