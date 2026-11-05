@@ -160,6 +160,8 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
   // New thread is withheld until setup is complete, and setup ends with a project.
   await page.getByRole('textbox', { name: 'Folder', exact: true }).fill(process.cwd());
   await button('Add').click();
+  // Adding a project opens a new-thread draft in it.
+  await expect(page.locator('.composer textarea')).toBeVisible();
   await page.locator('.sidebar').getByRole('button', { name: 'New thread', exact: true }).click();
   await page.getByRole('option', { name: 'No project', exact: true }).click();
   await page.getByRole('option', { name: /Personal/ }).click();

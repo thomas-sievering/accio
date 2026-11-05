@@ -5,6 +5,7 @@ import { Close, Folder, FolderPlus } from '../app/icons';
 import { Sheet } from '../app/Sheet';
 import { useAction } from '../app/useAction';
 import { useProfiles } from '../profiles/profiles';
+import { useThreads } from '../threads/threads';
 import { focusFirstInvalid } from '../resources/Field';
 import { MenuSelect } from '../ui/MenuSelect';
 
@@ -18,11 +19,13 @@ export function AddProjectSheet({ onClose }: { onClose: () => void }) {
 
 /**
  * Add a folder on this machine. A known repo joins its project; anything else
- * starts one. Shown in its sheet and inline on first run.
+ * starts one. Shown in its sheet and inline on first run. Once added, a
+ * new-thread draft opens in it.
  */
 export function AddProjectForm({ onAdded, onCancel }: { onAdded?: () => void; onCancel?: () => void }) {
   const client = useClient();
   const { profiles = [], filter } = useProfiles();
+  const { openDraft, setProjectScope } = useThreads();
   const [path, setPath] = useState('');
   const [seen, setSeen] = useState<FolderInspection | null>(null);
   const [profileId, setProfileId] = useState('');
@@ -60,6 +63,8 @@ export function AddProjectForm({ onAdded, onCancel }: { onAdded?: () => void; on
     if (added) {
       setPath('');
       setTried(false);
+      setProjectScope('');
+      openDraft(added.id);
       onAdded?.();
     }
   };
