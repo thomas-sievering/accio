@@ -58,8 +58,9 @@ export function Composer({
   const client = useClient();
   const { threads, shelves, selectedId, select } = useThreads();
   const storageKey = `accio:${client.hubId}:composer:${draftId}`;
-  const [text, updateText] = useState(() => sessionStorage.getItem(storageKey) ?? '');
-  const setText = (value: string) => { updateText(value); if (value) sessionStorage.setItem(storageKey, value); else sessionStorage.removeItem(storageKey); };
+  // Unsent text survives a restart; sending or clearing it removes the copy.
+  const [text, updateText] = useState(() => localStorage.getItem(storageKey) ?? '');
+  const setText = (value: string) => { updateText(value); if (value) localStorage.setItem(storageKey, value); else localStorage.removeItem(storageKey); };
   const [controlHeld, setControlHeld] = useState(false);
   const { busy, error, run } = useAction();
   const sending = useRef(false);

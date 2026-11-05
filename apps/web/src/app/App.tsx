@@ -16,6 +16,7 @@ import { ThreadList } from '../threads/ThreadList';
 import { DraftPane, ThreadPane } from '../threads/ThreadPane';
 import { ThreadSearch } from '../threads/ThreadSearch';
 import { useAppEvent } from './appEvents';
+import { useClient } from './connection';
 import { ConnectionNotice } from './ConnectionNotice';
 import { FirstRun } from './FirstRun';
 import { Close, FolderPlus, Limits, ScrollText, Settings as Gear } from './icons';
@@ -58,22 +59,34 @@ function Shell() {
     ?? profiles?.find((p) => p.id === filter)?.name;
   const thread = threads?.find((t) => t.id === selectedId);
   const [sheet, setSheet] = useState<OpenSheet>(null);
-  const [settings, setSettings] = useState<SettingsRoute | null>(null);
+  const viewKey = `accio:${useClient().hubId}:view`;
+  // The app reopens on the page it closed on; a thread or draft under it comes back on its own.
+  const [saved] = useState(() => savedView(viewKey));
+  const [settings, setSettings] = useState<SettingsRoute | null>(saved.settings ? { section: saved.settings } as SettingsRoute : null);
   const closeSettings = useCallback(() => setSettings(null), []);
   useAppEvent('settings.open', setSettings);
   // One project editor: the header chip and the Filter gear open its Settings page.
   useAppEvent('project.open', ({ id }) => setSettings({ section: 'projects', projectId: id }));
   const [panelWanted, togglePanel] = usePanelOpen();
-  const [limits, setLimits] = useState<{ scope: LimitsScope; navigation: number } | null>(null);
-  const [dashboard, setDashboard] = useState<{ projectId: string; navigation: number } | null>(null);
+  const [limits, setLimits] = useState<{ scope: LimitsScope; navigation: number } | null>(saved.limits !== undefined ? { scope: saved.limits, navigation } : null);
+  const [dashboard, setDashboard] = useState<{ projectId: string; navigation: number } | null>(saved.dashboard !== undefined ? { projectId: saved.dashboard, navigation } : null);
   // Like Limits, the dashboard covers the main pane until a thread or draft is opened.
   const dashboardProject = dashboard !== null && dashboard.navigation === navigation ? state?.projects.find((p) => p.id === dashboard.projectId) : undefined;
   const closeDashboard = useCallback(() => setDashboard(null), []);
   useAppEvent('project.dashboard', ({ id }) => { setLimits(null); setChangelog(null); setDashboard({ projectId: id, navigation }); });
   const limitsOpen = limits !== null && limits.navigation === navigation;
   // GLOSSARY: Changelog. Covers the main pane like Limits until a thread or draft is opened.
-  const [changelog, setChangelog] = useState<{ navigation: number; projectId?: string } | null>(null);
+  const [changelog, setChangelog] = useState<{ navigation: number; projectId?: string } | null>(saved.changelog ? { navigation, ...saved.changelog } : null);
   const changelogOpen = changelog !== null && changelog.navigation === navigation && !limitsOpen;
+  useEffect(() => {
+    const view: SavedView = {
+      ...(settings ? { settings: settings.section } : {}),
+      ...(limitsOpen ? { limits: limits.scope } : {}),
+      ...(changelogOpen ? { changelog: changelog.projectId ? { projectId: changelog.projectId } : {} } : {}),
+      ...(dashboard !== null && dashboard.navigation === navigation ? { dashboard: dashboard.projectId } : {}),
+    };
+    localStorage.setItem(viewKey, JSON.stringify(view));
+  }, [viewKey, settings, limits, limitsOpen, changelog, changelogOpen, dashboard, navigation]);
   const closeChangelog = useCallback(() => setChangelog(null), []);
   const openChangelog = (projectId?: string) => { setLimits(null); setSettings(null); setDashboard(null); setChangelog({ navigation, projectId }); };
   useAppEvent('changelog.open', ({ projectId }) => openChangelog(projectId));
@@ -232,6 +245,18 @@ function Shell() {
       </div>
     </>
   );
+}
+
+/** The page open over the thread pane, as remembered across restarts. Ids that no longer exist fall back to the thread pane. */
+type SavedView = { settings?: SettingsRoute['section']; limits?: LimitsScope; changelog?: { projectId?: string }; dashboard?: string };
+
+function savedView(key: string): SavedView {
+  try {
+    const view: unknown = JSON.parse(localStorage.getItem(key) ?? '{}');
+    return view && typeof view === 'object' ? view as SavedView : {};
+  } catch {
+    return {};
+  }
 }
 
 function Idle() {

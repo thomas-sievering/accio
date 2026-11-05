@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WorkerProcess, type Ready } from './workerProcess.js';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { previewUrl } from './openPreview.js';
 import type { DesktopMessage } from '@accio/worker/dist/machine/desktop.js';
@@ -85,10 +86,42 @@ async function captureWindow(win: BrowserWindow) {
   }
 }
 
+type WindowState = { x: number; y: number; width: number; height: number; maximized: boolean };
+const windowStateFile = () => join(app.getPath('userData'), 'window-state.json');
+
+/** Where the window was when it last closed, if that spot is still on a connected display. */
+function savedWindowState(): WindowState | undefined {
+  try {
+    const state = JSON.parse(readFileSync(windowStateFile(), 'utf8')) as WindowState;
+    if (![state.x, state.y, state.width, state.height].every(Number.isFinite)) return undefined;
+    const area = screen.getDisplayMatching(state).workArea;
+    const visible = state.x < area.x + area.width && state.x + state.width > area.x && state.y < area.y + area.height && state.y + state.height > area.y;
+    return visible ? state : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Remembers the window's size, position and maximized state for the next launch. */
+function rememberWindowState(win: BrowserWindow) {
+  const save = () => {
+    if (win.isDestroyed() || win.isMinimized()) return;
+    const state: WindowState = { ...win.getNormalBounds(), maximized: win.isMaximized() };
+    try { writeFileSync(windowStateFile(), JSON.stringify(state)); } catch (error) { console.error(error); }
+  };
+  let timer: NodeJS.Timeout | undefined;
+  const later = () => { clearTimeout(timer); timer = setTimeout(save, 500); };
+  win.on('resize', later);
+  win.on('move', later);
+  win.on('maximize', save);
+  win.on('unmaximize', save);
+  win.on('close', () => { clearTimeout(timer); save(); });
+}
+
 async function createWindow(ready: Ready) {
+  const state = savedWindowState();
   const win = new BrowserWindow({
-    width: 1280,
-    height: 840,
+    ...(state ? { x: state.x, y: state.y, width: state.width, height: state.height } : { width: 1280, height: 840 }),
     backgroundColor: '#18191d',
     title: process.env.ACCIO_WINDOW_TITLE ?? 'accio',
     icon: join(here, '../icon.ico'),
@@ -101,6 +134,8 @@ async function createWindow(ready: Ready) {
       additionalArguments: [`--accio-server-origin=${new URL(ready.url).origin}`],
     },
   });
+  if (state?.maximized) win.maximize();
+  rememberWindowState(win);
   // `pnpm try` names its window after the checkout so it stands apart from the real one.
   if (process.env.ACCIO_WINDOW_TITLE) win.on('page-title-updated', (event) => event.preventDefault());
   win.webContents.setWindowOpenHandler(({ url }) => {

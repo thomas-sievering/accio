@@ -97,6 +97,17 @@ test('keyboard focus visibly reveals a complete title without moving adjacent ro
   await expect(tip).toHaveCount(0);
 });
 
+test('a restart reopens the draft that was open, with its unsent text', async ({ page, context, baseURL }) => {
+  await freshDraft(page, baseURL);
+  await page.locator('.composer textarea').fill('Half-written thought');
+  await page.close();
+  // A new tab starts with empty sessionStorage, as a restarted app does.
+  const reopened = await context.newPage();
+  await reopened.goto(`${baseURL}/#token=${token}`);
+  await expect(reopened.locator('.composer textarea:visible')).toHaveValue('Half-written thought');
+  await reopened.locator('.composer textarea:visible').fill('');
+});
+
 async function freshDraft(page: Page, baseURL: string | undefined) {
   await page.goto(`${baseURL}/#token=${token}`);
   await page.getByRole('button', { name: 'New thread', exact: true }).first().click();

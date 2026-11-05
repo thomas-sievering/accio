@@ -46,8 +46,9 @@ export function ThreadsProvider({ children }: { children: ReactNode }) {
   const { value: threads, error: loadError, retry: retryLoad } = useLiveState(() => client.call('threads.list', {}), 'threads.changed');
   const [selectedId, setSelected] = useLocalState<string>('accio.thread', '');
   const draftKey = `accio:${client.hubId}:draft`;
-  const [draft, updateDraft] = useState<ThreadsCtx['draft']>(() => { try { return JSON.parse(sessionStorage.getItem(draftKey) ?? 'null'); } catch { return null; } });
-  const setDraft = (value: ThreadsCtx['draft']) => { updateDraft(value); if (value) sessionStorage.setItem(draftKey, JSON.stringify(value)); else sessionStorage.removeItem(draftKey); };
+  // Kept across restarts, like the selected thread, so the app reopens on the draft it closed on.
+  const [draft, updateDraft] = useState<ThreadsCtx['draft']>(() => { try { return JSON.parse(localStorage.getItem(draftKey) ?? 'null'); } catch { return null; } });
+  const setDraft = (value: ThreadsCtx['draft']) => { updateDraft(value); if (value) localStorage.setItem(draftKey, JSON.stringify(value)); else localStorage.removeItem(draftKey); };
   const [navigation, setNavigation] = useState(0);
   const { filter } = useProfiles();
   const { visible } = useProjects();

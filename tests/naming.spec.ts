@@ -44,8 +44,9 @@ test('automatic naming, inline and sidebar rename, regeneration and settings pre
   await page.getByRole('checkbox', { name: 'Automatically name new threads' }).uncheck();
   await page.getByRole('button', { name: 'Save naming settings', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('Naming settings saved');
+  // A reload reopens the Settings page it left.
   await page.reload();
-  await page.getByRole('button', { name: 'Settings', exact: true }).click(); await naming.click();
+  await naming.click();
   await expect(page.getByRole('checkbox', { name: 'Automatically name new threads' })).not.toBeChecked();
   await expect(page.getByRole('button', { name: 'Naming model', exact: true })).toHaveText('Claude Haiku');
   await page.getByText('Advanced', { exact: true }).click();
