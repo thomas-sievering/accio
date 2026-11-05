@@ -3,6 +3,7 @@ import { DEFAULT_THREAD_NAMING } from '@accio/protocol';
 import type { MachineHello, SharedSettings } from './sharedSettings.js';
 import type { HubSnapshot } from './service.js';
 import { HUB_PROTOCOL } from './service.js';
+import { keepAlive } from './keepAlive.js';
 
 export function hubAddress(text: string): string {
   const url = new URL(text);
@@ -72,7 +73,7 @@ export class HubClient {
     const url = new URL('/events', this.url); url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(url, { headers: { authorization: `Bearer ${this.token}` }, handshakeTimeout: 10_000, maxPayload: 16_384 });
     this.ws = ws;
-    ws.on('open', () => { void this.call('machine.hello', this.hello).catch((error) => this.offline(error)); });
+    ws.on('open', () => { keepAlive(ws); void this.call('machine.hello', this.hello).catch((error) => this.offline(error)); });
     ws.on('message', () => { void this.refresh().catch((error) => this.offline(error)); });
     ws.on('error', () => {});
     ws.on('close', () => { if (this.ws === ws && !this.stopped) { this.offline(new Error('Hub connection lost. Reconnecting…')); this.schedule(); } });
