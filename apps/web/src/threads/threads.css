@@ -196,6 +196,40 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Another machine's thread: a small tag naming the machine, dot lit while it is online. */
+.row-machine {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 50%;
+  align-self: center;
+  padding: 0 6px 2px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 11px;
+  /* Tall enough that the clipped name keeps its descenders. */
+  line-height: 15px;
+}
+.row-machine-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.row-machine-dot {
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--green);
+}
+.row-machine.offline .row-machine-dot {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--dim);
+}
 .row-project.with-state > .row-project-name::after {
   content: ' \00b7';
 }

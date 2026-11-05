@@ -19,8 +19,9 @@ export function ThreadRow({ thread: t, place, withinProject = false }: { thread:
   const { selectedId, select, now, act } = useThreads();
   const { state } = useProjects();
   const project = state?.projects.find((p) => p.id === t.projectId)?.name ?? t.projectName;
-  // GLOSSARY: Relay. Another machine's thread names its machine; offline, it stays listed but greyed.
-  const where = t.machine ? `${project ?? 'No project'} · ${t.machine.name}${t.machine.online ? '' : ' (offline)'}` : project ?? 'No project';
+  const where = project ?? 'No project';
+  // GLOSSARY: Relay. Another machine's thread wears its machine as a tag; offline, it stays listed but greyed.
+  const machineText = t.machine ? `${t.machine.name}${t.machine.online ? '' : ' (offline)'}` : undefined;
   // Every row has the same layout; only open rows carry the live status mark.
   // Working rows keep the full open look: project mark and the live status.
   const open = place === 'open' || place === 'working';
@@ -67,12 +68,16 @@ export function ThreadRow({ thread: t, place, withinProject = false }: { thread:
   const Main = renaming ? 'div' : 'button';
   return (
     <div className={`${className}${renaming ? ' renaming' : ''}`} onContextMenu={onContextMenu}>
-      <Main className="row-main" {...(renaming ? {} : { ...titleTip.props, onClick: () => select(t.id), title: `${t.title} · ${where}${showState ? ` · ${statusLine}` : ''}`, 'aria-current': t.id === selectedId ? 'page' as const : undefined })}>
+      <Main className="row-main" {...(renaming ? {} : { ...titleTip.props, onClick: () => select(t.id), title: `${t.title} · ${where}${machineText ? ` · ${machineText}` : ''}${showState ? ` · ${statusLine}` : ''}`, 'aria-current': t.id === selectedId ? 'page' as const : undefined })}>
         {withinProject ? null : t.projectId ? <ProjectMark id={t.projectId} name={t.projectName} /> : <span className="no-project-mark" />}
         <span className="row-name">
           {renaming ? <RowRename thread={t} /> : <span className="row-title">{t.title}</span>}
           {/* A delivery status takes the whole line: the project mark already names the project. */}
           {!oneLine && <span className={`row-project${showState ? ' with-state' : ''}${delivery && showState ? ' delivery' : ''}`}>
+            {t.machine && <span className={`row-machine${t.machine.online ? '' : ' offline'}`} aria-label={machineText}>
+              <span className="row-machine-dot" />
+              <span className="row-machine-name">{t.machine.name}</span>
+            </span>}
             {!(delivery && showState) && !withinProject && <span className="row-project-name">{where}</span>}
             {showState && <span className={`row-state tone-${status.tone}`}>
               <span className="row-state-label">{delivery ? shortStatus(status.label) : status.label}</span>
