@@ -1,7 +1,6 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { modelKey, type ModelSelection, type UsedUpLimit } from '@accio/protocol';
 import { useClient, useConnectionStatus } from '../app/connection';
-import { useTooltip } from '../app/Tooltip';
 import { Check, ProviderLogo, Star } from '../app/icons';
 import { EffortWord, effortSteps } from './EffortControl';
 import { useSteps, useWheelSteps } from './steps';
@@ -103,12 +102,11 @@ export function ModelPicker({ profileId, value, onChange, disabled = false }: {
     (next) => onChange({ harnessId: current.harnessId, modelId: current.modelId, ...(next ? { effort: next } : {}) }), setError);
   useWheelSteps(effortTrigger, stepper.step, !!effort);
   const shownEffort = effort?.steps[stepper.shown];
-  const effortTip = useTooltip(`Effort: ${shownEffort?.label ?? ''}`);
   const description = selected?.name ?? fallbackName;
 
   return <span className="model-choice">
     <button type="button" ref={trigger} className="model-trigger" popoverTarget={id}
-      disabled={disabled || busy || !profileId || status !== 'open'} aria-label={`Select model: ${description}`} title={description}
+      disabled={disabled || busy || !profileId || status !== 'open'} aria-label={`Select model: ${description}`}
       onClick={(event) => {
         const rect = event.currentTarget.getBoundingClientRect();
         const width = Math.min(340, window.innerWidth - 24);
@@ -124,9 +122,8 @@ export function ModelPicker({ profileId, value, onChange, disabled = false }: {
       <span>{shortName}</span>
     </button>
     {effort && <>
-      <button {...effortTip.props} type="button" ref={effortTrigger} className="effort-trigger" popoverTarget={effortId}
+      <button type="button" ref={effortTrigger} className="effort-trigger" popoverTarget={effortId}
         disabled={disabled || busy || status !== 'open'} aria-label={`Effort: ${shownEffort?.label ?? ''}`} aria-haspopup="menu"
-        title={`Effort: ${shownEffort?.label ?? ''} · scroll or use the arrow keys to change`}
         onKeyDown={(event) => {
           if (event.key === 'ArrowUp') { event.preventDefault(); stepper.step(1); }
           if (event.key === 'ArrowDown') { event.preventDefault(); stepper.step(-1); }
@@ -137,7 +134,6 @@ export function ModelPicker({ profileId, value, onChange, disabled = false }: {
         }}>
         <EffortWord key={modelKey(current)} steps={effort.steps} index={stepper.shown} />
       </button>
-      {effortTip.tooltip}
       <div id={effortId} ref={effortMenu} popover="auto" className="menu effort-menu" role="menu" aria-label="Effort" style={effortPosition}
         onToggle={(event) => {
           if (event.newState === 'open') requestAnimationFrame(() => (effortMenu.current?.querySelector<HTMLButtonElement>('[aria-checked="true"]') ?? effortMenu.current?.querySelector<HTMLButtonElement>('button'))?.focus());

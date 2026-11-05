@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
-import { lstat, mkdir, open, realpath, rename, rm, writeFile, type FileHandle } from 'node:fs/promises';
+import { copyFile, lstat, mkdir, open, realpath, rename, rm, writeFile, type FileHandle } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { basename, dirname, isAbsolute, join, resolve, win32 } from 'node:path';
 import { pipeline } from 'node:stream/promises';
@@ -56,6 +56,20 @@ export class ThreadAssets {
       await Promise.all([pending, file, join(dir, `${asset.id}.json`)].map((path) => rm(path, { force: true }).catch(() => {})));
       throw error;
     }
+  }
+
+  /**
+   * GLOSSARY: Image attachment. A copy named for its type, which harnesses and their
+   * file tools can open; the stored `.bin` stays the asset the transcript serves.
+   */
+  async harnessFile(threadId: string, asset: ThreadAsset): Promise<string> {
+    validId(asset.id);
+    const dir = await this.directory(threadId, true);
+    const path = join(dir, `${asset.id}.${extension(asset.mimeType)}`);
+    await copyFile(join(dir, `${asset.id}.bin`), path, constants.COPYFILE_EXCL).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== 'EEXIST') throw error;
+    });
+    return path;
   }
 
   async snapshot(threadId: string, cwd: string, source: string): Promise<MediaBinding> {
@@ -290,7 +304,7 @@ function parseRange(header: string, size: number): { start: number; end: number 
 }
 
 /** Only actual media signatures can become inline assets, regardless of an authored filename/MIME. */
-function checkedMime(head: Buffer, claimed: string): string {
+export function checkedMime(head: Buffer, claimed: string): string {
   const aliases: Record<string, string> = { 'image/jpg': 'image/jpeg', 'audio/x-wav': 'audio/wav', 'audio/wave': 'audio/wav', 'audio/x-flac': 'audio/flac', 'video/x-m4v': 'video/mp4' };
   const mime = aliases[claimed.toLowerCase()] ?? claimed.toLowerCase();
   const ascii = (start: number, end: number) => head.toString('ascii', start, end);

@@ -46,13 +46,19 @@ export type HarnessMessage =
   | { type: 'result'; subtype: string; is_error: boolean; session_id: string; result?: string; errors?: string[] }
   | { type: string; session_id?: string; [k: string]: unknown };
 
+/** GLOSSARY: Image attachment. A saved image file named for its type, given to the harness with a message. */
+export type HarnessImage = { path: string; mimeType: string };
+export type SteerInput = (text: string, images?: HarnessImage[]) => Promise<void>;
+
 export type HarnessTurn = {
   /** Registers the live input channel; unregister before the harness finishes. */
-  registerSteer?: (send: ((text: string) => Promise<void>) | undefined) => void;
+  registerSteer?: (send: SteerInput | undefined) => void;
   resourceInstructions?: string;
   mcps?: Record<string, HarnessMcp>;
   cwd: string;
   prompt: string;
+  /** Images sent with the prompt; the prompt already names their files. */
+  images?: HarnessImage[];
   /** Harness session to continue; null starts a new one. */
   sessionId: string | null;
   /** Harness model alias; omitted to use the account's default. */

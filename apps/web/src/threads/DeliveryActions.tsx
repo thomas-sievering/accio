@@ -47,7 +47,7 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
     return () => { live = false; clearInterval(timer); };
   }, [client, connection, thread.id, thread.updatedAt, thread.workspace, thread.delivery, project?.previewCommand, attempt]);
 
-  const deliver = () => { emitAppEvent('panel.show', 'delivery'); void run(async () => { await client.call('threads.deliver', { threadId: thread.id, mode }); }); };
+  const deliver = () => { void run(async () => { await client.call('threads.deliver', { threadId: thread.id, mode }); }); };
   // Choosing an option only sets the mode; the main button starts delivery.
   const choose = (choice: DeliveryMode) => { setMode(choice); menu.current?.hidePopover(); trigger.current?.focus(); };
   const openApp = () => {
@@ -65,6 +65,14 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
     });
   };
 
+  // The Delivery panel opens once shipping actually starts, not when it is only queued.
+  const phase = thread.workspace ? deliveryStatus(thread)?.phase : undefined;
+  const lastPhase = useRef(phase);
+  useEffect(() => {
+    if (phase === 'shipping' && lastPhase.current !== 'shipping') emitAppEvent('panel.show', 'delivery');
+    lastPhase.current = phase;
+  }, [phase]);
+
   const settled = !!thread.settledAt;
   const snoozedUntil = !settled && thread.snoozedUntil && new Date(thread.snoozedUntil) > now ? new Date(thread.snoozedUntil) : undefined;
   // A settled or snoozed thread always has its state row, even when it never had a workspace.
@@ -73,8 +81,8 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
   const call = (method: 'threads.cancelDelivery' | 'threads.checkDelivery' | 'threads.archive' | 'threads.reopen') =>
     void run(async () => { await client.call(method, { threadId: thread.id }); });
   // A fresh request is offered with no delivery, after new work, or when a person must act.
-  const nothingToShip = !!summary && summary.files === 0;
-  const offerShip = (!status || status.canShip) && !nothingToShip;
+  // Offered from the start: Ship when done can be queued before the first edit.
+  const offerShip = !status || status.canShip;
   const receipt = status?.phase === 'delivered';
   const age = checkedAgo(status?.checkedAt, now);
   // The chip already says "Waiting for merge · #123"; a review request only adds when it was last checked.

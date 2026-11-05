@@ -70,9 +70,10 @@ test('keyboard focus visibly reveals a complete title without moving adjacent ro
   await expect(tip).toHaveText(title);
   await expect(tip).toBeInViewport();
   expect((await renamed.boundingBox())?.height).toBe(before?.height);
+  // Composer controls carry no tooltip.
   await effort(page).hover();
-  await expect(tip).toHaveCount(1);
-  await expect(tip).toContainText('Effort:');
+  await expect(tip.filter({ hasText: 'Effort' })).toHaveCount(0);
+  await expect(effort(page)).not.toHaveAttribute('title');
   await page.mouse.move(899, 5);
   await page.getByRole('searchbox', { name: 'Search threads', exact: true }).focus();
   // A long search scrolls its text horizontally; blurring it resets that scroll.
@@ -90,7 +91,7 @@ test('keyboard focus visibly reveals a complete title without moving adjacent ro
   await expect(tip.filter({ hasText: title })).toHaveCount(0);
   const chip = effort(page);
   await chip.focus();
-  await expect(tip).toContainText('Effort:');
+  await expect(tip.filter({ hasText: 'Effort' })).toHaveCount(0);
   await chip.press('Enter');
   await expect(page.getByRole('menu', { name: 'Effort', exact: true })).toBeVisible();
   await expect(tip).toHaveCount(0);

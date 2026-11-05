@@ -197,3 +197,38 @@
 .composer-chip button:hover { color: var(--ink-strong); }
 .composer-chip svg { width: 12px; height: 12px; }
 .msg-pick { padding-right: 8px; margin-right: 8px; background: var(--bg); }
+
+/* GLOSSARY: Image attachment. Pasted images in the composer, and sent ones in a message. */
+.composer-chips { flex-wrap: wrap; align-items: center; }
+.composer-image {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+.composer-image img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.composer-image.uploading img { opacity: 0.45; }
+.composer-image button {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--bg);
+  color: var(--ink-strong);
+  opacity: 0;
+}
+.composer-image:hover button, .composer-image button:focus-visible { opacity: 1; }
+.composer-image svg { width: 11px; height: 11px; }
+
+.msg-images { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin-bottom: 6px; white-space: normal; }
+.msg-images:only-child { margin-bottom: 0; }
+.msg-image { padding: 0; border-radius: 6px; overflow: hidden; line-height: 0; }
+.msg-image img { display: block; max-width: 240px; max-height: 160px; object-fit: contain; }
+.msg-image-missing { display: inline-block; padding: 4px 8px; border-radius: 6px; background: var(--bg); color: var(--dim); font-size: 12.5px; }
+@media (hover: none) { .composer-image button { opacity: 1; } }

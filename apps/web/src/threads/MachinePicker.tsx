@@ -35,7 +35,6 @@ export function MachinePicker({ machines, value, onChange, note }: {
   return <>
     <button type="button" ref={trigger} className={`machine-trigger${current && !current.connected ? ' offline' : ''}`} popoverTarget={id}
       disabled={!machines} aria-haspopup="menu" aria-label={`Run on machine: ${label}`}
-      title={current && !current.connected ? `${current.name} is offline` : undefined}
       onClick={(event) => {
         const rect = event.currentTarget.getBoundingClientRect();
         const width = Math.min(260, window.innerWidth - 24);
