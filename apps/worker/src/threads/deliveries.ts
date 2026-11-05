@@ -83,9 +83,13 @@ export class Deliveries {
       const baseBranch = await this.git.target(thread.workspace);
       const project = this.projects.projectOf(this.projects.checkout(thread.checkoutId));
       const openPr = thread.delivery?.pullRequest?.state === 'open' || !!(thread.delivery?.pullRequestUrl && !thread.delivery.pullRequest && thread.delivery.status !== 'delivered');
+      // A PR the agent opened outside Ship, or target rules a direct push could only bypass, route through the PR.
+      const host = openPr ? {} : await this.git.hostRoute(thread.workspace, baseBranch);
+      const linked = openPr ? { pullRequest: thread.delivery?.pullRequest, pullRequestUrl: thread.delivery?.pullRequestUrl }
+        : host.pullRequestUrl ? { pullRequest: host.pullRequest, pullRequestUrl: host.pullRequestUrl } : {};
+      const viaPr = openPr || !!host.pullRequestUrl || !!host.requiresPullRequest;
       const delivery: ThreadDelivery = { id: randomUUID(), workVersion: thread.workVersion ?? 0, autoSettle: true,
-        mode, policy: openPr ? 'pull-request' : project.deliveryPolicy ?? 'direct', baseBranch, requestedAt: now(), status: 'queued',
-        ...(openPr ? { pullRequest: thread.delivery?.pullRequest, pullRequestUrl: thread.delivery?.pullRequestUrl } : {}) };
+        mode, policy: viaPr ? 'pull-request' : project.deliveryPolicy ?? 'direct', baseBranch, requestedAt: now(), status: 'queued', ...linked };
       try { await this.state.update(threadId, t => ({ ...t, delivery })); }
       catch (error) {
         // A rejected request must never become an in-memory publication grant.

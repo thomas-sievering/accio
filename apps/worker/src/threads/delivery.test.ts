@@ -1,6 +1,6 @@
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { JsonFile } from '@accio/persistence';
 import { FakeHarness, gate, replyWith, SESSION, toolCall } from '../testing/fakeHarness.js';
 import { RESTART_NOTICE, RESUME_PROMPT } from './thread.js';
@@ -14,6 +14,8 @@ vi.setConfig({ testTimeout: 20_000 });
 
 let t: Awaited<ReturnType<typeof startTestApp>>;
 afterEach(async () => { vi.restoreAllMocks(); vi.unstubAllEnvs(); await t?.stop(); });
+// Ship requests read host routing; fixtures with a GitHub-shaped origin must not reach the real gh CLI.
+beforeEach(() => { vi.spyOn(DeliveryGit.prototype, 'hostRoute').mockResolvedValue({}); });
 
 async function setup(harness = new FakeHarness()) {
   t = await startTestApp({ harness });

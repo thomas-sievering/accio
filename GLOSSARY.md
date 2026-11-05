@@ -200,7 +200,7 @@ Every change delivered on a machine, newest first, each with its shipped note, t
 _Avoid_: History, activity, release log
 
 **Delivery policy**:
-A project's choice of how Ship publishes: directly onto the target branch, or through a pull request. It applies to new requests; an existing request keeps the policy it was recorded with.
+A project's choice of how Ship publishes: directly onto the target branch, or through a pull request. It applies to new requests; an existing request keeps the policy it was recorded with. A branch with an open PR, or a target whose rules require PRs, checks or a merge queue, always ships through the PR.
 _Avoid_: Merge mode, strategy
 
 **Prepare for review**:

@@ -18,6 +18,7 @@ export class DeliveryPending extends UserError {
 export class DeliveryUnavailable extends UserError {}
 export type DeliveryObservation = (patch: Partial<ThreadDelivery>) => Promise<void>;
 export type DeliveryHosting = (cwd: string, args: string[]) => Promise<any>;
+export type HostRoute = { pullRequest?: DeliveryPullRequest; pullRequestUrl?: string; requiresPullRequest?: boolean };
 const PR_FIELDS = 'number,url,state,headRefOid,baseRefName,isDraft,mergeCommit,mergedAt,statusCheckRollup,reviewDecision,autoMergeRequest,mergeStateStatus,mergeable';
 
 /**
@@ -94,6 +95,33 @@ export class DeliveryGit {
     const branch = remote?.match(/^ref: refs\/heads\/(.+)\tHEAD$/m)?.[1];
     if (!branch) throw new UserError('Could not determine origin’s default branch. Check access to origin.');
     return branch;
+  }
+
+  /**
+   * Host facts a Ship request must respect: an open PR this branch already has, or target
+   * rules a direct push could only satisfy through an admin bypass. Best effort: an unreadable
+   * host leaves the project's policy, and the prompt still forbids bypassing rules.
+   */
+  async hostRoute(workspace: ThreadWorkspace, baseBranch: string): Promise<HostRoute> {
+    const origin = await maybeGit(workspace.sourcePath, 'config', '--get', 'remote.origin.url');
+    const slug = origin ? githubRepo(origin) : undefined;
+    if (!slug) return {};
+    const route: HostRoute = {};
+    try {
+      const prs = await this.hosting(workspace.sourcePath, ['pr', 'list', '--repo', slug, '--head', workspace.branch, '--state', 'open', '--json', PR_FIELDS]);
+      const pr = (prs as any[]).find(p => p.baseRefName === baseBranch);
+      const identity = pullRequestIdentity(pr?.url);
+      if (pr && identity && identity.repository.toLowerCase() === slug.toLowerCase())
+        Object.assign(route, { pullRequestUrl: pr.url, pullRequest: { ...identity, state: 'open', headRevision: pr.headRefOid, baseBranch: pr.baseRefName } });
+    } catch { /* Ship still proceeds under the project's policy. */ }
+    try {
+      const branch = encodeURIComponent(baseBranch);
+      const rules = await this.hosting(workspace.sourcePath, ['api', `repos/${slug}/rules/branches/${branch}`]);
+      const ruled = (rules as any[]).some(r => ['pull_request', 'merge_queue', 'required_status_checks'].includes(r.type));
+      const classic = !ruled && (await this.hosting(workspace.sourcePath, ['api', `repos/${slug}/branches/${branch}`]))?.protection?.enabled === true;
+      if (ruled || classic) route.requiresPullRequest = true;
+    } catch { /* Same as above. */ }
+    return route;
   }
 
   async summary(workspace?: ThreadWorkspace): Promise<DeliverySummary> {
@@ -315,7 +343,7 @@ export function deliveryPrompt(workspace: ThreadWorkspace, delivery: ThreadDeliv
     ? 'Push the owned feature branch and open or update a pull request to the target branch. Prepare it for review, address automated feedback and checks, but NEVER merge, enable auto-merge or enter a merge queue.'
     : delivery.policy === 'pull-request'
       ? 'Push the owned feature branch, open or update a pull request, address feedback and required checks, then merge it when ready. Publication is authorized by this Ship request.'
-      : 'Push the verified result directly to the target branch using a normal, non-force push. Publication is authorized by this Ship request.';
+      : 'Push the verified result directly to the target branch using a normal, non-force push. Publication is authorized by this Ship request. Never rely on an admin or ruleset bypass: if the target branch requires pull requests, required checks or a merge queue, do not push to it; stop and report that the project needs the pull-request delivery policy.';
   return `Deliver the current task from this same thread. Work only in the owned worktree ${workspace.path}, branch ${workspace.branch}. Target: origin/${delivery.baseBranch}.\n\n` +
     (delivery.detail ? `Latest delivery update: ${delivery.detail}\n\n` : '') +
     'Finish any remaining implementation. Commit all intended changes, including uncommitted work; preserve unrelated or unpublished work. Fetch origin and integrate the latest target branch early. Resolve conflicts using the task and repository intent; ask only when a product decision cannot be inferred or necessary access is missing. Never force push. If a shallow clone floods unrelated add/add conflicts, abort the rebase, unshallow origin, then retry.\n\n' +

@@ -1,6 +1,6 @@
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { JsonFile } from '@accio/persistence';
 import { FakeHarness, gate, replyWith } from '../testing/fakeHarness.js';
 import { startTestApp, type TestClient } from '../testing/testApp.js';
@@ -11,6 +11,8 @@ import type { ThreadView } from '@accio/protocol';
 vi.setConfig({ testTimeout: 25_000 });
 let app: Awaited<ReturnType<typeof startTestApp>>;
 afterEach(async () => { vi.restoreAllMocks(); await app?.stop(); });
+// Ship requests read host routing; fixtures with a GitHub-shaped origin must not reach the real gh CLI.
+beforeEach(() => { vi.spyOn(DeliveryGit.prototype, 'hostRoute').mockResolvedValue({}); });
 const wait = (client: TestClient, id: string, check = (t: ThreadView) => t.status === 'idle') =>
   client.waitFor('threads.changed', ts => ts.some(t => t.id === id && check(t)), 15_000);
 const view = async (client: TestClient, id: string) => (await client.call('threads.list', {})).find(t => t.id === id)!;
@@ -394,4 +396,42 @@ it.each(['reopen', 'new work', 'stop follow-ups'] as const)('discards an in-flig
   expect(current.settledAt).toBeNull();
   expect(current.delivery!.status).not.toBe('delivered');
   if (action === 'new work') expect(current.workVersion).toBeGreaterThan(current.delivery!.workVersion!);
+});
+
+const openPr = [{ number: 68, url: 'https://github.com/test/fixture/pull/68', state: 'OPEN', headRefOid: 'abc', baseRefName: 'main' }];
+it.each([
+  { name: 'an open PR opened outside Ship', prs: openPr, rules: [], classic: false, policy: 'pull-request', pr: 68 },
+  { name: 'a merge-queue ruleset', prs: [], rules: [{ type: 'deletion' }, { type: 'merge_queue' }], classic: false, policy: 'pull-request' },
+  { name: 'a required-checks ruleset', prs: [], rules: [{ type: 'required_status_checks' }], classic: false, policy: 'pull-request' },
+  { name: 'classic branch protection', prs: [], rules: [], classic: true, policy: 'pull-request' },
+  { name: 'an unprotected target', prs: [], rules: [{ type: 'non_fast_forward' }], classic: false, policy: 'direct' },
+  { name: 'an unreadable host', prs: undefined, rules: undefined, classic: false, policy: 'direct' },
+] as const)('routes a direct-policy Ship through a PR only for $name', async ({ prs, rules, classic, policy, ...expected }) => {
+  const harness = new FakeHarness(async function* () { yield* replyWith('done'); });
+  const { client, checkout, source, origin } = await project(harness);
+  await client.call('projects.setDelivery', { projectId: checkout.projectId, deliveryPolicy: 'direct', previewCommand: '' });
+  await git(source, 'config', `url.${origin.replaceAll('\\', '/')}.insteadOf`, 'https://github.com/test/fixture.git');
+  await git(source, 'remote', 'set-url', 'origin', 'https://github.com/test/fixture.git');
+  const reads: string[][] = [];
+  const hosting = async (_cwd: string, args: string[]) => {
+    reads.push(args);
+    const answer = args[0] === 'pr' ? prs : args[1]!.includes('/rules/') ? rules : { protection: { enabled: classic } };
+    if (answer === undefined) throw new DeliveryUnavailable('GitHub is unavailable');
+    return answer;
+  };
+  const manager = new DeliveryGit(app.home, hosting);
+  vi.mocked(DeliveryGit.prototype.hostRoute).mockRestore();
+  const original = DeliveryGit.prototype.hostRoute;
+  vi.spyOn(DeliveryGit.prototype, 'hostRoute').mockImplementation((workspace, base) => original.call(manager, workspace, base));
+  vi.spyOn(DeliveryGit.prototype, 'verify').mockRejectedValue(new DeliveryUnavailable('Not observed in this test'));
+  const thread = await client.call('threads.start', { checkoutId: checkout.id, text: 'build feature' });
+  await wait(client, thread.id);
+  await client.call('threads.deliver', { threadId: thread.id, mode: 'ship' });
+  await wait(client, thread.id, t => t.status === 'idle' && t.delivery?.status !== 'queued' && !!t.delivery?.startedAt);
+  const delivery = (await view(client, thread.id)).delivery!;
+  expect(delivery.policy).toBe(policy);
+  if ('pr' in expected) expect(delivery.pullRequest).toMatchObject({ number: expected.pr, state: 'open', repository: 'test/fixture', baseBranch: 'main' });
+  else expect(delivery.pullRequest).toBeUndefined();
+  expect(reads[0]).toEqual(expect.arrayContaining(['list', '--head', thread.workspace!.branch, '--state', 'open']));
+  expect(harness.runs[1]!.prompt).toContain(policy === 'direct' ? 'Never rely on an admin or ruleset bypass' : 'open or update a pull request');
 });
