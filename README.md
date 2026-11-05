@@ -34,6 +34,58 @@ From a worktree, use `pnpm try` to open that version for hands-on testing. `pnpm
 
 Install the test browser once with `pnpm exec playwright install chromium`. The Playwright suites (`playwright.config.ts`, one project per suite) start fixture servers from `scripts/<suite>-test-server.ts` with a fake harness, fixture provider I/O and a temporary home on their own ports; they never call a model or touch your profiles. Agents can drive further journeys with the [3-verify skill](.agents/skills/3-verify/SKILL.md).
 
+## Terminal client
+
+The CLI is an agent-facing developer tool for quick testing, debugging and
+verification without opening the UI. Use it to exercise worker behavior and
+inspect state during development. The desktop and web apps remain the user-facing
+clients.
+
+After `pnpm install` and `pnpm build`, run `pnpm cli --help`. The CLI connects to
+an already running worker using the same authenticated RPC interface as the app.
+It reads the existing `server.json` under `ACCIO_HOME` (default `~/.accio`), without
+starting a worker or creating configuration. Point `--home` at an isolated test
+worker's home to test that instance.
+
+```sh
+pnpm cli methods                         # discover every operation, offline
+pnpm cli methods threads.                # filter by prefix
+pnpm cli schema threads.start            # JSON input schema, offline
+pnpm cli profiles.list
+pnpm cli projects.get
+pnpm cli call threads.start @start.json  # params from a file
+pnpm cli threads.transcript @thread.json
+pnpm cli wait THREAD_ID --timeout 120000
+pnpm cli events thread.item              # filtered JSON Lines; Ctrl+C to stop
+```
+
+For example, `start.json` can contain
+`{"checkoutId":"CHECKOUT_ID","text":"Explain this project"}`; get checkout IDs
+from `projects.get`. The returned thread contains its `id`. Use
+`{"threadId":"THREAD_ID"}` in `thread.json` to read its transcript. Any protocol
+method can be called directly or through `call`; `schema METHOD` shows its inputs.
+Use `-` in place of JSON or `@file` to read params from stdin, including secrets.
+Pass JSON as one shell argument when using inline params.
+
+Use `--hub HUB_ID` to select a window's hub context (`hubs.list` lists connections).
+For a different worker, set `ACCIO_URL` and `ACCIO_TOKEN`, or pass its printed
+`--url 'http://127.0.0.1:PORT/#token=TOKEN'` link. Explicit URLs never borrow a token
+from the local home. Prefer environment variables for credentials to avoid shell
+history. `ACCIO_HUB` also selects a hub. Run `pnpm --silent cli ...` to suppress
+pnpm's command banner when consuming JSON.
+
+Results are JSON on stdout; errors are JSON on stderr. Exit codes are **0** for
+success, **1** for errors, and **2** for timeouts. `wait` reads fresh thread state
+until it leaves `running`: `idle` succeeds, `failed` or `interrupted` exits 1, and
+a missing thread is an error. It reports the current state, so call it after the
+start/send request succeeds. `events` streams until interrupted (exit 130) or
+disconnected (exit 1); it does not replay history. Read a transcript snapshot when
+you need existing items. Requests default to a 30-second timeout and are never
+retried automatically, since a timed-out write may have completed.
+
+This tests worker behavior and saved state; visual interactions still use the UI
+verification suites.
+
 ## State
 
 - Machine: `~/.accio` (`ACCIO_HOME` overrides). Remote hubs' projects, threads and media live under `hubs/<hub-id>`; hub credentials are server-only in `hub-connections.json`.

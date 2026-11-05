@@ -20,6 +20,10 @@ _Avoid_: Linking, registering
 The app you use to read threads, send prompts and change settings. It holds no threads of its own and does not execute turns; a worker does that. A client can run on a machine with or without a worker. Planned iOS and standalone web apps are clients only. Currently the desktop app combines a client with a local worker, and the web client is served by a worker.
 _Avoid_: Thin client (in UI text), frontend, desktop (for the role)
 
+**Developer CLI**:
+The agent-facing terminal client (`pnpm cli`) for quick testing, debugging and verification during development without opening the UI. It calls the running worker's authenticated app protocol and returns JSON; supported remote operations use the worker's relay. Use it for behavior and state checks, and the UI verification journeys for rendering and interaction checks. See [terminal client usage](README.md#terminal-client).
+_Avoid_: Harness, accio tool (for this development client)
+
 **Worker**:
 The process on a machine that runs harnesses, executes turns and provides access to that machine's files and tools. It can run alongside a client or on its own. It remains a worker while idle; it does not need a running turn. The current implementation is `apps/worker`, started by the desktop app or headlessly with `pnpm worker`.
 _Avoid_: Server (for the role), machine (for the process), agent, sub-agent

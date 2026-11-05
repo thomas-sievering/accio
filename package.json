@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "cli": "tsx apps/worker/src/cli/main.ts",
     "build": "pnpm -r build",
     "start": "pnpm build && pnpm --filter @accio/desktop start",
     "try": "pnpm build && node scripts/try.mjs",

@@ -7,6 +7,21 @@ description: "Verify Accio's React app through its real browser UI: launch an is
 
 Read [the feature index](features/README.md), then the affected feature files. Drive every mapped entry point relevant to the change; record each as passed, failed, or unverified with its unmet precondition. The default smoke covers selected offline paths; its coverage report is not a claim that the whole map passed.
 
+## Quick behavior checks with the developer CLI
+
+For agent-driven development checks of worker behavior, state or relay reachability,
+use `pnpm cli` without opening the UI. See [terminal client usage](../../../README.md#terminal-client)
+for setup, connection options and examples; `pnpm cli --help`, `methods` and
+`schema <method>` discover the current interface. Use `--home <test-home>` for an
+already running isolated worker and `--hub <id>` to select its hub context.
+Calls act on that instance's real state; choose the test instance before writes.
+Retain the command, JSON result and exit code as evidence of the behavior checked.
+
+For rendering, navigation, clicks or other UI behavior, follow the browser journeys
+below. CLI results establish protocol behavior; record UI entry points as verified
+only when driven through the UI. In those journeys, RPC remains a read-only second
+observation of effects.
+
 ## Launch
 
 From the repository root, use Node and the pnpm version pinned in `package.json`:
