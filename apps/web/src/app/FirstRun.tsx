@@ -19,14 +19,13 @@ import { MenuSelect } from '../ui/MenuSelect';
 export function FirstRun() {
   const { profiles = [] } = useProfiles();
   const { state } = useProjects();
-  const { hubs, selectedId } = useHubs();
+  const { hubs, selectedId, chosen, select } = useHubs();
   const hub = hubs.find((h) => h.id === selectedId);
-  // A fresh install already runs Local dev, so "decided" means the user said so, joined another hub, or set this one up.
-  const [hubChosen, setHubChosen] = useState(() => sessionStorage.getItem(HUB_CHOSEN) === '1');
-  const chooseLocal = () => { sessionStorage.setItem(HUB_CHOSEN, '1'); setHubChosen(true); };
   const unsigned = profiles.find((p) => !hasSignedInAccount(p));
   const steps = [
-    hubChosen || !hub?.local || profiles.length > 0,
+    // A fresh install already runs Local dev, so "decided" means the user picked it, joined another hub, or set this one up.
+    // With several saved hubs, an unfinished one may just be the wrong hub, so ask.
+    chosen || hubs.length === 1 && (!hub?.local || profiles.length > 0),
     profiles.length > 0,
     profiles.some(hasSignedInAccount),
     (state?.checkouts.length ?? 0) > 0,
@@ -38,7 +37,7 @@ export function FirstRun() {
   return (
     <div className="first-run">
       <h1 className="first-run-kicker">Set up Accio</h1>
-      {current === 0 && <ChooseHub onLocal={chooseLocal} />}
+      {current === 0 && (hubs.length > 1 ? <ChooseSavedHub onChoose={select} /> : <ChooseHub onLocal={() => select(selectedId)} />)}
       {(current === 1 || editingProfile && unsigned) && (
         <Screen title="Name your first profile" sub="A profile groups the accounts and projects for one side of your life, such as personal or work.">
           <AddProfile profile={editingProfile ? unsigned : undefined} onDone={() => setEditingProfile(false)} />
@@ -61,8 +60,6 @@ export function FirstRun() {
     </div>
   );
 }
-
-const HUB_CHOSEN = 'accio.firstRun.hubChosen';
 
 function Screen(props: { title: string; sub: string; children: ReactNode }) {
   return (
@@ -91,6 +88,21 @@ function ChooseHub({ onLocal }: { onLocal: () => void }) {
         <Choice on={where === 'remote'} onClick={() => setWhere('remote')} icon={<Globe />} title="Remote hub" detail="Share accounts across your machines" />
       </div>
       <button type="button" className="ghost primary first-run-next" onClick={() => (where === 'local' ? onLocal() : setJoining(true))}>Continue</button>
+    </Screen>
+  );
+}
+
+/** Several hubs are saved on this machine: pick the one to use here. */
+function ChooseSavedHub({ onChoose }: { onChoose: (id: string) => void }) {
+  const { hubs, selectedId } = useHubs();
+  const [where, setWhere] = useState(selectedId);
+  return (
+    <Screen title="Which hub should this window use?" sub="Each hub has its own profiles, projects and threads.">
+      <div className="choice-cards" role="radiogroup" aria-label="Hub">
+        {hubs.map((h) => <Choice key={h.id} on={where === h.id} onClick={() => setWhere(h.id)} icon={h.local ? <Monitor /> : <Globe />}
+          title={h.name} detail={h.status === 'connected' ? 'Connected' : h.status === 'connecting' ? 'Connecting' : 'Offline'} />)}
+      </div>
+      <button type="button" className="ghost primary first-run-next" onClick={() => onChoose(where)}>Continue</button>
     </Screen>
   );
 }

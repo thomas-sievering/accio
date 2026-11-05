@@ -1,6 +1,7 @@
 // The verify device: one machine identity paired with a real hub (Home server) whose accounts are
 // already signed in. Real-model journeys and `pnpm try` start from a fresh home that already joined
-// that hub, so provider credentials stay on the hub. One user holds the device at a time.
+// that hub, so provider credentials stay on the hub. One user holds the device at a time; a `pnpm try`
+// window hands it to the next run that asks.
 import assert from 'node:assert/strict';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -13,25 +14,39 @@ const save = (file, value) => writeFile(file, JSON.stringify(value, null, 2) + '
 const delay = (ms) => new Promise((done) => setTimeout(done, ms));
 const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
 
-/** Claims the device for this process; `owner` says who holds it to anyone else waiting. Returns the release. */
-export async function lockDevice(owner, { waitMs = 15 * 60_000 } = {}) {
+/**
+ * Claims the device for this process; `owner` says who holds it to anyone else waiting. Returns the release.
+ * A `yields` holder (a `pnpm try` window) gives the device up when the next run asks: `yields` is called once
+ * and must end that holder, which then releases. Other holders are waited for.
+ */
+export async function lockDevice(owner, { waitMs = 15 * 60_000, yields } = {}) {
   await mkdir(dirname(devicePath), { recursive: true });
   let announced = false;
-  for (const deadline = Date.now() + waitMs; ; await delay(1000)) {
+  for (const deadline = Date.now() + Math.max(waitMs, YIELD_MS); ; await delay(1000)) {
     try {
       await mkdir(lockPath);
-      await save(join(lockPath, 'owner.json'), { pid: process.pid, runDir: owner });
-      return async () => { await rm(lockPath, { recursive: true, force: true }); };
+      await save(join(lockPath, 'owner.json'), { pid: process.pid, runDir: owner, yields: !!yields });
+      let watch;
+      if (yields) watch = setInterval(() => void readFile(join(lockPath, 'yield'), 'utf8').then((to) => { clearInterval(watch); yields(to); }, () => {}), 1000);
+      return async () => { clearInterval(watch); await rm(lockPath, { recursive: true, force: true }); };
     } catch (error) {
       if (error.code !== 'EEXIST') throw error;
       const held = await json(join(lockPath, 'owner.json')).catch(() => null);
       if (held && !alive(held.pid)) { await rm(lockPath, { recursive: true, force: true }); continue; }
       const who = held?.runDir ?? lockPath;
-      assert(Date.now() < deadline, waitMs ? `The verify device stayed busy for ${Math.round(waitMs / 60_000)} minutes; held by ${who}` : `The verify device is in use by ${who}. Close that one first.`);
+      if (held?.yields) {
+        if (!announced) { await writeFile(join(lockPath, 'yield'), owner).catch(() => {}); console.log(`Closing ${who} to take the verify device.`); announced = true; }
+        assert(Date.now() < deadline, `${who} did not give up the verify device. Close it first.`);
+        continue;
+      }
+      assert(waitMs && Date.now() < deadline, waitMs ? `The verify device stayed busy for ${Math.round(waitMs / 60_000)} minutes; held by ${who}` : `The verify device is in use by ${who}. Close that one first.`);
       if (!announced) { console.log(`Waiting for the verify device; another run holds it: ${who}`); announced = true; }
     }
   }
 }
+
+/** How long a run waits for a yielding holder to close. */
+const YIELD_MS = 30_000;
 
 /** Before the server starts: this home is the verify device, already joined to its hub. */
 export async function seedLinkedHome(home) {
