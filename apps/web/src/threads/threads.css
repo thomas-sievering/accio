@@ -238,16 +238,17 @@
   flex: 0 0 auto;
   min-width: 0;
 }
-/* A delivery is its own tag beside the project, tinted by its tone; the project name gives way first. */
+/* A delivery is its own soft chip beside the project, filled with its tone; the project name gives way first.
+   No border, so the chip stays as tall as the text beside it. */
 .row-state.row-delivery {
   flex: 0 0 auto;
   align-self: center;
   max-width: 75%;
-  padding: 0 6px 2px;
-  border: 1px solid color-mix(in srgb, currentColor 35%, var(--line-2));
-  border-radius: 8px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, currentColor 14%, transparent);
   font-size: 11px;
-  line-height: 15px;
+  line-height: 16px;
   white-space: nowrap;
 }
 .row-state.row-delivery.tone-working {
