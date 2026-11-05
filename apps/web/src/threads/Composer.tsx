@@ -197,19 +197,18 @@ export function Composer({
         />
         <div className="composer-bar">
           {toolbar}
-          {onStop && sendable && <button type="button" className="composer-queue" title="Queue for after this turn (Ctrl+Enter)" disabled={disabled || busy} onClick={() => void submit('queue')}>Queue <kbd>Ctrl ↵</kbd></button>}
+          {onStop && sendable && <button type="button" className="composer-queue" disabled={disabled || busy} onClick={() => void submit('queue')}>Queue <kbd>Ctrl ↵</kbd></button>}
           {onStop && (
             <button
               type="button"
               className="send stop"
-              title="Stop"
               aria-label="Stop"
               onClick={() => void run(onStop)}
             >
               <StopSquare />
             </button>
           )}
-          <button type="submit" className={`send${queuing ? ' queue' : ''}`} title={queuing ? 'Queue message (Ctrl+Enter)' : onStop ? 'Send into current turn (Enter). Ctrl+Enter to queue.' : 'Send'} aria-label={queuing ? 'Queue message' : 'Send'} disabled={disabled || busy || !sendable}
+          <button type="submit" className={`send${queuing ? ' queue' : ''}`} aria-label={queuing ? 'Queue message' : 'Send'} disabled={disabled || busy || !sendable}
             onClick={e => { e.preventDefault(); void submit(onStop && (e.ctrlKey || e.metaKey) ? 'queue' : 'steer'); }}>
             {queuing ? <Queue /> : <ArrowUp />}
           </button>
