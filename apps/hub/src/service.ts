@@ -347,7 +347,10 @@ export async function startHubService(opts: HubServiceOptions) {
   const url = `http://${opts.host ?? '127.0.0.1'}:${port}`;
   mcp.setUrl(opts.publicUrl ?? url);
   return { hub, settings, resources, secrets, trust, port, url, snapshot, createPairingCode: () => HubTrust.createCode(opts.home),
-    async close() { closing = true; clearInterval(heartbeat); for (const ws of sockets.clients) ws.terminate(); for (const ws of relay.clients) ws.terminate(); await new Promise<void>((resolve) => server.close(() => resolve())); sockets.close(); relay.close(); await queue; for (const grant of grants.values()) grant.release(); await proxy.close(); await modelsRefreshed; await hub.close(); await secrets.close(); await resources.close(); await settings.close(); await trust.close(); } };
+    async close() { closing = true; clearInterval(heartbeat); for (const ws of sockets.clients) ws.terminate(); for (const ws of relay.clients) ws.terminate();
+      // server.close() drops only the connections idle right now; a request finishing later would keep its socket open until the client's keep-alive timeout (~3s).
+      const sweep = setInterval(() => server.closeIdleConnections(), 25);
+      await new Promise<void>((resolve) => server.close(() => resolve())).finally(() => clearInterval(sweep)); sockets.close(); relay.close(); await queue; for (const grant of grants.values()) grant.release(); await proxy.close(); await modelsRefreshed; await hub.close(); await secrets.close(); await resources.close(); await settings.close(); await trust.close(); } };
 }
 
 function json(res: ServerResponse, status: number, value: unknown) { res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify(value)); }
