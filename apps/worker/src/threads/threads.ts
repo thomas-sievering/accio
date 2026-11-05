@@ -104,7 +104,7 @@ export class Threads {
     this.turns = new Turns(this.state, { profiles, projects, models, machines, harnesses, secrets: this.secrets, content: this.content, deliveries: this.deliveries, tools,
       images: { claim: (threadId, ids) => this.uploads.claim(threadId, ids, this.assets), file: (threadId, asset) => this.assets.harnessFile(threadId, asset) },
       resources: () => this.resources, toolsOff: (harnessId) => builtinToolsOff(harnessId, this.toolOverrides?.()[harnessId]), onWorkFinished: id => this.naming.refine(id), onRepairFinished: (toolId) => this.onRepairFinished?.(toolId) });
-    tools?.add(agentTool((threadId, input, signal) => this.turns.startSubagent(threadId, input, signal)));
+    tools?.add(agentTool((threadId, input, { signal, progress }) => this.turns.startSubagent(threadId, input, signal, progress)));
     projects.onRemoveThreads((id) => this.deleteThreads(this.state.list.filter((t) => t.checkoutId === id)));
     projects.onCheckInUse((checkoutId) => this.countUsing((t) => t.checkoutId === checkoutId));
     projects.onCheckProjectInUse((projectId) => this.countUsing((t) => t.projectId === projectId));

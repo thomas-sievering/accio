@@ -17,8 +17,15 @@ export type AccioTool<Shape extends z.ZodRawShape = z.ZodRawShape> = {
   input: Shape;
   /** Listed and callable only when this says so for the turn's thread, so a turn sees just the tools it can use. */
   available?: (threadId: string) => boolean;
-  call: (args: z.infer<z.ZodObject<Shape>>, context: { threadId: string; signal: AbortSignal }) => Promise<string> | string;
+  call: (args: z.infer<z.ZodObject<Shape>>, context: ToolContext) => Promise<string> | string;
 };
+
+/**
+ * What a call knows about its caller. `progress` tells the harness the call is
+ * still working, so a long call is not mistaken for a hung one; it does nothing
+ * when the harness did not ask for progress.
+ */
+export type ToolContext = { threadId: string; signal: AbortSignal; progress: (message: string) => void };
 
 /** Typed helper so each tool's arguments are checked against its own shape. */
 export function accioTool<Shape extends z.ZodRawShape>(tool: AccioTool<Shape>): AccioTool {
@@ -57,7 +64,11 @@ export class AccioTools {
     return { access: { url: `${this.origin}${MCP_PATH}`, authorization: `Bearer ${token}` }, revoke: () => this.grants.delete(token) };
   }
 
-  /** Streamable HTTP, answered with plain JSON: no sessions or server-sent events are needed for these tools. */
+  /**
+   * Streamable HTTP without sessions. Answers are plain JSON, except that a call
+   * whose caller asked for progress switches to server-sent events once it first
+   * reports some, so the harness's idle timeout restarts while a sub-agent works.
+   */
   async handle(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
     if (new URL(req.url ?? '/', 'http://localhost').pathname !== MCP_PATH) return false;
     const token = /^Bearer (\S+)$/i.exec(req.headers.authorization ?? '')?.[1];
@@ -87,10 +98,13 @@ export class AccioTools {
     // A harness that gives up on a call closes the request; long tools stop with it.
     const caller = new AbortController();
     res.once('close', () => caller.abort());
-    return json(res, 200, await this.answer(message as RpcRequest & { method: string }, grant.threadId, caller.signal));
+    const events = progressEvents(req, res, message.params);
+    const answer = await this.answer(message as RpcRequest & { method: string }, { threadId: grant.threadId, signal: caller.signal, progress: events.progress });
+    return events.started ? events.finish(answer) : json(res, 200, answer);
   }
 
-  private async answer({ id, method, params }: RpcRequest & { method: string }, threadId: string, signal: AbortSignal) {
+  private async answer({ id, method, params }: RpcRequest & { method: string }, context: ToolContext) {
+    const { threadId } = context;
     switch (method) {
       case 'initialize': {
         const asked = typeof params?.protocolVersion === 'string' ? params.protocolVersion : '';
@@ -111,7 +125,7 @@ export class AccioTools {
         const args = z.object(tool.input).safeParse(params?.arguments ?? {});
         if (!args.success) return rpcResult(id, toolResult(z.prettifyError(args.error), true));
         try {
-          return rpcResult(id, toolResult(await tool.call(args.data, { threadId, signal }), false));
+          return rpcResult(id, toolResult(await tool.call(args.data, context), false));
         } catch (error) {
           return rpcResult(id, toolResult(error instanceof Error ? error.message : String(error), true));
         }
@@ -120,6 +134,37 @@ export class AccioTools {
         return rpcError(id, -32601, `Method not found: ${method}`);
     }
   }
+}
+
+/**
+ * Progress for one request, sent as MCP `notifications/progress` events. Only a
+ * caller that sent a progress token and accepts event streams gets them.
+ */
+function progressEvents(req: IncomingMessage, res: ServerResponse, params: RpcRequest['params']) {
+  const meta = params?._meta as { progressToken?: unknown } | undefined;
+  const token = meta?.progressToken;
+  const streams = /text\/event-stream/i.test(req.headers.accept ?? '');
+  let count = 0;
+  const send = (body: unknown) => res.write(`event: message
+data: ${JSON.stringify(body)}
+
+`);
+  const events = {
+    started: false,
+    progress(message: string) {
+      if ((typeof token !== 'string' && typeof token !== 'number') || !streams || res.writableEnded || res.destroyed) return;
+      if (!events.started) {
+        events.started = true;
+        res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });
+      }
+      send({ jsonrpc: '2.0', method: 'notifications/progress', params: { progressToken: token, progress: ++count, message } });
+    },
+    finish(answer: unknown) {
+      if (!res.writableEnded && !res.destroyed) { send(answer); res.end(); }
+      return true;
+    },
+  };
+  return events;
 }
 
 function inputSchema(shape: z.ZodRawShape) {

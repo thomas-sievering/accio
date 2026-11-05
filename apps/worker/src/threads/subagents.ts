@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { ToolStep } from '@accio/protocol';
-import { ACCIO_MCP_SERVER, accioTool } from '../tools/tools.js';
+import { ACCIO_MCP_SERVER, accioTool, type ToolContext } from '../tools/tools.js';
 import type { Harness, HarnessTurn } from './harness.js';
 import { TurnTranscript } from './transcript.js';
 
@@ -13,7 +13,11 @@ import { TurnTranscript } from './transcript.js';
  * tools, so they cannot start sub-agents of their own.
  */
 export const AGENT_TOOL = 'agent';
-/** How long a harness waits on one accio tool call, so a sub-agent can work for a while. Codex's default is 60 seconds. */
+/**
+ * How long a harness waits on one accio tool call, so a sub-agent can work for a
+ * while. Codex's default is 60 seconds; Claude Code's is about 28 hours in total
+ * but only 5 minutes without a progress event.
+ */
 export const SUBAGENT_TIMEOUT_SEC = 2 * 60 * 60;
 
 /** How the parent's transcript names the call, whichever harness made it. */
@@ -70,6 +74,6 @@ export async function runSubagent(turn: SubagentTurn, input: AgentInput, signal:
 }
 
 /** The accio tool; `start` finds the calling thread's running turn and runs the sub-agent in it. */
-export function agentTool(start: (threadId: string, input: AgentInput, signal: AbortSignal) => Promise<string>) {
-  return accioTool({ name: AGENT_TOOL, description: AGENT_DESCRIPTION, input: agentInput, call: (input, { threadId, signal }) => start(threadId, input, signal) });
+export function agentTool(start: (threadId: string, input: AgentInput, context: ToolContext) => Promise<string>) {
+  return accioTool({ name: AGENT_TOOL, description: AGENT_DESCRIPTION, input: agentInput, call: (input, context) => start(context.threadId, input, context) });
 }

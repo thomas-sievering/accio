@@ -72,3 +72,40 @@ it('refuses calls without a live grant, so a turn that ended can no longer use t
 it('grants nothing before the worker listens', () => {
   expect(new AccioTools([echo]).grant('thread-1')).toBeUndefined();
 });
+
+const working = accioTool({
+  name: 'work',
+  description: 'Reports progress while it works',
+  input: {},
+  call: (_args, { progress }) => { progress('Bash: ls'); progress('Read: a.txt'); return 'done'; },
+});
+
+async function callWork(access: { url: string; authorization: string }, accept: string, meta?: unknown) {
+  const response = await fetch(access.url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept, authorization: access.authorization },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 7, method: 'tools/call', params: { name: 'work', arguments: {}, ...(meta ? { _meta: meta } : {}) } }),
+  });
+  return { type: response.headers.get('content-type') ?? '', text: await response.text() };
+}
+
+it('streams progress to a caller that asked for it, so a long call is not taken for a hung one', async () => {
+  const tools = new AccioTools([working]);
+  await serve(tools);
+  const { access } = tools.grant('thread-1')!;
+  const streamed = await callWork(access, 'application/json, text/event-stream', { progressToken: 'p-1' });
+  expect(streamed.type).toMatch(/^text\/event-stream/);
+  const events = streamed.text.split('\n\n').filter(Boolean).map((e) => JSON.parse(e.split('\n').find((l) => l.startsWith('data: '))!.slice(6)));
+  expect(events).toEqual([
+    { jsonrpc: '2.0', method: 'notifications/progress', params: { progressToken: 'p-1', progress: 1, message: 'Bash: ls' } },
+    { jsonrpc: '2.0', method: 'notifications/progress', params: { progressToken: 'p-1', progress: 2, message: 'Read: a.txt' } },
+    { jsonrpc: '2.0', id: 7, result: { content: [{ type: 'text', text: 'done' }] } },
+  ]);
+
+  // Without a token, or without accepting event streams, the answer stays plain JSON.
+  for (const [accept, meta] of [['application/json, text/event-stream', undefined], ['application/json', { progressToken: 'p-2' }]] as const) {
+    const plain = await callWork(access, accept, meta);
+    expect(plain.type).toMatch(/^application\/json/);
+    expect(JSON.parse(plain.text)).toEqual({ jsonrpc: '2.0', id: 7, result: { content: [{ type: 'text', text: 'done' }] } });
+  }
+});

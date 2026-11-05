@@ -359,12 +359,14 @@ export class Turns {
    * GLOSSARY: Sub-agent. Runs one for the thread's current turn. Its steps go to
    * the parent's running Agent row with the same description, once that row exists.
    */
-  async startSubagent(threadId: string, input: AgentInput, signal: AbortSignal): Promise<string> {
+  async startSubagent(threadId: string, input: AgentInput, signal: AbortSignal, progress: (message: string) => void = () => {}): Promise<string> {
     const live = this.subagentTurns.get(threadId);
     if (!live) throw new Error('A sub-agent can only start while its thread is working.');
     const { transcripts } = this.state;
     let rowId: string | undefined;
     const showStep = async (step: { name: string; summary: string }) => {
+      // Tells the parent's harness the sub-agent is still working, before the row update that may be skipped.
+      progress(step.summary ? `${step.name}: ${step.summary}` : step.name);
       const items = (await transcripts.get(threadId)).items;
       const row = rowId ? items.find(item => item.id === rowId) : items.find(item => item.kind === 'tool' && item.turnId === live.turnId
         && item.name === AGENT_TOOL_LABEL && item.status === 'running' && item.summary.trim() === input.description && !this.subagentRows.has(item.id));

@@ -22,15 +22,20 @@ function* toolResult(id: string, text: string, isError = false): Iterable<Harnes
   yield { type: 'user', parent_tool_use_id: null, session_id: SESSION, message: { content: [{ type: 'tool_result', tool_use_id: id, content: [{ type: 'text', text }], is_error: isError }] } };
 }
 
-/** Calls accio's MCP server the way a harness does. */
+/** Calls accio's MCP server the way Claude Code does: asking for progress, which may arrive as server-sent events. */
 async function callAgent(run: HarnessTurn, args: unknown) {
   const response = await fetch(run.tools!.url, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: run.tools!.authorization },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'agent', arguments: args } }),
+    headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: run.tools!.authorization },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'agent', arguments: args, _meta: { progressToken: 1 } } }),
   });
-  const { result } = await response.json() as { result: { content: { text: string }[]; isError?: boolean } };
-  return { text: result.content[0]!.text, isError: !!result.isError };
+  const body = await response.text();
+  const messages = response.headers.get('content-type')?.startsWith('text/event-stream')
+    ? body.split('\n\n').filter(Boolean).map((e) => JSON.parse(e.split('\n').find((l) => l.startsWith('data: '))!.slice(6)))
+    : [JSON.parse(body)];
+  const { result } = messages.at(-1) as { result: { content: { text: string }[]; isError?: boolean } };
+  const progress = messages.slice(0, -1).map((m) => (m as { params: { message: string } }).params.message);
+  return { text: result.content[0]!.text, isError: !!result.isError, progress };
 }
 
 const task = { description: 'Count the files', prompt: 'Count the files in this folder and report the number.' };
@@ -43,6 +48,7 @@ afterEach(() => stop?.());
 it('runs a sub-agent from the agent tool, shows its latest step on the row, and returns only its reply', async () => {
   const working = gate();
   const stepShown = gate();
+  let progress: string[] = [];
   const harness = new FakeHarness(async function* (run) {
     if (!run.tools) {
       // The sub-agent: one shell call, then its reply.
@@ -58,6 +64,7 @@ it('runs a sub-agent from the agent tool, shows its latest step on the row, and 
     yield { type: 'system', subtype: 'init', session_id: SESSION };
     yield* toolCall('call-1', 'mcp__accio__agent', task);
     const result = await callAgent(run, task);
+    progress = result.progress;
     yield* toolResult('call-1', result.text, result.isError);
     yield* replyWith('The sub-agent counted 3 files.');
   });
@@ -71,6 +78,8 @@ it('runs a sub-agent from the agent tool, shows its latest step on the row, and 
   await expect.poll(() => agentRow(c, thread.id)).toMatchObject({ status: 'running', summary: 'Count the files', step: { name: 'Bash', summary: 'ls' } });
   working.release();
   await settled(c, thread.id);
+  // Each step also reached the parent's harness as progress, which keeps its idle timeout from firing.
+  expect(progress).toContain('Bash: ls');
 
   const row = await agentRow(c, thread.id);
   expect(row).toMatchObject({ status: 'done', output: 'There are 3 files.' });

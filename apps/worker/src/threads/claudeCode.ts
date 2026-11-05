@@ -52,8 +52,9 @@ export const claudeCode: Harness = {
         cwd,
         model,
         ...(effort ? { effort: effort as 'low' | 'medium' | 'high' | 'xhigh' | 'max' } : {}),
-        // Claude's own limit on one MCP call; accio's agent tool can run as long as a sub-agent needs.
-        env: tools ? { ...env, MCP_TOOL_TIMEOUT: String(SUBAGENT_TIMEOUT_SEC * 1000) } : env,
+        // Claude's own limits on one MCP call, in total and without progress; accio's agent tool can run
+        // as long as a sub-agent needs, including one long silent step such as a build.
+        env: tools ? { ...env, MCP_TOOL_TIMEOUT: String(SUBAGENT_TIMEOUT_SEC * 1000), CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT: String(SUBAGENT_TIMEOUT_SEC * 1000) } : env,
         abortController,
         resume: sessionId ?? undefined,
         includePartialMessages: true,
