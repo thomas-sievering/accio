@@ -1,4 +1,4 @@
-import type { CheckoutView, ChoicePick, ProjectView, RemoteMachine, ThreadView } from '@accio/protocol';
+import type { CheckoutView, ChoicePick, MachineView, ProjectView, RemoteMachine, ThreadView } from '@accio/protocol';
 import { type ModelSelection } from '@accio/protocol';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useClient } from '../app/connection';
@@ -118,9 +118,10 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
   const model = choice?.checkoutId === checkoutId && choice.profileId === place.profile?.id ? choice.model : defaultModel(place.profile);
   const machines = useLive(() => client.call('machines.list', {}), 'machines.changed');
   const [chosenMachineId, setChosenMachineId] = useState<string>();
-  // GLOSSARY: Relay. Another machine can run it when it is on the relay with a checkout of the same repository.
+  // GLOSSARY: Relay. Another machine on the relay can run it; one without a checkout of the repository clones it first.
   const repoKey = place.project?.repoKey;
-  const startable = machines?.filter((m) => m.thisMachine || (m.relay && (!checkoutId || (!!repoKey && m.relay.repos.includes(repoKey)))));
+  const startable = machines?.filter((m) => m.thisMachine || (m.relay && (!checkoutId || !!repoKey)));
+  const noCheckout = (m: MachineView) => !!checkoutId && !m.thisMachine && !!repoKey && !m.relay?.repos.includes(repoKey);
   const local = machines?.find((m) => m.thisMachine);
   const machineId = chosenMachineId ?? local?.id;
   const machine = startable?.find((m) => m.id === machineId);
@@ -165,7 +166,7 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
           </>}
         />
         <div className="draft-machine">
-          <MachinePicker machines={startable} value={machineId} onChange={setChosenMachineId} />
+          <MachinePicker machines={startable} value={machineId} onChange={setChosenMachineId} note={(m) => noCheckout(m) ? 'No checkout yet' : undefined} />
         </div>
       </div>
     </>

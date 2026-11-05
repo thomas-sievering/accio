@@ -4,12 +4,14 @@ import { Check, Monitor } from '../app/icons';
 
 /**
  * GLOSSARY: Machine. A quiet chip naming where a new thread will run; clicking lists the
- * online machines, the current one ticked.
+ * online machines, the current one ticked, each with an optional note.
  */
-export function MachinePicker({ machines, value, onChange }: {
+export function MachinePicker({ machines, value, onChange, note }: {
   machines?: MachineView[];
   value?: string;
   onChange: (machineId: string) => void;
+  /** A second line under a machine's name, such as that sending will clone the project there. */
+  note?: (machine: MachineView) => string | undefined;
 }) {
   const id = useId();
   const menu = useRef<HTMLDivElement>(null);
@@ -54,7 +56,7 @@ export function MachinePicker({ machines, value, onChange }: {
       {online.map((m) => <button key={m.id} type="button" className="menu-item" role="menuitemradio" aria-checked={m.id === value}
         onClick={() => { menu.current?.hidePopover(); trigger.current?.focus(); onChange(m.id); }}>
         <Monitor />
-        <span className="menu-text"><b>{m.name}</b>{m.thisMachine && <small>This machine</small>}</span>
+        <span className="menu-text"><b>{m.name}</b>{m.thisMachine ? <small>This machine</small> : note?.(m) && <small>{note(m)}</small>}</span>
         <span className="machine-check" aria-hidden>{m.id === value && <Check />}</span>
       </button>)}
     </div>
