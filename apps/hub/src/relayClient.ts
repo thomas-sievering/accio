@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import WebSocket from 'ws';
 import type { RelayFrame, RelayHubFrame } from '@accio/protocol';
 import { RELAY_FRAME_BYTES } from './service.js';
+import { keepAlive } from './keepAlive.js';
 
 /** Frames above this are sent as chunks; leaves room for the envelope. */
 const CHUNK_CHARS = 256 * 1024;
@@ -70,7 +71,7 @@ export class RelaySocket {
     const url = new URL('/relay', this.url); url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(url, { headers: { authorization: `Bearer ${this.token}` }, handshakeTimeout: 10_000, maxPayload: RELAY_FRAME_BYTES });
     this.ws = ws;
-    ws.on('open', () => { this.open = true; this.attempts = 0; });
+    ws.on('open', () => { this.open = true; this.attempts = 0; keepAlive(ws); });
     ws.on('message', (data, binary) => { if (!binary && this.ws === ws) this.receive(String(data)); });
     ws.on('error', () => {});
     ws.on('close', () => {
