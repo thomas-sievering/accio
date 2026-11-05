@@ -236,7 +236,8 @@ test('Ship menu, queued cancellation, owned preview, delivery, Archive and follo
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect(page.getByText('Fresh workspace ready.', { exact: true })).toBeVisible();
   await expect(page.getByText('Archived · history kept', { exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Ship', exact: true })).toHaveCount(0);
+  // Ship is offered from the start, even before the fresh workspace has an edit.
+  await expect(page.getByRole('button', { name: 'Ship', exact: true })).toBeVisible();
 });
 
 test('Electron Open app uses the native bridge and archives its real owned preview', async ({ baseURL }) => {
