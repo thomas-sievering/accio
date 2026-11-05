@@ -248,7 +248,7 @@ export class Deliveries {
   private observes(thread: Thread) {
     const d = thread.delivery;
     if (!d || !thread.workspace || thread.workspace.releasedAt || (d.workVersion ?? 0) !== (thread.workVersion ?? 0)) return false;
-    if (d.status === 'delivered') return !!(d.autoSettle && !d.keepOpen && !thread.settledAt && !unreadNote(thread));
+    if (d.status === 'delivered') return !!(d.autoSettle && !d.keepOpen && !thread.settledAt);
     if (d.status === 'queued' || d.status === 'running' || d.pullRequest?.state === 'closed') return false;
     return d.status === 'waiting' || d.status === 'ready' || !!(d.pullRequest || d.pullRequestUrl || d.integratedAt || d.observationError);
   }
@@ -262,7 +262,7 @@ export class Deliveries {
 
   settleDelivered(thread: Thread) {
     const d = thread.delivery;
-    if (d?.status !== 'delivered' || !d.autoSettle || d.keepOpen || d.followUpsStoppedAt || thread.settledAt || thread.status !== 'idle' || unreadNote(thread)
+    if (d?.status !== 'delivered' || !d.autoSettle || d.keepOpen || d.followUpsStoppedAt || thread.settledAt || thread.status !== 'idle'
       || (d.workVersion ?? 0) !== (thread.workVersion ?? 0) || this.state.running.has(thread.id) || this.state.lifecycle.has(thread.id) || !!thread.queuedMessages?.length || this.state.messageOps.has(thread.id)
       || (thread.snoozedUntil && Date.parse(thread.snoozedUntil) > Date.now())) return thread;
     return settle(thread, now());
@@ -332,12 +332,6 @@ export class Deliveries {
     if (verified.status === 'delivered') await this.host.delivered(threadId, false);
   }
 
-  /** You opened the thread after its delivery: its shipped note is read, so it can settle. */
-  async readNote(threadId: string) {
-    if (!unreadNote(this.state.require(threadId))) return this.state.require(threadId);
-    return this.state.updateDurably(threadId, t => unreadNote(t) ? this.settleDelivered({ ...t, delivery: { ...t.delivery!, noteReadAt: now() } }) : t);
-  }
-
   async check(threadId: string, force = false) {
     const existing = this.checks.get(threadId);
     if (existing) return existing;
@@ -364,10 +358,4 @@ export class Deliveries {
     const path = thread.workspace!.path;
     if (this.projects.state().checkouts.some(c => samePath(c.path, path)) || this.state.list.some(t => t.id !== thread.id && t.workspace && !t.workspace.releasedAt && (samePath(t.workspace.path, path) || samePath(t.workspace.sourcePath, path)))) throw new UserError('Another checkout or thread still uses this workspace.');
   }
-}
-
-/** A delivered thread whose shipped note you have not seen stays open, so it waits at the top of the inbox. */
-export function unreadNote(thread: Thread): boolean {
-  const d = thread.delivery;
-  return d?.status === 'delivered' && !!d.note && !d.noteReadAt;
 }

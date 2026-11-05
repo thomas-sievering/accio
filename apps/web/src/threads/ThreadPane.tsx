@@ -1,6 +1,6 @@
 import type { CheckoutView, ChoicePick, MachineView, ProjectView, RemoteMachine, ThreadView } from '@accio/protocol';
 import { type ModelSelection } from '@accio/protocol';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { useClient } from '../app/connection';
 import { useLive } from '../app/useLive';
 import { accountForModel, defaultModel, useProfiles } from '../profiles/profiles';
@@ -43,11 +43,6 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
   const place = usePlace(thread.checkoutId, thread.profileId, thread.machine ? thread.projectId : undefined);
   const { items, error, retry } = useTranscript(thread.id);
   useReportPendingSecrets(thread.id, items);
-  // GLOSSARY: Shipped note. Seeing a delivered thread reads its note, so it can settle as usual.
-  const unreadNote = thread.delivery?.status === 'delivered' && !!thread.delivery.note && !thread.delivery.noteReadAt;
-  useEffect(() => {
-    if (active && unreadNote) void client.call('threads.readNote', { threadId: thread.id }).catch(() => {});
-  }, [active, unreadNote, client, thread.id]);
   const running = thread.status === 'running';
   const [savingModel, setSavingModel] = useState(false);
   const [renaming, setRenaming] = useState(false);

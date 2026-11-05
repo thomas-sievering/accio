@@ -193,7 +193,7 @@ it('explains failed target checks without escalating a merged review-only grant'
   expect(harness.runs).toHaveLength(2);
 });
 
-it('shows the shipped note in the thread and the Changelog, and settles only once the note is read', async () => {
+it('shows the shipped note in the thread and the Changelog, and settles the thread without waiting for it to be opened', async () => {
   const harness = new FakeHarness(async function* (run) {
     if (run.prompt.startsWith('Deliver the current task')) {
       await writeFile(join(run.cwd, 'feature'), 'published change\n');
@@ -217,15 +217,12 @@ it('shows the shipped note in the thread and the Changelog, and settles only onc
   await wait(client, thread.id, t => t.status === 'idle' && t.delivery?.status === 'delivered');
   const note = { summary: 'Threads can be renamed in place', test: ['Double-click a title and type a new one'] };
   const delivered = await view(client, thread.id);
-  expect(delivered.settledAt).toBeNull();
+  expect(delivered.settledAt).toEqual(expect.any(String));
   expect(delivered.delivery).toMatchObject({ note });
   const log = await client.call('changelog.list', {});
   expect(log).toEqual([expect.objectContaining({ threadId: thread.id, projectId: delivered.projectId, note, target: 'main', revision: expect.any(String) })]);
   const shipped = (await client.call('threads.transcript', { threadId: thread.id })).filter(item => item.kind === 'shipped');
   expect(shipped).toEqual([expect.objectContaining({ entry: log[0] })]);
-  const read = await client.call('threads.readNote', { threadId: thread.id });
-  expect(read.settledAt).toEqual(expect.any(String));
-  expect(read.delivery?.noteReadAt).toEqual(expect.any(String));
   const home = app.home;
   await app.stop({ keepHome: true });
   app = await startTestApp({ harness: new FakeHarness() }, home);

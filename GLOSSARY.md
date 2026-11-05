@@ -180,7 +180,7 @@ A direct Ship in a project with a test command, run by accio without a model tur
 _Avoid_: Fast ship, auto ship
 
 **Shipped note**:
-What a delivery changed and what to try, written by the delivery turn through the shipped_note accio tool, or by the naming model for a scripted ship, for the person who will use the change. Once the delivery is verified, the thread shows it as a turn of its own and the Changelog lists it. A delivered thread with a note waits at the top of the open list until you open it, then settles as usual.
+What a delivery changed and what to try, written by the delivery turn through the shipped_note accio tool, or by the naming model for a scripted ship, for the person who will use the change. Once the delivery is verified, the thread shows it as a turn of its own and the Changelog lists it. The thread itself settles automatically like any delivered thread; the note lives on in the Changelog and the project dashboard's Recently shipped.
 _Avoid_: Release note, summary, receipt
 
 **Changelog**:

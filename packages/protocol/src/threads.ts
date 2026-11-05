@@ -126,8 +126,6 @@ export type ThreadDelivery = {
   step?: DeliveryStep;
   /** GLOSSARY: Shipped note. What the delivery turn says changed and what to try, through the shipped_note accio tool. */
   note?: ShippedNote;
-  /** When you opened the thread after its delivery with a note; it settles automatically only then. */
-  noteReadAt?: string;
 };
 
 /** GLOSSARY: Shipped note. Written for the person who will try the change, not for reviewers. */
@@ -294,7 +292,6 @@ export const threadMethods = {
   'threads.previewTitle': method<typeof PreviewTitle, { title: string }>(PreviewTitle),
   'threads.delete': method<typeof ThreadId, null>(ThreadId),
   /** Records that you saw a delivered thread's shipped note; the thread then settles as usual. */
-  'threads.readNote': method<typeof ThreadId, ThreadView>(ThreadId),
   /** GLOSSARY: Changelog. Every delivered change on this machine, newest first. */
   'changelog.list': method<z.ZodObject<{}>, ChangelogEntry[]>(z.object({})),
 };

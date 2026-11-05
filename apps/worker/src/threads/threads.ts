@@ -291,7 +291,6 @@ export class Threads {
         return { url: await this.previews.open(threadId, thread.workspace.path, command) };
       }))
       .on('threads.archive', ({ threadId }) => deliveries.archive(threadId))
-      .on('threads.readNote', async ({ threadId }) => toView(await deliveries.readNote(threadId)))
       .on('changelog.list', () => this.changelog.list())
       .on('threads.setModel', async ({ threadId, model }) => {
         await this.models.ready(state.require(threadId).profileId);
