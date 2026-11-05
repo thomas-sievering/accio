@@ -1,15 +1,13 @@
 import type { ChangelogEntry, CommitView } from '@accio/protocol';
 
 /**
- * GLOSSARY: Changelog. The entries the sidebar's filters allow, as for threads: a project
- * entry when its project is in scope, a No project entry when its profile is shown. The
- * search matches the summary, things to try, thread title, target and PR number.
+ * GLOSSARY: Changelog. One project's entries matching a search: every word must appear in
+ * the summary, things to try, thread title, target or PR number.
  */
-export function filterChangelog(entries: readonly ChangelogEntry[], scope: { projectIds: ReadonlySet<string>; profile: string; query: string }): ChangelogEntry[] {
+export function filterChangelog(entries: readonly ChangelogEntry[], scope: { projectId: string; query: string }): ChangelogEntry[] {
   const words = scope.query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   return entries.filter((e) => {
-    if (!scope.projectIds.has(e.projectId)) return false;
-    if (!e.projectId && scope.profile !== 'all' && e.profileId !== scope.profile) return false;
+    if (e.projectId !== scope.projectId) return false;
     if (!words.length) return true;
     const text = [e.note?.summary, ...(e.note?.test ?? []), e.title, e.target, e.pullRequest && `#${e.pullRequest.number}`].join('\n').toLowerCase();
     return words.every((w) => text.includes(w));

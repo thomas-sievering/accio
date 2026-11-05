@@ -5,7 +5,7 @@ import { focusMenuItem, onMenuKeyDown } from '../ui/menuKeys';
 
 /**
  * The thread header's project name: a menu to open the project dashboard, the thread's folder
- * in Explorer, the project's Changelog, or its settings. Explorer needs this desktop's own server.
+ * in Explorer, or its settings. Explorer needs this desktop's own server.
  */
 export function ProjectCrumbMenu({ project, path }: { project: ProjectView; path?: string }) {
   const id = useId();
@@ -35,7 +35,6 @@ export function ProjectCrumbMenu({ project, path }: { project: ProjectView; path
       onToggle={(e) => { if (e.newState === 'open') { setError(undefined); focusMenuItem(menu.current); } }}>
       {item('Dashboard', () => { close(); emitAppEvent('project.dashboard', { id: project.id }); })}
       {canOpenFolder && item('Open in Explorer', () => void openFolder())}
-      {item('Changelog', () => { close(); emitAppEvent('changelog.open', { projectId: project.id }); })}
       {item('Project settings', () => { close(); emitAppEvent('project.open', { id: project.id }); })}
       {error && <p className="error menu-error" role="alert">Could not open the folder: {error}</p>}
     </div>

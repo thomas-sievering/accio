@@ -188,7 +188,7 @@ What a delivery changed and what to try, written by the delivery turn through th
 _Avoid_: Release note, summary, receipt
 
 **Changelog**:
-Every change delivered on a machine, newest first, each with its shipped note, target, PR and revision. It opens from the sidebar footer, following the sidebar's project and profile filters, or for one project from the project name in a thread's header or the project dashboard's Recently shipped. It can be searched and opens each change's thread while that thread exists. Entries outlive later deliveries, Archive and deletion of their thread; changes delivered before notes existed are listed by thread title.
+Every change delivered on a machine, newest first, each with its shipped note, target, PR and revision. Each project's Changelog is a fold on its project dashboard, grouped by day; it can be searched and opens each change's thread while that thread exists. Entries outlive later deliveries, Archive and deletion of their thread; changes delivered before notes existed are listed by thread title.
 _Avoid_: History, activity, release log
 
 **Delivery policy**:
@@ -211,7 +211,7 @@ The app a project runs on one machine from its default branch, in a detached che
 _Avoid_: Owned preview (for a thread's app), dev server, deployment
 
 **Project dashboard**:
-A project's page, opened through Dashboard in the menu on the project name in a thread's header: the project app's controls with its logs, the project's threads grouped as Needs you, Working and Snoozed, Recently shipped (the default branch's newest commits, each joined to its Changelog entry and expanding to its things to try, thread and PR, the running commit marked, with a link to the project's full Changelog) and its settled threads, folded.
+A project's page, opened through Dashboard in the menu on the project name in a thread's header: the project app's controls with its logs, the project's threads grouped as Needs you, Working and Snoozed, Recently shipped (the default branch's newest commits, each joined to its Changelog entry and expanding to its things to try, thread and PR, the running commit marked), then its Changelog and its settled threads, both folded.
 _Avoid_: Project settings (for this page), overview
 
 **Project setup thread**:

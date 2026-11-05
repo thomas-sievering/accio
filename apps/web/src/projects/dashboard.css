@@ -150,17 +150,6 @@ button.changelog-commit:hover { background: var(--hover, var(--active)); }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.dashboard-heading .spacer { flex: 1; }
-.dashboard-link {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--muted);
-  font: inherit;
-  font-weight: 400;
-  cursor: pointer;
-}
-.dashboard-link:hover { color: var(--ink); text-decoration: underline; }
 /* One fixed slot so the times line up whether or not a commit expands. */
 .changelog-chevron {
   display: grid;

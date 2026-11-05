@@ -47,27 +47,22 @@
   margin-top: 2px;
 }
 
-/* GLOSSARY: Changelog. */
+/* GLOSSARY: Changelog. The project dashboard's fold. */
 .changelog-search {
-  flex: 0 1 260px;
+  width: min(320px, 100%);
 }
 .changelog-page {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  width: min(760px, calc(100% - 32px));
-  margin: 0 auto;
-  padding: 24px 0 64px;
-}
-.changelog-empty {
-  color: var(--muted);
+  gap: 14px;
+  padding-top: 4px;
 }
 .changelog-day {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
-.changelog-day h2 {
+.changelog-day h4 {
   margin: 0 0 2px;
   font-size: 12px;
   font-weight: 500;
@@ -95,21 +90,10 @@ button.changelog-entry:hover {
 button.changelog-entry:focus-visible {
   outline: 2px solid var(--blue);
 }
-.changelog-thread {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  font-size: 12px;
-  color: var(--muted);
-}
 .changelog-thread-title {
   overflow: hidden;
+  font-size: 12px;
+  color: var(--muted);
   white-space: nowrap;
   text-overflow: ellipsis;
-}
-.changelog-project {
-  flex: none;
-  margin-inline-start: auto;
-  color: var(--dim);
 }

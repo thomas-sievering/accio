@@ -87,11 +87,10 @@ test('the project dashboard starts the app from main, follows new commits, and l
     await expect(page.getByRole('heading', { name: 'dashboard-project' })).toHaveCount(0);
     await expect(page.getByText('Fresh workspace ready.', { exact: true })).toBeVisible();
 
-    // Recently shipped leads on to the project's full Changelog.
+    // The project's full Changelog is a fold on its dashboard.
     await page.locator('.thread-project-link', { hasText: 'dashboard-project' }).click();
     await page.getByRole('menuitem', { name: 'Dashboard', exact: true }).click();
-    await page.getByRole('button', { name: 'Open changelog' }).click();
-    await expect(page.getByRole('heading', { name: 'Changelog' })).toBeVisible();
+    await page.locator('.dashboard-fold > summary', { hasText: 'Changelog' }).click();
     await expect(page.getByText('Nothing shipped yet.')).toBeVisible();
   } finally {
     await client.call('projectApps.stop', { projectId: checkout.projectId }).catch(() => {});

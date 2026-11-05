@@ -7,7 +7,7 @@ const entry = (id: string, extra: Partial<ChangelogEntry> = {}): ChangelogEntry 
   deliveredAt: '2026-11-04T10:00:00Z', ...extra,
 });
 const ids = (es: ChangelogEntry[]) => es.map((e) => e.id);
-const all = { projectIds: new Set(['', 'p1', 'p2']), profile: 'all', query: '' };
+const all = { projectId: 'p1', query: '' };
 
 describe('filterChangelog', () => {
   const entries = [
@@ -16,15 +16,15 @@ describe('filterChangelog', () => {
     entry('loose', { projectId: '', profileId: 'work' }),
   ];
 
-  it('follows the sidebar scope: projects in view, and No project entries of the shown profile', () => {
-    expect(ids(filterChangelog(entries, { ...all, projectIds: new Set(['', 'p1']) }))).toEqual(['rename', 'loose']);
-    expect(ids(filterChangelog(entries, { ...all, profile: 'personal' }))).toEqual(['rename', 'limits']);
+  it('keeps one project’s entries', () => {
+    expect(ids(filterChangelog(entries, all))).toEqual(['rename']);
+    expect(ids(filterChangelog(entries, { ...all, projectId: 'p2' }))).toEqual(['limits']);
   });
 
   it('searches the note, things to try, title and PR number, every word anywhere', () => {
     expect(ids(filterChangelog(entries, { ...all, query: 'DOUBLE-click' }))).toEqual(['rename']);
     expect(ids(filterChangelog(entries, { ...all, query: 'renamed title' }))).toEqual(['rename']);
-    expect(ids(filterChangelog(entries, { ...all, query: '#42' }))).toEqual(['limits']);
+    expect(ids(filterChangelog(entries, { projectId: 'p2', query: '#42' }))).toEqual(['limits']);
     expect(ids(filterChangelog(entries, { ...all, query: 'nothing like it' }))).toEqual([]);
   });
 });

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ProjectAppView, ProjectChangelog, ProjectView } from '@accio/protocol';
+import type { ChangelogEntry, ProjectAppView, ProjectChangelog, ProjectView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { emitAppEvent } from '../app/appEvents';
 import { ChevronDown, Close, Play, Refresh, Settings, StopSquare } from '../app/icons';
@@ -13,6 +13,7 @@ import { useThreads } from '../threads/threads';
 import { ProjectMark } from './ProjectMark';
 import { ProfileLabel } from '../profiles/ProfileLabel';
 import { entryForCommit } from '../changelog/changelog';
+import { ProjectChangelog as ChangelogFold } from '../changelog/ProjectChangelog';
 
 const SETTLED_SHOWN = 10;
 const SHIPPED_SHOWN = 8;
@@ -20,12 +21,13 @@ const SHIPPED_SHOWN = 8;
 /**
  * GLOSSARY: Project dashboard. Opened from the project name in a thread's header:
  * the project app's controls and logs on top, then its threads by state, then what
- * recently landed on its default branch, with settled threads folded away last.
+ * recently landed on its default branch, then its Changelog and settled threads, folded.
  */
 export function ProjectDashboard({ project, onClose }: { project: ProjectView; onClose: () => void }) {
   const client = useClient();
   const apps = useLive(() => client.call('projectApps.get', {}), 'projectApps.changed');
   const app = apps?.find((a) => a.projectId === project.id);
+  const entries = useLive(() => client.call('changelog.list', {}), 'changelog.changed');
   const heading = useRef<HTMLElement>(null);
   useEffect(() => { heading.current?.focus(); }, [project.id]);
   useEffect(() => {
@@ -55,7 +57,8 @@ export function ProjectDashboard({ project, onClose }: { project: ProjectView; o
           <AppControls project={project} app={app} />
           <ThreadMenuProvider>
             <Threads project={project} />
-            <Shipped project={project} running={app?.status === 'stopped' ? undefined : app?.commit?.sha} />
+            <Shipped project={project} entries={entries} running={app?.status === 'stopped' ? undefined : app?.commit?.sha} />
+            <ChangelogFold projectId={project.id} entries={entries} />
             <Settled project={project} />
           </ThreadMenuProvider>
         </div>
@@ -193,12 +196,11 @@ function Settled({ project }: { project: ProjectView }) {
 /**
  * Recently shipped: the default branch's newest commits, each joined to the Changelog entry
  * that delivered it. Such a commit shows its shipped note and expands to what to try, its
- * thread and PR; the full Changelog covers older changes and other targets.
+ * thread and PR; the Changelog fold below covers older changes and other targets.
  */
-function Shipped({ project, running }: { project: ProjectView; running: string | undefined }) {
+function Shipped({ project, entries, running }: { project: ProjectView; entries: readonly ChangelogEntry[] | undefined; running: string | undefined }) {
   const client = useClient();
   const { threads, select } = useThreads();
-  const entries = useLive(() => client.call('changelog.list', {}), 'changelog.changed');
   const [log, setLog] = useState<ProjectChangelog>();
   const [error, setError] = useState<string>();
   const [all, setAll] = useState(false);
@@ -217,8 +219,6 @@ function Shipped({ project, running }: { project: ProjectView; running: string |
     <section className="dashboard-section" aria-label="Recently shipped">
       <h3 className="dashboard-heading">
         Recently shipped{log?.branch && <span className="dashboard-count">to {log.branch}</span>}
-        <span className="spacer" />
-        <button type="button" className="dashboard-link" onClick={() => emitAppEvent('changelog.open', { projectId: project.id })}>Open changelog</button>
       </h3>
       {error ? <p className="dashboard-empty error">{error}</p>
         : !log ? <p className="dashboard-empty">Loading…</p>
