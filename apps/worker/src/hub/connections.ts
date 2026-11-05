@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { access } from 'node:fs/promises';
 import { JsonFile } from '@accio/persistence';
 import { HubClient, hubAddress, remoteSettings, remoteResources, remoteMcp, remoteSecrets, type SecretsAccess, type HubSnapshot, type HarnessInstall } from '@accio/hub';
-import type { Events, HubConnectionView, MachineInfo } from '@accio/protocol';
+import type { Events, HubConnectionView, MachineInfo, ThreadView } from '@accio/protocol';
 import { Router, UserError, type Broadcast } from '../rpc/router.js';
 import { Profiles } from '../profiles/profiles.js';
 import { Machines } from '../machine/machine.js';
@@ -13,6 +13,7 @@ import { deliveryStepTool } from '../threads/deliveryStep.js';
 import { shippedNoteTool } from '../threads/shippedNote.js';
 import { projectSettingsTool } from '../projects/projectSettings.js';
 import { readThreadTool } from '../threads/handoff.js';
+import { startThreadTool } from '../threads/startThread.js';
 import { Projects } from '../projects/projects.js';
 import { ProjectApps } from '../projects/projectApps.js';
 import { Threads } from '../threads/threads.js';
@@ -28,7 +29,7 @@ import { harnessEnv } from '../threads/harnessEnv.js';
 import { configFolderOf } from '../profiles/claudeConfigFolder.js';
 import { Relay } from '../relay/relay.js';
 import type { Updates } from '../machine/update.js';
-import { machineTools } from '../machine/machineTools.js';
+import { findMachine, machineTools } from '../machine/machineTools.js';
 
 export type SavedHub = { id: string; name: string; url: string; token: string; home: string; local: boolean; managed?: boolean; snapshot?: HubSnapshot };
 export type HubWorkspace = { client: HubClient; router: Router; relay: Relay; profiles: Profiles; machines: Machines; models: Models; projects: Projects; threads: Threads; tools: AccioTools; resources: ResourceManager; secrets: SecretsAccess; home: string; initialize(origin: string): void; close(): Promise<void> };
@@ -117,6 +118,16 @@ export class HubConnections {
         },
       }));
     }
+    tools.add(startThreadTool({
+      caller: (id) => threads.views().find((t) => t.id === id),
+      models: (profileId) => models.list(profileId).models,
+      machine: (name) => { if (!name) return undefined; const found = findMachine(settings.machines(), name); return found.id === this.here.id ? undefined : found; },
+      start: async (params) => {
+        const response = await router.handle({ id: 0, method: 'threads.start', params });
+        if (!response?.ok) throw new Error(response?.error ?? 'Invalid request');
+        return response.result as ThreadView;
+      },
+    }));
     const stopUpdates = updates?.onChange((view) => { relay.emit('update.changed', view); this.send('update.changed', view, record.id); });
     const secrets = remoteSecrets(client);
     const threads = refs.threads = new Threads(record.home, profiles, projects, this.runners, broadcast, models, machines, secrets, tools, this.deliveryHosting); await threads.load(); threads.register(router);
