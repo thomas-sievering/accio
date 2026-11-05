@@ -58,6 +58,10 @@ _Avoid_: Account, environment, identity
 A folder on one machine whose new projects default to a profile. Each machine has its own, since paths differ between machines, but the hub stores them with the other shared settings.
 _Avoid_: Root
 
+**GitHub account**:
+The gh login a profile's threads use for GitHub on one machine: Accio's own Ship checks and the agent's gh commands. It is chosen per profile in each machine's settings, since gh sign-ins are per machine, and stored on the hub like profile folders. Left on Automatic, it is the account git sends for the repository's origin, so reads act as the same account that pushes.
+_Avoid_: GitHub profile, GitHub identity
+
 **Provider**:
 A company whose models threads use, such as Anthropic or OpenAI.
 _Avoid_: Vendor, backend, harness

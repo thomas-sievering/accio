@@ -6,6 +6,7 @@ import type { HarnessInstall, SettingsAccess } from '@accio/hub';
 import type { Broadcast, Router } from '../rpc/router.js';
 import { UserError } from '../rpc/router.js';
 import { JsonFile } from '@accio/persistence';
+import { GitHubAccounts } from '../github/accounts.js';
 
 export const WORKER_VERSION = '0.1.0';
 
@@ -29,13 +30,25 @@ export function machineInfo(id: string): MachineInfo {
  * folders there (ADR 0004).
  */
 export class Machines {
+  /** GLOSSARY: GitHub account. Each profile's on this machine. */
+  readonly github: GitHubAccounts;
   async refresh() { await this.settings.refresh?.(); }
   constructor(
     private here: MachineInfo,
     private settings: SettingsAccess,
     private broadcast: Broadcast,
+    github?: GitHubAccounts,
   ) {
+    this.github = github ?? new GitHubAccounts((profileId) => this.settings.machine(this.here.id)?.profileGitHub?.[profileId]);
     settings.onMachinesChanged(() => this.announce());
+  }
+
+  /** Tells the hub which GitHub accounts gh is signed in to here, when that changed. */
+  async reportGitHub() {
+    const found = await this.github.logins();
+    const record = this.settings.machine(this.here.id);
+    if (!record || JSON.stringify(record.githubAccounts ?? []) === JSON.stringify(found)) return;
+    await this.settings.machineConnected({ ...this.here, harnesses: record.harnesses, githubAccounts: found });
   }
 
   async connect(harnesses: HarnessInstall[]) {
@@ -55,7 +68,7 @@ export class Machines {
   views(): MachineView[] {
     return this.settings
       .machines()
-      .map(({ id, name, platform, version, connected, lastSeen, harnesses, profileFolders }) => ({
+      .map(({ id, name, platform, version, connected, lastSeen, harnesses, profileFolders, githubAccounts, profileGitHub }) => ({
         id,
         name,
         platform,
@@ -64,6 +77,8 @@ export class Machines {
         lastSeen,
         harnesses,
         profileFolders,
+        githubAccounts: githubAccounts ?? [],
+        profileGitHub: profileGitHub ?? {},
         thisMachine: id === this.here.id,
       }))
       .sort((a, b) => Number(b.thisMachine) - Number(a.thisMachine) || a.name.localeCompare(b.name));
@@ -89,6 +104,13 @@ export class Machines {
         if (!this.settings.machine(machineId)) throw new UserError('No such machine');
         if (!this.settings.profiles().some((p) => p.id === profileId)) throw new UserError(`No profile ${profileId}`);
         await this.settings.setProfileFolders(machineId, profileId, folders);
+        return this.views().find((m) => m.id === machineId)!;
+      })
+      .on('machines.setProfileGitHub', async ({ machineId, profileId, login }) => {
+        await this.refresh();
+        if (!this.settings.machine(machineId)) throw new UserError('No such machine');
+        if (!this.settings.profiles().some((p) => p.id === profileId)) throw new UserError(`No profile ${profileId}`);
+        await this.settings.setProfileGitHub(machineId, profileId, login);
         return this.views().find((m) => m.id === machineId)!;
       });
   }

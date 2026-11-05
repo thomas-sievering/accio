@@ -9,6 +9,7 @@ Users see which machine is connected, its installed harnesses, its shared name, 
 - `machines-onboard`: Add machine opens setup steps for the selected hub; Generate pairing code issues a one-use code, Copy code acknowledges clipboard success or reports denial, and expired codes cannot be copied. Public hub addresses also offer a copyable setup prompt under Set up with a coding agent. Localhost addresses explain the reachability limit. Done returns focus to Add machine. Pair a second disposable worker through its first-run UI and require its Connected row in the original Machines list; code reuse must fail.
 - `machines-name`: rename this machine and reopen the saved name.
 - `machines-folders`: add/remove profile folders and observe project-profile suggestions.
+- `machines-github`: each profile's GitHub account on this machine, under Profiles on this machine: `Automatic` (the account git uses for each repository) or one of the logins gh is signed in to there.
 
 ## How to get to it (user POV)
 
@@ -26,6 +27,7 @@ Preconditions: healthy isolated instance; UI-created profiles for folder setting
 - **Add folder.** With one profile, fill textbox `Folder path` with `fixture`, press `Enter`, click exact `Save folders`. Reopen the machine and require the literal path. With several profiles, scope the folder input and save button to the form containing the intended profile's text; each profile owns its own form.
 - **Remove folder.** Click `page.getByRole('button', { name: 'Remove ' + fixture, exact: true })`, save that profile's folders, reopen and require absence both in the UI and persisted `profileFolders` entry.
 - **Suggested profile.** Create two profiles, assign a scratch parent folder to the second profile, save, then add a new child folder through `Add project`. Require the second profile option marked `(from its folders)` to be selected; save and verify the project actually belongs to that profile.
+- **GitHub account.** In `Profiles on this machine`, open the MenuSelect labelled `<profile> GitHub account`. Require `Automatic` first, then the logins from `gh auth status` on this machine (the runner's worker reads the real gh). Choose one, Save, reload, reopen the machine and require it selected; inspect `profileGitHub` (profile id → login) and `githubAccounts` for this machine's id in `<home>/hub/settings.json`. Choosing `Automatic` and saving removes the profile's entry. `out/verify-github-account.mjs`-style journeys must create their profile through first run; with no gh sign-in the menu holds only `Automatic`, and choosing a login is unverified.
 - **Proof.** Use `await capture('machines-persisted')` plus the relevant non-secret machine fields from `hub/settings.json`. The default smoke proves the settings entry, name change and folder save/reopen.
 
 ## Gotchas

@@ -2,7 +2,7 @@ import { createServer, request as httpRequest, type IncomingMessage, type Server
 import { randomUUID } from 'node:crypto';
 import { WebSocket, WebSocketServer } from 'ws';
 import { z } from 'zod';
-import { methods, ResourceScope, SecretSlot, type AccountView, type AccountLimitsView, type ProfileView, type ResourcesState, type SecretSummary } from '@accio/protocol';
+import { GitHubLogin, methods, ResourceScope, SecretSlot, type AccountView, type AccountLimitsView, type ProfileView, type ResourcesState, type SecretSummary } from '@accio/protocol';
 import { Hub } from './hub.js';
 import { SharedSettings, type MachineHello, type SharedSeed } from './sharedSettings.js';
 import { OpenAIAuth, type CodexModel } from './openaiAuth.js';
@@ -120,7 +120,7 @@ export async function startHubService(opts: HubServiceOptions) {
     switch (method) {
       case 'machine.hello': {
         const hello = p as MachineHello;
-        if (hello.id !== machineId || !hello.name || !hello.platform || !hello.version || !Array.isArray(hello.harnesses) || JSON.stringify(hello).length > 16_384) throw new SignInError('Invalid machine identity');
+        if (hello.id !== machineId || !hello.name || !hello.platform || !hello.version || !Array.isArray(hello.harnesses) || (hello.githubAccounts !== undefined && !(Array.isArray(hello.githubAccounts) && hello.githubAccounts.every((l) => GitHubLogin.safeParse(l).success))) || JSON.stringify(hello).length > 16_384) throw new SignInError('Invalid machine identity');
         await settings.machineConnected(hello); return null;
       }
       case 'machine.references': {
@@ -235,6 +235,7 @@ export async function startHubService(opts: HubServiceOptions) {
       }
       case 'machines.rename': await settings.renameMachine(p.machineId, p.name); return null;
       case 'machines.setProfileFolders': await settings.setProfileFolders(p.machineId, p.profileId, p.folders); return null;
+      case 'machines.setProfileGitHub': await settings.setProfileGitHub(p.machineId, p.profileId, p.login); return null;
       case 'models.favorite': await settings.setModelFavorite(p.profileId, p.model, p.favorite); return null;
       case 'harnesses.setTools': await settings.setHarnessTools(p.harnessId, p.tools); return null;
       case 'threadNaming.save': await settings.setThreadNaming(p); return settings.threadNaming();

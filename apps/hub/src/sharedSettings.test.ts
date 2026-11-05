@@ -78,3 +78,19 @@ it('keeps built-in tool overrides per harness and rejects unknown harnesses', as
   await reloaded.load();
   expect(reloaded.harnessTools()).toEqual({ claudeCode: { web: false }, codex: { goals: true } });
 });
+
+it('keeps each profile’s GitHub account per machine, clears it on request and with the profile', async () => {
+  const settings = await setup();
+  await settings.setProfiles([{ id: 'work', name: 'Work' }, { id: 'personal', name: 'Personal' }]);
+  await settings.setProfileGitHub('here', 'work', 'work_hrc');
+  await settings.setProfileGitHub('here', 'personal', 'me');
+  await settings.machineConnected({ ...hello, githubAccounts: ['me', 'work_hrc'] });
+  const reloaded = new SharedSettings(home);
+  await reloaded.load();
+  expect(reloaded.machine('here')).toMatchObject({ githubAccounts: ['me', 'work_hrc'], profileGitHub: { work: 'work_hrc', personal: 'me' } });
+  await settings.setProfileGitHub('here', 'personal', null);
+  expect(settings.machine('here')?.profileGitHub).toEqual({ work: 'work_hrc' });
+  await settings.setProfiles([{ id: 'personal', name: 'Personal' }]);
+  expect(settings.machine('here')?.profileGitHub).toEqual({});
+  await expect(settings.setProfileGitHub('here', 'work', 'work_hrc')).rejects.toThrow(/No profile/);
+});

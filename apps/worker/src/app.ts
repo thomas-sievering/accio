@@ -15,9 +15,10 @@ import { Updates, pnpmHere, type UpdateDeps } from './machine/update.js';
 import { desktopHost } from './machine/desktop.js';
 import { appCheckout, checkoutVersion } from './machine/checkout.js';
 import { runCommand } from './resources/process.js';
+import type { GhRunner } from './github/accounts.js';
 
 export type AppOptions = { home: string; host: string; port: number; token: string; hubPort: number; webRoot?: string };
-export type AppDeps = { resourceCommand: CommandRunner; mcpFetch: Fetch; harness: Harness; claudeModels: ClaudeModelSource; claudeFetch: Fetch; anthropicUrl: string; codexHarness: Harness; codexFactory: CodexFactory; openaiUrl: string; openaiFetch: Fetch; deliveryHosting: DeliveryHosting; updates: Partial<Omit<UpdateDeps, 'machineId'>> };
+export type AppDeps = { resourceCommand: CommandRunner; mcpFetch: Fetch; harness: Harness; claudeModels: ClaudeModelSource; claudeFetch: Fetch; anthropicUrl: string; codexHarness: Harness; codexFactory: CodexFactory; openaiUrl: string; openaiFetch: Fetch; deliveryHosting: DeliveryHosting; github: GhRunner; updates: Partial<Omit<UpdateDeps, 'machineId'>> };
 
 /** The local machine hosts clients and work; all hubs use the standalone service protocol. */
 export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
@@ -31,7 +32,7 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
   const codex = await codexInstall();
   const harnesses = [await claudeCodeInstall(), ...(codex.version ? [codex] : [])];
   const updates = new Updates({ machineId: here.id, run: runCommand, pnpm: pnpmHere(), host: desktopHost(), ...(deps.updates ?? { root }) });
-  const connections = new HubConnections(opts.home, here, harnesses, { claudeCode: deps.harness ?? claudeCode, codex: deps.codexHarness ?? codexHarness(deps.codexFactory) }, (...args) => send(...args), deps.resourceCommand, deps.claudeModels ?? (deps.harness ? undefined : sdkClaudeModels), deps.deliveryHosting, updates);
+  const connections = new HubConnections(opts.home, here, harnesses, { claudeCode: deps.harness ?? claudeCode, codex: deps.codexHarness ?? codexHarness(deps.codexFactory) }, (...args) => send(...args), deps.resourceCommand, deps.claudeModels ?? (deps.harness ? undefined : sdkClaudeModels), deps.deliveryHosting, updates, deps.github);
   await connections.load();
   const shouldStartLocal = !connections.initialized || connections.saved.some((s) => s.managed);
   let local: Awaited<ReturnType<typeof startHubService>> | undefined;

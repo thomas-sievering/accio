@@ -34,7 +34,8 @@ export async function startTestApp(deps: Partial<AppDeps> = {}, existingHome?: s
   const home = existingHome ?? (await mkdtemp(join(tmpdir(), 'accio-test-')));
   const app = await startApp(
     { home, host: '127.0.0.1', port: 0, hubPort: 0, token: TEST_TOKEN },
-    { claudeFetch: fakeClaudeFetch, ...deps },
+    // No test reads the real gh accounts of the machine running it.
+    { claudeFetch: fakeClaudeFetch, github: async () => { throw new Error('gh is not available in tests'); }, ...deps },
   );
   const clients: TestClient[] = [];
   return {

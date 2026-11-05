@@ -100,6 +100,7 @@ export class Threads {
       withLifecycle: (threadId, action) => this.withLifecycle(threadId, action),
       delivered: (threadId, backfill) => this.recordShipped(threadId, backfill),
       describeShip: (threadId, files, signal) => this.naming.describeShip(threadId, files, signal),
+      githubEnv: (profileId, cwd) => machines.github.env(profileId, cwd),
     }, deliveryHosting);
     this.turns = new Turns(this.state, { profiles, projects, models, machines, harnesses, secrets: this.secrets, content: this.content, deliveries: this.deliveries, tools,
       images: { claim: (threadId, ids) => this.uploads.claim(threadId, ids, this.assets), file: (threadId, asset) => this.assets.harnessFile(threadId, asset) },

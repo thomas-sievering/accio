@@ -53,6 +53,23 @@ describe('machines on the hub', () => {
     await c.waitFor('machines.changed', (list) => Object.keys(list[0]?.profileFolders ?? {}).length === 0);
   });
 
+  it('reports gh’s accounts and keeps each profile’s GitHub account on the hub', async () => {
+    const gh = async (args: string[]) => {
+      if (args[1] === 'status') return JSON.stringify({ hosts: { 'github.com': [{ login: 'me' }, { login: 'work_hrc' }] } });
+      throw new Error('unexpected');
+    };
+    t = await startTestApp({ github: gh });
+    const c = await t.connect();
+    const { id: machineId } = await c.call('machine.get', {});
+    await c.call('profiles.save', { name: 'Work' });
+    expect((await c.call('machines.list', {}))[0]).toMatchObject({ githubAccounts: ['me', 'work_hrc'], profileGitHub: {} });
+    const saved = await c.call('machines.setProfileGitHub', { machineId, profileId: 'work', login: 'work_hrc' });
+    expect(saved.profileGitHub).toEqual({ work: 'work_hrc' });
+    await expect(c.call('machines.setProfileGitHub', { machineId, profileId: 'work', login: 'not a login' })).rejects.toThrow();
+    await expect(c.call('machines.setProfileGitHub', { machineId, profileId: 'nope', login: 'me' })).rejects.toThrow(/No profile/);
+    expect((await c.call('machines.setProfileGitHub', { machineId, profileId: 'work', login: null })).profileGitHub).toEqual({});
+  });
+
   it('refuses folders for a machine or profile the hub does not know', async () => {
     t = await startTestApp();
     const c = await t.connect();

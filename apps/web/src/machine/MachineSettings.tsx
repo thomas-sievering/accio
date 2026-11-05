@@ -7,6 +7,7 @@ import { SettingRow, SettingsFooter, SettingsSection, StatusPill } from '../app/
 import { Field } from '../resources/Field';
 import { useProfiles } from '../profiles/profiles';
 import { FolderList } from './FolderList';
+import { MenuSelect, type MenuOption } from '../ui/MenuSelect';
 import { useAction } from '../app/useAction';
 import { useResources } from '../resources/resources';
 import { ToolStatusCard } from '../tools/ToolStatusCard';
@@ -23,7 +24,7 @@ export function MachineSettings({ machineId, onOpen, onBack, onOpenThread }: { m
   if (machine) return <MachineDetail key={machine.id} machine={machine} onBack={onBack} onOpenThread={onOpenThread} />;
   return (
     <>
-      <p className="note">Workers connected to this hub run coding turns. Open a machine to manage its name, tools and profile folders.</p>
+      <p className="note">Workers connected to this hub run coding turns. Open a machine to manage its name, tools and what each profile uses there.</p>
       <HubRow />
       <SettingsSection add={!onboarding ? { label: 'Add machine', onClick: () => setOnboarding(true) } : undefined}>
         {machines.length === 0 && <SettingRow title="No machines connected yet" />}
@@ -75,11 +76,16 @@ function MachineDetail({ machine, onBack, onOpenThread }: { machine: MachineView
   // Edits wait here until Save: the name, and each profile's folders by profile id.
   const [name, setName] = useState<string>();
   const [folders, setFolders] = useState<Record<string, string[]>>({});
+  // Each profile's GitHub login by profile id; '' means the account git uses.
+  const [github, setGitHub] = useState<Record<string, string>>({});
   const [touched, setTouched] = useState(false);
   const { busy, error, run } = useAction();
   const shownName = name ?? machine.name;
   const changedFolders = Object.keys(folders).filter((id) => JSON.stringify(folders[id]) !== JSON.stringify(machine.profileFolders[id] ?? []));
+  const savedGitHub = (id: string) => machine.profileGitHub?.[id] ?? '';
+  const changedGitHub = Object.keys(github).filter((id) => github[id] !== savedGitHub(id));
   const renamed = shownName.trim() !== machine.name;
+  const dirty = renamed || changedFolders.length > 0 || changedGitHub.length > 0;
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setTouched(true);
@@ -87,9 +93,10 @@ function MachineDetail({ machine, onBack, onOpenThread }: { machine: MachineView
     const done = await run(async () => {
       if (renamed) await client.call('machines.rename', { machineId: machine.id, name: shownName.trim() });
       for (const profileId of changedFolders) await client.call('machines.setProfileFolders', { machineId: machine.id, profileId, folders: folders[profileId]! });
+      for (const profileId of changedGitHub) await client.call('machines.setProfileGitHub', { machineId: machine.id, profileId, login: github[profileId] || null });
       return true;
     });
-    if (done) { setName(undefined); setFolders({}); }
+    if (done) { setName(undefined); setFolders({}); setGitHub({}); }
   };
   return (
     <form className="settings-profile-form" id="machine-form" onSubmit={submit} noValidate>
@@ -126,7 +133,7 @@ function MachineDetail({ machine, onBack, onOpenThread }: { machine: MachineView
           </div>
         )}
       </section>
-      <SettingsSection title="Profile folders">
+      <SettingsSection title="Profiles on this machine">
         {profiles.length === 0 && <SettingRow title="Add a profile first" />}
         {profiles.map((p) => (
           <div key={p.id} className="setting-form">
@@ -135,11 +142,27 @@ function MachineDetail({ machine, onBack, onOpenThread }: { machine: MachineView
               <FolderList folders={folders[p.id] ?? machine.profileFolders[p.id] ?? []} onChange={(f) => setFolders((d) => ({ ...d, [p.id]: f }))} disabled={busy} />
               <small className="hint">Folders on {machine.name}. New projects inside these folders default to {p.name}.</small>
             </div>
+            <div className="field">
+              <span>GitHub account</span>
+              <MenuSelect label={`${p.name} GitHub account`} value={github[p.id] ?? savedGitHub(p.id)} disabled={busy}
+                onChange={(login) => setGitHub((d) => ({ ...d, [p.id]: login }))} options={githubOptions(machine, savedGitHub(p.id))} />
+              <small className="hint">What {p.name}’s threads use for GitHub on {machine.name}: Accio’s Ship checks and the agent’s gh commands.</small>
+            </div>
           </div>
         ))}
       </SettingsSection>
       {error && <p className="error" role="alert">{error}</p>}
-      <SettingsFooter busy={busy} onCancel={onBack} saveLabel="Save" saveDisabled={busy || (!renamed && changedFolders.length === 0)} dirty={!busy && (renamed || changedFolders.length > 0)} />
+      <SettingsFooter busy={busy} onCancel={onBack} saveLabel="Save" saveDisabled={busy || !dirty} dirty={!busy && dirty} />
     </form>
   );
+}
+
+/** gh's accounts on the machine, after the automatic choice; a saved login gh no longer has stays visible. */
+function githubOptions(machine: MachineView, saved: string): MenuOption<string>[] {
+  const logins = machine.githubAccounts ?? [];
+  return [
+    { value: '', label: 'Automatic', detail: 'The account git uses for each repository' },
+    ...logins.map((login) => ({ value: login, label: login })),
+    ...(saved && !logins.includes(saved) ? [{ value: saved, label: saved, detail: `Not signed in to gh on ${machine.name}` }] : []),
+  ];
 }

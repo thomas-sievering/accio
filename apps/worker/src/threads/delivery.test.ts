@@ -5,7 +5,7 @@ import { JsonFile } from '@accio/persistence';
 import { FakeHarness, gate, replyWith, SESSION, toolCall } from '../testing/fakeHarness.js';
 import { RESTART_NOTICE, RESUME_PROMPT } from './thread.js';
 import { startTestApp, type TestClient } from '../testing/testApp.js';
-import { DeliveryGit, DeliveryPending, deliveryPrompt } from './delivery.js';
+import { DeliveryGit, DeliveryPending, deliveryPrompt, ghFailure } from './delivery.js';
 import { git } from '../git.js';
 import type { ThreadDelivery, ThreadView } from '@accio/protocol';
 
@@ -809,4 +809,16 @@ it('sends the agent back to push when its push lost the race with the target', a
   await c.call('threads.checkDelivery', { threadId: thread.id });
   await wait(c, thread.id, x => x.status === 'idle' && x.delivery?.status === 'delivered');
   expect(harness.runs[2]!.prompt).toContain('This revision has not reached main yet. Rebase onto the latest main and push again.');
+});
+
+it('tells a GitHub outage apart from sign-in and access problems', () => {
+  const failed = (stderr: string) => Object.assign(new Error('Command failed'), { code: 1, stderr });
+  expect(ghFailure(failed('gh: HTTP 500'))).toMatch(/GitHub returned an error \(HTTP 500\).*GitHub's side/);
+  expect(ghFailure(failed('gh: HTTP 502: Bad Gateway'))).toMatch(/HTTP 502/);
+  expect(ghFailure(failed('gh: HTTP 401: Bad credentials'))).toMatch(/rejected the sign-in/);
+  expect(ghFailure(failed('To get started with GitHub CLI, please run:  gh auth login'))).toMatch(/rejected the sign-in/);
+  expect(ghFailure(failed('gh: Not Found (HTTP 404)'))).toMatch(/refused access.*HTTP 404.*GitHub account/);
+  expect(ghFailure(Object.assign(new Error('spawn gh ENOENT'), { code: 'ENOENT' }))).toMatch(/not installed/);
+  expect(ghFailure(Object.assign(new Error('timeout'), { killed: true }))).toMatch(/did not answer in time/);
+  expect(ghFailure(failed('something else'))).toBe('Could not read GitHub delivery or checks. Observation will retry.');
 });

@@ -8,7 +8,7 @@ export type { HarnessInstall };
 export type SharedProfile = { id: string; name: string };
 
 /** What a machine tells the hub about itself when it connects. */
-export type MachineHello = MachineInfo & { harnesses: HarnessInstall[] };
+export type MachineHello = MachineInfo & { harnesses: HarnessInstall[]; githubAccounts?: string[] };
 
 /** GLOSSARY: Machine, as the hub records it, with the settings that apply to it alone. */
 export type MachineRecord = MachineHello & {
@@ -17,6 +17,8 @@ export type MachineRecord = MachineHello & {
   lastSeen: string;
   /** Profile id → this machine's profile folders. */
   profileFolders: Record<string, string[]>;
+  /** Profile id → the GitHub login this machine uses for it (GLOSSARY: GitHub account). */
+  profileGitHub?: Record<string, string>;
 };
 
 /** What a store seeds itself with when it does not exist yet. */
@@ -86,6 +88,7 @@ export class SharedSettings {
       const machines = this.data.machines.map((m) => ({
         ...m,
         profileFolders: Object.fromEntries(Object.entries(m.profileFolders).filter(([id]) => ids.has(id))),
+        ...(m.profileGitHub ? { profileGitHub: Object.fromEntries(Object.entries(m.profileGitHub).filter(([id]) => ids.has(id))) } : {}),
       }));
       const modelFavorites = Object.fromEntries(Object.entries(this.data.modelFavorites ?? {}).filter(([id]) => ids.has(id)));
       await this.commit({ ...this.data, profiles, machines, modelFavorites });
@@ -150,6 +153,15 @@ export class SharedSettings {
     await this.updateMachine(machineId, (m) => {
       this.requireProfile(profileId);
       return { ...m, profileFolders: { ...m.profileFolders, [profileId]: [...new Set(folders)] } };
+    });
+  }
+
+  /** Null returns the profile to the account git uses for each repository. */
+  async setProfileGitHub(machineId: string, profileId: string, login: string | null) {
+    await this.updateMachine(machineId, (m) => {
+      this.requireProfile(profileId);
+      const { [profileId]: _previous, ...others } = m.profileGitHub ?? {};
+      return { ...m, profileGitHub: login ? { ...others, [profileId]: login } : others };
     });
   }
 

@@ -189,7 +189,8 @@ export class Turns {
       if (delivering && !resume) text = thread.delivery!.mode === 'review' ? 'Prepare for review.' : `Ship to ${thread.delivery!.baseBranch} when ready.`;
       // A refused resource preparation is not a sent message or a failed turn.
       // Reserve the turn above, but publish it only after its tools are ready.
-      const env = turnEnv(state.home, thread.profileId, thread.model.harnessId, access);
+      // GLOSSARY: GitHub account. The agent's gh commands act as the profile's account, like Accio's own reads.
+      const env = { ...turnEnv(state.home, thread.profileId, thread.model.harnessId, access), ...await deps.machines.github.env(thread.profileId, cwd).catch(() => ({})) };
       resources = await deps.resources()?.prepare(thread.profileId, thread.projectId, env, { repair: !!thread.repairToolId, cwd });
       if (controller.signal.aborted || state.closing) throw new UserError('Turn interrupted before starting');
       if (!delivering) {
@@ -402,6 +403,7 @@ export class Turns {
       const path = Object.entries(env).find(([key]) => key.toLowerCase() === 'path')?.[1];
       env = Object.fromEntries(Object.entries(turnEnv(state.home, live.profileId, model.harnessId, access)).filter(([key]) => key.toLowerCase() !== 'path'));
       if (path) env.PATH = path;
+      if (live.turn.run.env.GH_TOKEN) env.GH_TOKEN = live.turn.run.env.GH_TOKEN;
     }
     return { ...live.turn, harness, run: { ...live.turn.run, env, model: model.id, effort: selection.effort, modelName: model.name, toolsOff: deps.toolsOff(model.harnessId) } };
   }

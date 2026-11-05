@@ -5,7 +5,7 @@ import { samePath } from '../paths.js';
 import type { Projects } from '../projects/projects.js';
 import { UserError } from '../rpc/router.js';
 import { now } from '../time.js';
-import { DeliveryGit, DeliveryPending, DeliveryUnavailable, type DeliveryHosting } from './delivery.js';
+import { DeliveryGit, DeliveryPending, DeliveryUnavailable, type DeliveryHosting, type GitHubEnv } from './delivery.js';
 import { reportDeliveryStep } from './deliveryStep.js';
 import { cleanExecutionEnv } from './harnessEnv.js';
 import type { Previews } from './previews.js';
@@ -22,6 +22,8 @@ export type DeliveryHost = {
   delivered(threadId: string, backfill: boolean): Promise<void>;
   /** A commit message and shipped note from the lightweight naming model. */
   describeShip(threadId: string, files: string, signal: AbortSignal): Promise<{ message: string; note?: ShippedNote }>;
+  /** gh's environment for a profile in a repository (GLOSSARY: GitHub account). */
+  githubEnv?(profileId: string, cwd: string): Promise<GitHubEnv>;
 };
 
 /** Ship requests, their delivery turns, host observation, auto-settle and workspace archiving (ADR 0015). */
@@ -74,6 +76,12 @@ export class Deliveries {
     return { ...summary, previewAvailable: !!(project?.previewCommand && thread.workspace && !thread.workspace.releasedAt) };
   }
 
+  /** The thread's profile's GitHub account, so host reads see what its pushes can. */
+  private async githubEnv(thread: Thread): Promise<GitHubEnv | undefined> {
+    if (!thread.workspace || !this.host.githubEnv) return undefined;
+    return this.host.githubEnv(thread.profileId, thread.workspace.sourcePath).catch(() => undefined);
+  }
+
   async request(threadId: string, mode: DeliveryMode) {
     await this.host.withLifecycle(threadId, async () => {
       const thread = this.state.require(threadId);
@@ -84,7 +92,7 @@ export class Deliveries {
       const project = this.projects.projectOf(this.projects.checkout(thread.checkoutId));
       const openPr = thread.delivery?.pullRequest?.state === 'open' || !!(thread.delivery?.pullRequestUrl && !thread.delivery.pullRequest && thread.delivery.status !== 'delivered');
       // A PR the agent opened outside Ship, or target rules a direct push could only bypass, route through the PR.
-      const host = openPr ? {} : await this.git.hostRoute(thread.workspace, baseBranch);
+      const host = openPr ? {} : await this.git.hostRoute(thread.workspace, baseBranch, await this.githubEnv(thread));
       const linked = openPr ? { pullRequest: thread.delivery?.pullRequest, pullRequestUrl: thread.delivery?.pullRequestUrl }
         : host.pullRequestUrl ? { pullRequest: host.pullRequest, pullRequestUrl: host.pullRequestUrl } : {};
       const viaPr = openPr || !!host.pullRequestUrl || !!host.requiresPullRequest;
@@ -128,7 +136,7 @@ export class Deliveries {
       if (this.state.running.has(threadId) || thread.status === 'running') throw new UserError('Wait for the thread to finish before archiving.');
       if (!thread.workspace || thread.workspace.releasedAt || !thread.delivery || !['delivered', 'ready'].includes(thread.delivery.status)) throw new UserError('Ship the change successfully before archiving its workspace.');
       this.assertWorkspaceUnused(thread);
-      const verified = await this.git.verify(thread.workspace, thread.delivery);
+      const verified = await this.git.verify(thread.workspace, thread.delivery, undefined, await this.githubEnv(thread));
       if (verified.status !== 'delivered' || verified.revision !== thread.delivery.revision) throw new UserError('This change has not been delivered. The workspace has been kept.');
       await this.previews.stop(threadId);
       // Journal the verified revision and release intent before touching files.
@@ -313,7 +321,7 @@ export class Deliveries {
     try {
       verified = await this.git.verify(expected.workspace!, expected.delivery!, async patch => {
         if (matches()) await this.state.update(threadId, t => ({ ...t, delivery: { ...t.delivery!, ...patch } }));
-      });
+      }, await this.githubEnv(expected));
     } catch (error) {
       if (!matches()) return;
       const current = this.state.require(threadId);

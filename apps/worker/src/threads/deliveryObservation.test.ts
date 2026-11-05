@@ -6,6 +6,7 @@ import { FakeHarness, gate, replyWith } from '../testing/fakeHarness.js';
 import { startTestApp, type TestClient } from '../testing/testApp.js';
 import { DeliveryGit, DeliveryUnavailable, type DeliveryObservation } from './delivery.js';
 import { git } from '../git.js';
+import type { GhRunner } from '../github/accounts.js';
 import type { ThreadView } from '@accio/protocol';
 
 vi.setConfig({ testTimeout: 25_000 });
@@ -17,8 +18,8 @@ const wait = (client: TestClient, id: string, check = (t: ThreadView) => t.statu
   client.waitFor('threads.changed', ts => ts.some(t => t.id === id && check(t)), 15_000);
 const view = async (client: TestClient, id: string) => (await client.call('threads.list', {})).find(t => t.id === id)!;
 
-async function project(harness: FakeHarness) {
-  app = await startTestApp({ harness });
+async function project(harness: FakeHarness, github?: GhRunner) {
+  app = await startTestApp({ harness, ...(github ? { github } : {}) });
   const client = await app.connect();
   await client.signedIn('Personal');
   const source = join(app.home, 'source');
@@ -434,4 +435,32 @@ it.each([
   else expect(delivery.pullRequest).toBeUndefined();
   expect(reads[0]).toEqual(expect.arrayContaining(['list', '--head', thread.workspace!.branch, '--state', 'open']));
   expect(harness.runs[1]!.prompt).toContain(policy === 'direct' ? 'Never rely on an admin or ruleset bypass' : 'open or update a pull request');
+});
+
+it('reads GitHub and runs the agent as the GitHub account chosen for the thread’s profile', async () => {
+  const harness = new FakeHarness(async function* () { yield* replyWith('done'); });
+  const gh: GhRunner = async (args) => {
+    if (args[1] === 'status') return JSON.stringify({ hosts: { 'github.com': [{ login: 'me' }, { login: 'work_hrc' }] } });
+    if (args[1] === 'token') return `token-of-${args.at(-1)}`;
+    throw new Error('unexpected');
+  };
+  const { client, checkout, source, origin } = await project(harness, gh);
+  await git(source, 'config', `url.${origin.replaceAll('\\', '/')}.insteadOf`, 'https://github.com/test/fixture.git');
+  await git(source, 'remote', 'set-url', 'origin', 'https://github.com/test/fixture.git');
+  const { id: machineId } = await client.call('machine.get', {});
+  await client.call('machines.setProfileGitHub', { machineId, profileId: 'personal', login: 'work_hrc' });
+  const envs: (Record<string, string> | undefined)[] = [];
+  const manager = new DeliveryGit(app.home, async (_cwd, args, env) => { envs.push(env); return args[0] === 'pr' ? [] : []; });
+  vi.mocked(DeliveryGit.prototype.hostRoute).mockRestore();
+  const original = DeliveryGit.prototype.hostRoute;
+  vi.spyOn(DeliveryGit.prototype, 'hostRoute').mockImplementation((workspace, base, env) => original.call(manager, workspace, base, env));
+  vi.spyOn(DeliveryGit.prototype, 'verify').mockRejectedValue(new DeliveryUnavailable('Not observed in this test'));
+  const thread = await client.call('threads.start', { checkoutId: checkout.id, text: 'build feature' });
+  await wait(client, thread.id);
+  expect(harness.runs[0]!.env.GH_TOKEN).toBe('token-of-work_hrc');
+  await client.call('threads.deliver', { threadId: thread.id, mode: 'ship' });
+  await wait(client, thread.id, t => t.status === 'idle' && !!t.delivery?.startedAt);
+  expect(envs.length).toBeGreaterThan(0);
+  expect(envs.every(env => env?.GH_TOKEN === 'token-of-work_hrc')).toBe(true);
+  expect(harness.runs[1]!.env.GH_TOKEN).toBe('token-of-work_hrc');
 });

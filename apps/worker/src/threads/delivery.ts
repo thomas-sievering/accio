@@ -17,7 +17,10 @@ export class DeliveryPending extends UserError {
 /** Failed observations are retried without granting the agent more publication authority. */
 export class DeliveryUnavailable extends UserError {}
 export type DeliveryObservation = (patch: Partial<ThreadDelivery>) => Promise<void>;
-export type DeliveryHosting = (cwd: string, args: string[]) => Promise<any>;
+/** Runs a gh JSON read. `env` carries the profile's GitHub account (GLOSSARY: GitHub account). */
+export type DeliveryHosting = (cwd: string, args: string[], env?: Record<string, string>) => Promise<any>;
+/** Environment for gh on behalf of the owning thread's profile. */
+export type GitHubEnv = Record<string, string>;
 export type HostRoute = { pullRequest?: DeliveryPullRequest; pullRequestUrl?: string; requiresPullRequest?: boolean };
 const PR_FIELDS = 'number,url,state,headRefOid,baseRefName,isDraft,mergeCommit,mergedAt,statusCheckRollup,reviewDecision,autoMergeRequest,mergeStateStatus,mergeable';
 
@@ -39,11 +42,12 @@ export class DeliveryGit {
   constructor(private home: string, private hostingJson: DeliveryHosting = ghJson) {}
 
   /** Concurrent observers of one project's PR share host reads, including failures. */
-  private hosting = (cwd: string, args: string[]): Promise<any> => {
-    const key = JSON.stringify([resolve(cwd), args]);
+  private hosting = (cwd: string, args: string[], env?: GitHubEnv): Promise<any> => {
+    // Reads as different accounts can see different things; only the same account's are shared.
+    const key = JSON.stringify([resolve(cwd), args, env?.GH_TOKEN ?? '']);
     const existing = this.reads.get(key);
     if (existing) return existing;
-    const read = Promise.resolve().then(() => this.hostingJson(cwd, args)).finally(() => this.reads.delete(key));
+    const read = Promise.resolve().then(() => this.hostingJson(cwd, args, env)).finally(() => this.reads.delete(key));
     this.reads.set(key, read);
     return read;
   };
@@ -102,13 +106,14 @@ export class DeliveryGit {
    * rules a direct push could only satisfy through an admin bypass. Best effort: an unreadable
    * host leaves the project's policy, and the prompt still forbids bypassing rules.
    */
-  async hostRoute(workspace: ThreadWorkspace, baseBranch: string): Promise<HostRoute> {
+  async hostRoute(workspace: ThreadWorkspace, baseBranch: string, env?: GitHubEnv): Promise<HostRoute> {
+    const host = (cwd: string, args: string[]) => this.hosting(cwd, args, env);
     const origin = await maybeGit(workspace.sourcePath, 'config', '--get', 'remote.origin.url');
     const slug = origin ? githubRepo(origin) : undefined;
     if (!slug) return {};
     const route: HostRoute = {};
     try {
-      const prs = await this.hosting(workspace.sourcePath, ['pr', 'list', '--repo', slug, '--head', workspace.branch, '--state', 'open', '--json', PR_FIELDS]);
+      const prs = await host(workspace.sourcePath, ['pr', 'list', '--repo', slug, '--head', workspace.branch, '--state', 'open', '--json', PR_FIELDS]);
       const pr = (prs as any[]).find(p => p.baseRefName === baseBranch);
       const identity = pullRequestIdentity(pr?.url);
       if (pr && identity && identity.repository.toLowerCase() === slug.toLowerCase())
@@ -116,9 +121,9 @@ export class DeliveryGit {
     } catch { /* Ship still proceeds under the project's policy. */ }
     try {
       const branch = encodeURIComponent(baseBranch);
-      const rules = await this.hosting(workspace.sourcePath, ['api', `repos/${slug}/rules/branches/${branch}`]);
+      const rules = await host(workspace.sourcePath, ['api', `repos/${slug}/rules/branches/${branch}`]);
       const ruled = (rules as any[]).some(r => ['pull_request', 'merge_queue', 'required_status_checks'].includes(r.type));
-      const classic = !ruled && (await this.hosting(workspace.sourcePath, ['api', `repos/${slug}/branches/${branch}`]))?.protection?.enabled === true;
+      const classic = !ruled && (await host(workspace.sourcePath, ['api', `repos/${slug}/branches/${branch}`]))?.protection?.enabled === true;
       if (ruled || classic) route.requiresPullRequest = true;
     } catch { /* Same as above. */ }
     return route;
@@ -162,7 +167,8 @@ export class DeliveryGit {
     return { ...result, available: !!origin, baseBranch, onBase, ...(!origin ? { reason: 'Add an origin remote before shipping.' } : {}) };
   }
 
-  async verify(workspace: ThreadWorkspace, delivery: ThreadDelivery, observed?: DeliveryObservation): Promise<ThreadDelivery> {
+  async verify(workspace: ThreadWorkspace, delivery: ThreadDelivery, observed?: DeliveryObservation, env?: GitHubEnv): Promise<ThreadDelivery> {
+    const host = (cwd: string, args: string[]) => this.hosting(cwd, args, env);
     let result = { ...delivery };
     const record = async (patch: Partial<ThreadDelivery>) => {
       result = { ...result, ...patch };
@@ -179,9 +185,9 @@ export class DeliveryGit {
       if (!slug) throw new UserError('PR verification currently requires a GitHub origin and authenticated gh CLI.');
       const linked = delivery.pullRequest ?? pullRequestIdentity(delivery.pullRequestUrl);
       if (linked && linked.repository.toLowerCase() !== slug.toLowerCase()) throw new UserError('The PR repository no longer matches origin. Request Ship again.');
-      if (linked) pr = await this.hosting(workspace.sourcePath, ['pr', 'view', String(linked.number), '--repo', slug, '--json', PR_FIELDS]);
+      if (linked) pr = await host(workspace.sourcePath, ['pr', 'view', String(linked.number), '--repo', slug, '--json', PR_FIELDS]);
       else {
-        const prs = await this.hosting(workspace.sourcePath, ['pr', 'list', '--repo', slug, '--head', workspace.branch, '--state', 'all', '--json', PR_FIELDS]);
+        const prs = await host(workspace.sourcePath, ['pr', 'list', '--repo', slug, '--head', workspace.branch, '--state', 'all', '--json', PR_FIELDS]);
         pr = prs.find((p: any) => p.headRefOid === revision && p.baseRefName === delivery.baseBranch);
       }
       if (!pr) throw new UserError('No PR for this revision was found. The workspace has been kept.');
@@ -208,8 +214,8 @@ export class DeliveryGit {
       if (pr.state === 'OPEN') {
         if (pr.isDraft || pr.reviewDecision === 'CHANGES_REQUESTED') throw new DeliveryPending('The PR needs review changes. Continuing in the owning thread.', true, 'review');
         if (pr.mergeable === 'CONFLICTING') throw new DeliveryPending('The PR has conflicts. Continuing in the owning thread.', true, 'merge');
-        await assertChecksWithProgress(workspace.sourcePath, slug!, revision, pr.statusCheckRollup ?? [], this.hosting);
-        await verifyGitHubChecks(workspace.sourcePath, slug!, revision!, delivery.requestedAt, this.hosting);
+        await assertChecksWithProgress(workspace.sourcePath, slug!, revision, pr.statusCheckRollup ?? [], host);
+        await verifyGitHubChecks(workspace.sourcePath, slug!, revision!, delivery.requestedAt, host);
         if (pr.reviewDecision === 'REVIEW_REQUIRED') throw new DeliveryPending('Waiting for the required PR review.', false, 'review');
         if (delivery.mode === 'review') return { ...result, ci: undefined, status: 'ready', waitingOn: 'merge', detail: undefined, observationError: undefined, observationFailures: 0 };
         if (pr.autoMergeRequest || pr.mergeStateStatus === 'QUEUED') throw new DeliveryPending('Waiting for the PR to merge.', false, 'merge');
@@ -227,7 +233,7 @@ export class DeliveryGit {
     }
     await record({ publishedRevision, integratedAt: result.integratedAt ?? checkedAt });
     if (slug) {
-      try { await verifyGitHubChecks(workspace.sourcePath, slug, publishedRevision, result.integratedAt ?? delivery.requestedAt, this.hosting); }
+      try { await verifyGitHubChecks(workspace.sourcePath, slug, publishedRevision, result.integratedAt ?? delivery.requestedAt, host); }
       catch (error) {
         const checks = error instanceof DeliveryPending ? error.ci?.checks : undefined;
         const cancelled = checks?.some(c => c.status === 'cancelled')
@@ -237,7 +243,7 @@ export class DeliveryGit {
         // Branch concurrency can cancel this revision's run when a newer push contains it.
         // Require CI proof on that containing target instead of treating cancellation as a code failure.
         if (tip === publishedRevision) throw error;
-        await verifyGitHubChecks(workspace.sourcePath, slug, tip, result.integratedAt ?? delivery.requestedAt, this.hosting);
+        await verifyGitHubChecks(workspace.sourcePath, slug, tip, result.integratedAt ?? delivery.requestedAt, host);
       }
     }
     // Host reads can take time. Files or commits added meanwhile still belong to this thread.
@@ -282,11 +288,26 @@ function pullRequestIdentity(url?: string): Pick<DeliveryPullRequest, 'host' | '
   if (!match || !Number.isSafeInteger(Number(match[2]))) return undefined;
   return { host: 'github.com', repository: match[1]!, number: Number(match[2]), url: url! };
 }
-async function ghJson(cwd: string, args: string[]): Promise<any> {
+async function ghJson(cwd: string, args: string[], env?: GitHubEnv): Promise<any> {
+  let stdout: string;
   try {
-    const { stdout } = await exec('gh', args, { cwd, windowsHide: true, timeout: 30_000, maxBuffer: 4 * 1024 * 1024 });
-    return JSON.parse(stdout);
-  } catch { throw new DeliveryUnavailable('Could not read GitHub delivery or checks. Check gh sign-in on this machine; observation will retry.'); }
+    ({ stdout } = await exec('gh', args, { cwd, windowsHide: true, timeout: 30_000, maxBuffer: 4 * 1024 * 1024, ...(env ? { env: { ...process.env, ...env } } : {}) }));
+  } catch (error) { throw new DeliveryUnavailable(ghFailure(error)); }
+  try { return JSON.parse(stdout); }
+  catch { throw new DeliveryUnavailable('GitHub sent an unreadable reply. Observation will retry.'); }
+}
+
+/** Says what went wrong, so a GitHub outage is not mistaken for a sign-in problem. Exported for tests. */
+export function ghFailure(error: unknown): string {
+  const e = error as { code?: unknown; stderr?: unknown; killed?: boolean };
+  if (e?.code === 'ENOENT') return 'gh is not installed on this machine. Install the GitHub CLI and sign in; observation will retry.';
+  if (e?.killed) return 'GitHub did not answer in time. Observation will retry.';
+  const stderr = typeof e?.stderr === 'string' ? e.stderr : '';
+  const status = Number(/HTTP (\d{3})/.exec(stderr)?.[1]);
+  if (status >= 500) return `GitHub returned an error (HTTP ${status}). This is on GitHub's side; observation will retry.`;
+  if (status === 401 || /gh auth login|not logged in|authentication required/i.test(stderr)) return 'GitHub rejected the sign-in. Sign in again with gh auth login on this machine; observation will retry.';
+  if (status === 403 || status === 404) return `GitHub refused access to this repository (HTTP ${status}). The GitHub account in use may not have access; choose the profile's GitHub account in Settings / Machines. Observation will retry.`;
+  return 'Could not read GitHub delivery or checks. Observation will retry.';
 }
 function assertChecks(checks: any[]) {
   const conclusions = checks.map(c => String(c.conclusion ?? c.state).toLowerCase());

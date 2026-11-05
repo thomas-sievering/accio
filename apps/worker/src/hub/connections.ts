@@ -23,6 +23,7 @@ import { offerChoice } from '../threads/choice.js';
 import { ResourceManager } from '../resources/resources.js';
 import type { CommandRunner } from '../resources/process.js';
 import type { DeliveryHosting } from '../threads/delivery.js';
+import { GitHubAccounts, type GhRunner } from '../github/accounts.js';
 import { ClaudeModels } from '../harnesses/claudeModels.js';
 import type { ClaudeModelSource } from '../harnesses/catalog.js';
 import { harnessEnv } from '../threads/harnessEnv.js';
@@ -45,7 +46,7 @@ export class HubConnections {
   private closing = false;
   private origin?: string;
   initialized = false;
-  constructor(private home: string, private here: MachineInfo, private harnesses: HarnessInstall[], private runners: Record<string, Harness>, private send: (event: any, data: any, hubId?: string) => void, private resourceCommand?: CommandRunner, private claudeModelSource?: ClaudeModelSource, private deliveryHosting?: DeliveryHosting, private updates?: Updates) {
+  constructor(private home: string, private here: MachineInfo, private harnesses: HarnessInstall[], private runners: Record<string, Harness>, private send: (event: any, data: any, hubId?: string) => void, private resourceCommand?: CommandRunner, private claudeModelSource?: ClaudeModelSource, private deliveryHosting?: DeliveryHosting, private updates?: Updates, private github?: GhRunner) {
     this.file = new JsonFile(join(home, 'hub-connections.json'), () => []);
     this.register();
   }
@@ -90,7 +91,8 @@ export class HubConnections {
       }
     };
     const profiles = new Profiles(record.home, client, broadcast);
-    const machines = refs.machines = new Machines(this.here, settings, broadcast);
+    const machines: Machines = refs.machines = new Machines(this.here, settings, broadcast,
+      this.github && new GitHubAccounts((profileId) => settings.machine(this.here.id)?.profileGitHub?.[profileId], this.github));
     const claudeModels = new ClaudeModels(this.claudeModelSource,
       async (profileId) => harnessEnv(process.env, await profiles.hubAccess(profileId, 'anthropic'), configFolderOf(record.home, profileId)),
       () => broadcast('models.changed', null));
@@ -139,7 +141,9 @@ export class HubConnections {
     // GLOSSARY: Relay. Other machines' threads join this list; calls about them go to their machine.
     await relay.load();
     router.on('threads.list', () => relay.merged());
-    router.on('machines.list', async () => { await machines.refresh(); return relay.machines(); });
+    // A gh sign-in made since startup shows up in machine settings without a restart.
+    router.on('machines.list', async () => { await machines.refresh(); await machines.reportGitHub().catch(() => {}); return relay.machines(); });
+    void machines.reportGitHub().catch(() => {});
     router.forward = (method, params) => relay.forward(method, params);
     const resources = new ResourceManager(record.home, this.here.id, remoteResources(client), remoteMcp(client), profiles, projects, broadcast, async (tool, detail) => {
       const candidates = tool.repairProfileId ? [profiles.require(tool.repairProfileId)] : profiles.all();
