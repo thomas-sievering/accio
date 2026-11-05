@@ -24,6 +24,7 @@ import { Transcript } from './Transcript';
 import { CacheUsage } from './CacheUsage';
 import { useReportPendingSecrets } from '../secrets/pendingSecrets';
 import { viewTransition } from '../ui/viewTransition';
+import { keepSentImages } from './sentImages';
 import { useThreads, useTranscript } from './threads';
 
 /** Where a thread runs, looked up once for the header, the notice and the composer. */
@@ -66,7 +67,7 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
   return (
     <>
       <PaneHeader title={thread.title} titleEditor={renaming ? <TitleEdit thread={thread} className="header-rename" onDone={() => setRenaming(false)} /> : <EditableTitle key={thread.id} thread={thread} />} {...place} checkout={thread.workspace && !thread.workspace.releasedAt && place.checkout ? { ...place.checkout, path: thread.workspace.path } : place.checkout} actions={<ThreadActionsMenu key={thread.id} thread={thread} items={items} onRename={() => setRenaming(true)} />} projectName={thread.projectName} machine={thread.machine} />
-      {!visibleItems && !error && startedWith.has(thread.id) ? <StartingTranscript text={startedWith.get(thread.id)!} /> : visibleItems ? <PendingPick.Provider value={{ pick, setPick, enabled: !running }}>
+      {!visibleItems && !error && startedWith.has(thread.id) ? <StartingTranscript {...startedWith.get(thread.id)!} /> : visibleItems ? <PendingPick.Provider value={{ pick, setPick, enabled: !running }}>
         <Transcript threadId={thread.id} items={visibleItems} working={running} onOpenSecrets={onOpenSecrets} />
       </PendingPick.Provider> : (
         <div className="empty">
@@ -127,14 +128,14 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
   const machine = startable?.find((m) => m.id === machineId);
   // Until the list loads, a send goes to this machine, as the server does without a machine id.
   const unavailable = !!machines && !machine?.connected;
-  const [starting, setStarting] = useState<string>();
+  const [starting, setStarting] = useState<FirstMessage>();
 
   return (
     <>
       <PaneHeader title="New thread" {...place} />
-      {starting !== undefined && <StartingTranscript text={starting} />}
+      {starting && <StartingTranscript {...starting} />}
       {/* While starting, the composer settles where the thread's own will be, so the swap is still. */}
-      <div className={`hero${starting !== undefined ? ' starting' : ''}`} inert={starting !== undefined}>
+      <div className={`hero${starting ? ' starting' : ''}`} inert={!!starting}>
         <h1>{checkoutId ? `What should we build in ${place.project?.name ?? 'this checkout'}?` : 'What should we build?'}</h1>
         <ThreadNotice profile={place.profile} model={model} onOpenProfile={onOpenProfile} />
         {chosenMachineId && unavailable && <p className="note" role="status">The selected machine is offline. Choose an online machine.</p>}
@@ -142,15 +143,17 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
           target="draft"
           draftId={`new:${checkoutId}:${profileId ?? ''}`}
           profileId={place.profile?.id}
-          disabled={starting !== undefined || !place.profile || !accountForModel(place.profile, model)?.signedIn || unavailable}
+          handsOffImages
+          disabled={!!starting || !place.profile || !accountForModel(place.profile, model)?.signedIn || unavailable}
           placeholder={`Ask ${model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}
           model={model}
-          onSend={async (text, _mode, uploads) => {
-            const shown = viewTransition('thread-start', () => setStarting(text));
+          onSend={async (text, _mode, uploads, previews) => {
+            const shown = viewTransition('thread-start', () => setStarting({ text, images: previews }));
             try {
               const images = uploads.length ? { images: uploads } : {};
               const thread = await client.call('threads.start', checkoutId ? { checkoutId, text, model, machineId, ...images } : { profileId: profileId!, text, model, machineId, ...images });
-              startedWith.set(thread.id, text);
+              startedWith.set(thread.id, { text, images: previews });
+              keepSentImages(thread.id, previews);
               await shown;
               await viewTransition('thread-open', () => select(thread.id));
             } catch (error) {
@@ -173,14 +176,21 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
   );
 }
 
+/** A first message as sent: its text and the local copies of its images. */
+type FirstMessage = { text: string; images: string[] };
+
 /** First messages of threads started here, shown until their transcript arrives so the swap from the draft is still. */
-const startedWith = new Map<string, string>();
+const startedWith = new Map<string, FirstMessage>();
 
 /** The first message and a live row, laid out as the transcript will be once the turn reports. */
-function StartingTranscript({ text }: { text: string }) {
+function StartingTranscript({ text, images }: FirstMessage) {
   return <div className="transcript-scroll draft-starting" aria-busy="true">
     <div className="messages"><div className="thread">
-      <div className="msg user">{text}</div>
+      <div className="msg user">
+        {images.length > 0 && <div className="msg-images">{images.map((url, index) =>
+          <button key={url} type="button" className="msg-image" tabIndex={-1} style={{ viewTransitionName: `sent-image-${index}`, viewTransitionClass: 'sent-image' }}><img src={url} alt="" /></button>)}</div>}
+        {text}
+      </div>
       <div className="turn-work live">
         <button className="turn-work-toggle" disabled><span className="turn-work-activity" role="status">Starting thread…</span></button>
       </div>

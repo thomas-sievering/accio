@@ -3,19 +3,36 @@ import type { ThreadAsset } from '@accio/protocol';
 import { useClient, useConnectionStatus } from '../app/connection';
 import { assetUrl } from './assetUrl';
 import { ImageViewer } from './ImageViewer';
+import { releaseSentImage, sentImage } from './sentImages';
 
 /** GLOSSARY: Image attachment. The images sent with a message, as thumbnails that open full size. */
 export function MessageImages({ threadId, images }: { threadId: string; images: ThreadAsset[] }) {
-  return <div className="msg-images">{images.map((image) => <MessageImage key={image.id} threadId={threadId} image={image} />)}</div>;
+  return <div className="msg-images">{images.map((image, index) => <MessageImage key={image.id} threadId={threadId} image={image} index={index} />)}</div>;
 }
 
-function MessageImage({ threadId, image }: { threadId: string; image: ThreadAsset }) {
+function MessageImage({ threadId, image, index }: { threadId: string; image: ThreadAsset; index: number }) {
   const client = useClient();
   const connection = useConnectionStatus();
   const [url, setUrl] = useState<string>();
   const [version, setVersion] = useState(0);
   const [failed, setFailed] = useState(false);
   const [viewing, setViewing] = useState(false);
+  // A thread started here shows what was pasted until its own copy is ready to paint.
+  const [preview, setPreview] = useState(() => sentImage(threadId, index));
+  const [ready, setReady] = useState(!preview);
+  useEffect(() => {
+    if (!url || ready) return;
+    let active = true;
+    const next = new Image();
+    next.src = url;
+    void next.decode().catch(() => {}).then(() => {
+      if (!active) return;
+      setReady(true);
+      setPreview(undefined);
+      releaseSentImage(threadId, index);
+    });
+    return () => { active = false; };
+  }, [url, ready, threadId, index]);
 
   useEffect(() => {
     if (connection !== 'open') return;
@@ -35,12 +52,13 @@ function MessageImage({ threadId, image }: { threadId: string; image: ThreadAsse
   };
 
   if (failed) return <span className="msg-image-missing">{image.name}</span>;
-  if (!url) return <span className="msg-image" style={{ width: 56, height: 56 }} />;
+  const shown = ready ? url : preview;
+  if (!shown) return <span className="msg-image" style={{ width: 56, height: 56 }} />;
   return <>
-    <button className="msg-image" aria-label={`Expand image: ${image.name}`} onClick={() => setViewing(true)}>
-      <img src={url} alt={image.name} decoding="async" onError={renew} />
+    <button className="msg-image" aria-label={`Expand image: ${image.name}`} disabled={!url} onClick={() => setViewing(true)}>
+      <img src={shown} alt={image.name} decoding="async" onError={ready ? renew : undefined} />
     </button>
-    {viewing && <ImageViewer source={url} label={image.name} onClose={() => setViewing(false)}
+    {viewing && url && <ImageViewer source={url} label={image.name} onClose={() => setViewing(false)}
       onOpen={() => void open(false)} onDownload={() => void open(true)} onError={renew} />}
   </>;
 }

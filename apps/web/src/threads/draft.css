@@ -15,6 +15,8 @@
 }
 .hero.starting > :not(.composer-wrap) { display: none; }
 .hero.starting textarea { max-height: 44px; overflow: hidden; color: transparent; }
+/* Sent images leave the composer with the text; they travel into the message. */
+.hero.starting .composer-chips { display: none; }
 
 /* ── the first send ─────────────────────────────────────────
    One view transition per step (thread-start in viewTransition.ts).
@@ -36,6 +38,10 @@ html:active-view-transition-type(thread-start, thread-open) {
   &::view-transition-new(root) { animation-duration: 180ms; }
   /* The composer's box is opaque, so its new self simply covers the old as it glides:
      no blend, so neither half dims the box mid-move. */
+  /* Sent images leave it shorter: both halves hang from the bottom, so the toolbar never doubles. */
+  &::view-transition-group(composer) { overflow: clip; border-radius: 10px; }
+  &::view-transition-old(composer),
+  &::view-transition-new(composer) { inset-block: auto 0; }
   &::view-transition-old(composer) { animation: none; mix-blend-mode: normal; }
   &::view-transition-new(composer) { animation: draft-in 180ms ease both; mix-blend-mode: normal; }
 }
@@ -48,6 +54,16 @@ html:active-view-transition-type(thread-start) {
   &::view-transition-old(draft-question) { animation: draft-lift 160ms ease-out both; }
   &::view-transition-new(first-message) { animation: draft-rise 340ms var(--ease-settle) 40ms both; }
   &::view-transition-new(first-status) { animation: draft-in 200ms ease 200ms both; }
+}
+/* A sent image glides from its chip into the message and grows to its own shape, above
+   the message rising around it (groups stack in the order they first appeared):
+   both halves fill the moving box, and the message's copy covers the square chip. */
+html:active-view-transition-type(thread-start, thread-open) {
+  &::view-transition-group(.sent-image) { z-index: 1; border-radius: 6px; overflow: clip; }
+  &::view-transition-old(.sent-image),
+  &::view-transition-new(.sent-image) { width: 100%; height: 100%; object-fit: cover; mix-blend-mode: normal; }
+  &::view-transition-old(.sent-image) { animation: none; }
+  &::view-transition-new(.sent-image) { animation: draft-in 160ms ease both; }
 }
 @keyframes draft-lift { to { opacity: 0; translate: 0 -10px; } }
 @keyframes draft-rise { from { opacity: 0; translate: 0 14px; } }
