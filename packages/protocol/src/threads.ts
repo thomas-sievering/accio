@@ -175,6 +175,8 @@ export type DeliverySummary = {
   modified: number;
   files: number;
   previewAvailable: boolean;
+  /** The thread committed work and it is already on the target (pushed outside Ship), with nothing uncommitted: nothing left to ship. */
+  onBase?: boolean;
 };
 
 /**

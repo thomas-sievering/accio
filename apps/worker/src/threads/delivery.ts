@@ -127,7 +127,11 @@ export class DeliveryGit {
     const ref = await maybeGit(workspace.path, 'symbolic-ref', '--quiet', 'refs/remotes/origin/HEAD');
     const baseBranch = ref?.replace(/^refs\/remotes\/origin\//, '');
     const origin = await maybeGit(workspace.path, 'remote', 'get-url', 'origin');
-    return { ...result, available: !!origin, baseBranch, ...(!origin ? { reason: 'Add an origin remote before shipping.' } : {}) };
+    // Moved past its start yet contained in the target: the work landed outside Ship. A fresh thread still offers Ship.
+    const head = await maybeGit(workspace.path, 'rev-parse', 'HEAD');
+    const onBase = !!target && !!head && head !== workspace.startRevision && result.files === 0
+      && await maybeGit(workspace.path, 'merge-base', '--is-ancestor', head, target) !== null;
+    return { ...result, available: !!origin, baseBranch, onBase, ...(!origin ? { reason: 'Add an origin remote before shipping.' } : {}) };
   }
 
   async verify(workspace: ThreadWorkspace, delivery: ThreadDelivery, observed?: DeliveryObservation): Promise<ThreadDelivery> {

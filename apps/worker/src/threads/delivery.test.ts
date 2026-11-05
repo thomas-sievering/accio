@@ -123,6 +123,23 @@ it('counts only the thread’s own lines after it integrates newer target work',
   expect(await c.call('threads.deliverySummary', { threadId: thread.id })).toMatchObject({ added: 2, removed: 0, files: 1 });
 });
 
+it('reports work already on the target only after the thread has moved past its start', async () => {
+  const { c, checkout } = await setup();
+  const thread = await c.call('threads.start', { checkoutId: checkout.id, text: 'work' });
+  await wait(c, thread.id);
+  const cwd = thread.workspace!.path;
+  // A fresh thread can still queue Ship when done.
+  expect(await c.call('threads.deliverySummary', { threadId: thread.id })).toMatchObject({ onBase: false });
+  await writeFile(join(cwd, 'mine.txt'), 'one\n');
+  expect(await c.call('threads.deliverySummary', { threadId: thread.id })).toMatchObject({ onBase: false });
+  // The agent commits and pushes to main by itself, outside Ship.
+  await publish(cwd);
+  expect(await c.call('threads.deliverySummary', { threadId: thread.id })).toMatchObject({ onBase: true });
+  // New work brings Ship back.
+  await writeFile(join(cwd, 'more.txt'), 'two\n');
+  expect(await c.call('threads.deliverySummary', { threadId: thread.id })).toMatchObject({ onBase: false });
+});
+
 it('counts paired removed and added lines as modified', async () => {
   const { c, checkout } = await setup();
   const thread = await c.call('threads.start', { checkoutId: checkout.id, text: 'work' });

@@ -84,7 +84,9 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
     void run(async () => { await client.call(method, { threadId: thread.id }); });
   // A fresh request is offered with no delivery, after new work, or when a person must act.
   // Offered from the start: Ship when done can be queued before the first edit.
-  const offerShip = !status || status.canShip;
+  // Work the agent already pushed to the target outside Ship leaves nothing to ship.
+  const onBase = !!summary?.onBase && (!status || status.canShip);
+  const offerShip = (!status || status.canShip) && !onBase;
   const receipt = status?.phase === 'delivered';
   const age = checkedAgo(status?.checkedAt, now);
   // The chip already says "Waiting for merge · #123"; a review request only adds when it was last checked.
@@ -124,6 +126,7 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
             : <span>{statusBody}</span>}
           {receipt && status.revision && <span className="delivery-rev" title="Revision on the target">{status.revision}</span>}
         </span>}
+        {onBase && <span className="delivery-pill delivery-complete" title="This thread's commits are already on the target and nothing is uncommitted"><Check />Already on {target}</span>}
         {offerShip && <span className="delivery-split">
           <button disabled={!!unavailable || busy || !canRun || !summary?.available || !!thread.queuedMessages?.length} title={thread.queuedMessages?.length ? 'Send or remove queued messages first' : !canRun ? 'Sign in to this profile to ship' : summary?.reason ?? (mode === 'review' ? 'Prepare a PR without merging' : `Finish, verify and ship to ${target}`)} onClick={deliver}><Ship />{mode === 'review' ? 'Prepare for review' : 'Ship'}</button>
           <button ref={trigger} popoverTarget={id} disabled={!!unavailable || busy || !summary?.available || !!thread.queuedMessages?.length} aria-label="Shipping options" aria-haspopup="menu"><ChevronDown /></button>
