@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { systemPromptText } from '../harnesses/systemPrompt.js';
+import { measuredHarness } from '../harnesses/promptMeasurement.js';
 import { ACCIO_MCP_SERVER } from '../tools/tools.js';
 import { SUBAGENT_TIMEOUT_SEC } from './subagents.js';
 import type { Harness, HarnessImage, HarnessMessage, HarnessTurn } from './harness.js';
@@ -19,7 +20,7 @@ const HARD_STOP_AFTER_MS = 3000;
  * profile's accio-owned config folder via CLAUDE_CONFIG_DIR (ADR 0003) and from
  * the checkout's own .claude folder and CLAUDE.md.
  */
-export const claudeCode: Harness = {
+export const claudeCode: Harness = measuredHarness('claudeCode', {
   async generateText({ cwd, prompt, model, effort, env, signal }) {
     const abortController = new AbortController();
     const abort = () => abortController.abort();
@@ -129,7 +130,7 @@ export const claudeCode: Harness = {
       await q.return();
     }
   },
-};
+});
 
 type UserContent = SDKUserMessage['message']['content'];
 

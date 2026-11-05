@@ -88,3 +88,9 @@
   outline: 2px solid var(--blue);
   outline-offset: 2px;
 }
+.prompt-size-table { width: 100%; border-collapse: collapse; font-size: 12px; margin: 12px 0; }
+.prompt-size-table th, .prompt-size-table td { padding: 6px 8px; text-align: right; font-variant-numeric: tabular-nums; }
+.prompt-size-table th:first-child { text-align: left; }
+.prompt-size-table tbody th { font-weight: 400; }
+.prompt-size-table tbody tr:last-child { border-top: 1px solid var(--line); font-weight: 600; }
+.prompt-baseline + .prompt-baseline { border-top: 1px solid var(--line); margin-top: 16px; }

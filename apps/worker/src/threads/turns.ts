@@ -242,6 +242,7 @@ export class Turns {
     let outcome: TurnOutcome | null = null;
     /** GLOSSARY: Goal. A turn on a goal that used no tools pauses it. */
     let usedTools = false;
+    let promptMeasurement: import('@accio/protocol').PromptMeasurement | undefined;
     try {
       if (run.signal.aborted) {
         outcome = 'interrupted';
@@ -256,6 +257,7 @@ export class Turns {
       const model = { model: thread.model.modelId, effort: deps.models.effort(thread.profileId, thread.model), modelName: deps.models.modelName(thread.profileId, thread.model), toolsOff: deps.toolsOff(thread.model.harnessId) };
       this.subagentTurns.set(thread.id, { turnId, profileId: thread.profileId, model: { ...thread.model, effort: model.effort }, turn: { harness, signal: run.signal, run: { cwd: run.cwd, env: run.env, resourceInstructions: run.resourceInstructions, mcps: run.mcps, ...model } } });
       for await (const msg of harness.run({ ...run, sessionId: thread.sessionId, ...model, requestSecret,
+        onPromptSize: measurement => { promptMeasurement = measurement; },
         registerSteer: send => { const input = this.liveInputs.get(thread.id); if (input?.turnId === turnId) input.send = send; },
         secretPurposes: deps.secrets.purposes(thread.profileId, thread.projectId || null) })) {
         for (const change of transcript.accept(msg)) {
@@ -318,6 +320,7 @@ export class Turns {
         }
         for (const item of transcript.unfinishedTools(outcome === 'interrupted' ? 'interrupted' : 'error')) await transcripts.add(thread.id, item);
         if (outcome === 'completed') await transcripts.add(thread.id, { kind: 'finished', id: `${turnId}:finished`, turnId, ms: Date.now() - startedAt });
+        if (promptMeasurement) await transcripts.add(thread.id, { kind: 'promptSize', id: `${turnId}:promptSize`, turnId, harnessId: thread.model.harnessId, measurement: promptMeasurement });
         await transcripts.flush(thread.id);
       } catch (error) {
         if (outcome !== 'interrupted') outcome = 'failed';

@@ -205,7 +205,7 @@ const Item = memo(function Item({ threadId, item, preparing, picked, pickName }:
 }) {
   const onOpenSecrets = useContext(OpenSecrets);
   switch (item.kind) {
-    case 'usage': return null;
+    case 'usage': case 'promptSize': return null;
     case 'user':
       // GLOSSARY: Goal. A turn accio started itself is a divider, not something you said.
       if (item.goal === 'continue') return <div className="goal-continue" data-item-id={item.id}>Continuing toward the goal</div>;

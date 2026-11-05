@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import type { SystemPromptView } from '@accio/protocol';
+import type { PromptMeasurement, SystemPromptView } from '@accio/protocol';
 import { useClient, useConnectionStatus } from '../app/connection';
 import { SettingRow, SettingsSection } from '../app/Settings';
+import { PromptSizeBreakdown } from './PromptSizeBreakdown';
 
 /** GLOSSARY: System prompt. Read-only: each section once, labelled with the harnesses that get it. */
 export function SystemPromptSettings() {
@@ -25,6 +26,10 @@ export function SystemPromptSettings() {
       {error && <p className="error">{error}</p>}
       {prompt && (
         <>
+          <SettingsSection title="Prompt size">
+            <p className="note">Measure each harness with the current built-in tool switches, Accio prompt and standard Accio tools on this machine. The check runs locally without a model call. Project instructions, custom MCP servers and thread additions are excluded; see a thread's Prompt size for its last measured request.</p>
+            {prompt.harnesses.map(h => <Baseline key={h.id} harnessId={h.id} name={h.name} />)}
+          </SettingsSection>
           <SettingsSection title="How harnesses receive it">
             {prompt.harnesses.map((h) => <SettingRow key={h.id} title={h.name} description={h.delivery} />)}
           </SettingsSection>
@@ -44,4 +49,23 @@ export function SystemPromptSettings() {
       )}
     </>
   );
+}
+
+function Baseline({ harnessId, name }: { harnessId: string; name: string }) {
+  const client = useClient();
+  const [measurement, setMeasurement] = useState<PromptMeasurement>();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  return <div className="prompt-baseline">
+    <SettingRow title={name} description="Baseline with current built-in tool settings">
+      <button disabled={busy} onClick={async () => {
+        setBusy(true); setError(undefined); setMeasurement(undefined);
+        try { setMeasurement(await client.call('systemPrompt.measure', { harnessId })); }
+        catch (err) { setError((err as Error).message); }
+        finally { setBusy(false); }
+      }}>{busy ? 'Measuring…' : measurement ? 'Measure again' : 'Measure baseline'}</button>
+    </SettingRow>
+    {error && <p className="error" role="alert">{error}</p>}
+    {measurement && <PromptSizeBreakdown measurement={measurement} />}
+  </div>;
 }

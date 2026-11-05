@@ -95,7 +95,7 @@ export class HubConnections {
       async (profileId) => harnessEnv(process.env, await profiles.hubAccess(profileId, 'anthropic'), configFolderOf(record.home, profileId)),
       () => broadcast('models.changed', null));
     const models = new Models(profiles, settings, this.here.id, claudeModels);
-    profiles.register(router); machines.register(router); models.register(router, broadcast); registerHarnesses(router, settings, models);
+    profiles.register(router); machines.register(router); models.register(router, broadcast);
     const projects = refs.projects = new Projects(record.home, profiles, machines, broadcast); await projects.load(); projects.register(router);
     const projectApps = new ProjectApps(record.home, projects, broadcast); projectApps.register(router);
     const tools = new AccioTools([offerChoice, finishGoalTool((id, outcome, summary) => threads.finishGoal(id, outcome, summary), (id) => threads.goalActive(id)),
@@ -103,6 +103,7 @@ export class HubConnections {
       shippedNoteTool((id, note) => threads.recordShippedNote(id, note), (id) => threads.deliveryRunning(id)),
       projectSettingsTool((id, app) => threads.saveProjectSettings(id, app), (id) => threads.projectSetupRunning(id)),
       readThreadTool((id, offset, limit) => threads.readThread(id, offset, limit), (id) => threads.handedOff(id))]);
+    registerHarnesses(router, settings, models, this.runners, tools);
     const updates = this.updates;
     if (updates) {
       router.on('update.status', () => updates.status())

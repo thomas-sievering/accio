@@ -22,6 +22,7 @@ import { TitleEdit } from './ThreadMenu';
 import { EditableTitle } from './EditableTitle';
 import { Transcript } from './Transcript';
 import { CacheUsage } from './CacheUsage';
+import { PromptUsage } from './PromptUsage';
 import { useReportPendingSecrets } from '../secrets/pendingSecrets';
 import { viewTransition } from '../ui/viewTransition';
 import { firstMessage, forgetFirstMessage, keepFirstMessage } from './sentImages';
@@ -107,6 +108,7 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
           }} />
           {place.profile && <LimitsIndicator active={active} account={accountForModel(place.profile, thread.model)} onOpen={() => onOpenLimits(place.profile!.id)} />}
           <CacheUsage items={items ?? []} />
+          <PromptUsage items={items ?? []} />
         </>}
       />
     </>

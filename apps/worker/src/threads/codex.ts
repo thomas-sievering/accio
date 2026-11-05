@@ -1,6 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import { startCodex, type CodexFactory, type CodexNotification } from '@accio/codex';
 import { systemPromptText } from '../harnesses/systemPrompt.js';
+import { measuredHarness } from '../harnesses/promptMeasurement.js';
 import type { Harness, HarnessEvent, HarnessImage } from './harness.js';
 import { z } from 'zod';
 import { SecretToolInput, SECRET_TOOL_DESCRIPTION, SECRET_MCP_SERVER, savedPurposeInstructions } from '../secrets/secrets.js';
@@ -11,7 +12,7 @@ import { summarizeTool } from './transcript.js';
 
 /** Codex runs on this machine. Only the profile's scoped proxy key reaches it. */
 export function codexHarness(factory: CodexFactory = startCodex): Harness {
-  return {
+  return measuredHarness('codex', {
     async generateText({ prompt, model, effort, env, signal }) {
       // A Responses request avoids starting an agent with shell or repository access.
       const response = await fetch(`${env.ACCIO_OPENAI_URL}/responses`, {
@@ -151,7 +152,7 @@ export function codexHarness(factory: CodexFactory = startCodex): Harness {
         try { await client.close(); } finally { await endpoint?.close(); }
       }
     },
-  };
+  });
 }
 
 /** Keep streamed assistant text and authoritative item completion in the same transcript item. */

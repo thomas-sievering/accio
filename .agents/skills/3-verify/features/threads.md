@@ -43,6 +43,8 @@ Preconditions: healthy instance. New thread, search and filter stay hidden until
 
 ## Gotchas
 
+- **Prompt size:** see [System prompt](system-prompt.md) for the composer stat, persistence check and measurement scope.
+
 - **Prompt cache stat:** run the `Claude cache usage` case in `tests/inline-chat.spec.ts` against the chat fixture server. Send `Cache usage fixture` from a new No project thread; require `Cache 80%` beside the model controls, open its breakdown, and require 800 read, 100 written, 100 reported one-hour writes and 100 uncached tokens. Reload and reopen the breakdown with the same counts. The fixture substitutes the coding harness at the production boundary; this proves persistence and UI accounting, while live Anthropic cache hits remain unverified. Main-conversation request usage excludes subagents, title generation and older requests without usage reports.
 
 - Sending creates the thread; opening a draft alone does not persist a conversation.

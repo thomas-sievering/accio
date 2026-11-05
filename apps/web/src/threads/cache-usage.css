@@ -6,3 +6,4 @@
 .cache-usage-details p { margin: 8px 0 0; line-height: 1.5; color: var(--muted); }
 .cache-usage-details dl { display: grid; grid-template-columns: 1fr auto; gap: 8px 16px; margin: 14px 0; }
 .cache-usage-details dd { margin: 0; font-variant-numeric: tabular-nums; }
+.prompt-usage .cache-usage-details { width: min(460px, 85vw); max-height: 70vh; overflow: auto; }

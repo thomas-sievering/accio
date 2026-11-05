@@ -12,6 +12,7 @@ import { DeliveryGit, DeliveryPending } from '../apps/worker/src/threads/deliver
 import { git } from '../apps/worker/src/git.js';
 import { PROJECT_APP_TIMING } from '../apps/worker/src/projects/projectApps.js';
 import { lineCount, pastesIn, typedText } from '../packages/protocol/src/pastes.js';
+import { measurePrompt } from '../apps/worker/src/harnesses/promptMeasurement.js';
 
 const home = await mkdtemp(join(tmpdir(), 'accio-chat-browser-'));
 // Disposable encryption for this isolated fixture, including headless Linux runners.
@@ -64,6 +65,16 @@ const harness = new FakeHarness(async function* (run) {
   if (run.images?.length) { yield* replyWith(`Saw ${run.images.length} image${run.images.length > 1 ? 's' : ''}.`); return; }
   // GLOSSARY: Pasted text. Says how much pasted text arrived whole, and what was typed after it.
   const pasted = pastesIn(run.prompt);
+  if (run.prompt === 'Prompt size fixture' || run.prompt === 'Measure prompt.') {
+    run.onPromptSize?.(measurePrompt({ model: run.model, system: 'Harness instructions\n\nAccio text\n\nGoal text', tools: [{ name: 'shell' }] }, 'Accio text', 'Goal text'));
+    if (run.prompt === 'Measure prompt.') {
+      // Baseline capture uses the same HTTP request seam as the real adapters.
+      const { systemPromptText } = await import('../apps/worker/src/harnesses/systemPrompt.js');
+      await fetch(`${run.env.ANTHROPIC_BASE_URL}/v1/messages`, { method: 'POST', body: JSON.stringify({ model: run.model,
+        system: `Harness instructions\n\n${systemPromptText({ harnessId: 'claudeCode', model: run.model })}`, tools: [{ name: 'shell' }] }) });
+    }
+    yield* replyWith('Prompt size recorded.'); return;
+  }
   if (pasted.length) { yield* replyWith(`Read ${pasted.map(lineCount).join(' + ')} pasted lines, then: ${typedText(run.prompt) || 'nothing typed'}`); return; }
   if (run.prompt === 'Cache usage fixture') {
     const message = { id: 'cache-response', content: [{ type: 'text' as const, text: 'Cache usage recorded.' }],

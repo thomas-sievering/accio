@@ -1,0 +1,33 @@
+import { expect, test } from '@playwright/test';
+
+test('measures a settings baseline and shows the persisted last request in a thread', async ({ page, baseURL }, testInfo) => {
+  await page.goto(`${baseURL}/#token=isolated-chat-test-token`);
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.locator('.sidebar nav').getByRole('button', { name: 'System prompt', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Prompt size', exact: true })).toBeVisible();
+  const baseline = page.locator('.prompt-baseline').filter({ hasText: 'Claude Code' });
+  await baseline.getByRole('button', { name: 'Measure baseline', exact: true }).click();
+  await expect(baseline.getByRole('button', { name: 'Measure again', exact: true })).toBeEnabled();
+  await expect(baseline.getByRole('row', { name: /Accio prompt/ })).not.toContainText('0 0');
+  await expect(baseline).toContainText('Tokens are rough estimates');
+  await page.screenshot({ path: testInfo.outputPath('prompt-baseline.png') });
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
+  await page.locator('.sidebar').getByRole('button', { name: 'New thread', exact: true }).click();
+  await page.getByRole('option', { name: 'No project', exact: true }).click();
+  if (await page.getByRole('combobox', { name: 'Search profiles' }).isVisible()) await page.getByRole('option', { name: 'Personal', exact: true }).click();
+  await expect(page.getByLabel('Prompt size', { exact: true })).toHaveCount(0);
+  await page.locator('.composer textarea').fill('Prompt size fixture');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect(page.getByText('Prompt size recorded.', { exact: true })).toBeVisible();
+  const stat = page.locator('.prompt-usage');
+  await stat.getByLabel('Prompt size', { exact: true }).click();
+  await expect(stat.getByRole('row', { name: /Harness \/ other instructions/ }).getByRole('cell')).toHaveText(['6', '24']);
+  await expect(stat.getByRole('row', { name: /Accio prompt/ }).getByRole('cell')).toHaveText(['3', '10']);
+  await expect(stat.getByRole('row', { name: /Added turn instructions/ }).getByRole('cell')).toHaveText(['3', '9']);
+  await expect(stat).toContainText('Tool definitions (1)');
+  await page.screenshot({ path: testInfo.outputPath('thread-prompt-size.png') });
+  await page.reload();
+  await stat.getByLabel('Prompt size', { exact: true }).click();
+  await expect(stat.getByRole('row', { name: /Accio prompt/ }).getByRole('cell')).toHaveText(['3', '10']);
+  await expect(page.locator('.messages')).not.toContainText('Harness instructions');
+});

@@ -61,6 +61,20 @@ export type SystemPromptView = {
   sections: { id: string; title: string; variants: { harnessIds: string[]; text: string }[] }[];
 };
 
+/** Exact text/JSON character counts at the model request boundary. Tokens are rough estimates. */
+export type PromptSize = { characters: number; estimatedTokens: number };
+export type PromptMeasurement = {
+  at: string;
+  model?: string;
+  harness: PromptSize;
+  accio: PromptSize;
+  additional: PromptSize;
+  /** Recognizable project/environment instruction blocks carried in user-role context. */
+  context: PromptSize;
+  tools: PromptSize;
+  toolCount: number;
+};
+
 const Effort = z.string().regex(/^[a-z]{1,32}$/);
 /** GLOSSARY: Effort. Omitted to use the model's default level. */
 export const ModelSelection = z.object({ harnessId: z.string().min(1), modelId: z.string().min(1), effort: Effort.optional() });
@@ -105,6 +119,7 @@ export const modelMethods = {
   'harnesses.setTool': method<typeof HarnessTool, HarnessView[]>(HarnessTool),
   'harnesses.resetTools': method<typeof HarnessId, HarnessView[]>(HarnessId),
   'systemPrompt.get': method<z.ZodObject<{}>, SystemPromptView>(z.object({})),
+  'systemPrompt.measure': method<typeof HarnessId, PromptMeasurement>(HarnessId),
   'models.list': method<typeof ProfileId, ModelsState>(ProfileId),
   'models.favorite': method<typeof Favorite, ModelsState>(Favorite),
 };

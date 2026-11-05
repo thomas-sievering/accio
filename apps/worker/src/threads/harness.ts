@@ -51,6 +51,8 @@ export type HarnessImage = { path: string; mimeType: string };
 export type SteerInput = (text: string, images?: HarnessImage[]) => Promise<void>;
 
 export type HarnessTurn = {
+  /** Counts only; the assembled model request is never retained. */
+  onPromptSize?: (measurement: import('@accio/protocol').PromptMeasurement) => void;
   /** Registers the live input channel; unregister before the harness finishes. */
   registerSteer?: (send: SteerInput | undefined) => void;
   resourceInstructions?: string;

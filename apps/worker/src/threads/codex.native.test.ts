@@ -60,6 +60,13 @@ it.each([[false, false], [true, false], [false, true]])('runs the bundled Codex 
     expect(transcript.some(item => item.kind === 'tool' && item.status === 'running')).toBe(false);
   }
   expect(transcript).toEqual(expect.arrayContaining([expect.objectContaining({ kind: 'assistant', text: 'Native Codex reply.' })]));
+  const measured = transcript.find(item => item.kind === 'promptSize');
+  expect(measured).toMatchObject({ kind: 'promptSize', harnessId: 'codex' });
+  if (measured?.kind === 'promptSize') {
+    expect(measured.measurement.accio.characters).toBeGreaterThan(1000);
+    expect(measured.measurement.tools.characters).toBe(JSON.stringify(requests.at(-1)!.body.tools).length);
+    expect(measured.measurement.toolCount).toBe(requests.at(-1)!.body.tools.length);
+  }
   expect(requests[0]?.body).toMatchObject({ model: 'test-codex', stream: true, store: false });
   expect(requests[0]?.headers.get('chatgpt-account-id')).toBe('native');
   expect(requests[0]?.headers.get('authorization')).not.toContain('accio-');
@@ -69,5 +76,6 @@ it.each([[false, false], [true, false], [false, true]])('runs the bundled Codex 
   const after = await client.call('threads.transcript', { threadId: thread.id });
   expect(after.filter((i) => i.kind === 'notice')).toHaveLength(0);
   expect(after.filter((i) => i.kind === 'assistant')).toHaveLength(2);
+  expect(after.filter((i) => i.kind === 'promptSize')).toHaveLength(2);
   expect(requests).toHaveLength(withShell ? 3 : 2);
 }, 40_000);

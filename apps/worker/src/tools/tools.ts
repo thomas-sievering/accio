@@ -41,7 +41,7 @@ const MAX_BODY = 1024 * 1024;
 type RpcRequest = { jsonrpc?: string; id?: string | number | null; method?: unknown; params?: Record<string, unknown> };
 
 export class AccioTools {
-  private grants = new Map<string, { threadId: string }>();
+  private grants = new Map<string, { threadId: string; measurement?: boolean }>();
   private origin?: string;
 
   constructor(private tools: AccioTool[]) {}
@@ -58,9 +58,18 @@ export class AccioTools {
 
   /** Access for one turn of a thread; revoke it when the turn ends. */
   grant(threadId: string): { access: ToolAccess; revoke: () => void } | undefined {
+    return this.createGrant({ threadId });
+  }
+
+  /** Enumerate standard tools for a baseline, with all tool execution disabled. */
+  measurementGrant() {
+    return this.createGrant({ threadId: '', measurement: true });
+  }
+
+  private createGrant(context: { threadId: string; measurement?: boolean }) {
     if (!this.origin) return undefined;
     const token = randomBytes(32).toString('base64url');
-    this.grants.set(token, { threadId });
+    this.grants.set(token, context);
     return { access: { url: `${this.origin}${MCP_PATH}`, authorization: `Bearer ${token}` }, revoke: () => this.grants.delete(token) };
   }
 
@@ -99,11 +108,11 @@ export class AccioTools {
     const caller = new AbortController();
     res.once('close', () => caller.abort());
     const events = progressEvents(req, res, message.params);
-    const answer = await this.answer(message as RpcRequest & { method: string }, { threadId: grant.threadId, signal: caller.signal, progress: events.progress });
+    const answer = await this.answer(message as RpcRequest & { method: string }, { threadId: grant.threadId, signal: caller.signal, progress: events.progress }, grant.measurement);
     return events.started ? events.finish(answer) : json(res, 200, answer);
   }
 
-  private async answer({ id, method, params }: RpcRequest & { method: string }, context: ToolContext) {
+  private async answer({ id, method, params }: RpcRequest & { method: string }, context: ToolContext, measurement = false) {
     const { threadId } = context;
     switch (method) {
       case 'initialize': {
@@ -118,8 +127,9 @@ export class AccioTools {
         return rpcResult(id, {});
       case 'tools/list':
         // Claude Code would otherwise defer MCP tools behind its tool search; accio's are few and named in the system prompt.
-        return rpcResult(id, { tools: this.tools.filter((t) => !t.available || t.available(threadId)).map(({ name, description, input }) => ({ name, description, inputSchema: inputSchema(input), _meta: { 'anthropic/alwaysLoad': true } })) });
+        return rpcResult(id, { tools: this.tools.filter((t) => !t.available || !measurement && t.available(threadId)).map(({ name, description, input }) => ({ name, description, inputSchema: inputSchema(input), _meta: { 'anthropic/alwaysLoad': true } })) });
       case 'tools/call': {
+        if (measurement) return rpcError(id, -32601, 'Tool execution is disabled during prompt measurement');
         const tool = this.tools.find((t) => t.name === params?.name && (!t.available || t.available(threadId)));
         if (!tool) return rpcError(id, -32602, `Unknown tool: ${String(params?.name)}`);
         const args = z.object(tool.input).safeParse(params?.arguments ?? {});

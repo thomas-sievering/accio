@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { PromptMeasurement } from './models.js';
 import { method } from './rpc.js';
 import { ModelSelection } from './models.js';
 import { IMAGE_ATTACHMENT_BYTES, IMAGE_TYPES, IMAGES_PER_MESSAGE, type AssetUrl, type MediaBinding, type RelayMedia, type ThreadAsset, type ToolDetails } from './media.js';
@@ -207,6 +208,7 @@ export type PromptCacheUsage = {
 export type TranscriptItem =
   | SecretRequestItem
   | { kind: 'usage'; id: string; turnId: string; provider: 'anthropic'; usage: PromptCacheUsage }
+  | { kind: 'promptSize'; id: string; turnId: string; harnessId: string; measurement: PromptMeasurement }
   | { kind: 'user'; id: string; turnId: string; text: string; at: string; images?: ThreadAsset[]; resume?: boolean; delivery?: DeliveryMode; pick?: ChoicePick; steered?: boolean; goal?: 'continue' }
   | { kind: 'assistant'; id: string; turnId: string; text: string; media?: MediaBinding[] }
   | { kind: 'tool'; id: string; turnId: string; name: string; summary: string; status: 'running' | 'done' | 'error' | 'interrupted'; output?: string; detailRevision?: number; loadedSkills?: LoadedSkill[]; step?: ToolStep }

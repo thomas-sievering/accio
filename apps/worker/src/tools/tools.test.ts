@@ -59,6 +59,16 @@ it('reports invalid arguments to the harness as a tool error', async () => {
   expect((await rpc(access, 'resources/list')).body.error).toMatchObject({ code: -32601 });
 });
 
+it('allows a measurement grant to list standard tools but forbids execution and contextual tools', async () => {
+  const tools = new AccioTools([echo, { ...echo, name: 'contextual', available: () => { throw new Error('No thread exists for a baseline'); } }]);
+  await serve(tools);
+  const grant = tools.measurementGrant()!;
+  expect((await rpc(grant.access, 'tools/list')).body.result.tools.map((tool: { name: string }) => tool.name)).toEqual(['echo']);
+  expect((await rpc(grant.access, 'tools/call', { name: 'echo', arguments: { text: 'never executed' } })).body.error.code).toBe(-32601);
+  grant.revoke();
+  expect((await rpc(grant.access, 'tools/list')).status).toBe(401);
+});
+
 it('refuses calls without a live grant, so a turn that ended can no longer use the tools', async () => {
   const tools = new AccioTools([echo]);
   await serve(tools);
