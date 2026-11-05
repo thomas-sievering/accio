@@ -9,7 +9,8 @@ describe('machine (walking skeleton)', () => {
     t = await startTestApp();
     const client = await t.connect();
     const info = await client.call('machine.get', {});
-    expect(info.version).toBe('0.1.0');
+    // Run from Accio's checkout, the version counts its commits.
+    expect(info.version).toMatch(/^0\.1\.\d+$/);
     expect(info.name.length).toBeGreaterThan(0);
   });
 

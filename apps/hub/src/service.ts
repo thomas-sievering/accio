@@ -21,6 +21,8 @@ export const HUB_PROTOCOL = 1;
 export const RELAY_FRAME_BYTES = 1024 * 1024;
 export type HubSnapshot = {
   hubId: string; protocol: number; revision: number; epoch: string;
+  /** The Accio version this hub runs, when its build recorded one. */
+  version?: string;
   profiles: ProfileView[]; accounts: AccountView[];
   machines: ReturnType<SharedSettings['machines']>;
   favorites: Record<string, { harnessId: string; modelId: string }[]>;
@@ -36,6 +38,8 @@ export type HubServiceOptions = {
   home: string; host?: string; port?: number; seed?: () => Promise<SharedSeed>;
   claudeFetch?: Fetch; codexFactory?: CodexFactory; anthropicUrl?: string;
   openaiUrl?: string; openaiFetch?: Fetch; mcpFetch?: Fetch; publicUrl?: string; secretKey?: string;
+  /** GLOSSARY: Accio version. What this hub runs, shown to clients. */
+  version?: string;
 };
 const SecretId = z.string().min(1).max(160);
 const SecretScope = z.object({ profileId: SecretId, projectId: SecretId.nullable(), slot: SecretSlot });
@@ -92,7 +96,7 @@ export async function startHubService(opts: HubServiceOptions) {
   let closing = false;
   function snapshot(): HubSnapshot {
     const profiles = settings.profiles();
-    return { hubId: trust.id, protocol: HUB_PROTOCOL, revision, epoch, profiles: profileViews(profiles, hub), accounts: hub.accountViews(), machines: settings.machines(),
+    return { hubId: trust.id, protocol: HUB_PROTOCOL, revision, epoch, ...(opts.version ? { version: opts.version } : {}), profiles: profileViews(profiles, hub), accounts: hub.accountViews(), machines: settings.machines(),
       favorites: Object.fromEntries(profiles.map((p) => [p.id, settings.modelFavorites(p.id)])), harnessTools: settings.harnessTools(),
       threadNaming: settings.threadNaming(),
       models: Object.fromEntries(profiles.map((p) => [p.id, hub.codexModels(p.id)])), resources: resources.state(), limits: hub.limits.views(), secrets: profiles.flatMap(p => secrets.list(p.id)) };

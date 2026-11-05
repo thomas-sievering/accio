@@ -8,8 +8,10 @@ RUN pnpm --config.minimumReleaseAge=${PNPM_MINIMUM_RELEASE_AGE} --filter '@accio
 RUN pnpm --config.minimumReleaseAge=${PNPM_MINIMUM_RELEASE_AGE} --filter @accio/hub deploy --prod --legacy /opt/hub
 
 FROM node:24-bookworm-slim
+# GLOSSARY: Accio version, of the commit the image was built from; clients show it.
+ARG ACCIO_VERSION
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
-ENV NODE_ENV=production ACCIO_HOST=0.0.0.0 ACCIO_HUB_PORT=47322 ACCIO_HOME=/data
+ENV NODE_ENV=production ACCIO_HOST=0.0.0.0 ACCIO_HUB_PORT=47322 ACCIO_HOME=/data ACCIO_VERSION=${ACCIO_VERSION}
 WORKDIR /app
 COPY --from=build --chown=node:node /opt/hub/ ./
 USER node

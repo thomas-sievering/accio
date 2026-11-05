@@ -36,6 +36,10 @@ _Avoid_: Sync (for threads), tunnel
 Bringing a machine's Accio to the latest `main`: it fast-forwards the checkout the desktop app runs from, installs, builds and restarts, and its interrupted turns continue by themselves. A failed install or build resets to the previous commit and rebuilds it while the app keeps running. Only a clean checkout of `main` can update. Started from Settings → Machines or by a thread through the app_update accio tool, on this machine or, through the relay, on another one.
 _Avoid_: Upgrade, deploy, self-update (in UI text)
 
+**Accio version**:
+What a machine or hub runs, as `0.1.<n>`, where n counts the commits it was built from; each commit on `main` raises it by one. Settings → Machines shows it for the hub and every machine.
+_Avoid_: Commit hash (in UI text), build number
+
 **App screenshot**:
 A PNG of a machine's Accio desktop window, which a thread takes through the app_screenshot accio tool, on its own machine or another one through the relay. A script can run in the window first to open the view to capture.
 _Avoid_: Capture (as a noun), snapshot

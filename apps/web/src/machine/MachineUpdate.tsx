@@ -4,12 +4,12 @@ import { useClient } from '../app/connection';
 import { useAction } from '../app/useAction';
 import { SettingRow } from '../app/Settings';
 
-/** GLOSSARY: Update. The machine's Accio version, and one button when origin/main is ahead of it. */
-export function MachineUpdate({ machine }: { machine: MachineView }) {
+/** GLOSSARY: Update. Where a connected machine stands against main, kept current, and how to start its update. */
+export function useMachineUpdate(machine: Pick<MachineView, 'id' | 'connected'>) {
   const client = useClient();
   const [view, setView] = useState<UpdateView>();
   const [unavailable, setUnavailable] = useState<string>();
-  const { busy, error, run } = useAction();
+  const action = useAction();
   useEffect(() => {
     setUnavailable(undefined);
     if (!machine.connected) { setView(undefined); return; }
@@ -19,21 +19,23 @@ export function MachineUpdate({ machine }: { machine: MachineView }) {
     void client.call('update.status', { machineId: machine.id }).then((next) => { if (active) setView(next); }, (e: Error) => { if (active) setUnavailable(e.message); });
     return () => { active = false; off(); };
   }, [client, machine.id, machine.connected]);
+  const canUpdate = !!view && (view.state === 'behind' || (view.state === 'failed' && !!view.behind));
+  const start = () => action.run(async () => setView(await client.call('update.start', { machineId: machine.id })));
+  return { view, unavailable, canUpdate, start, busy: action.busy, error: action.error };
+}
 
-  const canUpdate = view && (view.state === 'behind' || (view.state === 'failed' && !!view.behind));
+/** GLOSSARY: Update. The machine's Accio version, and one button when origin/main is ahead of it. */
+export function MachineUpdate({ machine }: { machine: MachineView }) {
+  const { view, unavailable, canUpdate, start, busy, error } = useMachineUpdate(machine);
   return (
-    <SettingRow title="Accio version" description={error ?? describe(view) ?? unavailable}>
-      <code>{machine.version}{view?.commit ? ` · ${view.commit}` : ''}</code>
-      {canUpdate && (
-        <button type="button" className="ghost" disabled={busy} onClick={() => run(async () => setView(await client.call('update.start', { machineId: machine.id })))}>
-          Update
-        </button>
-      )}
+    <SettingRow title="Accio version" description={error ?? describeUpdate(view) ?? unavailable}>
+      <code title={view?.commit ?? undefined}>{machine.version}</code>
+      {canUpdate && <button type="button" className="ghost" disabled={busy} onClick={start}>Update</button>}
     </SettingRow>
   );
 }
 
-function describe(view?: UpdateView) {
+export function describeUpdate(view?: UpdateView) {
   if (!view) return undefined;
   const commits = `${view.behind} commit${view.behind === 1 ? '' : 's'} behind main`;
   switch (view.state) {

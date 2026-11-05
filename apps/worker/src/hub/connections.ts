@@ -50,7 +50,7 @@ export class HubConnections {
   }
   async load() { this.initialized = await access(this.file.path).then(() => true, () => false); this.saved = await this.file.read(); }
   get defaultId() { return this.saved[0]?.id; }
-  views(): HubConnectionView[] { return this.saved.map((record) => { const workspace = this.workspaces.get(record.id); return { id: record.id, name: record.name, url: record.url, local: record.local, status: workspace?.client.status ?? 'connecting', error: workspace?.client.error, running: workspace?.threads.runningCount ?? 0 }; }); }
+  views(): HubConnectionView[] { return this.saved.map((record) => { const workspace = this.workspaces.get(record.id); return { id: record.id, name: record.name, url: record.url, local: record.local, status: workspace?.client.status ?? 'connecting', error: workspace?.client.error, running: workspace?.threads.runningCount ?? 0, ...(workspace?.client.snapshot?.version ? { version: workspace.client.snapshot.version } : {}) }; }); }
   private async persist() { await this.file.write(this.saved.map((s) => ({ ...s, snapshot: this.workspaces.get(s.id)?.client.snapshot ?? s.snapshot }))); }
   private announce() { if (this.closing) return; this.send('hubs.changed', this.views()); clearTimeout(this.cacheTimer); this.cacheTimer = setTimeout(() => { void this.persist().catch(() => {}); }, 250); this.cacheTimer.unref(); }
   async add(record: SavedHub) {

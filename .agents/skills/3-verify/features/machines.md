@@ -5,6 +5,7 @@ Users see which machine is connected, its installed harnesses, its shared name, 
 ## Sub-features
 
 - `machines-status`: connected state, platform, app version and harness versions.
+- `machines-list`: the selected hub's row above the list (`Hub on this machine · 0.1.<n>` or `Hub at <host> · 0.1.<n>`), and each machine's Accio version in its row; a connected machine behind main shows `Update` in its row, which starts its update without opening it.
 - `machines-onboard`: Add machine opens setup steps for the selected hub; Generate pairing code issues a one-use code, Copy code acknowledges clipboard success or reports denial, and expired codes cannot be copied. Public hub addresses also offer a copyable setup prompt under Set up with a coding agent. Localhost addresses explain the reachability limit. Done returns focus to Add machine. Pair a second disposable worker through its first-run UI and require its Connected row in the original Machines list; code reuse must fail.
 - `machines-name`: rename this machine and reopen the saved name.
 - `machines-folders`: add/remove profile folders and observe project-profile suggestions.
