@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { mediaKind, mediaMimeType, normalizeMarkdownSource, type ChoicePick, type WorkspaceSkill } from '@accio/protocol';
+import { fallbackEffort, findMentionedModel, mediaKind, mediaMimeType, modelHandles, normalizeMarkdownSource, type ChoicePick, type ModelSelection, type WorkspaceSkill } from '@accio/protocol';
 import type { Models } from '../harnesses/models.js';
+import { usedUpMessage } from '../harnesses/modelLimits.js';
 import type { Machines } from '../machine/machine.js';
 import type { Profiles } from '../profiles/profiles.js';
 import type { Projects } from '../projects/projects.js';
@@ -52,7 +53,7 @@ export class Turns {
   private preparing = new Set<Promise<void>>();
   private turns = new Set<Promise<void>>();
   /** The running turn of each thread, which its sub-agents inherit. */
-  private subagentTurns = new Map<string, { turnId: string; turn: SubagentTurn }>();
+  private subagentTurns = new Map<string, { turnId: string; turn: SubagentTurn; profileId: string; model: ModelSelection }>();
   /** Parent tool rows already showing a running sub-agent. */
   private subagentRows = new Set<string>();
 
@@ -230,7 +231,7 @@ export class Turns {
         projectName: deps.projects.state().projects.find(p => p.id === thread.projectId)?.name ?? 'No project',
         machineName: deps.machines.views().find(m => m.thisMachine)?.name ?? 'This machine', signal: run.signal });
       const model = { model: thread.model.modelId, effort: deps.models.effort(thread.profileId, thread.model), modelName: deps.models.modelName(thread.profileId, thread.model), toolsOff: deps.toolsOff(thread.model.harnessId) };
-      this.subagentTurns.set(thread.id, { turnId, turn: { harness, signal: run.signal, run: { cwd: run.cwd, env: run.env, resourceInstructions: run.resourceInstructions, mcps: run.mcps, ...model } } });
+      this.subagentTurns.set(thread.id, { turnId, profileId: thread.profileId, model: { ...thread.model, effort: model.effort }, turn: { harness, signal: run.signal, run: { cwd: run.cwd, env: run.env, resourceInstructions: run.resourceInstructions, mcps: run.mcps, ...model } } });
       for await (const msg of harness.run({ ...run, sessionId: thread.sessionId, ...model, requestSecret,
         registerSteer: send => { const input = this.liveInputs.get(thread.id); if (input?.turnId === turnId) input.send = send; },
         secretPurposes: deps.secrets.purposes(thread.profileId, thread.projectId || null) })) {
@@ -354,8 +355,34 @@ export class Turns {
       if (!rowId) this.subagentRows.add(rowId = row.id);
       await transcripts.add(threadId, { ...row, step });
     };
-    try { return await runSubagent(live.turn, input, signal, showStep); }
+    const turn = input.model ? await this.subagentOn(live, input.model) : live.turn;
+    try { return await runSubagent(turn, input, signal, showStep); }
     finally { if (rowId) this.subagentRows.delete(rowId); }
+  }
+
+  /**
+   * GLOSSARY: Model mention. The parent's turn moved to the model the user mentioned:
+   * the thread's effort when it accepts it, and on another harness that harness's own
+   * account and settings, with the same tools on PATH.
+   */
+  private async subagentOn(live: { turn: SubagentTurn; profileId: string; model: ModelSelection }, handle: string): Promise<SubagentTurn> {
+    const { deps, state } = this;
+    const models = deps.models.list(live.profileId).models;
+    const model = findMentionedModel(models, handle);
+    if (!model) throw new Error(`No model is called @${handle.replace(/^@/, '')}. Mention one of: ${modelHandles(models).map(h => `@${h.handle}`).join(', ')}.`);
+    if (model.limited) throw new Error(usedUpMessage(model.limited));
+    if (model.harnessId === live.model.harnessId && model.id === live.model.modelId) return live.turn;
+    const harness = deps.harnesses[model.harnessId];
+    if (!harness) throw new Error(`${model.harnessName} is not installed on this machine.`);
+    let env = live.turn.run.env;
+    if (model.harnessId !== live.model.harnessId) {
+      const access = await deps.profiles.hubAccess(live.profileId, providerOf(model.harnessId));
+      const path = Object.entries(env).find(([key]) => key.toLowerCase() === 'path')?.[1];
+      env = Object.fromEntries(Object.entries(turnEnv(state.home, live.profileId, model.harnessId, access)).filter(([key]) => key.toLowerCase() !== 'path'));
+      if (path) env.PATH = path;
+    }
+    const effort = live.model.effort && model.efforts.some(e => e.id === live.model.effort) ? live.model.effort : fallbackEffort(model);
+    return { ...live.turn, harness, run: { ...live.turn.run, env, model: model.id, effort, modelName: model.name, toolsOff: deps.toolsOff(model.harnessId) } };
   }
 
   private async apply(threadId: string, change: TranscriptChange, cwd: string, skills: WorkspaceSkill[] = []) {

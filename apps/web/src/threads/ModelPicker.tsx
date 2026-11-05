@@ -1,14 +1,12 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
-import { modelKey, type ModelSelection, type ModelsState, type UsedUpLimit } from '@accio/protocol';
+import { modelKey, type ModelSelection, type UsedUpLimit } from '@accio/protocol';
 import { useClient, useConnectionStatus } from '../app/connection';
 import { useTooltip } from '../app/Tooltip';
 import { Check, ProviderLogo, Star } from '../app/icons';
 import { EffortWord, effortSteps } from './EffortControl';
 import { useSteps, useWheelSteps } from './steps';
 import { prettyModelName } from './modelName';
-
-/** Each profile's model list as last loaded, shared by every picker. */
-const lastModels = new Map<string, ModelsState>();
+import { useModels } from './useModels';
 
 /**
  * GLOSSARY: Effort. One chip for what a thread runs: the model and a muted effort word.
@@ -30,33 +28,13 @@ export function ModelPicker({ profileId, value, onChange, disabled = false }: {
   const effortId = useId();
   const effortMenu = useRef<HTMLDivElement>(null);
   const [effortPosition, setEffortPosition] = useState<CSSProperties>({});
-  const [loaded, setLoaded] = useState<{ profileId: string; state: ModelsState }>();
-  const [error, setError] = useState<string>();
+  const { data, error, setError, update } = useModels(profileId);
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState('favorites');
   const [position, setPosition] = useState<CSSProperties>({});
-  // The last list seen for this profile, so a remounted picker (a draft becoming its thread) shows effort at once.
-  const data = loaded && loaded.profileId === profileId ? loaded.state : profileId ? lastModels.get(profileId) : undefined;
-
-  useEffect(() => {
-    if (!profileId || status !== 'open') return;
-    let active = true;
-    let revision = 0;
-    const refresh = () => {
-      const request = ++revision;
-      void client.call('models.list', { profileId }).then((state) => {
-        if (request === revision) lastModels.set(profileId, state);
-        if (active && request === revision) { setLoaded({ profileId, state }); setError(undefined); }
-      }, (err: Error) => { if (active && request === revision) setError(err.message); });
-    };
-    refresh();
-    const off = [client.onEvent('models.changed', refresh), client.onEvent('profiles.changed', refresh)];
-    return () => { active = false; off.forEach((stop) => stop()); };
-  }, [client, status, profileId]);
 
   useEffect(() => {
     setTab('favorites');
-    setError(undefined);
     panel.current?.hidePopover();
   }, [profileId]);
 
@@ -100,9 +78,7 @@ export function ModelPicker({ profileId, value, onChange, disabled = false }: {
     setBusy(true);
     setError(undefined);
     try {
-      const state = await client.call('models.favorite', { profileId, model, favorite: next });
-      lastModels.set(profileId, state);
-      setLoaded({ profileId, state });
+      update(await client.call('models.favorite', { profileId, model, favorite: next }));
     } catch (err) { setError((err as Error).message); }
     finally { setBusy(false); }
   };
@@ -225,7 +201,7 @@ export function ModelPicker({ profileId, value, onChange, disabled = false }: {
 }
 
 /** "Opus" with its version muted beside it. */
-function PrettyName({ name }: { name: string }) {
+export function PrettyName({ name }: { name: string }) {
   const pretty = prettyModelName(name);
   return <span className="model-name">{pretty.name}{pretty.version && <span className="model-version">{pretty.version}</span>}</span>;
 }

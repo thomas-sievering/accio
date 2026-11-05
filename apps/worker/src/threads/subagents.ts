@@ -6,8 +6,8 @@ import { TurnTranscript } from './transcript.js';
 
 /**
  * GLOSSARY: Sub-agent. A helper turn a thread's harness starts through accio's
- * `agent` tool for one self-contained task. It runs on the same harness, model,
- * profile and working folder, with a fresh context, and returns only its final
+ * `agent` tool for one self-contained task. It runs on the thread's model, or on
+ * one the user mentioned with @, with the same profile and working folder and a fresh context, and returns only its final
  * reply. It is not a thread: it has no transcript of its own, and its latest
  * step shows on the parent's tool row while it works. Sub-agents get no accio
  * tools, so they cannot start sub-agents of their own.
@@ -22,6 +22,7 @@ export const AGENT_TOOL_LABEL = 'Agent';
 export const agentInput = {
   description: z.string().trim().min(1).max(80).describe('A few words naming the task, such as "Find where deliveries retry"'),
   prompt: z.string().trim().min(1).max(20_000).describe('The complete task. The sub-agent sees nothing else: include the goal, relevant paths and what to report back.'),
+  model: z.string().trim().min(1).max(80).optional().describe("A model the user mentioned with @, such as '@sol', to run the sub-agent on instead of this thread's model. Omit to use this thread's model."),
 };
 export type AgentInput = z.infer<z.ZodObject<typeof agentInput>>;
 

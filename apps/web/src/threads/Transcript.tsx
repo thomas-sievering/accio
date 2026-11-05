@@ -10,7 +10,11 @@ import { blocksHaveItem, layoutTranscript, type TranscriptBlock } from './transc
 import { RevealContext, useReveal, type Reveal } from './reveal';
 
 const revealFrames = 30;
+const NO_MODELS: never[] = [];
 import { Choice, optionName } from './Choice';
+import { MentionModels, MentionText } from './Mentions';
+import { useModels } from './useModels';
+import { useThreads } from './threads';
 
 /** Follow late media/layout changes only while the reader is already at the bottom. */
 export function Transcript({ threadId, items, working, onOpenSecrets }: { threadId: string; items: TranscriptItem[]; working: boolean; onOpenSecrets?: (profileId: string) => void }) {
@@ -22,6 +26,8 @@ export function Transcript({ threadId, items, working, onOpenSecrets }: { thread
   const [away, setAway] = useState(false);
   const lastTurn = items.findLast((item) => item.kind === 'user')?.turnId;
   const picks = useMemo(() => pickedOptions(items), [items]);
+  const profileId = useThreads().threads?.find((thread) => thread.id === threadId)?.profileId;
+  const models = useModels(profileId).data?.models;
   // Another pane (the skills panel) can ask to show an item, even one folded away.
   const [reveal, setReveal] = useState<Reveal>();
   useAppEvent('transcript.reveal', (request) => {
@@ -107,7 +113,7 @@ export function Transcript({ threadId, items, working, onOpenSecrets }: { thread
       }}>
         <div className="thread" ref={content}>
           <RevealContext.Provider value={reveal}><OpenSecrets.Provider value={onOpenSecrets}>
-            <Picks.Provider value={picks}><Blocks threadId={threadId} blocks={layoutTranscript(items, working ? lastTurn : undefined)} preparingTurn={working ? lastTurn : undefined} /></Picks.Provider>
+            <MentionModels.Provider value={models ?? NO_MODELS}><Picks.Provider value={picks}><Blocks threadId={threadId} blocks={layoutTranscript(items, working ? lastTurn : undefined)} preparingTurn={working ? lastTurn : undefined} /></Picks.Provider></MentionModels.Provider>
           </OpenSecrets.Provider></RevealContext.Provider>
           {working && !lastTurn && <div className="typing" aria-label="Working"><i /><i /><i /></div>}
         </div>
@@ -200,7 +206,7 @@ const Item = memo(function Item({ threadId, item, preparing, picked, pickName }:
       return <div className="msg user" data-item-id={item.id}>
         {item.steered && <span className="msg-pick">Steered mid-turn</span>}
         {pickName && <span className="msg-pick">✓ {pickName}</span>}
-        {item.text}
+        <MentionText text={item.text} />
       </div>;
     case 'choice':
       return <Choice threadId={threadId} item={item} picked={picked} />;
