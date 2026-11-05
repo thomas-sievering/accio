@@ -59,6 +59,8 @@ const subagentSteps: Record<string, [string, Record<string, string>][]> = {
 Object.assign(PROJECT_APP_TIMING, { pollMs: 1000, debounceMs: 200, graceMs: 3000 });
 const goalTurns = new Map<string, number>();
 const harness = new FakeHarness(async function* (run) {
+  // GLOSSARY: Image attachment. Says how many images arrived with the message.
+  if (run.images?.length) { yield* replyWith(`Saw ${run.images.length} image${run.images.length > 1 ? 's' : ''}.`); return; }
   if (run.prompt === 'Cache usage fixture') {
     const message = { id: 'cache-response', content: [{ type: 'text' as const, text: 'Cache usage recorded.' }],
       usage: { input_tokens: 100, cache_read_input_tokens: 800, cache_creation_input_tokens: 100,

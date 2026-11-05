@@ -1,4 +1,5 @@
 import { createContext, memo, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { MessageImages } from './MessageImages';
 import { ShippedNote } from '../changelog/ShippedNote';
 import type { TranscriptItem } from '@accio/protocol';
 import { AssistantMarkdown } from './AssistantMarkdown';
@@ -206,7 +207,8 @@ const Item = memo(function Item({ threadId, item, preparing, picked, pickName }:
       return <div className="msg user" data-item-id={item.id}>
         {item.steered && <span className="msg-pick">Steered mid-turn</span>}
         {pickName && <span className="msg-pick">✓ {pickName}</span>}
-        <MentionText text={item.text} />
+        {item.images && <MessageImages threadId={threadId} images={item.images} />}
+        {item.text && <MentionText text={item.text} />}
       </div>;
     case 'choice':
       return <Choice threadId={threadId} item={item} picked={picked} />;

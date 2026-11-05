@@ -23,12 +23,14 @@ import {
   settle,
   snooze,
   recoverAfterRestart,
+  titleFrom,
   toView,
   upsertItem,
   type Thread,
 } from './thread.js';
 import type { Machines } from '../machine/machine.js';
 import { ThreadAssets } from './assets.js';
+import { Uploads } from './uploads.js';
 import { ThreadContent } from './content.js';
 import { markdownReferences } from './markdown.js';
 import { SecretRequests } from '../secrets/secrets.js';
@@ -58,6 +60,7 @@ export class Threads {
   /** The hub's built-in tool overrides; accio's defaults apply until it is set. */
   toolOverrides?: () => BuiltinToolOverrides;
   readonly assets: ThreadAssets;
+  private readonly uploads: Uploads;
   readonly secrets: SecretRequests;
   private state: ThreadState;
   private content: ThreadContent;
@@ -85,6 +88,7 @@ export class Threads {
     this.naming = new ThreadNaming(this.state, profiles, models, harnesses);
     this.previews = new Previews(home);
     this.assets = new ThreadAssets(home, (threadId) => this.state.list.some((thread) => thread.id === threadId));
+    this.uploads = new Uploads(home);
     this.content = new ThreadContent(home, this.assets);
     this.changelog = new Changelog(home, broadcast);
     this.secrets = new SecretRequests(home, vault, async (threadId, item) => {
@@ -98,6 +102,7 @@ export class Threads {
       describeShip: (threadId, files, signal) => this.naming.describeShip(threadId, files, signal),
     }, deliveryHosting);
     this.turns = new Turns(this.state, { profiles, projects, models, machines, harnesses, secrets: this.secrets, content: this.content, deliveries: this.deliveries, tools,
+      images: { claim: (threadId, ids) => this.uploads.claim(threadId, ids, this.assets), file: (threadId, asset) => this.assets.harnessFile(threadId, asset) },
       resources: () => this.resources, toolsOff: (harnessId) => builtinToolsOff(harnessId, this.toolOverrides?.()[harnessId]), onWorkFinished: id => this.naming.refine(id), onRepairFinished: (toolId) => this.onRepairFinished?.(toolId) });
     tools?.add(agentTool((threadId, input, signal) => this.turns.startSubagent(threadId, input, signal)));
     projects.onRemoveThreads((id) => this.deleteThreads(this.state.list.filter((t) => t.checkoutId === id)));
@@ -226,7 +231,8 @@ export class Threads {
         if (!linked) throw new UserError('This file is not linked in the thread');
         return this.assets.fileUrl(threadId, state.cwd(thread), path);
       })
-      .on('threads.send', ({ threadId, text, pick, mode }) => {
+      .on('threads.upload', (input) => this.uploads.add(input))
+      .on('threads.send', ({ threadId, text, pick, images: uploads = [], mode }) => {
         // Never wait behind a starting turn for steering: it may be blocked on
         // authentication, and the caller must keep its unsent draft immediately.
         // A scripted ship holds the slot with no turn to steer.
@@ -237,12 +243,17 @@ export class Threads {
           throw new UserError('The agent is starting or finishing. Try sending again in a moment.');
         }
         const goal = parseGoalCommand(text);
-        if (goal && !pick) return this.withMessages(threadId, () => this.goalCommand(threadId, goal, text));
+        if (goal && !pick && !uploads.length) return this.withMessages(threadId, () => this.goalCommand(threadId, goal, text));
         return this.withMessages(threadId, async () => {
           this.assertMessageAllowed(threadId);
-          if (!state.running.has(threadId)) await turns.begin(threadId, text, { pick });
-          else if (mode === 'queue') await this.changeQueue(threadId, queue => [...queue, { id: randomUUID(), text, ...(pick ? { pick } : {}) }]);
-          else await turns.steer(threadId, text, pick);
+          const thread = state.require(threadId);
+          const images = await this.uploads.claim(threadId, uploads, this.assets);
+          if (!state.running.has(threadId)) await turns.begin(threadId, text, { pick, images });
+          else if (mode === 'queue') {
+            this.models.assertReadsImages(thread.profileId, thread.model, images);
+            await this.changeQueue(threadId, queue => [...queue, { id: randomUUID(), text, ...(pick ? { pick } : {}), ...(images.length ? { images } : {}) }]);
+          } else await turns.steer(threadId, text, pick, undefined, images);
+          await this.uploads.release(uploads);
           return null;
         });
       })
@@ -254,11 +265,11 @@ export class Threads {
           this.assertMessageAllowed(threadId);
           if (message.editing) throw new UserError('Finish editing this message first.');
           if (state.running.has(threadId)) {
-            await turns.steer(threadId, message.text, message.pick);
+            await turns.steer(threadId, message.text, message.pick, undefined, message.images);
             await this.changeQueue(threadId, queue => queue.filter(m => m.id !== messageId));
-          } else await turns.begin(threadId, message.text, { pick: message.pick, queuedId: messageId });
+          } else await turns.begin(threadId, message.text, { pick: message.pick, images: message.images, queuedId: messageId });
         } else {
-          if (action === 'save' && !text) throw new UserError('Write a message before saving.');
+          if (action === 'save' && !text && !message.images?.length) throw new UserError('Write a message before saving.');
           await this.changeQueue(threadId, queue => action === 'remove' ? queue.filter(m => m.id !== messageId)
             : queue.map(m => m.id !== messageId ? m : { ...m, text: action === 'save' ? text! : m.text, editing: action === 'edit' }));
           await turns.dispatchQueued(threadId);
@@ -357,7 +368,7 @@ export class Threads {
   start(input: ParamsOf<'threads.start'>, options: { repairToolId?: string; projectSetup?: boolean } = {}) {
     const { state } = this;
     return state.track(async () => {
-      const { text, model, machineId } = input;
+      const { text, model, machineId, images: uploads = [] } = input;
       if (machineId) {
         await this.machines.refresh();
         const machine = this.machines.views().find((m) => m.id === machineId);
@@ -395,7 +406,7 @@ export class Threads {
         const stored = state.commit([...state.list, thread], { quiet: true });
         try {
           // Reserve synchronously with insertion, before persistence yields to another intent.
-          await this.turns.begin(thread.id, text, {}, stored);
+          await this.turns.begin(thread.id, text, { uploads }, stored);
         } catch (err) {
           state.starting.delete(thread.id);
           if (thread.workspace) {
@@ -406,11 +417,12 @@ export class Threads {
               await state.transcripts.add(thread.id, { kind: 'user', id: `${turnId}:u`, turnId, text, at: now() });
               await state.transcripts.add(thread.id, { kind: 'notice', id: `${turnId}:err`, turnId, tone: 'error', text: (err as Error).message });
             }
-            await state.update(thread.id, t => ({ ...t, title: text.split('\n')[0]!.slice(0, 60), status: 'failed' }));
+            await state.update(thread.id, t => ({ ...t, title: titleFrom(text), status: 'failed' }));
             await state.transcripts.flush(thread.id);
           } else await this.deleteThreads([state.require(thread.id)]);
           throw err;
         }
+        await this.uploads.release(uploads);
         this.naming.initial(thread.id);
         return toView(state.require(thread.id));
       } finally {

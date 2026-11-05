@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ClipboardEvent, type FormEvent, type ReactNode } from 'react';
+import { IMAGES_PER_MESSAGE, imageRefusal, readsImage, type ModelSelection } from '@accio/protocol';
 import { ArrowUp, Close, Queue, StopSquare } from '../app/icons';
 import { useAppEvent } from '../app/appEvents';
 import { useAction } from '../app/useAction';
@@ -7,10 +8,15 @@ import { useThreads } from './threads';
 import { caretLeft, MentionMenu } from './Mentions';
 import { mentionAt, mentionOptions } from './mentionQuery';
 import { useModels } from './useModels';
+import { base64, pastedImages, prepareImage } from './pastedImage';
+
+/** GLOSSARY: Image attachment. A pasted image in the composer; it can be sent once uploaded. */
+type PendingImage = { key: string; name: string; mimeType: string; url: string; uploadId?: string };
 
 /**
  * Enter steers the running turn; Ctrl+Enter queues. Shift+Enter adds a line.
  * Typing @ lists the profile's models to mention (GLOSSARY: Model mention).
+ * Pasted images go above the message when the model reads them (GLOSSARY: Image attachment).
  */
 export function Composer({
   onSend,
@@ -23,8 +29,10 @@ export function Composer({
   target,
   draftId,
   profileId,
+  model,
 }: {
-  onSend: (text: string, mode?: 'steer' | 'queue') => Promise<void>;
+  /** `images` are upload ids, in the order they were pasted. */
+  onSend: (text: string, mode: 'steer' | 'queue' | undefined, images: string[]) => Promise<void>;
   /** Set while a turn runs; Stop stays beside Send. */
   onStop?: () => Promise<void>;
   disabled: boolean;
@@ -40,6 +48,8 @@ export function Composer({
   draftId: string;
   /** Whose models `@` offers. */
   profileId?: string;
+  /** The model the message goes to, which must read any pasted image. */
+  model?: ModelSelection;
 }) {
   const client = useClient();
   const { threads, shelves, selectedId, select } = useThreads();
@@ -77,7 +87,17 @@ export function Composer({
     if (next?.start !== mention?.start) setHighlight(0);
     if (dismissed !== undefined && next?.start !== dismissed) setDismissed(undefined);
   };
-  const sendable = !!text.trim() || !!attachment;
+  const [images, setImages] = useState<PendingImage[]>([]);
+  const [imageError, setImageError] = useState<string>();
+  const shown = useRef(images);
+  shown.current = images;
+  useEffect(() => () => { for (const image of shown.current) URL.revokeObjectURL(image.url); }, []);
+  const listed = model && models?.models.find((m) => m.harnessId === model.harnessId && m.id === model.modelId);
+  const refusalFor = (mimeType: string) => listed && !readsImage(listed, mimeType) ? imageRefusal(listed.name, listed.imageTypes ?? [], mimeType) : undefined;
+  // A model chosen after pasting may not read what is already here.
+  const refused = images.map((image) => refusalFor(image.mimeType)).find(Boolean);
+  const uploading = images.some((image) => !image.uploadId);
+  const sendable = (!!text.trim() || !!attachment || images.length > 0) && !uploading && !refused;
   const repairThread = error?.includes('A repair thread was started')
     ? threads?.filter((t) => t.repairToolId).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
     : undefined;
@@ -122,15 +142,48 @@ export function Composer({
     el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
   }, [text]);
 
+  const paste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = pastedImages(event.clipboardData);
+    if (!files.length) return;
+    event.preventDefault();
+    setImageError(undefined);
+    // Reserve places before any await, so two quick pastes respect the limit together.
+    const room = IMAGES_PER_MESSAGE - images.length;
+    if (files.length > room) setImageError(`A message can carry ${IMAGES_PER_MESSAGE} images.`);
+    for (const file of files.slice(0, Math.max(0, room))) {
+      const refusal = refusalFor(file.type || 'image/png');
+      if (refusal) { setImageError(refusal); continue; }
+      const key = crypto.randomUUID();
+      const name = file.name && file.name !== 'image.png' ? file.name : 'Pasted image';
+      setImages((current) => [...current, { key, name, mimeType: file.type, url: URL.createObjectURL(file) }]);
+      void (async () => {
+        const blob = await prepareImage(file);
+        const { uploadId } = await client.call('threads.upload', { name, mimeType: blob.type as 'image/png', data: await base64(blob) });
+        setImages((current) => current.map((image) => image.key === key ? { ...image, mimeType: blob.type, uploadId } : image));
+      })().catch((cause: unknown) => {
+        setImages((current) => current.filter((image) => image.key !== key));
+        setImageError(cause instanceof Error ? cause.message : String(cause));
+      });
+    }
+  };
+  const removeImage = (key: string) => setImages((current) => current.filter((image) => {
+    if (image.key === key) URL.revokeObjectURL(image.url);
+    return image.key !== key;
+  }));
+
   const submit = async (mode: 'steer' | 'queue' = 'steer') => {
     const value = text.trim();
-    if ((!value && !attachment) || disabled || sending.current) return;
+    if (!sendable || disabled || sending.current) return;
+    const sent = images;
     sending.current = true;
     try {
       await run(async () => {
-        await onSend(value, mode);
+        await onSend(value, mode, sent.map((image) => image.uploadId!));
         // Sent from a composer that has since closed (a started draft): forget its saved text too.
         if (!input.current || input.current.value === text) setText('');
+        setImages((current) => current.filter((image) => !sent.includes(image)));
+        for (const image of sent) URL.revokeObjectURL(image.url);
+        setImageError(undefined);
       });
     } finally {
       sending.current = false;
@@ -140,16 +193,20 @@ export function Composer({
   return (
     <div className="composer-wrap">
       {actions}
-      {error && <p className="error composer-error" role="status">{error}
+      {(error || refused || imageError) && <p className="error composer-error" role="status">{refused ?? error ?? imageError}
         {/* A send refused for a broken tool points at the repair already under way. */}
         {repairThread && <> <button type="button" className="link" onClick={() => select(repairThread.id)}>Open repair thread</button></>}
       </p>}
       <form className="composer" onSubmit={(e: FormEvent) => { e.preventDefault(); void submit(queuing ? 'queue' : 'steer'); }}>
-        {attachment && <div className="composer-chips">
-          <span className="composer-chip">
+        {(attachment || images.length > 0) && <div className="composer-chips">
+          {attachment && <span className="composer-chip">
             {attachment.label}
             <button type="button" aria-label={`Remove ${attachment.label}`} onClick={attachment.onRemove}><Close /></button>
-          </span>
+          </span>}
+          {images.map((image) => <span key={image.key} className={`composer-image${image.uploadId ? '' : ' uploading'}`}>
+            <img src={image.url} alt={image.name} />
+            <button type="button" aria-label={`Remove ${image.name}`} onClick={() => removeImage(image.key)}><Close /></button>
+          </span>)}
         </div>}
         {options.length > 0 && mention && <MentionMenu options={options} active={active} onPick={pickMention} onHover={setHighlight}
           left={Math.min((input.current?.offsetLeft ?? 0) + (input.current ? caretLeft(input.current, mention.start) : 0), (input.current?.parentElement?.clientWidth ?? 0) - 240)} />}
@@ -165,6 +222,7 @@ export function Composer({
           aria-autocomplete="list"
           aria-activedescendant={options.length > 0 ? `mention-${options[active]!.handle}` : undefined}
           onChange={(e) => setText(e.target.value)}
+          onPaste={paste}
           onSelect={trackCaret}
           onFocus={trackCaret}
           onBlur={() => setCaret(undefined)}

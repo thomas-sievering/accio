@@ -1,13 +1,15 @@
 import { query } from '@anthropic-ai/claude-agent-sdk';
-import type { HarnessModel, ModelEffort } from '@accio/protocol';
+import { IMAGE_TYPES, type HarnessModel, type ModelEffort } from '@accio/protocol';
 
 const CLAUDE_EFFORTS: ModelEffort[] = ['low', 'medium', 'high', 'xhigh', 'max'].map((id) => ({ id }));
+/** Claude Code does not report input types; every Claude model reads these images. */
+const CLAUDE_IMAGES = [...IMAGE_TYPES];
 
 /** Claude Code's stable aliases, used until Claude Code has reported this profile's own list. */
 export const CLAUDE_MODELS: HarnessModel[] = [
-  { id: 'opus', name: 'Claude Opus', providerId: 'anthropic', description: 'For complex reasoning and demanding coding tasks.', efforts: CLAUDE_EFFORTS },
-  { id: 'sonnet', name: 'Claude Sonnet', providerId: 'anthropic', description: 'A balance of capability and speed.', efforts: CLAUDE_EFFORTS },
-  { id: 'haiku', name: 'Claude Haiku', providerId: 'anthropic', description: 'For quick, lightweight tasks.', efforts: CLAUDE_EFFORTS },
+  { id: 'opus', name: 'Claude Opus', providerId: 'anthropic', description: 'For complex reasoning and demanding coding tasks.', efforts: CLAUDE_EFFORTS, imageTypes: CLAUDE_IMAGES },
+  { id: 'sonnet', name: 'Claude Sonnet', providerId: 'anthropic', description: 'A balance of capability and speed.', efforts: CLAUDE_EFFORTS, imageTypes: CLAUDE_IMAGES },
+  { id: 'haiku', name: 'Claude Haiku', providerId: 'anthropic', description: 'For quick, lightweight tasks.', efforts: CLAUDE_EFFORTS, imageTypes: CLAUDE_IMAGES },
 ];
 
 /** What Claude Code's supportedModels() reports for one model. */
@@ -42,6 +44,7 @@ export function claudeModel(info: ClaudeModelInfo): HarnessModel | undefined {
     id: info.value, providerId: 'anthropic', description,
     name: versioned.startsWith('Claude ') ? versioned : `Claude ${versioned}`,
     efforts: info.supportsEffort === false ? [] : (info.supportedEffortLevels ?? []).map((id) => ({ id })),
+    imageTypes: CLAUDE_IMAGES,
   };
 }
 

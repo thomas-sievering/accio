@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { method } from './rpc.js';
 import { ModelSelection } from './models.js';
-import type { AssetUrl, MediaBinding, ThreadAsset, ToolDetails } from './media.js';
+import { IMAGE_ATTACHMENT_BYTES, IMAGE_TYPES, IMAGES_PER_MESSAGE, type AssetUrl, type MediaBinding, type ThreadAsset, type ToolDetails } from './media.js';
 import type { LoadedSkill } from './workspaceSkills.js';
 import type { SecretRequestItem } from './secrets.js';
 import type { RemoteMachine } from './relay.js';
@@ -62,7 +62,7 @@ export type ThreadGoal = {
   detail?: string;
 };
 
-export type QueuedMessage = { id: string; text: string; pick?: ChoicePick; editing?: boolean };
+export type QueuedMessage = { id: string; text: string; pick?: ChoicePick; images?: ThreadAsset[]; editing?: boolean };
 
 export type ThreadWorkspace = {
   path: string;
@@ -207,7 +207,7 @@ export type PromptCacheUsage = {
 export type TranscriptItem =
   | SecretRequestItem
   | { kind: 'usage'; id: string; turnId: string; provider: 'anthropic'; usage: PromptCacheUsage }
-  | { kind: 'user'; id: string; turnId: string; text: string; at: string; resume?: boolean; delivery?: DeliveryMode; pick?: ChoicePick; steered?: boolean; goal?: 'continue' }
+  | { kind: 'user'; id: string; turnId: string; text: string; at: string; images?: ThreadAsset[]; resume?: boolean; delivery?: DeliveryMode; pick?: ChoicePick; steered?: boolean; goal?: 'continue' }
   | { kind: 'assistant'; id: string; turnId: string; text: string; media?: MediaBinding[] }
   | { kind: 'tool'; id: string; turnId: string; name: string; summary: string; status: 'running' | 'done' | 'error' | 'interrupted'; output?: string; detailRevision?: number; loadedSkills?: LoadedSkill[]; step?: ToolStep }
   /** GLOSSARY: Choice. Screenshots the harness offers; you pick one in your next message. */
@@ -226,19 +226,24 @@ export type TranscriptItem =
 export type TranscriptSnapshot = { items: TranscriptItem[]; cursor: number };
 
 const ThreadId = z.object({ threadId: z.string() });
-const StartCommon = { text: z.string().trim().min(1), model: ModelSelection.optional(), machineId: z.string().optional() };
+/** GLOSSARY: Image attachment. Uploads from `threads.upload` on this machine, sent with a message. */
+const Images = z.array(z.string().uuid()).max(IMAGES_PER_MESSAGE).optional();
+const StartCommon = { text: z.string().trim(), images: Images, model: ModelSelection.optional(), machineId: z.string().optional() };
+const said = (start: { text: string; images?: string[] }) => start.text.length > 0 || !!start.images?.length;
 const Start = z.union([
-  z.object({ checkoutId: z.string().min(1), ...StartCommon }),
-  z.object({ profileId: z.string().min(1), ...StartCommon }),
+  z.object({ checkoutId: z.string().min(1), ...StartCommon }).refine(said, { message: 'Write a message' }),
+  z.object({ profileId: z.string().min(1), ...StartCommon }).refine(said, { message: 'Write a message' }),
 ]);
+/** Base64 bytes of one pasted image, which the client has already shrunk to the attachment limit. */
+const Upload = z.object({ name: z.string().max(180), mimeType: z.enum(IMAGE_TYPES), data: z.string().min(1).max(Math.ceil(IMAGE_ATTACHMENT_BYTES / 3) * 4 + 4) });
 const ProjectSetup = z.object({ projectId: z.string().min(1) });
 const SetModel = z.object({ threadId: z.string(), model: ModelSelection });
 /** GLOSSARY: Goal. The status bar's controls; setting one goes through `/goal` in a message. */
 const GoalAction = z.object({ threadId: z.string(), action: z.enum(['pause', 'resume', 'clear']) });
 const Snooze = z.object({ threadId: z.string(), until: z.iso.datetime({ offset: true }) });
 const PickInput = z.object({ choiceId: z.string().min(1).max(512), option: z.int().min(0).max(63) });
-const Send = z.object({ threadId: z.string(), text: z.string().trim(), pick: PickInput.optional(), mode: z.enum(['steer', 'queue']).optional() })
-  .refine((send) => send.text.length > 0 || send.pick, { message: 'Write a message or pick an option' });
+const Send = z.object({ threadId: z.string(), text: z.string().trim(), pick: PickInput.optional(), images: Images, mode: z.enum(['steer', 'queue']).optional() })
+  .refine((send) => send.text.length > 0 || send.pick || send.images?.length, { message: 'Write a message or pick an option' });
 const Rename = z.object({ threadId: z.string(), title: z.string().trim().min(1).max(120) });
 const PreviewTitle = z.object({ threadId: z.string(), instructions: z.string().trim().max(2000), model: ModelSelection.nullable() });
 const ToolDetailRequest = z.object({ threadId: z.string(), itemId: z.string().min(1).max(512) });
@@ -260,6 +265,8 @@ export const threadMethods = {
   'threads.assetUrl': method<typeof AssetRequest, AssetUrl>(AssetRequest),
   /** A download grant for a current file explicitly linked in the thread. */
   'threads.fileUrl': method<typeof FileRequest, AssetUrl>(FileRequest),
+  /** GLOSSARY: Image attachment. Keeps a pasted image on this machine until a message sends it. */
+  'threads.upload': method<typeof Upload, { uploadId: string }>(Upload),
   'threads.send': method<typeof Send, null>(Send),
   'threads.queued': method<typeof Queued, null>(Queued),
   'threads.deliverySummary': method<typeof ThreadId, DeliverySummary>(ThreadId),

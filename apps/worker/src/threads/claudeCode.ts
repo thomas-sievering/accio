@@ -5,7 +5,7 @@ import { query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { systemPromptText } from '../harnesses/systemPrompt.js';
 import { ACCIO_MCP_SERVER } from '../tools/tools.js';
 import { SUBAGENT_TIMEOUT_SEC } from './subagents.js';
-import type { Harness, HarnessMessage, HarnessTurn } from './harness.js';
+import type { Harness, HarnessImage, HarnessMessage, HarnessTurn } from './harness.js';
 import { secretMcpServer } from '../secrets/claudeTool.js';
 import { savedPurposeInstructions, SECRET_MCP_SERVER } from '../secrets/secrets.js';
 
@@ -41,11 +41,11 @@ export const claudeCode: Harness = {
       throw new Error('No generated title');
     } finally { signal.removeEventListener('abort', abort); q.close(); await q.return(); }
   },
-  async *run({ cwd, prompt, sessionId, model, effort, modelName, env, tools, signal, resourceInstructions, mcps, requestSecret, secretPurposes, registerSteer, toolsOff = [] }: HarnessTurn) {
+  async *run({ cwd, prompt, images, sessionId, model, effort, modelName, env, tools, signal, resourceInstructions, mcps, requestSecret, secretPurposes, registerSteer, toolsOff = [] }: HarnessTurn) {
     if (signal.aborted) return;
     const abortController = new AbortController();
     const stderr: string[] = [];
-    const input = new SteeringInput(prompt, sessionId ?? '');
+    const input = new SteeringInput(images?.length ? await userContent(prompt, images) : prompt, sessionId ?? '');
     const q = query({
       prompt: input.stream(),
       options: {
@@ -75,7 +75,7 @@ export const claudeCode: Harness = {
         },
       },
     });
-    registerSteer?.((text) => input.send(text));
+    registerSteer?.(async (text, images) => input.send(await userContent(text, images)));
 
     // Give Claude a bounded chance to acknowledge interruption, then terminate
     // and await its cleanup before releasing the turn or exiting the server.
@@ -124,19 +124,32 @@ export const claudeCode: Harness = {
   },
 };
 
+type UserContent = SDKUserMessage['message']['content'];
+
+/**
+ * GLOSSARY: Image attachment. Images go before the text, as T3 Code sends them:
+ * Claude Code expands a skill command only from the message's last block.
+ */
+export async function userContent(text: string, images: readonly HarnessImage[] = []): Promise<UserContent> {
+  if (!images.length) return text;
+  const blocks = await Promise.all(images.map(async (image) => ({ type: 'image' as const,
+    source: { type: 'base64' as const, media_type: image.mimeType as 'image/png', data: (await readFile(image.path)).toString('base64') } })));
+  return [...blocks, { type: 'text' as const, text }];
+}
+
 /** Keep stdin open for native mid-turn input; close it with this turn. */
 class SteeringInput {
-  private pending: { text: string; resolve: () => void; reject: (error: Error) => void }[] = [];
+  private pending: { content: UserContent; resolve: () => void; reject: (error: Error) => void }[] = [];
   private wake = () => {};
   private closed = false;
-  constructor(private prompt: string, private sessionId: string) {}
-  send(text: string) {
+  constructor(private prompt: UserContent, private sessionId: string) {}
+  send(content: UserContent) {
     if (this.closed) return Promise.reject(new Error('This turn has finished'));
-    return new Promise<void>((resolve, reject) => { this.pending.push({ text, resolve, reject }); this.wake(); });
+    return new Promise<void>((resolve, reject) => { this.pending.push({ content, resolve, reject }); this.wake(); });
   }
-  private message(text: string, steer = false): SDKUserMessage {
+  private message(content: UserContent, steer = false): SDKUserMessage {
     return { type: 'user', session_id: this.sessionId, parent_tool_use_id: null,
-      message: { role: 'user', content: text }, ...(steer ? { priority: 'now' as const } : {}) };
+      message: { role: 'user', content }, ...(steer ? { priority: 'now' as const } : {}) };
   }
   async *stream(): AsyncIterable<SDKUserMessage> {
     yield this.message(this.prompt);
@@ -144,7 +157,7 @@ class SteeringInput {
       const next = this.pending.shift();
       if (!next) { await new Promise<void>(resolve => { this.wake = resolve; }); continue; }
       next.resolve();
-      yield this.message(next.text, true);
+      yield this.message(next.content, true);
     }
   }
   close() {

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { fallbackEffort, findMentionedModel, mediaKind, mediaMimeType, modelHandles, normalizeMarkdownSource, type ChoicePick, type ModelSelection, type WorkspaceSkill } from '@accio/protocol';
+import { fallbackEffort, findMentionedModel, mediaKind, mediaMimeType, modelHandles, normalizeMarkdownSource, type ChoicePick, type ModelSelection, type ThreadAsset, type WorkspaceSkill } from '@accio/protocol';
 import type { Models } from '../harnesses/models.js';
 import { usedUpMessage } from '../harnesses/modelLimits.js';
 import type { Machines } from '../machine/machine.js';
@@ -15,7 +15,7 @@ import { isChoiceTool, parseChoice, pickPrompt } from './choice.js';
 import type { ThreadContent } from './content.js';
 import type { Deliveries } from './deliveries.js';
 import { deliveryPrompt } from './delivery.js';
-import type { Harness, HarnessTurn, TurnResources } from './harness.js';
+import type { Harness, HarnessImage, HarnessTurn, SteerInput, TurnResources } from './harness.js';
 import { providerOf, turnEnv } from './harnessEnv.js';
 import type { ThreadState } from './state.js';
 import { AGENT_TOOL_LABEL, isAgentTool, runSubagent, type AgentInput, type SubagentTurn } from './subagents.js';
@@ -26,6 +26,10 @@ import type { BuiltinTool } from '../harnesses/builtinTools.js';
 import { afterGoalTurn, CONTINUE_PROMPT, goalInstructions, goalTurnStarted, newGoalPrompt, parseGoalCommand } from '../goals/goal.js';
 
 export type TurnOptions = { resume?: boolean; retry?: boolean; delivery?: boolean; pick?: ChoicePick; queuedId?: string;
+  /** GLOSSARY: Image attachment. Images already in the thread's assets, such as a queued message's. */
+  images?: ThreadAsset[];
+  /** Uploads to claim into the thread's assets as the turn starts, such as a new thread's. */
+  uploads?: string[];
   /** GLOSSARY: Goal. A turn accio starts itself to keep working toward the goal. */
   goalContinue?: boolean };
 
@@ -44,11 +48,13 @@ export type TurnDeps = {
   toolsOff: (harnessId: string) => BuiltinTool[];
   onRepairFinished: (toolId: string) => void;
   onWorkFinished?: (threadId: string) => void;
+  /** GLOSSARY: Image attachment. */
+  images: { claim: (threadId: string, uploadIds: string[]) => Promise<ThreadAsset[]>; file: (threadId: string, asset: ThreadAsset) => Promise<string> };
 };
 
 /** Starting, running, steering and finishing the turns of threads on this machine. */
 export class Turns {
-  private liveInputs = new Map<string, { turnId: string; send?: (text: string) => Promise<void> }>();
+  private liveInputs = new Map<string, { turnId: string; send?: SteerInput }>();
   private queuedStarts = new Map<string, string>();
   private preparing = new Set<Promise<void>>();
   private turns = new Set<Promise<void>>();
@@ -92,14 +98,17 @@ export class Turns {
   }
 
   /** `prompt` replaces what the harness reads, such as for a `/goal` message; the transcript keeps `text`. */
-  async steer(id: string, text: string, pick?: ChoicePick, prompt?: string) {
+  async steer(id: string, text: string, pick?: ChoicePick, prompt?: string, images: ThreadAsset[] = []) {
     const input = this.liveInputs.get(id);
     const send = input?.send;
     if (!input || !send) throw new UserError('The agent is starting or finishing. Try sending again in a moment.');
     const harnessText = prompt ?? (pick ? pickPrompt((await this.state.transcripts.get(id)).items, pick, text) : text);
     if (harnessText === undefined) throw new UserError('That option is no longer available');
-    await send(harnessText);
-    await this.state.transcripts.add(id, { kind: 'user', id: randomUUID(), turnId: input.turnId, text, at: now(), steered: true, ...(pick ? { pick } : {}) });
+    const thread = this.state.require(id);
+    this.deps.models.assertReadsImages(thread.profileId, thread.model, images);
+    const files = await this.imageFiles(id, images);
+    await send(withImageFiles(harnessText, files), files);
+    await this.state.transcripts.add(id, { kind: 'user', id: randomUUID(), turnId: input.turnId, text, at: now(), steered: true, ...(images.length ? { images } : {}), ...(pick ? { pick } : {}) });
     await this.state.transcripts.flush(id);
   }
 
@@ -108,10 +117,14 @@ export class Turns {
     const thread = state.require(id);
     const message = thread.queuedMessages?.[0];
     if (!message || message.editing || state.closing || state.lifecycle.has(id) || state.running.has(id) || thread.status !== 'idle') return;
-    try { await this.begin(id, message.text, { pick: message.pick, queuedId: message.id }); }
+    try { await this.begin(id, message.text, { pick: message.pick, images: message.images, queuedId: message.id }); }
     catch (error) {
       await state.transcripts.add(id, { kind: 'notice', id: randomUUID(), turnId: 'queue', tone: 'error', text: `Queued message could not start: ${(error as Error).message}` });
     }
+  }
+
+  private async imageFiles(threadId: string, images: readonly ThreadAsset[]): Promise<HarnessImage[]> {
+    return Promise.all(images.map(async (image) => ({ path: await this.deps.images.file(threadId, image), mimeType: image.mimeType })));
   }
 
   private async prepare(threadId: string, text: string, options: TurnOptions, controller: AbortController, stored?: Promise<void>) {
@@ -127,12 +140,13 @@ export class Turns {
       let resume = options.resume ?? false;
       let delivering = options.delivery ?? false;
       let pick = options.pick;
+      let images = options.images ?? [];
       if (resume) assertResumable(thread);
       if (options.retry || resume) {
         const items = (await transcripts.get(threadId)).items;
         const last = items.findLast(item => item.kind === 'user');
         delivering = !!(last?.kind === 'user' && last.delivery && thread.delivery);
-        if (options.retry) ({ text, resume, pick } = retryOf(thread, items));
+        if (options.retry) ({ text, resume, pick, images = [] } = retryOf(thread, items));
       }
       if (delivering && thread.delivery?.followUpsStoppedAt) throw new UserError('Automatic delivery was stopped. Request Ship again before continuing publication.');
       const picked = pick ? pickPrompt((await transcripts.get(threadId)).items, pick, text) : text;
@@ -143,6 +157,9 @@ export class Turns {
       await deps.models.ready(thread.profileId);
       thread = state.require(threadId);
       thread = { ...thread, model: deps.models.require(thread.profileId, thread.model) };
+      if (options.uploads?.length) images = await deps.images.claim(threadId, options.uploads);
+      deps.models.assertReadsImages(thread.profileId, thread.model, images);
+      const files = await this.imageFiles(threadId, images);
       if (thread.workspace?.releasedAt) {
         // An archived delivery restores its published revision with a fresh session.
         // A worktree released unchanged on Settle held no work: start from the latest default branch and keep the conversation.
@@ -160,7 +177,7 @@ export class Turns {
       const cwd = state.cwd(thread);
       const goalCommand = parseGoalCommand(picked);
       // A /goal message never reaches the harness as typed: Claude Code would run its own /goal.
-      const ownPrompt = delivering && !resume ? deliveryPrompt(thread.workspace!, requested!) : goalCommand?.type === 'set' ? newGoalPrompt(goalCommand.objective) : picked;
+      const ownPrompt = delivering && !resume ? deliveryPrompt(thread.workspace!, requested!) : withImageFiles(goalCommand?.type === 'set' ? newGoalPrompt(goalCommand.objective) : picked, files);
       // ADR 0017: after a change of harness, the first turn on the new one carries what it missed.
       const prompt = thread.handoff ? withHandoff(handoffContext((await transcripts.get(threadId)).items, thread.handoff), ownPrompt) : ownPrompt;
       if (delivering && !resume) text = thread.delivery!.mode === 'review' ? 'Prepare for review.' : `Ship to ${thread.delivery!.baseBranch} when ready.`;
@@ -183,12 +200,12 @@ export class Turns {
         queuedMessages: options.queuedId ? t.queuedMessages?.filter(m => m.id !== options.queuedId) : t.queuedMessages,
         goal: goalTurnStarted(t.goal),
       }));
-      await transcripts.add(thread.id, { kind: 'user', id: `${turnId}:u`, turnId, text, at: now(), ...(resume ? { resume } : {}), ...(delivering ? { delivery: thread.delivery!.mode } : {}), ...(pick ? { pick } : {}), ...(options.goalContinue ? { goal: 'continue' as const } : {}) });
+      await transcripts.add(thread.id, { kind: 'user', id: `${turnId}:u`, turnId, text, at: now(), ...(images.length ? { images } : {}), ...(resume ? { resume } : {}), ...(delivering ? { delivery: thread.delivery!.mode } : {}), ...(pick ? { pick } : {}), ...(options.goalContinue ? { goal: 'continue' as const } : {}) });
       const grant = deps.tools?.grant(thread.id);
       const turnResources = resources;
       this.liveInputs.set(thread.id, { turnId });
       const instructions = [resources?.instructions, goalInstructions(next.goal)].filter(Boolean).join('\n\n') || undefined;
-      const turn = this.run(next, turnId, { cwd, prompt, env: resources?.env ?? env, signal: controller.signal, ...(grant ? { tools: grant.access } : {}), resourceInstructions: instructions, mcps: resources?.mcps }, delivering, resources?.skills).finally(() => { turnResources?.release(); grant?.revoke(); });
+      const turn = this.run(next, turnId, { cwd, prompt, ...(files.length ? { images: files } : {}), env: resources?.env ?? env, signal: controller.signal, ...(grant ? { tools: grant.access } : {}), resourceInstructions: instructions, mcps: resources?.mcps }, delivering, resources?.skills).finally(() => { turnResources?.release(); grant?.revoke(); });
       resources = undefined;
       this.turns.add(turn);
       void turn.then(() => this.turns.delete(turn), (err) => {
@@ -208,7 +225,7 @@ export class Turns {
   private async run(
     thread: Thread,
     turnId: string,
-    run: Pick<HarnessTurn, 'cwd' | 'prompt' | 'env' | 'tools' | 'signal' | 'resourceInstructions' | 'mcps'>,
+    run: Pick<HarnessTurn, 'cwd' | 'prompt' | 'images' | 'env' | 'tools' | 'signal' | 'resourceInstructions' | 'mcps'>,
     delivering = false,
     skills: WorkspaceSkill[] = [],
   ) {
@@ -436,4 +453,11 @@ export class Turns {
       await state.transcripts.add(threadId, change.item);
     }
   }
+}
+
+/** GLOSSARY: Image attachment. The harness sees each image and is told where its file is, so its tools can open it. */
+export function withImageFiles(text: string, files: readonly HarnessImage[]): string {
+  if (!files.length) return text;
+  const notes = files.map((file, i) => `[Image ${i + 1} is saved at: ${file.path}]`).join('\n');
+  return text ? `${text}\n\n${notes}` : notes;
 }

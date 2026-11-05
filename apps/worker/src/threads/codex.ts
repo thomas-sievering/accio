@@ -1,7 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import { startCodex, type CodexFactory, type CodexNotification } from '@accio/codex';
 import { systemPromptText } from '../harnesses/systemPrompt.js';
-import type { Harness, HarnessEvent } from './harness.js';
+import type { Harness, HarnessEvent, HarnessImage } from './harness.js';
 import { z } from 'zod';
 import { SecretToolInput, SECRET_TOOL_DESCRIPTION, SECRET_MCP_SERVER, savedPurposeInstructions } from '../secrets/secrets.js';
 import { secretHttpTool } from '../secrets/httpTool.js';
@@ -50,7 +50,7 @@ export function codexHarness(factory: CodexFactory = startCodex): Harness {
         throw new Error('Title response was interrupted');
       } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
     },
-    async *run({ cwd, prompt, sessionId, model, effort, modelName, env, tools, signal, resourceInstructions, mcps, requestSecret, secretPurposes, registerSteer, toolsOff = [] }) {
+    async *run({ cwd, prompt, images, sessionId, model, effort, modelName, env, tools, signal, resourceInstructions, mcps, requestSecret, secretPurposes, registerSteer, toolsOff = [] }) {
       if (signal.aborted) return;
       const home = env.CODEX_HOME;
       const baseUrl = env.ACCIO_OPENAI_URL;
@@ -118,11 +118,11 @@ export function codexHarness(factory: CodexFactory = startCodex): Harness {
         threadId = result.thread.id;
         yield { type: 'harness_event', event: { kind: 'session', id: threadId! } };
         if (signal.aborted) return;
-        const turn = await client.request('turn/start', { threadId, input: [{ type: 'text', text: prompt }], ...(model ? { model } : {}), ...(effort ? { effort } : {}) });
+        const turn = await client.request('turn/start', { threadId, input: codexInput(prompt, images), ...(model ? { model } : {}), ...(effort ? { effort } : {}) });
         turnId = turn.turn.id;
-        registerSteer?.(async (text) => {
+        registerSteer?.(async (text, images) => {
           if (signal.aborted) throw new Error('This turn has stopped');
-          await client.request('turn/steer', { threadId, expectedTurnId: turnId, input: [{ type: 'text', text }] });
+          await client.request('turn/steer', { threadId, expectedTurnId: turnId, input: codexInput(text, images) });
         });
         if (signal.aborted) { clearTimeout(stopTimer); stop(); }
         for (;;) {
@@ -171,4 +171,9 @@ export function codexEvents({ method, params }: CodexNotification): HarnessEvent
     case 'webSearch': return [{ kind: 'tool', id: item.id, name: 'Search', summary: item.query ?? '', status }];
     default: return [];
   }
+}
+
+/** GLOSSARY: Image attachment. Codex reads each image from its saved file; the text follows them. */
+export function codexInput(text: string, images: readonly HarnessImage[] = []) {
+  return [...images.map((image) => ({ type: 'localImage' as const, path: image.path })), { type: 'text' as const, text }];
 }

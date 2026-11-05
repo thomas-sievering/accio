@@ -6,6 +6,26 @@ export const normalizeMarkdownSource = normalizeUri;
 /** Immutable bytes owned by one thread on the machine that ran it. */
 export type ThreadAsset = { id: string; name: string; mimeType: string; sizeBytes: number };
 
+/** GLOSSARY: Image attachment. The image types a pasted image may have; every harness reads these four. */
+export const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'] as const;
+/** Claude refuses an image over 5 MB once base64-encoded; clients shrink pasted images below this. */
+export const IMAGE_ATTACHMENT_BYTES = 3_500_000;
+export const IMAGE_ATTACHMENT_MAX_EDGE = 2000;
+export const IMAGES_PER_MESSAGE = 10;
+
+/**
+ * Whether a model reads an image of this type. A model that has not reported
+ * the image types it reads (`imageTypes` absent) is assumed to read them all.
+ */
+export function readsImage(model: { imageTypes?: readonly string[] } | undefined, mimeType: string): boolean {
+  return !model?.imageTypes || model.imageTypes.includes(mimeType);
+}
+
+/** "GPT-5 Codex can't read images" or "… can't read GIF images", for the composer and the worker alike. */
+export function imageRefusal(modelName: string, imageTypes: readonly string[], mimeType: string): string {
+  return imageTypes.length ? `${modelName} can't read ${mimeType.split('/')[1]!.toUpperCase()} images.` : `${modelName} can't read images.`;
+}
+
 export type ResultPart =
   | { type: 'text'; text: string }
   | { type: 'media'; asset: ThreadAsset }
