@@ -51,7 +51,7 @@ export function ThreadsProvider({ children }: { children: ReactNode }) {
   const setDraft = (value: ThreadsCtx['draft']) => { updateDraft(value); if (value) localStorage.setItem(draftKey, JSON.stringify(value)); else localStorage.removeItem(draftKey); };
   const [navigation, setNavigation] = useState(0);
   const { filter } = useProfiles();
-  const { visible } = useProjects();
+  const { visible, state: projects } = useProjects();
   const [storedScope, setProjectScope] = useLocalState<string>('accio.projectScope', '');
   const [query, setQuery] = useState('');
   // A scope outside the selected profile (or a removed project) falls back to every project.
@@ -77,10 +77,7 @@ export function ThreadsProvider({ children }: { children: ReactNode }) {
         setNavigation((n) => n + 1);
       },
       navigation,
-      shelves: shelveThreads(filterThreads(
-        (threads ?? []).filter((t) => t.projectId || filter === 'all' || t.profileId === filter),
-        new Set(projectScope ? [projectScope] : ['', ...visible.map((p) => p.id)]), query,
-      ), now, placement),
+      shelves: shelveThreads(filterThreads(threads ?? [], { project: projectScope, profileId: filter, projects: projects?.projects ?? [] }, query), now, placement),
       projectScope,
       setProjectScope,
       query,
@@ -95,7 +92,7 @@ export function ThreadsProvider({ children }: { children: ReactNode }) {
     }),
     // The setters are stable in behaviour; recreate only when data changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [client, threads, placement, loadError, retryLoad, selectedId, draft, navigation, now, visible, projectScope, query, filter],
+    [client, threads, placement, loadError, retryLoad, selectedId, draft, navigation, now, projects, projectScope, query, filter],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

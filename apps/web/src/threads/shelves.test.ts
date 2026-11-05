@@ -132,14 +132,30 @@ describe('createPlacementTracker', () => {
 });
 
 describe('filterThreads', () => {
-  const threads = [thread('Fix login'), thread('Add search', { projectId: 'p2' }), thread('Search docs', { projectId: 'p3' })];
+  const projects = [{ id: 'p1', profileId: 'a1' }, { id: 'p2', profileId: 'a1' }, { id: 'p3', profileId: 'a2' }];
+  const all = { project: '', profileId: 'all', projects };
+  const threads = [
+    thread('Fix login'), thread('Add search', { projectId: 'p2' }), thread('Search docs', { projectId: 'p3', profileId: 'a2' }),
+    thread('Loose', { projectId: '', profileId: 'a2' }),
+    // Another machine's thread in a repository with no checkout on this one.
+    thread('Remote work', { projectId: 'elsewhere', profileId: 'a1', projectName: 'accio', machine: { id: 'm2', name: 'PC', online: true } }),
+  ];
 
-  it('keeps only threads of the given projects', () => {
-    expect(ids(filterThreads(threads, new Set(['p1', 'p2']), ''))).toEqual(['Fix login', 'Add search']);
+  it('keeps every thread when no project or profile is chosen, including other machines projects', () => {
+    expect(ids(filterThreads(threads, all, ''))).toEqual(['Fix login', 'Add search', 'Search docs', 'Loose', 'Remote work']);
+  });
+
+  it('keeps one project when the sidebar is narrowed to it', () => {
+    expect(ids(filterThreads(threads, { ...all, project: 'p2' }, ''))).toEqual(['Add search']);
+  });
+
+  it('places threads of projects this machine lacks, and No project threads, by their own profile', () => {
+    expect(ids(filterThreads(threads, { ...all, profileId: 'a1' }, ''))).toEqual(['Fix login', 'Add search', 'Remote work']);
+    expect(ids(filterThreads(threads, { ...all, profileId: 'a2' }, ''))).toEqual(['Search docs', 'Loose']);
   });
 
   it('matches the search against titles, ignoring case', () => {
-    expect(ids(filterThreads(threads, new Set(['p1', 'p2', 'p3']), '  SEARCH '))).toEqual(['Add search', 'Search docs']);
+    expect(ids(filterThreads(threads, all, '  SEARCH '))).toEqual(['Add search', 'Search docs']);
   });
 });
 

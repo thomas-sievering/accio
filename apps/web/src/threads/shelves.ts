@@ -115,10 +115,28 @@ export function shelveThreads(threads: ThreadView[], now: Date, placement?: Plac
   return shelves;
 }
 
-/** The threads the sidebar lists: those of the given projects whose title matches the search. */
-export function filterThreads(threads: ThreadView[], projectIds: ReadonlySet<string>, query: string): ThreadView[] {
+/** What the sidebar is narrowed to: one project, or every project of the selected profile. */
+export type ThreadScope = {
+  /** The one project the sidebar shows, or '' for all. */
+  project: string;
+  /** The selected profile, or 'all'. */
+  profileId: string;
+  /** This machine's projects, each with the profile it belongs to. */
+  projects: readonly { id: string; profileId: string }[];
+};
+
+/**
+ * The threads the sidebar lists: those in scope whose title matches the search. A thread whose
+ * project this machine doesn't have, such as another machine's thread in a repository with no
+ * checkout here, or a No project thread, is placed by its own profile.
+ */
+export function filterThreads(threads: ThreadView[], scope: ThreadScope, query: string): ThreadView[] {
   const q = query.trim().toLowerCase();
-  return threads.filter((t) => projectIds.has(t.projectId) && (!q || t.title.toLowerCase().includes(q)));
+  const owners = new Map(scope.projects.map((p) => [p.id, p.profileId]));
+  const inScope = (t: ThreadView) => scope.project
+    ? t.projectId === scope.project
+    : scope.profileId === 'all' || (owners.get(t.projectId) ?? t.profileId) === scope.profileId;
+  return threads.filter((t) => inScope(t) && (!q || t.title.toLowerCase().includes(q)));
 }
 
 /** Next 9:00 that is at least an hour away: "snooze until tomorrow morning". */
