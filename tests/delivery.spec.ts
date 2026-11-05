@@ -145,15 +145,15 @@ test('a conversation with no changes stops Ship without waiting for checks', asy
   await page.locator('.composer textarea').fill('Delivery follow-up');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect(page.getByText('Fresh workspace ready.', { exact: true })).toBeVisible();
-  // With nothing to ship, Ship and its options are not offered at all.
-  await expect(page.getByRole('button', { name: 'Ship', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Shipping options', exact: true })).toHaveCount(0);
+  // Ship is offered from the start, so Ship when done can be queued before any edit.
+  await expect(page.getByRole('button', { name: 'Ship', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Shipping options', exact: true })).toBeVisible();
   await expect(page.getByText('Waiting for checks', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Check now', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Archive', exact: true })).toHaveCount(0);
   await page.reload();
   await expect(page.getByText('Fresh workspace ready.', { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Ship', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Ship', exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('nothing-to-ship.png') });
 });
 
