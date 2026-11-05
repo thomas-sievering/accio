@@ -800,7 +800,6 @@
 /* A turn starting or ending dims and restores the chips gently; the press keeps its scale. */
 .composer-bar :is(.model-trigger, .effort-trigger) { transition: opacity 200ms ease, scale 420ms var(--ease-settle); }
 .effort-menu .menu-item { justify-content: space-between; }
-.model-trigger svg { fill: currentColor; }
 .menu.effort-menu { position: fixed; inset: auto; position-area: none; position-try-fallbacks: none; width: 160px; margin: 0; }
 .model-picker {
   position: fixed;
@@ -1003,8 +1002,8 @@ div.model-picker-empty b { color: var(--ink); font-weight: 500; }
   font-size: 13px;
 }
 .mention-option { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 0 9px; border-radius: 6px; color: var(--ink); cursor: pointer; white-space: nowrap; }
-.mention-option svg { flex: none; width: 13px; height: 13px; fill: currentColor; }
+.mention-option svg { flex: none; width: 13px; height: 13px; }
 .mention-option[aria-selected="true"] { background: var(--raised-2); color: var(--ink-strong); }
 .mention-option.limited { opacity: 0.5; }
 .mention { display: inline-flex; align-items: baseline; gap: 4px; padding: 0 5px; border-radius: 5px; background: var(--raised); color: var(--ink-strong); white-space: nowrap; }
-.mention svg { align-self: center; width: 11px; height: 11px; fill: currentColor; }
+.mention svg { align-self: center; width: 11px; height: 11px; }
