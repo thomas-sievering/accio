@@ -4,15 +4,18 @@ import { RpcClient, socketUrl, takeToken, type ConnectionStatus } from './rpcCli
 import { HubSettings } from '../hub/HubSettings';
 
 const ClientContext = createContext<RpcClient | null>(null);
-const HubsContext = createContext<{ hubs: HubConnectionView[]; selectedId: string; select: (id: string) => void; root: RpcClient } | null>(null);
+const HubsContext = createContext<{ hubs: HubConnectionView[]; selectedId: string; /** The user picked this hub themselves, rather than it being the default. */ chosen: boolean; select: (id: string) => void; root: RpcClient } | null>(null);
+
+const HUB_KEY = 'accio.hub';
 
 export function ConnectionProvider({ children }: { children: ReactNode }) {
   const [token] = useState(takeToken);
   const [root, setRoot] = useState<RpcClient>();
   const [client, setClient] = useState<RpcClient>();
   const [hubs, setHubs] = useState<HubConnectionView[]>();
-  const [selection, setSelection] = useState(() => sessionStorage.getItem('accio.hub') ?? '');
-  const selectedId = hubs?.some((h) => h.id === selection) ? selection : hubs?.[0]?.id ?? '';
+  // Remembered across restarts; without a choice, a hub you joined beats the one this machine runs for itself.
+  const [selection, setSelection] = useState(() => localStorage.getItem(HUB_KEY) ?? '');
+  const selectedId = hubs?.some((h) => h.id === selection) ? selection : (hubs?.find((h) => !h.local) ?? hubs?.[0])?.id ?? '';
   useEffect(() => {
     if (!token) return;
     const c = new RpcClient(socketUrl(token)); setRoot(c);
@@ -28,8 +31,8 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   }, [token, root, selectedId, hubs === undefined]);
   if (!token) return <div className="center-screen"><h1>accio</h1><p>Open the link the server printed at startup (it ends in <code>#token=…</code>).</p></div>;
   if (!root || !client || hubs === undefined || selectedId && client.hubId !== selectedId) return null;
-  const select = (id: string) => { sessionStorage.setItem('accio.hub', id); setSelection(id); };
-  return <HubsContext.Provider value={{ hubs, selectedId, select, root }}>
+  const select = (id: string) => { localStorage.setItem(HUB_KEY, id); setSelection(id); };
+  return <HubsContext.Provider value={{ hubs, selectedId, chosen: selection === selectedId, select, root }}>
     <ClientContext.Provider key={selectedId} value={client}>
       {hubs.length ? children : <div className="settings-page"><h1>Connect to a hub</h1><HubSettings /></div>}
     </ClientContext.Provider>

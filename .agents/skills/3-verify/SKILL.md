@@ -45,7 +45,7 @@ Real turns use the **verify device**: one machine identity, `~/.accio-verify/dev
 - `pnpm verify:real`: adds the disposable project, opens a draft through New thread, sends `Reply with ACCIO_VERIFY_OK…`, and requires the streamed reply plus a persisted transcript (copied to `transcript.json`).
 - Link once (or after the device is revoked): get a pairing code from a device already on the hub (Settings → Hubs, or `hubs.createPairingCode` on that device), then run `pnpm verify:link-hub` with `ACCIO_VERIFY_HUB_URL` and `ACCIO_VERIFY_PAIRING_CODE` set. It pairs through first-run setup, names the machine, and saves the device file. Never print the code or the device file.
 
-One run uses the device at a time; others wait up to 15 minutes on `device.json.lock`. `pnpm try` (the hands-on desktop launch from a checkout) holds the same lock while its window is open; the wait message names its checkout. Real turns spend the hub account's quota and run tools with full permissions, so keep prompts inside the disposable project. A journey can `export const headed = true`.
+One run uses the device at a time; others wait up to 15 minutes on `device.json.lock`. `pnpm try` (the hands-on desktop launch from a checkout) holds the same lock while its window is open, but closes that window when a run asks for the device, so a forgotten window never blocks you. Real turns spend the hub account's quota and run tools with full permissions, so keep prompts inside the disposable project. A journey can `export const headed = true`.
 
 ## Doctor
 
