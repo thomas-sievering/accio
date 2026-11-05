@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { method } from './rpc.js';
 import { ModelSelection } from './models.js';
-import { IMAGE_ATTACHMENT_BYTES, IMAGE_TYPES, IMAGES_PER_MESSAGE, type AssetUrl, type MediaBinding, type ThreadAsset, type ToolDetails } from './media.js';
+import { IMAGE_ATTACHMENT_BYTES, IMAGE_TYPES, IMAGES_PER_MESSAGE, type AssetUrl, type MediaBinding, type RelayMedia, type ThreadAsset, type ToolDetails } from './media.js';
 import type { LoadedSkill } from './workspaceSkills.js';
 import type { SecretRequestItem } from './secrets.js';
 import type { RemoteMachine } from './relay.js';
@@ -247,6 +247,7 @@ const PreviewTitle = z.object({ threadId: z.string(), instructions: z.string().t
 const ToolDetailRequest = z.object({ threadId: z.string(), itemId: z.string().min(1).max(512) });
 const AssetRequest = z.object({ threadId: z.string(), assetId: z.string().uuid(), download: z.boolean().optional() });
 const FileRequest = z.object({ threadId: z.string(), path: z.string().min(1).max(4096) });
+const MediaRequest = z.union([AssetRequest.pick({ threadId: true, assetId: true }), FileRequest]);
 const Deliver = z.object({ threadId: z.string(), mode: z.enum(['ship', 'review']) });
 const Queued = z.object({ threadId: z.string(), messageId: z.string(), action: z.enum(['steer', 'remove', 'edit', 'save', 'cancel']), text: z.string().trim().min(1).optional() });
 
@@ -263,6 +264,8 @@ export const threadMethods = {
   'threads.assetUrl': method<typeof AssetRequest, AssetUrl>(AssetRequest),
   /** A download grant for a current file explicitly linked in the thread. */
   'threads.fileUrl': method<typeof FileRequest, AssetUrl>(FileRequest),
+  /** The bytes behind `threads.assetUrl` or `threads.fileUrl`, base64, for another machine showing this thread. */
+  'threads.media': method<typeof MediaRequest, RelayMedia>(MediaRequest),
   /** GLOSSARY: Image attachment. Keeps a pasted image on this machine until a message sends it. */
   'threads.upload': method<typeof Upload, { uploadId: string }>(Upload),
   'threads.send': method<typeof Send, null>(Send),

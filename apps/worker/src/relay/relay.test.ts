@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -83,6 +84,43 @@ describe('thread relay between machines', () => {
     await mac.client.waitFor('threads.changed', (threads) => remote(threads, pcThread.id)?.status === 'idle' && !!remote(threads, pcThread.id)?.machine, 10_000);
     await mac.client.call('threads.send', { threadId: pcThread.id, text: 'from the mac' });
     await expect.poll(async () => (await pc.client.call('threads.transcript', { threadId: pcThread.id })).some((i) => i.kind === 'user' && i.text === 'from the mac'), { timeout: 10_000 }).toBe(true);
+  }, 30_000);
+
+  it('shows another machine’s images and linked files, fetched once through the hub', async () => {
+    const image = await readFile(fileURLToPath(new URL('../../../../tests/fixtures/chat.png', import.meta.url)));
+    const harness = new FakeHarness(async function* (run) {
+      await writeFile(join(run.cwd, 'shot.png'), image);
+      await writeFile(join(run.cwd, 'notes.txt'), 'version 1');
+      yield* replyWith('![Shot](shot.png)\n\n[Notes](notes.txt)');
+    });
+    const { mac, pc } = await machines(harness);
+    const profile = await mac.client.signedIn('Personal');
+    const thread = await mac.client.call('threads.start', { profileId: profile.id, text: 'show me' });
+    await pc.client.waitFor('threads.changed', (threads) => remote(threads, thread.id)?.status === 'idle', 10_000);
+    const assistant = (await pc.client.call('threads.observe', { threadId: thread.id })).items.find((i) => i.kind === 'assistant');
+    const asset = assistant?.kind === 'assistant' ? assistant.media?.[0]?.asset : undefined;
+    if (!asset) throw new Error('Missing image');
+    const get = (machine: typeof pc, url: string) => fetch(`http://127.0.0.1:${machine.app.app.port}/hubs/${machine.saved.id}${url}`);
+
+    const grant = await pc.client.call('threads.assetUrl', { threadId: thread.id, assetId: asset.id });
+    const response = await get(pc, grant.url);
+    expect(response.headers.get('content-type')).toBe('image/png');
+    expect(Buffer.from(await response.arrayBuffer())).toEqual(image);
+
+    const notes = join(harness.runs[0]!.cwd, 'notes.txt');
+    expect(await (await get(pc, (await pc.client.call('threads.fileUrl', { threadId: thread.id, path: 'notes.txt' })).url)).text()).toBe('version 1');
+    await writeFile(notes, 'version 2');
+    const file = await get(pc, (await pc.client.call('threads.fileUrl', { threadId: thread.id, path: 'notes.txt' })).url);
+    expect(file.headers.get('content-disposition')).toMatch(/^attachment; filename="notes.txt"/);
+    expect(await file.text()).toBe('version 2');
+    await expect(pc.client.call('threads.fileUrl', { threadId: thread.id, path: 'private.txt' })).rejects.toThrow(/not linked/);
+
+    // The image was kept here, so it still shows once its machine is offline; files are not.
+    await mac.app.stop();
+    await pc.client.waitFor('threads.changed', (threads) => remote(threads, thread.id)?.machine?.online === false, 10_000);
+    const again = await pc.client.call('threads.assetUrl', { threadId: thread.id, assetId: asset.id, download: true });
+    expect(Buffer.from(await (await get(pc, again.url)).arrayBuffer())).toEqual(image);
+    await expect(pc.client.call('threads.fileUrl', { threadId: thread.id, path: 'notes.txt' })).rejects.toThrow(/offline/);
   }, 30_000);
 
   it('keeps an offline machine’s threads listed, greyed and read-only', async () => {

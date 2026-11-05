@@ -2,14 +2,17 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { JsonFile } from '@accio/persistence';
 import { RelaySocket, type RelayRequest } from '@accio/hub';
-import { RELAY_MACHINE_METHODS, RELAY_THREAD_METHODS, type CheckoutView, type Events, type MachineView, type ParamsOf, type ProjectsState, type RelaySnapshot, type ThreadView } from '@accio/protocol';
+import { RELAY_MACHINE_METHODS, RELAY_THREAD_METHODS, type CheckoutView, type Events, type MachineView, type ParamsOf, type ProjectsState, type ResultOf, type RelaySnapshot, type ThreadView } from '@accio/protocol';
 import { UserError, type Router } from '../rpc/router.js';
 import { CLONE_TIMEOUT_MS, remoteUrlOf } from '../projects/git.js';
+import type { RemoteMediaKey, ThreadAssets } from '../threads/assets.js';
 
 const RELAY_METHODS = new Set<string>(RELAY_THREAD_METHODS);
 const MACHINE_METHODS = new Set<string>(RELAY_MACHINE_METHODS);
 /** Transcripts another machine streams from here at once; the oldest stops when it opens another. */
 const OBSERVED_PER_PEER = 16;
+/** Long enough to send the largest media through the hub. */
+const MEDIA_TIMEOUT_MS = 5 * 60_000;
 /** What a machine answers for a method it doesn't serve to others. Older machines answer exactly this. */
 const NOT_RELAYED = 'Not available from another machine.';
 const OLDER = (name: string) => `${name} runs an older Accio. Update it by hand once: git pull, then pnpm start.`;
@@ -26,6 +29,8 @@ export type RelayDeps = {
   machineName: (id: string) => string | undefined;
   /** Connected to the hub, though maybe not to the relay. */
   machineConnected?: (id: string) => boolean;
+  /** Caches other machines' media here and serves it to this machine's clients. */
+  assets?: () => Pick<ThreadAssets, 'cachedRemote' | 'storeRemote'> | undefined;
   /** To this hub's clients on this machine. */
   send: <E extends keyof Events>(event: E, data: Events[E]) => void;
 };
@@ -116,6 +121,7 @@ export class Relay {
     const machineId = this.owners.get(threadId);
     if (!machineId) return undefined;
     const name = this.deps.machineName(machineId) ?? 'The other machine';
+    if (method === 'threads.assetUrl' || method === 'threads.fileUrl') return this.media(machineId, name, method, params);
     if (!RELAY_METHODS.has(method)) return Promise.reject(new UserError(`Open this on ${name} for now.`));
     if (method === 'threads.send' && (params as ParamsOf<'threads.send'>).images?.length) return Promise.reject(new UserError(`Images can't be sent to threads on ${name} yet.`));
     if (!this.online.has(machineId) || !this.socket) return Promise.reject(new UserError(`${name} is offline.`));
@@ -174,6 +180,34 @@ export class Relay {
       }
       return this.decorate(machineId, result);
     }, (error: Error) => { throw new UserError(error.message); });
+  }
+
+  /**
+   * Another machine's asset or linked file, fetched through the relay and served from here,
+   * since the browser cannot reach the machine that owns it. Assets never change, so each is
+   * fetched once; a linked file is fetched again each time.
+   */
+  private async media(machineId: string, name: string, method: 'threads.assetUrl' | 'threads.fileUrl', params: unknown): Promise<unknown> {
+    const assets = this.deps.assets?.();
+    if (!assets) throw new UserError(`Open this on ${name} for now.`);
+    if (method === 'threads.assetUrl') {
+      const { threadId, assetId, download } = params as ParamsOf<'threads.assetUrl'>;
+      const key = { machineId, threadId, assetId };
+      const cached = await assets.cachedRemote(key, download);
+      if (cached) return cached;
+      return assets.storeRemote(key, await this.fetchMedia(machineId, name, { threadId, assetId }), download);
+    }
+    const { threadId, path } = params as ParamsOf<'threads.fileUrl'>;
+    const key: RemoteMediaKey = { machineId, threadId, path };
+    return assets.storeRemote(key, await this.fetchMedia(machineId, name, { threadId, path }), true);
+  }
+
+  private async fetchMedia(machineId: string, name: string, params: ParamsOf<'threads.media'>): Promise<ResultOf<'threads.media'>> {
+    if (!this.online.has(machineId) || !this.socket) throw new UserError(`${name} is offline.`);
+    return await this.socket.call(machineId, 'threads.media', params, MEDIA_TIMEOUT_MS).catch((error: Error) => {
+      // A machine from before relayed media answers that it does not serve this.
+      throw new UserError(error.message === NOT_RELAYED ? OLDER(name) : error.message);
+    }) as ResultOf<'threads.media'>;
   }
 
   /** Tells every other machine about a change to this machine itself, such as its update. */

@@ -1,12 +1,12 @@
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
-import { copyFile, lstat, mkdir, open, realpath, rename, rm, writeFile, type FileHandle } from 'node:fs/promises';
+import { copyFile, lstat, mkdir, open, readdir, realpath, rename, rm, writeFile, type FileHandle } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { basename, dirname, isAbsolute, join, resolve, win32 } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import { inside } from '../paths.js';
-import { mediaMimeType, type AssetUrl, type MediaBinding, type ThreadAsset } from '@accio/protocol';
+import { mediaMimeType, RELAY_MEDIA_BYTES, type AssetUrl, type MediaBinding, type RelayMedia, type ThreadAsset } from '@accio/protocol';
 
 const IMAGE_LIMIT = 10 * 1024 * 1024;
 const MEDIA_LIMIT = 100 * 1024 * 1024;
@@ -18,7 +18,10 @@ type Grant = {
   threadId: string;
   expiresAt: number;
   download: boolean;
-} & ({ assetId: string } | { cwd: string; source: string });
+} & ({ assetId: string } | { cwd: string; source: string } | { cached: string; name: string; mimeType: string });
+
+/** Where another machine's asset or file is cached here; a file is fetched again each time, since it can change. */
+export type RemoteMediaKey = { machineId: string; threadId: string } & ({ assetId: string } | { path: string });
 
 /** Files are copied at ingestion, while short-lived URLs are minted only over authenticated RPC. */
 export class ThreadAssets {
@@ -121,12 +124,68 @@ export class ThreadAssets {
     return this.grant({ threadId, cwd, source, download: true, expiresAt: Date.now() + GRANT_MS });
   }
 
+  /** The bytes of a saved asset or a linked file, for another machine showing this thread. */
+  async read(threadId: string, target: { assetId: string } | { cwd: string; source: string }): Promise<RelayMedia> {
+    this.assertThread(threadId);
+    const opened = 'assetId' in target
+      ? await this.openAsset(threadId, target.assetId).then(({ handle, asset }) => ({ handle, name: asset.name, mimeType: asset.mimeType }))
+      : await openLocal(target.cwd, target.source, this.home).then(({ handle, path }) => ({ handle, name: safeName(basename(path)), mimeType: 'application/octet-stream' }));
+    try {
+      const size = (await opened.handle.stat()).size;
+      if (size > RELAY_MEDIA_BYTES) throw new Error(`This file is over ${RELAY_MEDIA_BYTES / 1024 / 1024} MiB, too large to open from another machine.`);
+      const bytes = await readBounded(opened.handle, size);
+      return { name: opened.name, mimeType: opened.mimeType, data: bytes.toString('base64') };
+    } finally {
+      await opened.handle.close();
+    }
+  }
+
+  /** A grant for another machine's asset already cached here; undefined when it is not. */
+  async cachedRemote(key: RemoteMediaKey & { assetId: string }, download = false): Promise<AssetUrl | undefined> {
+    const dir = await this.remoteDirectory(key);
+    const file = join(dir, `${key.assetId}.bin`);
+    const metadata = await openRegular(join(dir, `${key.assetId}.json`)).catch(() => undefined);
+    if (!metadata) return undefined;
+    try {
+      const size = (await metadata.stat()).size;
+      if (size > 16_384) return undefined;
+      const { name, mimeType } = JSON.parse((await readBounded(metadata, size)).toString('utf8')) as Partial<RelayMedia>;
+      if (typeof name !== 'string' || typeof mimeType !== 'string') return undefined;
+      if (!(await lstat(file).then((info) => info.isFile(), () => false))) return undefined;
+      return this.grant({ threadId: key.threadId, cached: file, name, mimeType, download, expiresAt: Date.now() + GRANT_MS });
+    } catch {
+      return undefined;
+    } finally {
+      await metadata.close();
+    }
+  }
+
+  /** Keeps another machine's asset or file here and grants it like a local one. */
+  async storeRemote(key: RemoteMediaKey, media: RelayMedia, download = false): Promise<AssetUrl> {
+    if (typeof media?.data !== 'string' || typeof media.name !== 'string' || typeof media.mimeType !== 'string') throw new Error('The other machine sent no file.');
+    const bytes = Buffer.from(media.data, 'base64');
+    checkSize(bytes.byteLength, RELAY_MEDIA_BYTES);
+    const name = safeName(media.name);
+    // Only verified media is ever served inline; anything else is a download.
+    const mimeType = 'assetId' in key ? checkedMime(bytes.subarray(0, 4096), media.mimeType) : 'application/octet-stream';
+    const dir = await this.remoteDirectory(key, true);
+    const id = 'assetId' in key ? key.assetId : `${createHash('sha256').update(key.path).digest('hex').slice(0, 32)}-${randomUUID()}`;
+    if (!('assetId' in key)) await this.pruneFiles(dir);
+    const file = join(dir, `${id}.bin`);
+    const pending = join(dir, `${randomUUID()}.pending`);
+    await writeFile(pending, bytes, { mode: 0o600 });
+    await rename(pending, file).catch(async (error) => { await rm(pending, { force: true }); throw error; });
+    if ('assetId' in key) await writeFile(join(dir, `${id}.json`), JSON.stringify({ name, mimeType }), { mode: 0o600 });
+    return this.grant({ threadId: key.threadId, cached: file, name, mimeType, download: download || !('assetId' in key), expiresAt: Date.now() + GRANT_MS });
+  }
+
   async handle(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
     const path = new URL(req.url ?? '/', 'http://localhost').pathname;
     if (path !== '/thread-assets' && !path.startsWith('/thread-assets/')) return false;
     const token = /^\/thread-assets\/([a-zA-Z0-9_-]+)$/.exec(path)?.[1];
     const grant = token && this.grants.get(token);
-    if (!grant || grant.expiresAt <= Date.now() || !this.exists(grant.threadId)) {
+    // Another machine's thread is not listed here; its grant was minted after the relay found its owner.
+    if (!grant || grant.expiresAt <= Date.now() || (!('cached' in grant) && !this.exists(grant.threadId))) {
       if (token) this.grants.delete(token);
       res.writeHead(404, securityHeaders()).end();
       return true;
@@ -144,6 +203,10 @@ export class ThreadAssets {
         handle = opened.handle;
         mimeType = opened.asset.mimeType;
         name = opened.asset.name;
+      } else if ('cached' in grant) {
+        handle = await openRegular(grant.cached);
+        mimeType = grant.mimeType;
+        name = grant.name;
       } else {
         const opened = await openLocal(grant.cwd, grant.source, this.home);
         handle = opened.handle;
@@ -152,7 +215,7 @@ export class ThreadAssets {
         checkSize((await handle.stat()).size, FILE_LIMIT);
       }
       // Deletion can happen while filesystem operations above are in flight.
-      this.assertThread(grant.threadId);
+      if (!('cached' in grant)) this.assertThread(grant.threadId);
       const size = (await handle.stat()).size;
       const headers: Record<string, string | number> = {
         ...securityHeaders(),
@@ -214,6 +277,32 @@ export class ThreadAssets {
     const token = randomBytes(32).toString('base64url');
     this.grants.set(token, grant);
     return { url: `/thread-assets/${token}`, expiresAt: grant.expiresAt };
+  }
+
+  private async remoteDirectory(key: RemoteMediaKey, create = false): Promise<string> {
+    validId(key.machineId);
+    validId(key.threadId);
+    if (create) await mkdir(this.home, { recursive: true, mode: 0o700 });
+    let dir = this.home;
+    for (const part of ['relay-media', key.machineId, key.threadId, 'assetId' in key ? 'assets' : 'files']) {
+      dir = join(dir, part);
+      if (create) await mkdir(dir, { mode: 0o700 }).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== 'EEXIST') throw error;
+      });
+      const info = await lstat(dir).catch(() => undefined);
+      if (!info && !create) return dir;
+      if (!info || info.isSymbolicLink() || !info.isDirectory()) throw new Error('Unsafe relay media directory.');
+    }
+    return dir;
+  }
+
+  /** Drops fetched files whose grants have expired. */
+  private async pruneFiles(dir: string) {
+    const live = new Set([...this.grants.values()].flatMap((grant) => 'cached' in grant && grant.expiresAt > Date.now() ? [grant.cached] : []));
+    for (const entry of await readdir(dir).catch(() => [] as string[])) {
+      const path = join(dir, entry);
+      if (!entry.endsWith('.pending') && !live.has(path)) await rm(path, { force: true }).catch(() => {});
+    }
   }
 
   private async directory(threadId: string, create = false): Promise<string> {

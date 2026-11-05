@@ -73,6 +73,7 @@ export class HubConnections {
       projects: () => refs.projects?.state() ?? { projects: [], checkouts: [] },
       machines: () => refs.machines?.views() ?? [],
       router: () => router,
+      assets: () => refs.threads?.assets,
       machineName: (id) => settings.machine(id)?.name,
       machineConnected: (id) => settings.machines().some((m) => m.id === id && m.connected),
       send: (event, data) => this.send(event, data, record.id),

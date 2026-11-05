@@ -35,6 +35,10 @@ export type ToolDetails = { input: unknown; parts: ResultPart[]; truncated?: boo
 /** Source uses the same normalized destination encoding as the Markdown renderer. */
 export type MediaBinding = { source: string; asset?: ThreadAsset; error?: string };
 export type AssetUrl = { url: string; expiresAt: number };
+/** A saved asset or linked file, sent to another machine through the relay. `data` is base64. */
+export type RelayMedia = { name: string; mimeType: string; data: string };
+/** Largest asset or file one machine sends another; its base64 must fit in one relay frame. */
+export const RELAY_MEDIA_BYTES = 40 * 1024 * 1024;
 
 const TYPES: Record<string, string> = {
   png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif',

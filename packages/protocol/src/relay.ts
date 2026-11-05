@@ -41,7 +41,7 @@ export type RemoteMachine = { id: string; name: string; online: boolean };
  * Methods that hand out local HTTP URLs (assets, files, previews) wait for a relayed stream.
  */
 export const RELAY_THREAD_METHODS = [
-  'threads.start', 'threads.observe', 'threads.transcript', 'threads.toolDetails', 'threads.deliverySummary',
+  'threads.start', 'threads.observe', 'threads.transcript', 'threads.toolDetails', 'threads.media', 'threads.deliverySummary',
   'threads.send', 'threads.queued', 'threads.stop', 'threads.resume', 'threads.retry',
   'threads.deliver', 'threads.cancelDelivery', 'threads.checkDelivery', 'threads.archive',
   'threads.goal', 'threads.setModel', 'threads.snooze', 'threads.settle', 'threads.reopen',

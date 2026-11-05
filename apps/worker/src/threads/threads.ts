@@ -191,6 +191,16 @@ export class Threads {
       withLifecycle: (threadId, action) => this.withLifecycle(threadId, action) });
     const organize = (threadId: string, change: (t: Thread) => Thread) =>
       state.update(threadId, t => change({ ...t, organizationVersion: (t.organizationVersion ?? 0) + 1 })).then(toView);
+    /** The thread's working folder, once `path` is a file explicitly linked in it. */
+    const linkedCwd = async (threadId: string, path: string) => {
+      const thread = state.require(threadId);
+      if (thread.workspace?.releasedAt) throw new UserError('This thread’s worktree was released. Saved media remains in the conversation; send a follow-up to restore a working copy.');
+      const live = await transcripts.get(threadId);
+      state.require(threadId);
+      const linked = live.items.some((item) => item.kind === 'assistant' && markdownReferences(item.text).files.includes(path));
+      if (!linked) throw new UserError('This file is not linked in the thread');
+      return state.cwd(thread);
+    };
     router
       .on('threads.list', () => state.views())
       .on('threads.start', input => this.start(input))
@@ -222,14 +232,11 @@ export class Threads {
         state.require(threadId);
         return this.assets.assetUrl(threadId, assetId, download);
       })
-      .on('threads.fileUrl', async ({ threadId, path }) => {
-        const thread = state.require(threadId);
-        if (thread.workspace?.releasedAt) throw new UserError('This thread’s worktree was released. Saved media remains in the conversation; send a follow-up to restore a working copy.');
-        const live = await transcripts.get(threadId);
-        state.require(threadId);
-        const linked = live.items.some((item) => item.kind === 'assistant' && markdownReferences(item.text).files.includes(path));
-        if (!linked) throw new UserError('This file is not linked in the thread');
-        return this.assets.fileUrl(threadId, state.cwd(thread), path);
+      .on('threads.fileUrl', async ({ threadId, path }) => this.assets.fileUrl(threadId, await linkedCwd(threadId, path), path))
+      .on('threads.media', async (input) => {
+        state.require(input.threadId);
+        if ('assetId' in input) return this.assets.read(input.threadId, { assetId: input.assetId });
+        return this.assets.read(input.threadId, { cwd: await linkedCwd(input.threadId, input.path), source: input.path });
       })
       .on('threads.upload', (input) => this.uploads.add(input))
       .on('threads.send', ({ threadId, text, pick, images: uploads = [], mode }) => {
