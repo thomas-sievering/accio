@@ -9,6 +9,11 @@ Read [the feature index](features/README.md), then the affected feature files. D
 
 ## Choose the start
 
+For focused fixture browser tests, failure diagnosis, or checks after a rebase,
+follow [Verification and shipping](../../../docs/verification.md). `pnpm verify:ui`
+retains complete logs for selected tests. Use the journeys below when the changed
+behavior needs real accounts or is not covered by those fixtures.
+
 Every start uses a fresh home, never the user's `~/.accio`. Pick it by what the change needs:
 
 | Change needs | Start |

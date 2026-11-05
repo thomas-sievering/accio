@@ -2,6 +2,8 @@
 
 Runs coding threads in Claude Code and Codex on your own machines, keeping each profile, such as work and personal, apart. Terms are in [GLOSSARY.md](GLOSSARY.md), decisions in [docs/adr](docs/adr), open work in [docs/plans](docs/plans).
 
+For development checks and autonomous shipping, follow [Verification and shipping](docs/verification.md).
+
 ## How it fits together
 
 - **Hub.** accio runs its own hub (`apps/hub`): a standalone service, at home or locally, that holds accounts, profiles, shared settings, saved secrets and the model proxy. It never runs threads (ADR 0009). Machines save named hub connections under Settings / Hubs and pair with a one-time code; the hub's startup or `--pair` command issues the first one. Each window selects its own hub; running work stays on its hub (ADR 0014).

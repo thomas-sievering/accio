@@ -17,9 +17,13 @@ it('asks the delivery turn to report its steps', () => {
   expect(deliveryPrompt(workspace, delivery('running'))).toContain('delivery_step');
 });
 
-it('lets a failure that passes on one rerun count as flaky instead of a reason to keep rerunning', () => {
+it('keeps retries focused and continues diagnosis autonomously when a failure persists', () => {
   const workspace = { path: '/w', sourcePath: '/s', branch: 'accio/t', startRevision: 'a', releasedAt: null };
-  expect(deliveryPrompt(workspace, delivery('running'))).toContain('does not reproduce when you rerun it once, treat it as flaky');
+  const prompt = deliveryPrompt(workspace, delivery('running'));
+  expect(prompt).toContain('retrying only the failing test once');
+  expect(prompt).toContain('report both outcomes as intermittent and continue remaining checks');
+  expect(prompt).toContain('If it still fails, diagnose and repair it');
+  expect(prompt).toContain('Routine failures and outdated tests do not require a new user approval');
 });
 
 it('asks the delivery turn for a shipped note written for the person trying the change', () => {
