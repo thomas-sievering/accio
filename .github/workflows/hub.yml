@@ -1,6 +1,24 @@
 name: Hub image
 on:
+  # Branches run through their pull request; only main runs on push.
   push:
+    branches: [main]
+    paths:
+      - apps/**
+      - packages/**
+      - tests/**
+      - scripts/**
+      - playwright*.config.ts
+      - .agents/skills/3-verify/**
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - tsconfig*.json
+      - vitest.config.ts
+      - Dockerfile.hub
+      - .dockerignore
+      - .github/workflows/hub.yml
+  pull_request:
     paths:
       - apps/**
       - packages/**
@@ -67,6 +85,8 @@ jobs:
             out/e2e/limits/
           retention-days: 7
   image:
+    # Deploys pull only main's images, so pull requests skip the build.
+    if: github.event_name != 'pull_request'
     needs: [verify, browser]
     runs-on: ubuntu-latest
     permissions:
