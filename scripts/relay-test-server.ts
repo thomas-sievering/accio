@@ -54,6 +54,11 @@ const macCheckout = await mac.client.call('checkouts.add', { path: mac.repo, pro
 await mac.client.call('threads.start', { checkoutId: macCheckout.id, text: 'Hello from the MacBook' });
 await mac.client.call('threads.start', { checkoutId: macCheckout.id, text: 'A long task on the MacBook' });
 await pc.client.call('threads.start', { checkoutId: (await pc.client.call('projects.get', {})).checkouts[0]!.id, text: 'A thread on the PC' });
+// A repository only the MacBook has: its thread is listed on the PC under the MacBook's project name.
+const macOnly = join(root, 'MacBook', 'mac-only');
+await mkdir(macOnly); await git(macOnly, 'init', '--quiet'); await git(macOnly, 'remote', 'add', 'origin', 'https://github.com/example/mac-only.git');
+const macOnlyCheckout = await mac.client.call('checkouts.add', { path: macOnly, profileId: profile.id });
+await mac.client.call('threads.start', { checkoutId: macOnlyCheckout.id, text: 'Only the MacBook has this repository' });
 
 console.log(`Relay fixture ready: http://127.0.0.1:${pc.app.port}/#token=${token}`);
 process.send?.({ type: 'ready' });
