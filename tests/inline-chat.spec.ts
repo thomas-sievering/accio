@@ -81,6 +81,32 @@ for (const submit of ['Enter', 'Send'] as const) {
   });
 }
 
+test('a thread that finishes starting after you moved to another stays in the background', async ({ page, baseURL }) => {
+  let release: (() => void) | undefined;
+  await page.routeWebSocket('**/ws?*', socket => {
+    const server = socket.connectToServer();
+    socket.onMessage(message => {
+      if (JSON.parse(String(message)).method === 'threads.start') release = () => server.send(message);
+      else server.send(message);
+    });
+  });
+  await page.goto(`${baseURL}/#token=${token}`);
+  await page.locator('.sidebar').getByRole('button', { name: 'New thread', exact: true }).click();
+  await page.getByRole('option', { name: 'No project', exact: true }).click();
+  if (await page.getByRole('combobox', { name: 'Search profiles' }).isVisible()) await page.getByRole('option', { name: 'Personal', exact: true }).click();
+  const text = 'Started in the background';
+  await page.locator('.composer textarea').fill(text);
+  await page.locator('.composer textarea').press('Enter');
+  await expect(page.locator('.draft-starting')).toBeVisible();
+  await expect.poll(() => !!release).toBe(true);
+  await page.locator('.sidebar').getByRole('button', { name: /Inline chat fixture/ }).click();
+  await expect(page.locator('.draft-starting')).toHaveCount(0);
+  release!();
+  await expect(page.locator('.sidebar .row-main').filter({ hasText: text })).toBeVisible();
+  await expect(page.locator('.sidebar .row-main[aria-current="page"]')).toContainText('Inline chat fixture');
+  await expect(page.locator('.messages .msg.user').filter({ hasText: text })).toHaveCount(0);
+});
+
 test('Enter steers, Ctrl changes Send and queues; an unsaved queued edit closes when the turn ends', async ({ page, baseURL }, testInfo) => {
   await page.goto(`${baseURL}/#token=${token}`);
   await page.locator('.sidebar').getByRole('button', { name: /Inline chat fixture/ }).click();

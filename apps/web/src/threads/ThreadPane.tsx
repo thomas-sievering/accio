@@ -1,6 +1,6 @@
 import type { CheckoutView, ChoicePick, MachineView, ProjectView, RemoteMachine, ThreadView } from '@accio/protocol';
 import { type ModelSelection } from '@accio/protocol';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useClient } from '../app/connection';
 import { useLive } from '../app/useLive';
 import { accountForModel, defaultModel, useProfiles } from '../profiles/profiles';
@@ -124,6 +124,9 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
   // Until the list loads, a send goes to this machine, as the server does without a machine id.
   const unavailable = !!machines && !machine?.connected;
   const [starting, setStarting] = useState<FirstMessage>();
+  // A start can take a while; moving elsewhere meanwhile unmounts the draft, and the new thread must not pull focus back.
+  const open = useRef(true);
+  useEffect(() => { open.current = true; return () => { open.current = false; }; }, []);
 
   return (
     <>
@@ -150,7 +153,7 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
               startedWith.set(thread.id, { text, images: previews });
               keepSentImages(thread.id, previews);
               await shown;
-              await viewTransition('thread-open', () => select(thread.id));
+              if (open.current) await viewTransition('thread-open', () => select(thread.id));
             } catch (error) {
               // Keep the composer mounted so a failed start restores its draft and error.
               await shown;
