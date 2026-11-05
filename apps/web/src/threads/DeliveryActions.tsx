@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
 import type { DeliveryMode, DeliverySummary, ProjectView, ThreadView } from '@accio/protocol';
 import { emitAppEvent } from '../app/appEvents';
 import { useClient, useConnectionStatus } from '../app/connection';
@@ -24,6 +24,8 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
   const menu = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const [position, setPosition] = useState<CSSProperties>({});
+  const pill = useRef<HTMLSpanElement>(null);
+  useResizeGlide(pill);
   const { now } = useThreads();
   const delivery = thread.delivery;
   const released = !!thread.workspace?.releasedAt;
@@ -87,6 +89,7 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
   // Work the agent already pushed to the target outside Ship leaves nothing to ship.
   const onBase = !!summary?.onBase && (!status || status.canShip);
   const offerShip = (!status || status.canShip) && !onBase;
+  const inFlight = status?.phase === 'queued' || status?.phase === 'paused' || status?.phase === 'shipping';
   const receipt = status?.phase === 'delivered';
   const age = checkedAgo(status?.checkedAt, now);
   // The chip already says "Waiting for merge · #123"; a review request only adds when it was last checked.
@@ -112,22 +115,22 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
         {!receipt && summary && (summary.added > 0 || summary.removed > 0) && <DiffPill summary={summary} />}
         {/* Line changes stay left; delivery state and actions sit right, beside the composer's send. */}
         <span className="delivery-spacer" aria-hidden="true" />
-        {status?.phase === 'queued' || status?.phase === 'paused' || status?.phase === 'shipping' ? <span className={`delivery-split delivery-queued${status.phase === 'paused' ? '' : ' delivery-sparkly'}${status.phase === 'shipping' ? ' delivery-shipping' : ''}`}>
-          {/* One element from queued to shipping, so the sparkles carry on instead of restarting. */}
-          {status.phase !== 'paused' && <span className="delivery-sparkles" aria-hidden="true">
-            {Array.from({ length: 9 }, (_, i) => <i key={i} />)}
-          </span>}
-          <span role="status" key={status.phase} className="delivery-swap"><StatusGlyphIcon glyph={status.glyph} tone={status.tone} />{status.label}{status.phase === 'shipping' && '…'}</span>
-          {status.canCancel && status.phase !== 'shipping' && <button disabled={!!unavailable || busy} aria-label="Cancel queued delivery" title="Cancel queued delivery" onClick={() => call('threads.cancelDelivery')}><Close /></button>}
-        </span>
-        : status && status.phase !== 'superseded' && <span className={`delivery-split delivery-status tone-${status.tone}`} role="status" title={receipt ? 'Workspace retained' : undefined}>
+        {!inFlight && status && status.phase !== 'superseded' && <span className={`delivery-split delivery-status tone-${status.tone}`} role="status" title={receipt ? 'Workspace retained' : undefined}>
           {status.pullRequest
             ? <a href={status.pullRequest.url} target="_blank" rel="noreferrer" title={`Open PR #${status.pullRequest.number}`}>{statusBody}</a>
             : <span>{statusBody}</span>}
           {receipt && status.revision && <span className="delivery-rev" title="Revision on the target">{status.revision}</span>}
         </span>}
         {onBase && <span className="delivery-pill delivery-complete" title="This thread's commits are already on the target and nothing is uncommitted"><Check />Already on {target}</span>}
-        {offerShip && <span className="delivery-split">
+        {/* One element from Ship through queued to shipping: it resizes in place and the sparkles carry on instead of restarting. */}
+        {inFlight ? <span ref={pill} className={`delivery-split delivery-queued${status.phase === 'paused' ? '' : ' delivery-sparkly'}${status.phase === 'shipping' ? ' delivery-shipping' : ''}`}>
+          {status.phase !== 'paused' && <span className="delivery-sparkles" aria-hidden="true">
+            {Array.from({ length: 9 }, (_, i) => <i key={i} />)}
+          </span>}
+          <span role="status" key={status.phase} className="delivery-swap"><StatusGlyphIcon glyph={status.glyph} tone={status.tone} />{status.label}{status.phase === 'shipping' && '…'}</span>
+          {status.canCancel && status.phase !== 'shipping' && <button disabled={!!unavailable || busy} aria-label="Cancel queued delivery" title="Cancel queued delivery" onClick={() => call('threads.cancelDelivery')}><Close /></button>}
+        </span>
+        : offerShip && <span ref={pill} className="delivery-split">
           <button disabled={!!unavailable || busy || !canRun || !summary?.available || !!thread.queuedMessages?.length} title={thread.queuedMessages?.length ? 'Send or remove queued messages first' : !canRun ? 'Sign in to this profile to ship' : summary?.reason ?? (mode === 'review' ? 'Prepare a PR without merging' : `Finish, verify and ship to ${target}`)} onClick={deliver}><Ship />{mode === 'review' ? 'Prepare for review' : 'Ship'}</button>
           <button ref={trigger} popoverTarget={id} disabled={!!unavailable || busy || !summary?.available || !!thread.queuedMessages?.length} aria-label="Shipping options" aria-haspopup="menu"><ChevronDown /></button>
         </span>}
@@ -175,6 +178,36 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
     </div>
     {(error || loadError) && <p className="delivery-error" role="alert">{error ?? loadError}{loadError && <button className="ghost" onClick={() => setAttempt(n => n + 1)}>Retry</button>}</p>}
   </div>;
+}
+
+/**
+ * When a render changes the element's width, it glides from the old width to the new one
+ * rather than snapping. Runs after every render, since any state can change the label.
+ */
+const GLIDE_MS = 320;
+
+function useResizeGlide(ref: RefObject<HTMLElement | null>) {
+  const last = useRef<{ node: HTMLElement; width: number; glide?: Animation }>(undefined);
+  useLayoutEffect(() => {
+    const node = ref.current;
+    const prev = last.current;
+    if (!node) { prev?.glide?.cancel(); last.current = undefined; return; }
+    const gliding = prev?.node === node && prev.glide?.playState === 'running' ? prev.glide : undefined;
+    // Mid-glide, the next one starts from where this one has got to.
+    const from = gliding ? node.getBoundingClientRect().width : prev?.node === node ? prev.width : undefined;
+    const elapsed = Number(gliding?.currentTime ?? 0);
+    gliding?.cancel();
+    const to = node.getBoundingClientRect().width;
+    last.current = { node, width: to };
+    if (from === undefined || Math.abs(from - to) < 4 || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    // A render that keeps the same target only finishes the glide already under way.
+    const duration = gliding && Math.abs(prev!.width - to) < 1 ? Math.max(GLIDE_MS - elapsed, 1) : GLIDE_MS;
+    node.classList.add('delivery-resizing');
+    const glide = node.animate({ width: [`${from}px`, `${to}px`] }, { duration, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' });
+    // A glide replaced by the next one leaves the class to it.
+    glide.onfinish = glide.oncancel = () => { if (!last.current?.glide || last.current.glide === glide) node.classList.remove('delivery-resizing'); };
+    last.current.glide = glide;
+  });
 }
 
 /** Added and removed exclude the paired edits, which show as an approximate modified count. */

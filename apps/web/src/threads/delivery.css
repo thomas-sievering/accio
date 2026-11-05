@@ -9,7 +9,9 @@
 .delivery-split > :last-child { border-left: 1px solid var(--line-2); padding-inline: 8px; }
 .delivery-split > :only-child { border-left: 0; padding-inline: 11px; }
 .delivery-row button:hover:not(:disabled), .delivery-row a:hover { background: var(--hover); color: var(--ink-strong); }
-.delivery-row button:disabled { cursor: default; opacity: .5; }
+/* Disabled shows at once to the pointer; the dimming waits, so a quick request does not flash the row grey. */
+.delivery-row button { transition: opacity .15s ease, scale 420ms var(--ease-settle); }
+.delivery-row button:disabled { cursor: default; opacity: .5; transition-delay: .3s; }
 .delivery-split > button:first-child { color: var(--ink); }
 .delivery-queued { border-color: var(--blue); color: var(--ink); }
 .delivery-queued .row-working { width: 12px; height: 12px; }
@@ -60,9 +62,9 @@
 /* Without the cancel button the label is the last child; it keeps its own padding. */
 .delivery-sparkly > [role="status"]:last-child { border-left: 0; padding-inline: 11px; }
 /* The label changes in place; the new one settles in rather than snapping. */
-.delivery-swap { animation: delivery-swap .45s cubic-bezier(.2, .8, .2, 1) both; }
+.delivery-swap { animation: delivery-swap .28s var(--ease-settle) both; }
 @keyframes delivery-swap {
-  from { opacity: 0; filter: blur(3px); transform: translateY(4px); }
+  from { opacity: 0; filter: blur(2px); transform: translateY(3px); }
 }
 /* Shipping is the same celebration, livelier: faster stars, a shimmer passing through, and a bloom as it starts. */
 .delivery-sparkly { transition: border-color .5s ease, box-shadow .5s ease; }
@@ -129,3 +131,7 @@
 .delivery-queued { max-width: 100%; }
 .delivery-queued > [role="status"] { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 .delivery-settled { padding: 0 4px; color: var(--muted); font-size: 12.5px; }
+/* While the pill glides to a new width its content keeps one line and stays inside the edge. */
+.delivery-split.delivery-resizing { overflow: hidden; }
+.delivery-split.delivery-resizing, .delivery-split.delivery-resizing > * { white-space: nowrap; }
+.delivery-split.delivery-resizing > * { flex-shrink: 0; }
