@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -106,6 +107,8 @@ export const claudeCode: Harness = {
         // process left behind with an empty result of its own, before the prompt.
         if (step.value.type === 'result' && step.value.origin?.kind === 'task-notification') continue;
         if (step.value.type === 'result') {
+          // A steer cuts the reply short with a result of its own, then Claude carries on with it.
+          if (!input.answers(step.value)) continue;
           registerSteer?.(undefined);
           yield step.value as HarnessMessage;
           return;
@@ -143,25 +146,41 @@ export async function userContent(text: string, images: readonly HarnessImage[] 
 
 /** Keep stdin open for native mid-turn input; close it with this turn. */
 class SteeringInput {
-  private pending: { content: UserContent; resolve: () => void; reject: (error: Error) => void }[] = [];
+  private pending: { content: UserContent; uuid: string; resolve: () => void; reject: (error: Error) => void }[] = [];
   private wake = () => {};
   private closed = false;
+  /** The newest message sent, which the turn's final result has to answer. */
+  private latest = randomUUID();
+  private readonly first = this.latest;
   constructor(private prompt: UserContent, private sessionId: string) {}
   send(content: UserContent) {
     if (this.closed) return Promise.reject(new Error('This turn has finished'));
-    return new Promise<void>((resolve, reject) => { this.pending.push({ content, resolve, reject }); this.wake(); });
+    this.latest = randomUUID();
+    const uuid = this.latest;
+    return new Promise<void>((resolve, reject) => { this.pending.push({ content, uuid, resolve, reject }); this.wake(); });
   }
-  private message(content: UserContent, steer = false): SDKUserMessage {
-    return { type: 'user', session_id: this.sessionId, parent_tool_use_id: null,
+  /**
+   * Whether a result ends the turn: it consumed the newest message. A producer that doesn't
+   * echo what it consumed ends it unless a steer aborted it, as T3 Code's ClaudeAdapterV2 decides.
+   */
+  answers(result: { user_message_uuid?: unknown; user_message_uuids?: unknown; terminal_reason?: unknown }) {
+    const uuids = Array.isArray(result.user_message_uuids) ? result.user_message_uuids
+      : typeof result.user_message_uuid === 'string' ? [result.user_message_uuid] : undefined;
+    if (uuids) return uuids.includes(this.latest);
+    return !(this.steered && (result.terminal_reason === 'aborted_streaming' || result.terminal_reason === 'aborted_tools'));
+  }
+  private get steered() { return this.latest !== this.first; }
+  private message(content: UserContent, uuid: string, steer = false): SDKUserMessage {
+    return { type: 'user', session_id: this.sessionId, parent_tool_use_id: null, uuid: uuid as SDKUserMessage['uuid'],
       message: { role: 'user', content }, ...(steer ? { priority: 'now' as const } : {}) };
   }
   async *stream(): AsyncIterable<SDKUserMessage> {
-    yield this.message(this.prompt);
+    yield this.message(this.prompt, this.latest);
     while (!this.closed) {
       const next = this.pending.shift();
       if (!next) { await new Promise<void>(resolve => { this.wake = resolve; }); continue; }
       next.resolve();
-      yield this.message(next.content, true);
+      yield this.message(next.content, next.uuid, true);
     }
   }
   close() {

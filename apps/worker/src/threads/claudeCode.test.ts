@@ -52,6 +52,34 @@ it('streams steering into the same Claude query with immediate priority and clos
   expect((await input.next()).done).toBe(true);
 });
 
+it.each([true, false])('keeps the turn running past the result a steer cuts short, until a result answers the steer (echoes uuids: %s)', async (echoes) => {
+  const q = query(); queryMock.mockReturnValue(q);
+  const emitted: ReturnType<typeof deferred<IteratorResult<unknown>>>[] = [];
+  const emit = (n: number) => (emitted[n] ??= deferred());
+  let reads = 0;
+  q.next.mockImplementation(() => emit(reads++).promise);
+  let send: ((text: string) => Promise<void>) | undefined;
+  const iterator = claudeCode.run({ cwd: '.', prompt: 'start', sessionId: 's', env: {}, signal: new AbortController().signal,
+    registerSteer: value => { send = value; } })[Symbol.asyncIterator]();
+  const first = iterator.next();
+  await vi.waitFor(() => expect(send).toBeDefined());
+  const input = queryMock.mock.calls[0]![0].prompt[Symbol.asyncIterator]();
+  const start = (await input.next()).value;
+  const sending = send!('make 30 more');
+  const steer = (await input.next()).value;
+  await sending;
+  expect(steer.uuid).toBeTruthy();
+  expect(steer.uuid).not.toBe(start.uuid);
+  emit(0).resolve({ done: false, value: { type: 'result', subtype: 'error_during_execution', is_error: true, session_id: 's', terminal_reason: 'aborted_streaming', ...(echoes ? { user_message_uuids: [start.uuid] } : {}) } });
+  emit(1).resolve({ done: false, value: { type: 'assistant', session_id: 's', parent_tool_use_id: null, message: { id: 'm', content: [] } } });
+  emit(2).resolve({ done: false, value: { type: 'result', subtype: 'success', is_error: false, session_id: 's', terminal_reason: 'completed', ...(echoes ? { user_message_uuids: [steer.uuid] } : {}) } });
+  expect((await first).value).toMatchObject({ type: 'assistant' });
+  expect(send).toBeDefined();
+  expect((await iterator.next()).value).toMatchObject({ type: 'result', subtype: 'success' });
+  expect((await iterator.next()).done).toBe(true);
+  expect(send).toBeUndefined();
+});
+
 it('closes the query after completion and removes its stop listener', async () => {
   const q = query();
   q.next.mockResolvedValueOnce({ done: false, value: { type: 'result', subtype: 'success', is_error: false, session_id: 's' } });
