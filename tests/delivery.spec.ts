@@ -217,6 +217,11 @@ test('Ship menu, queued cancellation, owned preview, delivery, Archive and follo
   await expect(actions.locator('.delivery-settled')).toHaveCount(0);
   await expect(actions.locator('.delivery-status')).toHaveAttribute('title', 'Workspace retained');
   await expect(page.locator('.composer textarea')).toHaveAttribute('placeholder', 'Send a message to reopen this thread…');
+  // The Settled shelf stays closed until the user opens it.
+  const settledShelf = page.locator('.shelf-head', { hasText: 'Settled' });
+  await expect(settledShelf).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('.row.settled.active')).toHaveCount(0);
+  await settledShelf.click();
   await expect(page.locator('.row.settled.active')).toContainText('Shipped');
   await expect(page.locator('.row.settled.active .row-main')).toHaveAttribute('title', /Shipped to main/);
   // The outcome is said once, by the chip; the transcript carries no receipt line.
