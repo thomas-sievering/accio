@@ -90,7 +90,12 @@ test('CI wait shows current job and step, refreshes, survives reload and clears 
   expect(await page.locator('.delivery-row').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('ci-command-narrow.png') });
   await page.setViewportSize({ width: 1280, height: 900 });
-  await expect(page.locator('.row-project').filter({ hasText: 'CI · step 2/4' })).toBeVisible();
+  const shippingRow = page.locator('.row-project').filter({ hasText: 'CI · step 2/4' });
+  await expect(shippingRow).toBeVisible();
+  // The delivery is its own tag; the project keeps its name beside it.
+  await expect(shippingRow.locator('.row-project-name')).toHaveText('ci-progress-project');
+  await expect(shippingRow.locator('.row-delivery')).toHaveText('CI · step 2/4');
+  await page.locator('.row.active').screenshot({ path: testInfo.outputPath('row-delivery-tag.png') });
   // Ship opens the side panel at Delivery: the track, with live CI under the station waiting on it.
   await expect(page.getByRole('tab', { name: 'Delivery' })).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('.delivery-track [aria-current="step"]')).toContainText('Checks on main');

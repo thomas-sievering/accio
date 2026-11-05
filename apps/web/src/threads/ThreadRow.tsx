@@ -72,14 +72,14 @@ export function ThreadRow({ thread: t, place, withinProject = false }: { thread:
         {withinProject ? null : t.projectId ? <ProjectMark id={t.projectId} name={t.projectName} /> : <span className="no-project-mark" />}
         <span className="row-name">
           {renaming ? <RowRename thread={t} /> : <span className="row-title">{t.title}</span>}
-          {/* A delivery status takes the whole line: the project mark already names the project. */}
-          {!oneLine && <span className={`row-project${showState ? ' with-state' : ''}${delivery && showState ? ' delivery' : ''}`}>
+          {/* The project always keeps its name; a delivery status sits beside it as its own tag. */}
+          {!oneLine && <span className={`row-project${showState && !delivery && !withinProject ? ' with-state' : ''}`}>
             {t.machine && <span className={`row-machine${t.machine.online ? '' : ' offline'}`} aria-label={machineText}>
               <span className="row-machine-dot" />
               <span className="row-machine-name">{t.machine.name}</span>
             </span>}
-            {!(delivery && showState) && !withinProject && <span className="row-project-name">{where}</span>}
-            {showState && <span className={`row-state tone-${status.tone}`}>
+            {!withinProject && <span className="row-project-name">{where}</span>}
+            {showState && <span className={`row-state tone-${status.tone}${delivery ? ' row-delivery' : ''}`}>
               <span className="row-state-label">{delivery ? shortStatus(status.label) : status.label}</span>
               {delivery?.pullRequest && <span className="row-state-pr">&nbsp;· #{delivery.pullRequest.number}</span>}
             </span>}

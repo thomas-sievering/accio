@@ -192,7 +192,7 @@
 /* Idle rows read "project · Ready"; the project gives way before the short status does. */
 .row-project-name {
   flex: 0 1 auto;
-  min-width: 0;
+  min-width: 2ch;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -238,9 +238,20 @@
   flex: 0 0 auto;
   min-width: 0;
 }
-/* A delivery row shows its status alone, at full width. */
-.row-project.delivery .row-state {
-  flex: 0 1 auto;
+/* A delivery is its own tag beside the project, tinted by its tone; the project name gives way first. */
+.row-state.row-delivery {
+  flex: 0 0 auto;
+  align-self: center;
+  max-width: 75%;
+  padding: 0 6px 2px;
+  border: 1px solid color-mix(in srgb, currentColor 35%, var(--line-2));
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 15px;
+  white-space: nowrap;
+}
+.row-state.row-delivery.tone-working {
+  color: var(--muted);
 }
 .row-state-label {
   min-width: 0;
