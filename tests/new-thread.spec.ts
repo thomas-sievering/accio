@@ -47,9 +47,9 @@ test('keyboard focus visibly reveals a complete title without moving adjacent ro
   await freshDraft(page, baseURL);
   await page.locator('.composer textarea').fill('Queued title tooltip');
   await page.locator('.composer textarea').press('Enter');
-  // Wait until the completed turn leaves Working; that move remounts its row.
-  await expect(page.locator('.sidebar nav > .rows .row-main').filter({ hasText: 'Queued title tooltip' })).toBeVisible();
-  const row = page.locator('.row-main').filter({ hasText: 'Queued title tooltip' });
+  // Wait until the completed turn leaves Working; that move remounts its row. The draft's own row is not the thread.
+  await expect(page.locator('.sidebar nav > .rows .row:not(.draft) .row-main').filter({ hasText: 'Queued title tooltip' })).toBeVisible();
+  const row = page.locator('.row:not(.draft) .row-main').filter({ hasText: 'Queued title tooltip' });
   await row.focus();
   await page.keyboard.press('Shift+F10');
   await page.getByRole('menuitem', { name: /Rename/ }).click();

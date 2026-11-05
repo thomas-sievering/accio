@@ -253,6 +253,10 @@
 .row-state.row-delivery.tone-working {
   color: var(--muted);
 }
+/* A draft is yours to finish, so it reads in the hero's amber. */
+.row-draft-state {
+  color: var(--orange);
+}
 .row-state-label {
   min-width: 0;
   overflow: hidden;

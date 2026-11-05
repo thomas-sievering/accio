@@ -111,6 +111,10 @@ _Avoid_: Sandbox, project (for the thread's working copy)
 A durable conversation with a harness, optionally attached to a project's checkout and owned worktree. It exists from its first message on. It keeps its starting hub and profile; its model can change, including to another harness through a handoff. Accounts follow the profile's current selections. A No project thread runs under a profile without a project checkout.
 _Avoid_: Chat, session, agent, conversation
 
+**Draft**:
+What a composer holds before it sends: text, Pasted text and image attachments. It stays when you move to another thread; text and Pasted text also survive a restart. A new thread whose draft has something in it is listed at the top of the inbox as Draft until it is sent or emptied; it is not yet a thread.
+_Avoid_: Unsent thread, pending thread
+
 **Turn**:
 Work by the harness until it finishes or is interrupted, started by a user message, Resume or a delivery request. Each turn uses the profile's account in use for that harness's provider. Steering can add messages during the same turn.
 _Avoid_: Run, request

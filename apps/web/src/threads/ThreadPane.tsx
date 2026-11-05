@@ -26,6 +26,7 @@ import { useReportPendingSecrets } from '../secrets/pendingSecrets';
 import { viewTransition } from '../ui/viewTransition';
 import { keepSentImages } from './sentImages';
 import { useThreads, useTranscript } from './threads';
+import { newThreadDraftId } from './drafts';
 
 /** Where a thread runs, looked up once for the header, the notice and the composer. */
 function usePlace(checkoutId: string, profileId?: string, projectId?: string) {
@@ -134,12 +135,12 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
       {starting && <StartingTranscript {...starting} />}
       {/* While starting, the composer settles where the thread's own will be, so the swap is still. */}
       <div className={`hero${starting ? ' starting' : ''}`} inert={!!starting}>
-        <h1>{checkoutId ? `What should we build in ${place.project?.name ?? 'this checkout'}?` : 'What should we build?'}</h1>
+        <h1>{checkoutId ? <>What should we build in {place.project ? <span className="hero-project">{place.project.name}</span> : 'this checkout'}?</> : 'What should we build?'}</h1>
         <ThreadNotice profile={place.profile} model={model} onOpenProfile={onOpenProfile} />
         {chosenMachineId && unavailable && <p className="note" role="status">The selected machine is offline. Choose an online machine.</p>}
         <Composer
           target="draft"
-          draftId={`new:${checkoutId}:${profileId ?? ''}`}
+          draftId={newThreadDraftId(checkoutId, profileId)}
           profileId={place.profile?.id}
           handsOffImages
           disabled={!!starting || !place.profile || !accountForModel(place.profile, model)?.signedIn || unavailable}

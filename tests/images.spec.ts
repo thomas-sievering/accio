@@ -53,3 +53,43 @@ test('a pasted image starts a thread, shows in the message and opens full size',
   await page.reload();
   await expect(page.locator('.msg.user .msg-image img')).toHaveCount(2);
 });
+
+test('a new thread with something in its composer waits in the inbox as a Draft', async ({ page, baseURL }, testInfo) => {
+  await page.goto(`${baseURL}/#token=${token}`);
+  await page.locator('.sidebar').getByRole('button', { name: 'New thread', exact: true }).click();
+  await page.getByRole('option', { name: /delivery-project/ }).click();
+  // The project the thread will run in stands out in the question.
+  await expect(page.locator('.hero h1 .hero-project')).toHaveText('delivery-project');
+  const drafts = page.locator('.sidebar .row.draft');
+  await expect(drafts).toHaveCount(0);
+  await pasteImage(page);
+  await expect(page.locator('.composer-image')).not.toHaveClass(/uploading/);
+  const draft = drafts.filter({ hasText: 'Pasted image' });
+  await expect(draft).toContainText('Draft');
+  await page.locator('.composer textarea').fill('Draft kept while away\nsecond line');
+  await expect(drafts.filter({ hasText: 'Draft kept while away' })).toHaveClass(/active/);
+  await page.screenshot({ path: testInfo.outputPath('draft-row.png') });
+
+  // Moving to another thread keeps the draft, image included, and its row opens it again.
+  await page.locator('.sidebar').getByRole('button', { name: /Inline chat fixture/ }).click();
+  await expect(page.locator('.hero')).toHaveCount(0);
+  const row = drafts.filter({ hasText: 'Draft kept while away' });
+  await expect(row).not.toHaveClass(/active/);
+  await row.locator('.row-main').click();
+  await expect(page.locator('.composer textarea')).toHaveValue('Draft kept while away\nsecond line');
+  await expect(page.locator('.composer-image')).toHaveCount(1);
+
+  // Sending turns the draft into the thread.
+  await page.locator('.composer textarea').press('Enter');
+  await expect(page.locator('.msg.user img')).toHaveCount(1);
+  await expect(drafts).toHaveCount(0);
+
+  // Discarding a draft from its row empties it.
+  await page.locator('.sidebar').getByRole('button', { name: 'New thread', exact: true }).click();
+  await page.getByRole('option', { name: /delivery-project/ }).click();
+  await page.locator('.composer textarea').fill('Throwaway');
+  await drafts.hover();
+  await page.getByRole('button', { name: 'Discard draft' }).click();
+  await expect(drafts).toHaveCount(0);
+  await expect(page.locator('.composer textarea')).toHaveValue('');
+});

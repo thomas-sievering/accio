@@ -79,6 +79,11 @@ html:active-view-transition-type(thread-start, thread-open) {
   text-align: center;
   color: var(--ink);
 }
+/* The project the thread will run in: the one word in the question that is yours. */
+.hero-project {
+  color: var(--orange);
+  font-weight: 600;
+}
 .hero .notice-bar,
 .hero .composer-wrap {
   width: 100%;

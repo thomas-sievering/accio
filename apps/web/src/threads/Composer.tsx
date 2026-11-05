@@ -11,9 +11,7 @@ import { mentionAt, mentionOptions } from './mentionQuery';
 import { useModels } from './useModels';
 import { base64, pastedImages, prepareImage } from './pastedImage';
 import { PasteChip } from './PastedText';
-
-/** GLOSSARY: Image attachment. A pasted image in the composer; it can be sent once uploaded. */
-type PendingImage = { key: string; name: string; mimeType: string; url: string; uploadId?: string };
+import { composerKey, useDraft } from './drafts';
 
 /**
  * Enter steers the running turn; Ctrl+Enter queues. Shift+Enter adds a line.
@@ -59,22 +57,8 @@ export function Composer({
 }) {
   const client = useClient();
   const { threads, shelves, selectedId, select } = useThreads();
-  const storageKey = `accio:${client.hubId}:composer:${draftId}`;
-  // Unsent text survives a restart; sending or clearing it removes the copy.
-  const [text, updateText] = useState(() => localStorage.getItem(storageKey) ?? '');
-  const setText = (value: string) => { updateText(value); if (value) localStorage.setItem(storageKey, value); else localStorage.removeItem(storageKey); };
-  const pastesKey = `${storageKey}:pastes`;
-  // GLOSSARY: Pasted text. Kept beside the draft text, so a restart keeps them too.
-  const [pastes, updatePastes] = useState<string[]>(() => {
-    try { const saved: unknown = JSON.parse(localStorage.getItem(pastesKey) ?? '[]'); return Array.isArray(saved) ? saved.filter((p): p is string => typeof p === 'string') : []; }
-    catch { return []; }
-  });
-  const setPastes = (next: (current: string[]) => string[]) => updatePastes((current) => {
-    const value = next(current);
-    try { if (value.length) localStorage.setItem(pastesKey, JSON.stringify(value)); else localStorage.removeItem(pastesKey); }
-    catch { /* Too large to keep across a restart; it still sends. */ }
-    return value;
-  });
+  // GLOSSARY: Draft. Unsent text, Pasted text and images outlive this composer; sending or clearing them removes them.
+  const { text, setText, pastes, setPastes, images, setImages } = useDraft(composerKey(client.hubId, draftId));
   /** Set by Ctrl+Shift+V just before its paste event, which then keeps long text in the box. */
   const pasteInline = useRef(0);
   const [pasteHint, setPasteHint] = useState(false);
@@ -111,13 +95,7 @@ export function Composer({
     if (next?.start !== mention?.start) setHighlight(0);
     if (dismissed !== undefined && next?.start !== dismissed) setDismissed(undefined);
   };
-  const [images, setImages] = useState<PendingImage[]>([]);
   const [imageError, setImageError] = useState<string>();
-  const shown = useRef(images);
-  shown.current = images;
-  /** Images whose local copies a send has handed off; closing the composer mid-send leaves them alone. */
-  const handedOff = useRef<PendingImage[]>([]);
-  useEffect(() => () => { for (const image of shown.current) if (!handedOff.current.includes(image)) URL.revokeObjectURL(image.url); }, []);
   const listed = model && models?.models.find((m) => m.harnessId === model.harnessId && m.id === model.modelId);
   const refusalFor = (mimeType: string) => listed && !readsImage(listed, mimeType) ? imageRefusal(listed.name, listed.imageTypes ?? [], mimeType) : undefined;
   // A model chosen after pasting may not read what is already here.
@@ -231,7 +209,6 @@ export function Composer({
     const sent = images;
     const sentPastes = pastes;
     sending.current = true;
-    if (handsOffImages) handedOff.current = sent;
     try {
       await run(async () => {
         await onSend(joinPastes(sentPastes, value), mode, sent.map((image) => image.uploadId!), sent.map((image) => image.url));
@@ -245,7 +222,6 @@ export function Composer({
       });
     } finally {
       sending.current = false;
-      handedOff.current = [];
     }
   };
 
