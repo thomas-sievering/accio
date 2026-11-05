@@ -35,8 +35,8 @@ it('names asynchronously with a small model, outside the coding workspace, witho
   expect(harness.runs).toHaveLength(1);
   const items = await c.call('threads.transcript', { threadId: thread.id });
   expect(items.filter(item => item.kind === 'user')).toHaveLength(1);
-  const stored = JSON.parse(await readFile(join(home, 'threads.json'), 'utf8'));
-  expect(stored.find((t: any) => t.id === thread.id).title).toBe('Fix login redirects');
+  // The title is announced before it is saved, so wait for the write.
+  await expect.poll(async () => JSON.parse(await readFile(join(home, 'threads.json'), 'utf8')).find((t: any) => t.id === thread.id).title).toBe('Fix login redirects');
 });
 
 it('protects a manual rename from a late automatic result and keeps it through follow-ups', async () => {
