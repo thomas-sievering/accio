@@ -4,10 +4,13 @@ import { join } from 'node:path';
 import { startCodex, type CodexClient, type CodexFactory } from '@accio/codex';
 import { SIGN_IN_TTL_MS, SignInError } from './claudeOAuth.js';
 import { LimitsReadError } from './limits.js';
+import { IMAGE_TYPES } from '@accio/protocol';
 
 /** `efforts` is absent on models stored before accio kept them. */
-export type CodexModel = { id: string; name: string; description: string; isDefault: boolean; efforts?: { id: string; description?: string }[]; defaultEffort?: string };
-type ModelPage = { data: { model: string; displayName: string; description?: string; isDefault: boolean;
+export type CodexModel = { id: string; name: string; description: string; isDefault: boolean; efforts?: { id: string; description?: string }[]; defaultEffort?: string;
+  /** The image types it reads, from Codex's input modalities; absent on models stored before accio kept them. */
+  imageTypes?: string[] };
+type ModelPage = { data: { model: string; displayName: string; description?: string; isDefault: boolean; inputModalities?: string[];
   supportedReasoningEfforts?: { reasoningEffort: string; description?: string }[]; defaultReasoningEffort?: string }[]; nextCursor?: string | null };
 
 /** Every model the signed-in ChatGPT account offers Codex, with the effort levels each accepts. */
@@ -18,7 +21,8 @@ async function listModels(client: CodexClient): Promise<CodexModel[]> {
     const page: ModelPage = await client.request('model/list', { cursor, limit: 100, includeHidden: false });
     models.push(...page.data.map((m) => ({ id: m.model, name: m.displayName, description: m.description ?? '', isDefault: !!m.isDefault,
       efforts: (m.supportedReasoningEfforts ?? []).map((e) => ({ id: e.reasoningEffort, ...(e.description ? { description: e.description } : {}) })),
-      ...(m.defaultReasoningEffort ? { defaultEffort: m.defaultReasoningEffort } : {}) })));
+      ...(m.defaultReasoningEffort ? { defaultEffort: m.defaultReasoningEffort } : {}),
+      ...(m.inputModalities ? { imageTypes: m.inputModalities.includes('image') ? [...IMAGE_TYPES] : [] } : {}) })));
     cursor = page.nextCursor ?? null;
   } while (cursor);
   return models;

@@ -10,6 +10,8 @@ export type HarnessModel = {
   efforts: ModelEffort[];
   /** The level the harness uses when none is chosen. */
   defaultEffort?: string;
+  /** GLOSSARY: Image attachment. The image types it reads; empty when it reads none, absent when unknown. */
+  imageTypes?: string[];
 };
 
 /** One effort level a model accepts, such as 'high'. */

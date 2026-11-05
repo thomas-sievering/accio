@@ -87,8 +87,9 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
         onStop={running ? async () => void (await client.call('threads.stop', { threadId: thread.id })) : undefined}
         placeholder={running ? 'Enter steers · Ctrl+Enter queues' : thread.settledAt ? 'Send a message to reopen this thread…' : `Ask ${thread.model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}
         attachment={pick && pickLabel ? { label: pickLabel, onRemove: () => setPick(undefined) } : undefined}
-        onSend={async (text, mode) => {
-          await client.call('threads.send', { threadId: thread.id, text, mode, ...(pick ? { pick } : {}) });
+        model={thread.model}
+        onSend={async (text, mode, images) => {
+          await client.call('threads.send', { threadId: thread.id, text, mode, ...(pick ? { pick } : {}), ...(images.length ? { images } : {}) });
           setPick(undefined);
         }}
         toolbar={<>
@@ -142,10 +143,12 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
           profileId={place.profile?.id}
           disabled={starting !== undefined || !place.profile || !accountForModel(place.profile, model)?.signedIn || unavailable}
           placeholder={`Ask ${model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}
-          onSend={async (text) => {
+          model={model}
+          onSend={async (text, _mode, uploads) => {
             const shown = viewTransition('thread-start', () => setStarting(text));
             try {
-              const thread = await client.call('threads.start', checkoutId ? { checkoutId, text, model, machineId } : { profileId: profileId!, text, model, machineId });
+              const images = uploads.length ? { images: uploads } : {};
+              const thread = await client.call('threads.start', checkoutId ? { checkoutId, text, model, machineId, ...images } : { profileId: profileId!, text, model, machineId, ...images });
               startedWith.set(thread.id, text);
               await shown;
               await viewTransition('thread-open', () => select(thread.id));

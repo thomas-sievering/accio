@@ -9,7 +9,7 @@ test('a /goal keeps the thread working with a status bar until the harness repor
   await expect(bar).toHaveCount(0);
 
   // Setting a goal: the bar appears, and accio starts the following turns itself.
-  await page.getByRole('textbox').fill('/goal fixture: make the checks pass');
+  await page.locator('.composer textarea').fill('/goal fixture: make the checks pass');
   await page.keyboard.press('Enter');
   await expect(bar).toContainText('fixture: make the checks pass');
   await expect(bar).toContainText('working');
@@ -24,7 +24,7 @@ test('a /goal keeps the thread working with a status bar until the harness repor
   await expect(bar).toHaveCount(0);
 
   // Blocked pauses with the reason; Resume continues; the harness then finishes.
-  await page.getByRole('textbox').fill('/goal blocked fixture: deploy');
+  await page.locator('.composer textarea').fill('/goal blocked fixture: deploy');
   await page.keyboard.press('Enter');
   await expect(bar).toContainText('paused · Need the fixture token');
   await page.screenshot({ path: testInfo.outputPath('goal-paused.png') });
@@ -32,7 +32,7 @@ test('a /goal keeps the thread working with a status bar until the harness repor
   await expect(bar).toContainText('achieved · Fixture verified');
 
   // The command form works too.
-  await page.getByRole('textbox').fill('/goal clear');
+  await page.locator('.composer textarea').fill('/goal clear');
   await page.keyboard.press('Enter');
   await expect(bar).toHaveCount(0);
 });

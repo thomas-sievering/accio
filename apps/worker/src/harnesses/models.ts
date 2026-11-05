@@ -1,4 +1,4 @@
-import { DEFAULT_MODEL, accountInUse, fallbackEffort, modelKey, type HarnessModel, type ModelSelection, type ModelsState, type ModelView } from '@accio/protocol';
+import { DEFAULT_MODEL, accountInUse, fallbackEffort, imageRefusal, modelKey, readsImage, type HarnessModel, type ModelSelection, type ModelsState, type ModelView } from '@accio/protocol';
 import { HARNESSES, type SettingsAccess } from '@accio/hub';
 import type { Profiles } from '../profiles/profiles.js';
 import { UserError, type Broadcast, type Router } from '../rpc/router.js';
@@ -100,6 +100,14 @@ export class Models {
   /** The display name of a model, when this profile's list knows it. */
   modelName(profileId: string, selection: ModelSelection): string | undefined {
     return this.list(profileId).models.find((m) => m.harnessId === selection.harnessId && m.id === selection.modelId)?.name;
+  }
+
+  /** GLOSSARY: Image attachment. Refuses images the model does not read; a model not listed here is left to its harness. */
+  assertReadsImages(profileId: string, selection: ModelSelection, images: readonly { mimeType: string }[]) {
+    if (!images.length) return;
+    const model = this.list(profileId).models.find((m) => m.harnessId === selection.harnessId && m.id === selection.modelId);
+    const unread = images.find((image) => !readsImage(model, image.mimeType));
+    if (unread) throw new UserError(imageRefusal(model?.name ?? 'This model', model?.imageTypes ?? [], unread.mimeType));
   }
 
   /** Waits until this profile's model lists are as complete as this machine can make them. */

@@ -374,7 +374,7 @@ test('a choice shows screenshots full size and sends the pick with feedback', as
 
   // The pick waits in the composer, with the cursor ready for feedback.
   await expect(page.locator('.composer-chip')).toContainText('C · Grouped by provider');
-  await expect(page.getByRole('textbox')).toBeFocused();
+  await expect(page.locator('.composer textarea')).toBeFocused();
   await page.getByRole('button', { name: 'Pick B · Cards' }).click({ force: true });
   await expect(page.locator('.composer-chip')).toContainText('B · Cards');
   await page.getByRole('button', { name: 'Picked B · Cards' }).click();
@@ -388,7 +388,7 @@ test('a choice shows screenshots full size and sends the pick with feedback', as
   await page.getByRole('button', { name: 'Limits', exact: true }).click();
   await page.getByRole('button', { name: 'Close limits', exact: true }).click();
   await expect(page.locator('.composer-chip')).toContainText('C · Grouped by provider');
-  await page.getByRole('textbox').fill('but without the toggles');
+  await page.locator('.composer textarea').fill('but without the toggles');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
 
   await expect(page.getByText('Got it: I pick C ("Grouped by provider") for "Which Accounts layout?".')).toBeVisible();

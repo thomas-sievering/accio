@@ -15,7 +15,7 @@ Reference implementation (T3 Code, MIT, at [`b7ab02e`](https://github.com/pingdo
 
 ## Later, uncommitted
 
-- Composer paste/drop/upload: needs its own upload transport, prompt content blocks, attachment-only send validation and retry/resume retention. Composer and harness prompts are text-only today.
+- Composer paste/drop/upload: planned in [composer-images.md](composer-images.md).
 - MCP apps need an app protocol and a controlled host bridge.
 - Reasoning, plans and nested-agent activity need their own transcript mapping.
 - Highlighted code with Copy, Mermaid, math and richer diffs, by priority. Add Markdown block caching or virtualization only if measurements justify it.

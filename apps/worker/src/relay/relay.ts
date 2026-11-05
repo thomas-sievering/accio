@@ -116,6 +116,7 @@ export class Relay {
     if (!machineId) return undefined;
     const name = this.deps.machineName(machineId) ?? 'The other machine';
     if (!RELAY_METHODS.has(method)) return Promise.reject(new UserError(`Open this on ${name} for now.`));
+    if (method === 'threads.send' && (params as ParamsOf<'threads.send'>).images?.length) return Promise.reject(new UserError(`Images can't be sent to threads on ${name} yet.`));
     if (!this.online.has(machineId) || !this.socket) return Promise.reject(new UserError(`${name} is offline.`));
     if (method === 'threads.observe') this.observed.set(threadId, machineId);
     return this.socket.call(machineId, method, params).then(
@@ -135,6 +136,7 @@ export class Relay {
     // Not on the relay: threads.start says whether it is unknown, offline or on an earlier build.
     if (!name || !this.online.has(machineId) || !this.socket || !snapshot) return undefined;
     if (!snapshot.checkouts) return Promise.reject(new UserError(OLDER(name)));
+    if (input.images?.length) return Promise.reject(new UserError(`Images can't be sent to threads on ${name} yet.`));
     let params: ParamsOf<'threads.start'>;
     if ('checkoutId' in input) {
       const { projects, checkouts } = this.deps.projects();
