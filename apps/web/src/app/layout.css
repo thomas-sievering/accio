@@ -84,6 +84,7 @@
   align-items: center;
   gap: 2px;
   height: var(--caption-h);
+  padding-inline-start: var(--caption-start);
 }
 .side-filter-summary {
   display: flex;
