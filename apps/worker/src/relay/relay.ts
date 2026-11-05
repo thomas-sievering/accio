@@ -2,8 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { JsonFile } from '@accio/persistence';
 import { RelaySocket, type RelayRequest } from '@accio/hub';
-import { RELAY_MACHINE_METHODS, RELAY_THREAD_METHODS, type Events, type MachineView, type ParamsOf, type ProjectsState, type RelaySnapshot, type ThreadView } from '@accio/protocol';
+import { RELAY_MACHINE_METHODS, RELAY_THREAD_METHODS, type CheckoutView, type Events, type MachineView, type ParamsOf, type ProjectsState, type RelaySnapshot, type ThreadView } from '@accio/protocol';
 import { UserError, type Router } from '../rpc/router.js';
+import { CLONE_TIMEOUT_MS, remoteUrlOf } from '../projects/git.js';
 
 const RELAY_METHODS = new Set<string>(RELAY_THREAD_METHODS);
 const MACHINE_METHODS = new Set<string>(RELAY_MACHINE_METHODS);
@@ -128,24 +129,39 @@ export class Relay {
    * Undefined: it starts here.
    */
   private startThere(input: ParamsOf<'threads.start'>): Promise<unknown> | undefined {
-    const { machineId, text, model } = input;
+    const { machineId } = input;
     if (!machineId || machineId === this.deps.here) return undefined;
     const name = this.deps.machineName(machineId);
     const snapshot = this.remote.get(machineId);
     // Not on the relay: threads.start says whether it is unknown, offline or on an earlier build.
     if (!name || !this.online.has(machineId) || !this.socket || !snapshot) return undefined;
     if (!snapshot.checkouts) return Promise.reject(new UserError(OLDER(name)));
+    return this.startOn(machineId, name, input);
+  }
+
+  /** Starts it in that machine's checkout of the same repository, cloning one there first if it has none. */
+  private async startOn(machineId: string, name: string, input: ParamsOf<'threads.start'>): Promise<unknown> {
+    const { text, model } = input;
+    const socket = this.socket!;
     let params: ParamsOf<'threads.start'>;
     if ('checkoutId' in input) {
       const { projects, checkouts } = this.deps.projects();
-      const project = projects.find((p) => p.id === checkouts.find((c) => c.id === input.checkoutId)?.projectId);
-      if (!project) return Promise.reject(new UserError('No such checkout'));
-      const there = project.repoKey ? snapshot.projects.find((p) => p.repoKey === project.repoKey) : undefined;
-      const checkout = there && snapshot.checkouts.find((c) => c.projectId === there.id);
-      if (!checkout) return Promise.reject(new UserError(`${name} has no checkout of ${project.name}. Add one there first.`));
-      params = { checkoutId: checkout.id, text, ...(model ? { model } : {}) };
+      const here = checkouts.find((c) => c.id === input.checkoutId);
+      const project = projects.find((p) => p.id === here?.projectId);
+      if (!here || !project) throw new UserError('No such checkout');
+      if (!project.repoKey) throw new UserError(`${project.name} has no remote, so ${name} cannot clone it.`);
+      const snapshot = this.remote.get(machineId)!;
+      const there = snapshot.projects.find((p) => p.repoKey === project.repoKey);
+      let checkoutId = there && snapshot.checkouts?.find((c) => c.projectId === there.id)?.id;
+      if (!checkoutId) {
+        const url = await remoteUrlOf(here.path, project.repoKey);
+        const cloned = await socket.call(machineId, 'checkouts.clone', { machineId, repoKey: project.repoKey, url, profileId: project.profileId }, CLONE_TIMEOUT_MS + 30_000)
+          .catch((error: Error) => { throw new UserError(error.message === NOT_RELAYED ? OLDER(name) : error.message); }) as CheckoutView;
+        checkoutId = cloned.id;
+      }
+      params = { checkoutId, text, ...(model ? { model } : {}) };
     } else params = { profileId: input.profileId, text, ...(model ? { model } : {}) };
-    return this.socket.call(machineId, 'threads.start', params).then((result) => {
+    return socket.call(machineId, 'threads.start', params).then((result) => {
       if (!isThreadView(result)) return result;
       // List it before the owner's next snapshot arrives, so the client can open it straight away.
       const current = this.remote.get(machineId);

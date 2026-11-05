@@ -41,11 +41,11 @@ export class RelaySocket {
 
   start() { this.connect(); }
 
-  call(to: string, method: string, params: unknown): Promise<unknown> {
+  call(to: string, method: string, params: unknown, timeoutMs = REQUEST_TIMEOUT_MS): Promise<unknown> {
     if (!this.open) return Promise.reject(new Error('This machine is not connected to the hub relay.'));
     const id = randomUUID();
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { this.pending.delete(id); reject(new Error('The other machine did not answer in time.')); }, REQUEST_TIMEOUT_MS);
+      const timer = setTimeout(() => { this.pending.delete(id); reject(new Error('The other machine did not answer in time.')); }, timeoutMs);
       timer.unref?.();
       this.pending.set(id, { resolve, reject, timer });
       this.send({ kind: 'request', to, id, method, params });

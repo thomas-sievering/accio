@@ -1,3 +1,4 @@
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { ProjectsState } from '@accio/protocol';
 import type { Profiles } from '../profiles/profiles.js';
@@ -5,7 +6,7 @@ import type { Machines } from '../machine/machine.js';
 import type { Broadcast, Router } from '../rpc/router.js';
 import { UserError } from '../rpc/router.js';
 import { JsonFile } from '@accio/persistence';
-import { inspectFolder } from './git.js';
+import { cloneInto, inspectFolder } from './git.js';
 import { samePath } from '../paths.js';
 import {
   addCheckout,
@@ -31,6 +32,8 @@ export class Projects {
   private removing = new Set<string>();
   private removeThreads?: (id: string) => Promise<void>;
   private projectInUseChecks: ProjectInUse[] = [];
+  /** Clones in progress by repository, so two threads starting at once share one. */
+  private cloning = new Map<string, Promise<Checkout>>();
 
   constructor(
     home: string,
@@ -98,6 +101,30 @@ export class Projects {
     return updated;
   }
 
+  /** This machine's checkout of a repository, cloned under the profile's folder here (else home) when there is none. */
+  private async clone(repoKey: string, url: string, profileId: string): Promise<Checkout> {
+    const have = () => {
+      const project = this.data.projects.find((p) => p.repoKey === repoKey);
+      return project && this.data.checkouts.find((c) => c.projectId === project.id);
+    };
+    const existing = have();
+    if (existing) return existing;
+    await this.profiles.syncReferences();
+    const release = this.profiles.useProfile(profileId);
+    try {
+      const base = this.machines.profileFoldersHere().find((p) => p.id === profileId)?.folders[0] ?? homedir();
+      const facts = await cloneInto(base, repoKey, url);
+      const added = have();
+      if (added) return added;
+      if (this.data.checkouts.some((c) => samePath(c.path, facts.root))) throw new UserError(`${facts.root} is already added to another project`);
+      const { data, checkout } = addCheckout(this.data, facts, profileId);
+      await this.commit(data);
+      return checkout;
+    } finally {
+      release();
+    }
+  }
+
   register(router: Router) {
     router
       .on('projects.get', () => this.data)
@@ -131,6 +158,11 @@ export class Projects {
         } finally {
           release();
         }
+      })
+      .on('checkouts.clone', ({ repoKey, url, profileId }) => {
+        const pending = this.cloning.get(repoKey) ?? this.clone(repoKey, url, profileId).finally(() => this.cloning.delete(repoKey));
+        this.cloning.set(repoKey, pending);
+        return pending;
       })
       .on('checkouts.remove', async ({ id, deleteThreads }) => {
         this.checkout(id);

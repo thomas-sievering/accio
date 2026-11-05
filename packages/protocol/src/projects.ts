@@ -46,6 +46,18 @@ export type FolderInspection = {
 
 const Path = z.object({ path: z.string().trim().min(1, 'Choose a folder') });
 const AddCheckout = z.object({ path: z.string().trim().min(1), profileId: z.string().optional() });
+/**
+ * GLOSSARY: Checkout. Clones a repository onto a machine and adds it there, so a thread
+ * can start on a machine that had no checkout yet. Goes under the profile's folder on
+ * that machine, else the home folder; a clone of the same repository already there is reused.
+ */
+const CloneCheckout = z.object({
+  machineId: z.string(),
+  repoKey: z.string().min(1),
+  /** The remote the asking machine fetches from, so the clone authenticates the same way. */
+  url: z.string().min(1),
+  profileId: z.string(),
+});
 /** deleteThreads records explicit confirmation to delete all current checkout threads. */
 const RemoveCheckout = z.object({ id: z.string(), deleteThreads: z.boolean().optional() });
 const SetProfile = z.object({ projectId: z.string(), profileId: z.string() });
@@ -88,6 +100,7 @@ export const projectMethods = {
   'projects.get': method<z.ZodObject<{}>, ProjectsState>(z.object({})),
   'checkouts.inspect': method<typeof Path, FolderInspection>(Path),
   'checkouts.add': method<typeof AddCheckout, CheckoutView>(AddCheckout),
+  'checkouts.clone': method<typeof CloneCheckout, CheckoutView>(CloneCheckout),
   'checkouts.remove': method<typeof RemoveCheckout, null>(RemoveCheckout),
   'projects.setProfile': method<typeof SetProfile, ProjectView>(SetProfile),
   'projects.setDelivery': method<typeof DeliverySettings, ProjectView>(DeliverySettings),

@@ -122,7 +122,25 @@ describe('thread relay between machines', () => {
     const loose = await pc.client.call('threads.start', { profileId: profile.id, text: 'no project', machineId: macId });
     await expect.poll(async () => remote(await mac.client.call('threads.list', {}), loose.id)?.checkoutId, { timeout: 10_000 }).toBe('');
 
-    await expect(pc.client.call('threads.start', { checkoutId: only.id, text: 'hi', machineId: macId })).rejects.toThrow(/has no checkout of notes/);
+    // The MacBook has no checkout of notes: it clones one under the profile's folder there, then starts in it.
+    const folder = join(mac.app.home, 'code');
+    // The clone fetches from the PC's bare copy instead of GitHub.
+    Object.assign(process.env, { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: `url.${join(pc.app.home, 'notes.git').replaceAll('\\', '/')}.insteadOf`, GIT_CONFIG_VALUE_0: 'https://github.com/me/notes' });
+    cleanup.push(async () => { for (const key of ['GIT_CONFIG_COUNT', 'GIT_CONFIG_KEY_0', 'GIT_CONFIG_VALUE_0']) delete process.env[key]; });
+    await mac.client.call('machines.setProfileFolders', { machineId: macId, profileId: profile.id, folders: [folder] });
+    const cloned = await pc.client.call('threads.start', { checkoutId: only.id, text: 'clone it', machineId: macId });
+    expect(cloned.machine?.id).toBe(macId);
+    const macState = await mac.client.call('projects.get', {});
+    const clonedThere = remote(await mac.client.call('threads.list', {}), cloned.id);
+    const notes = macState.checkouts.find((c) => c.id === clonedThere?.checkoutId);
+    expect(notes?.path).toBe(join(folder, 'notes'));
+    expect(macState.projects.find((p) => p.id === notes?.projectId)).toMatchObject({ repoKey: 'github.com/me/notes', profileId: profile.id });
+    // The next thread reuses that checkout rather than cloning again.
+    await pc.client.waitFor('machines.changed', (all) => !!all.find((m) => m.id === macId)?.relay?.repos.includes('github.com/me/notes'), 10_000);
+    const again = await pc.client.call('threads.start', { checkoutId: only.id, text: 'again', machineId: macId });
+    await expect.poll(async () => remote(await mac.client.call('threads.list', {}), again.id)?.checkoutId, { timeout: 10_000 }).toBe(notes?.id);
+    expect((await mac.client.call('projects.get', {})).checkouts).toHaveLength(2);
+
     await mac.app.stop();
     await pc.client.waitFor('machines.changed', (all) => !all.find((m) => m.id === macId)?.relay, 10_000);
     await expect(pc.client.call('threads.start', { profileId: profile.id, text: 'hi', machineId: macId })).rejects.toThrow(/offline/);
