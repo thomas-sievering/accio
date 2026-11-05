@@ -20,14 +20,20 @@
   --amber: #bca777;
   --orange: #e6ad48;
   --red: #c47f84;
-  /* Width of the native caption buttons: none in a browser, set on .desktop (titleBarOverlay in the desktop app). */
+  /* Width of the native caption buttons: none in a browser, set on .desktop (titleBarOverlay in the desktop app).
+     --caption is on the right (Windows, Linux), --caption-start on the left (macOS). */
   --caption: 0px;
+  --caption-start: 0px;
   --caption-h: 52px;
   -webkit-font-smoothing: antialiased;
   overflow-wrap: break-word;
 }
 :root.desktop {
   --caption: 138px;
+}
+:root.desktop.mac {
+  --caption: 0px;
+  --caption-start: 72px;
 }
 *,
 *::before,

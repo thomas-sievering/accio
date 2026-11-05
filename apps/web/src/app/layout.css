@@ -57,7 +57,7 @@
   align-items: center;
   gap: 4px;
   height: var(--caption-h);
-  padding: 0 12px;
+  padding: 0 12px 0 calc(var(--caption-start) + 12px);
   background: var(--side);
 }
 .side-icon:disabled {
