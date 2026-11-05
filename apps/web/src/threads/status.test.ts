@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { DeliveryPullRequest, ThreadDelivery, ThreadView } from '@accio/protocol';
-import { autoSettled, checkedAgo, deliveryStatus, shortStatus, statusText, threadStatus } from './status';
+import { checkedAgo, deliveryStatus, shortStatus, statusText, threadStatus } from './status';
 
 const pr = (extra: Partial<DeliveryPullRequest> = {}): DeliveryPullRequest => ({
   host: 'github.com', repository: 'acme/app', number: 123, url: 'https://github.com/acme/app/pull/123',
@@ -99,7 +99,6 @@ describe('integration and verification', () => {
     const t = thread({ settledAt: '2026-11-03T12:00:00Z', delivery: delivery({ status: 'delivered', pullRequest: pr({ state: 'merged' }), publishedRevision: 'a1b2c3d4e5', autoSettle: true }) });
     expect(sidebar(t)).toEqual({ label: 'Merged into main · #123', glyph: 'merge', tone: 'delivered' });
     expect(deliveryStatus(t)).toMatchObject({ badge: 'Merged #123', revision: 'a1b2c3d', canCheck: false, canStopFollowUps: false });
-    expect(autoSettled(t)).toBe(true);
   });
 
   it('verified direct delivery reads Shipped to the target', () => {
@@ -111,12 +110,6 @@ describe('integration and verification', () => {
   it('legacy delivered records without IDs or versions still read as delivered', () => {
     const t = thread({ workVersion: undefined, delivery: { mode: 'ship', policy: 'direct', status: 'delivered', baseBranch: 'main', requestedAt: '2026-11-03T10:00:00Z', publishedRevision: '0123456789' } });
     expect(sidebar(t).label).toBe('Shipped to main');
-  });
-
-  it('a reopened or manually settled delivery is not auto-settled', () => {
-    const d = delivery({ status: 'delivered', autoSettle: true, keepOpen: true });
-    expect(autoSettled(thread({ settledAt: '2026-11-03T12:00:00Z', delivery: d }))).toBe(false);
-    expect(autoSettled(thread({ settledAt: '2026-11-03T12:00:00Z', delivery: { ...d, keepOpen: false, autoSettle: undefined } }))).toBe(false);
   });
 });
 

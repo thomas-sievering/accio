@@ -214,9 +214,3 @@ export function checkedAgo(iso: string | undefined, now: Date): string | undefin
   const hours = Math.floor(minutes / 60);
   return hours < 24 ? `checked ${hours}h ago` : `checked ${Math.floor(hours / 24)}d ago`;
 }
-
-/** Whether the server settled this thread for its delivery, as opposed to a manual or historical settle. */
-export function autoSettled(t: ThreadView): boolean {
-  const d = t.delivery;
-  return !!t.settledAt && d?.status === 'delivered' && !!d.autoSettle && !d.keepOpen && !d.followUpsStoppedAt;
-}
