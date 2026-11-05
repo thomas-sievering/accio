@@ -14,6 +14,11 @@ function optionLetter(index: number): string {
   return String.fromCharCode(65 + index);
 }
 
+/** Rows stay even: 4 options make a 2×2 grid, 5 or 6 make rows of 3. */
+function choiceColumns(count: number): number {
+  return count === 4 ? 2 : Math.min(count, 3);
+}
+
 export function optionName(choice: ChoiceItem, index: number): string {
   return `${optionLetter(index)} · ${choice.options[index]?.label ?? 'Unavailable option'}`;
 }
@@ -35,7 +40,7 @@ export function Choice({ threadId, item, picked }: { threadId: string; item: Cho
 
   return <div className={`choice${answered ? ' answered' : ''}`}>
     <p className="choice-question">{item.question}</p>
-    <div className="choice-options" style={{ ['--choice-columns' as string]: Math.min(item.options.length, 4) }}>
+    <div className="choice-options" style={{ ['--choice-columns' as string]: choiceColumns(item.options.length) }}>
       {item.options.map((option, index) => (
         <div key={index} className={`choice-option${selected === index ? ' selected' : ''}`}>
           <div className="choice-frame">
@@ -43,13 +48,16 @@ export function Choice({ threadId, item, picked }: { threadId: string; item: Cho
               <OptionImage threadId={threadId} option={option} />
             </button>
           </div>
-          <div className="choice-caption"><span className="choice-label">{optionName(item, index)}</span>
-            {(toggle || selected === index) && (
-              <button className="choice-check" disabled={!toggle} aria-pressed={selected === index}
-                aria-label={selected === index ? `Picked ${optionName(item, index)}` : `Pick ${optionName(item, index)}`}
-                onClick={() => toggle?.(index)}><Check /></button>
-            )}
-          </div>
+          {toggle
+            ? <button className="choice-caption" aria-pressed={selected === index}
+              aria-label={selected === index ? `Picked ${optionName(item, index)}` : `Pick ${optionName(item, index)}`} onClick={() => toggle(index)}>
+              <span className="choice-radio" aria-hidden><Check /></span>
+              <span className="choice-label">{optionName(item, index)}</span>
+            </button>
+            : <div className="choice-caption">
+              {selected === index && <span className="choice-radio" aria-label="Picked"><Check /></span>}
+              <span className="choice-label">{optionName(item, index)}</span>
+            </div>}
         </div>
       ))}
     </div>
