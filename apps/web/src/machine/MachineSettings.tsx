@@ -52,7 +52,7 @@ function HubRow() {
 /** One machine: opens its settings, and updates its Accio when main is ahead. */
 function MachineRow({ machine: m, onOpen }: { machine: MachineView; onOpen: () => void }) {
   const { view, canUpdate, start, busy, error } = useMachineUpdate(m);
-  const progress = error ?? (view?.state === 'updating' ? `${view.detail ?? 'Updating'}…` : view?.state === 'restarting' ? 'Restarting…' : view?.state === 'failed' ? 'Update failed' : undefined);
+  const progress = error ?? (view?.state === 'updating' ? `${view.detail ?? 'Updating'}…` : view?.state === 'restarting' ? 'Restarting…' : view?.state === 'failed' ? 'Update failed' : view?.state === 'blocked' ? `Can’t update: ${view.detail}` : undefined);
   const details = [m.platform, `${m.harnesses.length} harness${m.harnesses.length === 1 ? '' : 'es'}`, m.version, progress].filter(Boolean);
   return (
     <div className="setting setting-link machine-row">
