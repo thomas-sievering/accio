@@ -83,6 +83,7 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
         actions={<><DeliveryActions key={thread.id} thread={thread} project={place.project} canRun={!!place.profile && !!accountForModel(place.profile, thread.model)?.signedIn} /><GoalBar thread={thread} /><QueueTray thread={thread} /></>}
         target={thread.id}
         draftId={`thread:${thread.id}`}
+        profileId={thread.profileId}
         onStop={running ? async () => void (await client.call('threads.stop', { threadId: thread.id })) : undefined}
         placeholder={running ? 'Enter steers · Ctrl+Enter queues' : thread.settledAt ? 'Send a message to reopen this thread…' : `Ask ${thread.model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}
         attachment={pick && pickLabel ? { label: pickLabel, onRemove: () => setPick(undefined) } : undefined}
@@ -138,6 +139,7 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
         <Composer
           target="draft"
           draftId={`new:${checkoutId}:${profileId ?? ''}`}
+          profileId={place.profile?.id}
           disabled={starting !== undefined || !place.profile || !accountForModel(place.profile, model)?.signedIn || unavailable}
           placeholder={`Ask ${model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}
           onSend={async (text) => {

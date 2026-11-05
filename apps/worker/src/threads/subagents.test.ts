@@ -1,7 +1,8 @@
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import type { TranscriptItem } from '@accio/protocol';
 import { FakeHarness, SESSION, gate, replyWith } from '../testing/fakeHarness.js';
-import { startTestApp, type TestClient } from '../testing/testApp.js';
+import { FakeCodex } from '../testing/fakeCodex.js';
+import { claudeAccount, startTestApp, type TestClient } from '../testing/testApp.js';
 import { codexEvents } from './codex.js';
 import type { HarnessMessage, HarnessTurn } from './harness.js';
 
@@ -136,4 +137,54 @@ it('finds the row of a Codex call, whose MCP items carry the task as arguments',
   working.release();
   await settled(c, thread.id);
   expect(await agentRow(c, thread.id)).toMatchObject({ status: 'done' });
+});
+
+describe('a sub-agent on a model the user mentioned', () => {
+  /** A Claude thread whose parent turn starts one sub-agent with `model`, and replies with what the call returned. */
+  async function mention(model: string) {
+    const claude = new FakeHarness(async function* (run) {
+      if (!run.tools) { yield* replyWith('claude sub-agent', 'sub'); return; }
+      yield { type: 'system', subtype: 'init', session_id: SESSION };
+      yield* toolCall('call-1', 'mcp__accio__agent', { ...task, model });
+      const result = await callAgent(run, { ...task, model });
+      yield* toolResult('call-1', result.text, result.isError);
+      yield* replyWith('done');
+    });
+    const codex = new FakeHarness(() => replyWith('codex sub-agent', 'codex-sub'));
+    const fake = new FakeCodex();
+    const t = await startTestApp({ harness: claude, codexHarness: codex, codexFactory: fake.factory });
+    stop = t.stop;
+    const c = await t.connect();
+    const profile = await c.signedIn('Personal');
+    const account = await c.call('accounts.save', { name: 'Personal ChatGPT', providerId: 'openai' });
+    const login = await c.call('accounts.beginSignIn', { id: account.id });
+    await fake.latest.complete('Personal');
+    await c.call('accounts.signInStatus', { signInId: login.signInId });
+    await c.call('profiles.save', { id: profile.id, name: 'Personal', accountId: claudeAccount(profile)!.id, openaiAccountId: account.id });
+    const thread = await c.call('threads.start', { profileId: profile.id, model: { harnessId: 'claudeCode', modelId: 'opus', effort: 'high' }, text: 'Count them' });
+    await settled(c, thread.id);
+    return { claude, codex, row: await agentRow(c, thread.id) };
+  }
+
+  it('runs on another model of the same harness, keeping an effort it accepts', async () => {
+    const { claude, row } = await mention('@sonnet');
+    expect(row).toMatchObject({ status: 'done', output: 'claude sub-agent' });
+    expect(claude.runs[1]).toMatchObject({ model: 'sonnet', effort: 'high', sessionId: null });
+  });
+
+  it('runs on the other harness with its own account and settings', async () => {
+    const { claude, codex, row } = await mention('test-codex');
+    expect(row).toMatchObject({ status: 'done', output: 'codex sub-agent' });
+    expect(claude.runs).toHaveLength(1);
+    const sub = codex.runs[0]!;
+    expect(sub).toMatchObject({ model: 'test-codex', effort: 'high', prompt: task.prompt, cwd: claude.runs[0]!.cwd });
+    expect(sub.env.CODEX_HOME).toBeTruthy();
+    expect(sub.env.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
+    expect(sub.tools).toBeUndefined();
+  });
+
+  it('refuses a handle no model has, naming the ones it can use', async () => {
+    const { row } = await mention('@deepseek');
+    expect(row).toMatchObject({ status: 'error', output: expect.stringMatching(/No model is called @deepseek\. Mention one of: .*@opus.*@test-codex/) });
+  });
 });

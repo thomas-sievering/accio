@@ -741,6 +741,7 @@
   margin: 0 0 6px 12px;
 }
 .composer {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -984,3 +985,26 @@ div.model-picker-empty b { color: var(--ink); font-weight: 500; }
 .effort-particles { position: fixed; width: 0; height: 0; pointer-events: none; z-index: 1000; }
 .effort-particles i { position: absolute; left: 0; top: 0; border-radius: 50%; opacity: 0; }
 .effort-particles i.star { border-radius: 0; clip-path: polygon(50% 0, 62% 37%, 100% 50%, 62% 63%, 50% 100%, 38% 63%, 0 50%, 38% 37%); }
+
+/* GLOSSARY: Model mention. The @ menu: a plain list above the composer, starting under the @. */
+.mention-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 240px;
+  padding: 5px;
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  background: var(--raised);
+  box-shadow: 0 12px 40px #0006;
+  font-size: 13px;
+}
+.mention-option { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 0 9px; border-radius: 6px; color: var(--ink); cursor: pointer; white-space: nowrap; }
+.mention-option svg { flex: none; width: 13px; height: 13px; fill: currentColor; }
+.mention-option[aria-selected="true"] { background: var(--raised-2); color: var(--ink-strong); }
+.mention-option.limited { opacity: 0.5; }
+.mention { display: inline-flex; align-items: baseline; gap: 4px; padding: 0 5px; border-radius: 5px; background: var(--raised); color: var(--ink-strong); white-space: nowrap; }
+.mention svg { align-self: center; width: 11px; height: 11px; fill: currentColor; }

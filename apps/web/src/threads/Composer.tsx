@@ -4,9 +4,13 @@ import { useAppEvent } from '../app/appEvents';
 import { useAction } from '../app/useAction';
 import { useClient } from '../app/connection';
 import { useThreads } from './threads';
+import { caretLeft, MentionMenu } from './Mentions';
+import { mentionAt, mentionOptions } from './mentionQuery';
+import { useModels } from './useModels';
 
 /**
  * Enter steers the running turn; Ctrl+Enter queues. Shift+Enter adds a line.
+ * Typing @ lists the profile's models to mention (GLOSSARY: Model mention).
  */
 export function Composer({
   onSend,
@@ -18,6 +22,7 @@ export function Composer({
   actions,
   target,
   draftId,
+  profileId,
 }: {
   onSend: (text: string, mode?: 'steer' | 'queue') => Promise<void>;
   /** Set while a turn runs; Stop stays beside Send. */
@@ -33,6 +38,8 @@ export function Composer({
   /** Which `composer.insert` requests this composer accepts: its thread id, or 'draft'. */
   target: string;
   draftId: string;
+  /** Whose models `@` offers. */
+  profileId?: string;
 }) {
   const client = useClient();
   const { threads, shelves, selectedId, select } = useThreads();
@@ -44,6 +51,32 @@ export function Composer({
   const sending = useRef(false);
   const input = useRef<HTMLTextAreaElement>(null);
   const queuing = !!onStop && controlHeld;
+  const { data: models } = useModels(profileId);
+  const [caret, setCaret] = useState<number>();
+  const [highlight, setHighlight] = useState(0);
+  /** The @ whose menu Escape closed; it stays closed until the caret leaves it. */
+  const [dismissed, setDismissed] = useState<number>();
+  const mention = caret === undefined ? undefined : mentionAt(text, caret);
+  const options = mention && mention.start !== dismissed ? mentionOptions(models, mention.query) : [];
+  const active = Math.min(highlight, options.length - 1);
+  const pickMention = (handle: string) => {
+    const el = input.current;
+    if (!el || !mention) return;
+    const after = text.slice(caret);
+    const insert = `@${handle}${/^\s/.test(after) ? '' : ' '}`;
+    const end = mention.start + insert.length;
+    setText(text.slice(0, mention.start) + insert + after);
+    setCaret(end);
+    requestAnimationFrame(() => el.setSelectionRange(end, end));
+  };
+  const trackCaret = () => {
+    const el = input.current;
+    const at = el && document.activeElement === el && el.selectionStart === el.selectionEnd ? el.selectionStart : undefined;
+    setCaret(at);
+    const next = at === undefined ? undefined : mentionAt(el!.value, at);
+    if (next?.start !== mention?.start) setHighlight(0);
+    if (dismissed !== undefined && next?.start !== dismissed) setDismissed(undefined);
+  };
   const sendable = !!text.trim() || !!attachment;
   const repairThread = error?.includes('A repair thread was started')
     ? threads?.filter((t) => t.repairToolId).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
@@ -118,6 +151,8 @@ export function Composer({
             <button type="button" aria-label={`Remove ${attachment.label}`} onClick={attachment.onRemove}><Close /></button>
           </span>
         </div>}
+        {options.length > 0 && mention && <MentionMenu options={options} active={active} onPick={pickMention} onHover={setHighlight}
+          left={Math.min((input.current?.offsetLeft ?? 0) + (input.current ? caretLeft(input.current, mention.start) : 0), (input.current?.parentElement?.clientWidth ?? 0) - 240)} />}
         <textarea
           ref={input}
           rows={1}
@@ -125,8 +160,28 @@ export function Composer({
           placeholder={placeholder}
           spellCheck={false}
           autoFocus
+          role="combobox"
+          aria-expanded={options.length > 0}
+          aria-autocomplete="list"
+          aria-activedescendant={options.length > 0 ? `mention-${options[active]!.handle}` : undefined}
           onChange={(e) => setText(e.target.value)}
+          onSelect={trackCaret}
+          onFocus={trackCaret}
+          onBlur={() => setCaret(undefined)}
           onKeyDown={(e) => {
+            if (options.length > 0 && !e.nativeEvent.isComposing) {
+              if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                setHighlight((active + (e.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length);
+                return;
+              }
+              if ((e.key === 'Enter' || e.key === 'Tab') && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                e.preventDefault();
+                pickMention(options[active]!.handle);
+                return;
+              }
+              if (e.key === 'Escape') { e.preventDefault(); setDismissed(mention!.start); return; }
+            }
             if (e.key === 'Tab' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !e.nativeEvent.isComposing && e.keyCode !== 229) {
               const next = shelves.open[(shelves.open.findIndex((thread) => thread.id === selectedId) + 1) % shelves.open.length];
               if (next && next.id !== selectedId) {
