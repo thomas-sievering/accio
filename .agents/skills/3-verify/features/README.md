@@ -7,7 +7,7 @@ This is the maintained source for driving Accio as a user. Read the affected fea
 - Use the [3-verify launch](../SKILL.md#launch). It builds and starts the real production server and web app in a fresh home, with independent ports and Chromium context.
 - Readiness includes the doctor and visible `Set up Accio` heading. No accounts, profiles, projects or threads exist initially.
 - The runner provides `fixture`, an empty local `verify-project` git repository without a remote. Its own git boundary prevents discovering the parent Accio checkout. The smoke creates `Verify personal`, a signed-out `Verify ChatGPT` account, a profile folder mapping, and a project through UI actions.
-- Baseline has no provider credentials. Full sign-in, model availability, successful turns, transcript search and shelves require additional real user setup. Report these journeys as unverified with that reason until driven.
+- Baseline has no provider credentials. For signed-in accounts, model availability, successful turns, transcript search and shelves, start the journey linked (`export const linkedHub = true`; see [Choose the start](../SKILL.md#choose-the-start)). Report these as unverified only if the verify device is missing, and name that as the reason.
 
 ## Driving conventions
 

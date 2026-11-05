@@ -1,11 +1,25 @@
 ---
 name: 3-verify
-description: "Verify Accio's React app through its real browser UI: launch an isolated server, drive settings, projects or coding threads, capture evidence, and diagnose failures after behavior changes."
+description: "Verify Accio's React app through its real browser UI: launch an isolated server (linked to the user's hub for signed-in flows), drive settings, projects or coding threads, capture evidence, and diagnose failures after behavior changes."
 ---
 
 # Verify Accio
 
 Read [the feature index](features/README.md), then the affected feature files. Drive every mapped entry point relevant to the change; record each as passed, failed, or unverified with its unmet precondition. The default smoke covers selected offline paths; its coverage report is not a claim that the whole map passed.
+
+## Choose the start
+
+Every start uses a fresh home, never the user's `~/.accio`. Pick it by what the change needs:
+
+| Change needs | Start |
+| --- | --- |
+| First-run setup, or settings that need no account | Empty home: `pnpm verify` or a custom journey (below) |
+| Profiles with signed-in accounts, models, threads, limits, real turns: anything past setup | Linked home: a journey with `export const linkedHub = true` ([Real model turns](#real-model-turns)) |
+| The Electron window itself | `pnpm try`: the desktop app in a linked home |
+
+A linked home has already joined the user's hub as the verify device, so it shares the hub's profiles, signed-in accounts, favorites and hub settings. Machine-local state (projects, threads) starts empty; add the disposable `verify-project` through the UI.
+
+Never launch `apps/desktop`, `pnpm start` or the worker by hand with your own `ACCIO_HOME`. That home is empty and stops at `Set up Accio` / "Where should Accio keep your accounts?". If a window you launched shows that screen and the change is past setup, you chose the wrong start. If the verify device is missing or revoked, stop and ask the user for a pairing code to link it ([Real model turns](#real-model-turns)). Do not finish setup with a local profile and report signed-in behavior as verified.
 
 ## Quick behavior checks with the developer CLI
 
