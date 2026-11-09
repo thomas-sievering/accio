@@ -33,6 +33,6 @@ The updater changes only this hub service. It leaves existing media routes and c
 
 ## Check and recover
 
-`/healthz` returns readiness, protocol and durable hub identity. Management endpoints require a paired device credential; model routes require a restricted model key. Verify public HTTPS, authenticated WSS and real streamed model traffic after tunnel changes. The public root is setup information.
+`/healthz` returns readiness, protocol and durable hub identity. Management endpoints require a paired device credential; model routes require a restricted model key. They are `POST /v1/messages` (and `/count_tokens`) and `GET /v1/models` for Claude, and `POST /openai/responses` (and `/compact`) and `GET /openai/models` for Codex, so compatible tools can use the hub as a custom Anthropic or OpenAI Responses base URL (`https://<hub>` or `https://<hub>/openai`). Verify public HTTPS, authenticated WSS and real streamed model traffic after tunnel changes. The public root is setup information.
 
 Back up the protected `/data/configs/accio` directory consistently while the service is stopped. Restore the entire identity and credential store together. Never run two live copies of imported refresh tokens. Keep machine checkouts, threads, transcripts and harness sessions on their original machine. After restoring, restart only `accio-hub` and verify saved devices reconnect to the same identity.
