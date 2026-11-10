@@ -24,7 +24,7 @@ export function ProfilesSettings({
   /** Opens Settings / Secrets filtered to a profile. */
   onOpenSecrets?: (profileId: string) => void;
 }) {
-  const { profiles } = useProfiles();
+  const { profiles, sortingHat } = useProfiles();
   if (!profiles) return null;
   if (profileId === 'new') return <ProfileForm onSaved={(p) => onOpen(p.id)} onDone={onBack} />;
   // Always the latest view, so sign-in changes show up while the form is open.
@@ -36,7 +36,7 @@ export function ProfilesSettings({
     <SettingsSection add={{ label: 'Add profile', onClick: () => onOpen('new') }}>
       {profiles.map((p) => (
         <SettingLink key={p.id} icon={<User />} title={p.name} warn={!hasSignedInAccount(p)} onClick={() => onOpen(p.id)}
-          description={p.providers.flatMap((provider) => provider.accounts.map((a) => `${a.name}${a.signedIn ? '' : ' · Signed out'}`)).join(', ') || 'No account selected'} />
+          description={p.house === null ? 'No house on the Sorting Hat' : [p.house && `House ${p.house.name}`, p.providers.flatMap((provider) => provider.accounts.map((a) => `${a.name}${a.signedIn ? '' : ' · Signed out'}`)).join(', ') || (sortingHat ? 'No account in its house' : 'No account selected')].filter(Boolean).join(' · ')} />
       ))}
     </SettingsSection>
   </>);
@@ -44,9 +44,13 @@ export function ProfilesSettings({
 
 function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: ProfileView; onSaved: (p: ProfileView) => void; onDone: () => void; onOpenSecrets?: (profileId: string) => void }) {
   const client = useClient();
-  const { accounts } = useProfiles();
+  const { accounts, sortingHat } = useProfiles();
   const initial = selectionOf(profile);
   const [selection, setSelection] = useState(initial);
+  // GLOSSARY: House. Only on a hub with a Sorting Hat of its own.
+  const savedHouse = profile?.house?.id ?? '';
+  const [house, setHouse] = useState(savedHouse);
+  const relinked = !!sortingHat && house !== savedHouse;
   const [name, setName] = useState(profile?.name ?? '');
   const { state: resources } = useResources();
   // Skill choices wait here until Save, keyed by skill id.
@@ -57,14 +61,14 @@ function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: Pr
     const skill = resources?.skills.find((s) => s.id === id);
     return skill && profile && skill.scope.profileIds.includes(profile.id) !== on ? [{ skill, on }] : [];
   });
-  const dirty = profile ? skillChanges.length > 0 || name !== profile.name || JSON.stringify(selection) !== JSON.stringify(initial) : !!(name || selection.anthropic.length || selection.openai.length);
+  const dirty = profile ? skillChanges.length > 0 || name !== profile.name || relinked || JSON.stringify(selection) !== JSON.stringify(initial) : !!(name || house || selection.anthropic.length || selection.openai.length);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setTouched(true);
     if (!name.trim()) return focusFirstInvalid(e.currentTarget);
     const saved = await run(async () => {
-      const p = await client.call('profiles.save', profileSave(profile?.id, name, selection));
+      const p = await client.call('profiles.save', profileSave(profile?.id, name, selection, sortingHat ? house || null : undefined));
       for (const { skill, on } of skillChanges) await client.call('skills.setScope', { id: skill.id, scope: { ...skill.scope, profileIds: toggled(skill.scope.profileIds, p.id, on) } });
       return p;
     });
@@ -82,13 +86,19 @@ function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: Pr
           <Field label="Name" error={touched && !name.trim() && 'Enter a name for the profile.'}>
             {(p) => <input {...p} value={name} onChange={(e) => setName(e.target.value)} placeholder="personal, work…" autoFocus={!profile} required />}
           </Field>
-          {PROVIDERS.map((provider) => (
+          {sortingHat && (
+            <Field label="House on the Sorting Hat" hint={!house ? 'Threads of this profile can’t run until it links to a house.' : relinked ? `Save to use the accounts of ${sortingHat.houses.find((h) => h.id === house)?.name ?? house}.` : undefined}>
+              {(p) => <MenuSelect id={p.id} label="House on the Sorting Hat" value={house} placeholder="Choose a house…" onChange={setHouse}
+                options={[...(savedHouse && !sortingHat.houses.some((h) => h.id === savedHouse) ? [{ value: savedHouse, label: profile?.house?.name ?? savedHouse, detail: 'Not on the Sorting Hat' }] : []), ...sortingHat.houses.map((h) => ({ value: h.id, label: h.name }))]} />}
+            </Field>
+          )}
+          {(!sortingHat || (house && !relinked)) && PROVIDERS.map((provider) => (
             <ProviderAccounts key={provider.id} provider={provider} accounts={accounts} selected={selection[provider.id]}
               inUseId={profile && accountInUse(profile.providers.find((p) => p.id === provider.id))?.id}
               onChange={(ids) => setSelection((s) => ({ ...s, [provider.id]: ids }))} />
           ))}
           {error && <p className="error">{error}</p>}
-          <small className="hint">Accounts are set up in Settings / Accounts. With several at a provider, accio uses the signed-in one whose weekly allowance resets soonest, skipping any with 5% or less left until that resets; higher accounts win ties.{profile && onOpenSecrets && <> <button type="button" className="link" onClick={() => onOpenSecrets(profile.id)}>Saved secrets</button></>}</small>
+          {sortingHat ? <small className="hint">Accounts are signed in on the Sorting Hat’s dashboard. Choosing them here sets the house’s accounts, for every app that uses it.{profile && onOpenSecrets && <> <button type="button" className="link" onClick={() => onOpenSecrets(profile.id)}>Saved secrets</button></>}</small> : <small className="hint">Accounts are set up in Settings / Accounts. With several at a provider, accio uses the signed-in one whose weekly allowance resets soonest, skipping any with 5% or less left until that resets; higher accounts win ties.{profile && onOpenSecrets && <> <button type="button" className="link" onClick={() => onOpenSecrets(profile.id)}>Saved secrets</button></>}</small>}
         </div>
       </SettingsSection>
       {profile && (
@@ -99,7 +109,7 @@ function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: Pr
           </div>
         </SettingsSection>
       )}
-      <SettingsFooter remove={profile && { name: profile.name, run: remove, consequence: 'Its accounts stay; only the profile goes.' }} busy={busy} onCancel={onDone} saveLabel={profile ? 'Save' : 'Add profile'} saveDisabled={busy || !accounts || (!!profile && !dirty)} dirty={dirty && !busy} />
+      <SettingsFooter remove={profile && { name: profile.name, run: remove, consequence: sortingHat ? 'Its house and accounts stay on the Sorting Hat; only the profile goes.' : 'Its accounts stay; only the profile goes.' }} busy={busy} onCancel={onDone} saveLabel={profile ? 'Save' : 'Add profile'} saveDisabled={busy || !accounts || (!!profile && !dirty)} dirty={dirty && !busy} />
     </form>
   );
 }

@@ -150,6 +150,12 @@ House = { id, name,
 | `PUT /api/houses/{id}/accounts` | `{ anthropic?: string[], openai?: string[] }` | `House` |
 | `DELETE /api/houses/{id}` | | 204; deletes its hat keys too |
 | `GET /api/houses/{id}/hat-keys` | | `HatKey[]` |
+| `GET /api/houses/{id}/models` | | `{ openai: CodexModel[] }`, see below |
+
+`CodexModel = { id, name, description, isDefault, efforts?: { id, description? }[], defaultEffort? }`
+lists the models of the house's ChatGPT account in use, as its Codex app-server
+reports them (empty without one), for an app that shows a model picker with
+effort levels.
 
 `id` defaults to one made from the name (`"Personal"` → `personal`, then
 `personal-2`); when given it has 1 to 64 lowercase letters, digits, `-` or `_`.

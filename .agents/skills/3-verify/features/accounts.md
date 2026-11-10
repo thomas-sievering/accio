@@ -2,6 +2,8 @@
 
 Users name Claude or ChatGPT accounts, sign in with the provider, and select those accounts in profiles. Referenced accounts cannot be deleted.
 
+On a hub with a Sorting Hat of its own, accounts live there: Settings / Accounts lists them with a note pointing to its dashboard and offers no `Add … account` rows ([Sorting Hat](sorting-hat.md)). The recipes below apply to a hub without one.
+
 ## Sub-features
 
 - `accounts-named`: add, rename, cancel and delete a named provider account.

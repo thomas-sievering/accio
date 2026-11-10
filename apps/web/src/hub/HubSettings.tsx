@@ -4,6 +4,7 @@ import { Hub } from '../app/icons';
 import { SettingRow, SettingsSection, StatusPill, useEscape } from '../app/Settings';
 import { useAction } from '../app/useAction';
 import { PairHubForm } from './PairHubForm';
+import { SortingHatSettings } from './SortingHatSettings';
 
 /** The saved hubs; "Add hub" opens the pairing form as its own page. Without a hub yet (first run) the form is the whole page. */
 export function HubSettings({ adding, onAdd, onBack }: { adding?: boolean; onAdd?: () => void; onBack?: () => void } = {}) {
@@ -32,6 +33,7 @@ export function HubSettings({ adding, onAdd, onBack }: { adding?: boolean; onAdd
       </SettingRow>)}
       {current?.error && <div className="setting-form"><p className="error" role="status">{current.error}</p></div>}
     </SettingsSection>
+    {current?.status === 'connected' && <SortingHatSettings hubName={current.name} />}
     {current && <SettingsSection title="Pair another device">
       <div className="setting-form">
         <p className="hint">Generate a one-time code for {current.name}. Enter this hub’s address and the code on the other device.</p>

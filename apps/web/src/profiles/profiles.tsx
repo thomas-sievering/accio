@@ -1,5 +1,5 @@
 import { createContext, useContext, type ReactNode } from 'react';
-import { DEFAULT_MODEL, accountInUse, type AccountView, type ProfileView, type ModelSelection, type ProviderId } from '@accio/protocol';
+import { DEFAULT_MODEL, accountInUse, type AccountView, type ProfileView, type ModelSelection, type ProviderId, type SortingHatView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { useLive, useLocalState } from '../app/useLive';
 
@@ -9,6 +9,8 @@ export type ProfileFilter = 'all' | (string & {});
 type ProfilesState = {
   profiles: ProfileView[] | undefined;
   accounts: AccountView[] | undefined;
+  /** The hub's own Sorting Hat; null while the hub keeps accounts itself. */
+  sortingHat: SortingHatView | null | undefined;
   filter: ProfileFilter;
   setFilter: (f: ProfileFilter) => void;
 };
@@ -19,10 +21,11 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
   const client = useClient();
   const profiles = useLive(() => client.call('profiles.list', {}), 'profiles.changed');
   const accounts = useLive(() => client.call('accounts.list', {}), 'accounts.changed');
+  const sortingHat = useLive(() => client.call('sortingHat.get', {}), 'sortingHat.changed');
   const [stored, setFilter] = useLocalState<ProfileFilter>('accio.profileFilter', 'all');
   // A deleted profile falls back to showing everything.
   const filter = stored !== 'all' && profiles && !profiles.some((a) => a.id === stored) ? 'all' : stored;
-  return <Ctx.Provider value={{ profiles, accounts, filter, setFilter }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ profiles, accounts, sortingHat, filter, setFilter }}>{children}</Ctx.Provider>;
 }
 
 export function useProfiles(): ProfilesState {
@@ -56,9 +59,12 @@ export function selectionOf(profile?: ProfileView): AccountSelection {
   return { anthropic: ids('anthropic'), openai: ids('openai') };
 }
 
-/** The ordered selection, plus each provider's first account for hubs from before ordered accounts. */
-export function profileSave(id: string | undefined, name: string, selection: AccountSelection) {
-  return { id, name, accountIds: selection, accountId: selection.anthropic[0] ?? null, openaiAccountId: selection.openai[0] ?? null };
+/**
+ * The ordered selection, plus each provider's first account for hubs from before ordered accounts.
+ * `houseId` links a house on the hub's Sorting Hat (null for none); leave it out on hubs without one.
+ */
+export function profileSave(id: string | undefined, name: string, selection: AccountSelection, houseId?: string | null) {
+  return { id, name, accountIds: selection, accountId: selection.anthropic[0] ?? null, openaiAccountId: selection.openai[0] ?? null, ...(houseId !== undefined ? { houseId } : {}) };
 }
 
 export function hasSignedInAccount(profile: ProfileView) {

@@ -90,6 +90,8 @@ export function manageSortingHat(hat: SortingHat, adminToken: string) {
     'PUT houses/:id/accounts': ([id], b) => hat.setHouseAccounts(id!, accountSelection(b)).then(ok),
     'DELETE houses/:id': ([id]) => (hat.houseView(id!), hat.removeHouse(id!).then(() => none)),
     'GET houses/:id/hat-keys': ([id]) => ok(hat.hatKeyViews(id!)),
+    // For apps that show a model picker: the house's ChatGPT account in use's catalog, with effort levels.
+    'GET houses/:id/models': ([id]) => (hat.houseView(id!), ok({ openai: hat.codexModels(id!) })),
 
     // Hat keys
     'GET hat-keys': (_, __, q) => ok(hat.hatKeyViews(q.get('house') ?? undefined)),
