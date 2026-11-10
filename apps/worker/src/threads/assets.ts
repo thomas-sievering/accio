@@ -441,9 +441,11 @@ async function openLocal(cwd: string, source: string, home: string): Promise<{ p
   if (process.platform !== 'win32' && win32.isAbsolute(authored) && !isAbsolute(authored)) throw new Error('Windows path is not on this machine.');
   const absolute = isAbsolute(authored);
   const root = await realpath(resolve(cwd));
-  const target = resolve(root, authored);
-  if (!absolute && !inside(root, target)) throw new Error('Relative file path escapes its checkout.');
-  // Reject symbolic links in the authored path, including links which resolve back inside cwd.
+  const lexical = resolve(root, authored);
+  if (!absolute && !inside(root, lexical)) throw new Error('Relative file path escapes its checkout.');
+  // An absolute path has no checkout to escape, so links in its folders (macOS /tmp, /var) are resolved; the file itself must still not be a link.
+  const target = absolute ? join(await realpath(dirname(lexical)), basename(lexical)) : lexical;
+  // Reject symbolic links in a relative path, including links which resolve back inside cwd.
   await assertNoLinks(target, root);
   const canonical = await realpath(target);
   for (const part of ['hub', 'secret-delivery']) {

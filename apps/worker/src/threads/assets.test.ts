@@ -223,6 +223,21 @@ describe('thread-owned media and file capabilities', () => {
     expect((await get(url)).status).toBe(404);
   });
 
+  it('embeds absolute paths through system links such as macOS /tmp, but not a linked file', async () => {
+    const real = join(home, 'private-tmp');
+    await mkdir(real);
+    await writeFile(join(real, 'shot.png'), PNG);
+    await symlink(real, join(home, 'tmp'), process.platform === 'win32' ? 'junction' : 'dir');
+    const source = join(home, 'tmp', 'shot.png');
+    expect(await assets.snapshot('thread-one', cwd, source)).toMatchObject({ source, asset: { mimeType: 'image/png' } });
+    const { url } = await assets.fileUrl('thread-one', cwd, source);
+    expect((await get(url)).status).toBe(200);
+    if (process.platform !== 'win32') {
+      await symlink(join(real, 'shot.png'), join(real, 'alias.png'));
+      expect(await assets.snapshot('thread-one', cwd, join(home, 'tmp', 'alias.png'))).toMatchObject({ error: expect.stringContaining('Symbolic links') });
+    }
+  });
+
   it('opens current ordinary files as safe attachments rather than taking snapshots', async () => {
     const source = join(cwd, 'current.html');
     await writeFile(source, '<h1>one</h1>');
