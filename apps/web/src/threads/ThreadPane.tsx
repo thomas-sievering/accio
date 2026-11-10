@@ -31,6 +31,7 @@ import { useThreads, useTranscript } from './threads';
 import { newThreadDraftId } from './drafts';
 import { useThreadAvailability, remoteImagesReason } from './useThreadAvailability';
 import { UserMessageText } from './PastedText';
+import { OfflineThread } from './OfflineThread';
 
 /** Where a thread runs, looked up once for the header, the notice and the composer. */
 function usePlace(checkoutId: string, profileId?: string, projectId?: string) {
@@ -73,7 +74,7 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
       {!visibleItems && !error && starting ? <StartingTranscript {...starting} /> : visibleItems ? <PendingPick.Provider value={{ pick, setPick, enabled: !running && !unavailable }}>
         <Transcript threadId={thread.id} items={visibleItems} working={running} onOpenSecrets={onOpenSecrets} />
       </PendingPick.Provider> : (
-        <div className="empty">
+        thread.machine && !thread.machine.online && error ? <OfflineThread thread={{ ...thread, machine: thread.machine }} onRetry={retry} /> : <div className="empty">
           {error && <>
             <p className="error" role="alert">Could not load transcript: {error}</p>
             <button className="ghost" onClick={retry}>Retry</button>

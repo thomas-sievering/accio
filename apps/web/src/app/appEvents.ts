@@ -19,7 +19,7 @@ export type AppEvents = {
   /** Open a project's dashboard, such as from the thread header's project name. */
   'project.dashboard': { id: string };
   /** A thread was snoozed until a time (ISO); the sidebar says so briefly. */
-  'thread.snoozed': { threadId: string; until: string };
+  'thread.snoozed': { threadId: string; until: string; untilOnline?: string };
   /** Open the side panel at a tab, such as Delivery after pressing Ship. */
   'panel.show': PanelTab;
 };

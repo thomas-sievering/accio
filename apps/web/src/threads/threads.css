@@ -1060,3 +1060,12 @@ div.model-picker-empty b { color: var(--ink); font-weight: 500; }
 .mention-option small { margin-left: auto; color: var(--muted); font-size: 11px; }
 .mention { display: inline-flex; align-items: baseline; gap: 4px; padding: 0 5px; border-radius: 5px; background: var(--raised); color: var(--ink-strong); white-space: nowrap; }
 .mention svg { align-self: center; width: 11px; height: 11px; }
+
+/* Another machine's thread while it is offline: what we last heard, and Snooze until it is back. */
+.offline-thread p { margin-block: 0 6px; }
+.offline-thread-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-block: 12px 6px;
+}

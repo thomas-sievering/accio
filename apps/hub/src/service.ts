@@ -29,6 +29,8 @@ export type HubSnapshot = {
   /** Absent in snapshots cached before built-in tool switches existed. */
   harnessTools?: Record<string, Record<string, boolean>>;
   threadNaming?: ReturnType<SharedSettings['threadNaming']>;
+  /** GLOSSARY: Snooze. Absent from hubs before snoozes until a machine is back. */
+  offlineSnoozes?: ReturnType<SharedSettings['offlineSnoozes']>;
   models: Record<string, CodexModel[]>;
   resources: ResourcesState;
   limits: AccountLimitsView[];
@@ -44,6 +46,10 @@ export type HubServiceOptions = {
 const SecretId = z.string().min(1).max(160);
 const SecretScope = z.object({ profileId: SecretId, projectId: SecretId.nullable(), slot: SecretSlot });
 const settingCalls = {
+  'threads.snoozeUntilOnline': z.object({
+    threadId: z.string().min(1).max(128),
+    snooze: z.object({ machineId: z.string().min(1).max(128), until: z.iso.datetime({ offset: true }) }).nullable(),
+  }),
   'harnesses.setTools': z.object({ harnessId: z.string().min(1).max(64), tools: z.record(z.string().regex(/^[a-z][a-z0-9-]{0,63}$/), z.boolean()) }),
 };
 const secretCalls = {
@@ -98,7 +104,7 @@ export async function startHubService(opts: HubServiceOptions) {
     const profiles = settings.profiles();
     return { hubId: trust.id, protocol: HUB_PROTOCOL, revision, epoch, ...(opts.version ? { version: opts.version } : {}), profiles: profileViews(profiles, hub), accounts: hub.accountViews(), machines: settings.machines(),
       favorites: Object.fromEntries(profiles.map((p) => [p.id, settings.modelFavorites(p.id)])), harnessTools: settings.harnessTools(),
-      threadNaming: settings.threadNaming(),
+      threadNaming: settings.threadNaming(), offlineSnoozes: settings.offlineSnoozes(),
       models: Object.fromEntries(profiles.map((p) => [p.id, hub.codexModels(p.id)])), resources: resources.state(), limits: hub.limits.views(), secrets: profiles.flatMap(p => secrets.list(p.id)) };
   }
   function announce() { revision++; for (const ws of sockets.clients) if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ revision })); }
@@ -238,6 +244,9 @@ export async function startHubService(opts: HubServiceOptions) {
       case 'machines.setProfileGitHub': await settings.setProfileGitHub(p.machineId, p.profileId, p.login); return null;
       case 'models.favorite': await settings.setModelFavorite(p.profileId, p.model, p.favorite); return null;
       case 'harnesses.setTools': await settings.setHarnessTools(p.harnessId, p.tools); return null;
+      case 'threads.snoozeUntilOnline':
+        try { await settings.setOfflineSnooze(p.threadId, p.snooze); } catch (error) { throw new SignInError((error as Error).message); }
+        return null;
       case 'threadNaming.save': await settings.setThreadNaming(p); return settings.threadNaming();
       default: throw new SignInError(`Unknown hub method ${method}`);
     }

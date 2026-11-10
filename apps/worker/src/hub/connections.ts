@@ -77,8 +77,12 @@ export class HubConnections {
       assets: () => refs.threads?.assets,
       machineName: (id) => settings.machine(id)?.name,
       machineConnected: (id) => settings.machines().some((m) => m.id === id && m.connected),
+      offlineSnoozes: () => settings.offlineSnoozes(),
+      setOfflineSnooze: (threadId, snooze) => settings.setOfflineSnooze(threadId, snooze),
       send: (event, data) => this.send(event, data, record.id),
     });
+    // A snooze set from another machine, or dropped by the hub, changes how these threads look.
+    settings.onMachinesChanged(() => relay.announce());
     const broadcast: Broadcast = (event, data) => {
       if (event === 'threads.changed') { relay.localChanged(); this.send(event, relay.merged(data as Events['threads.changed']), record.id); }
       else {

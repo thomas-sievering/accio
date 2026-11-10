@@ -86,7 +86,7 @@ export class HubClient {
   async close() { this.stopped = true; clearTimeout(this.retry); this.ws?.terminate(); }
 }
 
-export type SettingsAccess = Pick<SharedSettings, 'threadNaming' | 'setThreadNaming' | 'profiles' | 'machines' | 'machine' | 'modelFavorites' | 'setModelFavorite' | 'harnessTools' | 'setHarnessTools' | 'onMachinesChanged' | 'machineConnected' | 'machineDisconnected' | 'renameMachine' | 'setProfileFolders' | 'setProfileGitHub'> & { refresh?: () => Promise<void> };
+export type SettingsAccess = Pick<SharedSettings, 'threadNaming' | 'setThreadNaming' | 'profiles' | 'machines' | 'machine' | 'modelFavorites' | 'setModelFavorite' | 'harnessTools' | 'setHarnessTools' | 'offlineSnoozes' | 'setOfflineSnooze' | 'onMachinesChanged' | 'machineConnected' | 'machineDisconnected' | 'renameMachine' | 'setProfileFolders' | 'setProfileGitHub'> & { refresh?: () => Promise<void> };
 
 /** Synchronous read views with writes committed by the hub over the connection. */
 export function remoteSettings(client: HubClient): SettingsAccess {
@@ -102,6 +102,9 @@ export function remoteSettings(client: HubClient): SettingsAccess {
     harnessTools: () => client.snapshot?.harnessTools ?? {},
     setHarnessTools: async (harnessId, tools) => { await client.call('harnesses.setTools', { harnessId, tools }); },
     setModelFavorite: async (profileId, model, favorite) => { await client.call('models.favorite', { profileId, model, favorite }); },
+    // Older hubs don't send snoozes; a machine's connection status there drops expired ones.
+    offlineSnoozes: (now = new Date()) => Object.fromEntries(Object.entries(client.snapshot?.offlineSnoozes ?? {}).filter(([, s]) => new Date(s.until) > now)),
+    setOfflineSnooze: async (threadId, snooze) => { await client.call('threads.snoozeUntilOnline', { threadId, snooze }); await client.refresh(true); },
     machineConnected: async (hello) => { await client.call('machine.hello', hello); },
     machineDisconnected: async () => {},
     renameMachine: async (machineId, name) => { await client.call('machines.rename', { machineId, name }); },

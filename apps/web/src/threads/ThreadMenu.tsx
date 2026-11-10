@@ -3,7 +3,7 @@ import type { ThreadView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { useAction } from '../app/useAction';
 import { focusMenuItem, onMenuKeyDown } from '../ui/menuKeys';
-import { placeOf } from './shelves';
+import { awaitsMachine, placeOf } from './shelves';
 import { snoozeThread } from './SnoozeNotice';
 import { useThreads, type ThreadActions } from './threads';
 import { releaseFirstMessage } from './sentImages';
@@ -46,12 +46,18 @@ export function ThreadMenuItems({ thread, close, onRename, before }: {
   };
   const running = thread.status === 'running';
   const place = placeOf(thread, now);
-  const item = (label: string, action: keyof ThreadActions) => (
-    <button className="menu-item" role="menuitem" disabled={busy || !!unavailable} title={unavailable}
-      onClick={() => done(() => action === 'snooze' ? snoozeThread(act, thread.id) : act[action](thread.id))}>
-      <span className="menu-text">{label}</span>
-    </button>
-  );
+  // Another machine's thread while that machine is offline: the hub keeps its snooze until the
+  // machine is back; settling waits until you can read it.
+  const awaiting = awaitsMachine(thread);
+  const item = (label: string, action: keyof ThreadActions, { whileOffline = false, blocked }: { whileOffline?: boolean; blocked?: string } = {}) => {
+    const reason = blocked ?? (whileOffline ? undefined : unavailable);
+    return (
+      <button className="menu-item" role="menuitem" disabled={busy || !!reason} title={reason}
+        onClick={() => done(() => action === 'snooze' ? snoozeThread(act, thread) : act[action](thread.id))}>
+        <span className="menu-text">{label}</span>
+      </button>
+    );
+  };
   const rename = (e: FormEvent) => {
     e.preventDefault();
     if (!unavailable && title.trim()) void done(() => client.call('threads.rename', { threadId: thread.id, title }));
@@ -73,8 +79,11 @@ export function ThreadMenuItems({ thread, close, onRename, before }: {
             <span className="menu-text">{busy ? 'Generating?' : 'Regenerate title'}</span>
           </button>
           {running && item('Stop', 'stop')}
-          {place === 'snoozed' ? item('Wake now', 'reopen') : item('Snooze until morning', 'snooze')}
-          {place === 'settled' ? item('Reopen', 'reopen') : item('Settle', 'settle')}
+          {place === 'snoozed' ? item('Wake now', 'reopen', { whileOffline: !!thread.snoozedUntilOnline })
+            : awaiting ? item('Snooze until back online', 'snooze', { whileOffline: true })
+            : item('Snooze until morning', 'snooze')}
+          {place === 'settled' ? item('Reopen', 'reopen')
+            : item('Settle', 'settle', { blocked: awaiting ? `${thread.machine!.name} is offline. Read the thread once it is back to settle it.` : undefined })}
           <hr />
           {mode === 'confirmDelete' ? (
             <div className="menu-confirm">

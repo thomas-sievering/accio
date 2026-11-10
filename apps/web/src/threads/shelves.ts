@@ -139,6 +139,11 @@ export function filterThreads(threads: ThreadView[], scope: ThreadScope, query: 
   return threads.filter((t) => inScope(t) && (!q || t.title.toLowerCase().includes(q)));
 }
 
+/** Another machine's thread while that machine is offline: it can only be snoozed until it is back. */
+export function awaitsMachine(t: Pick<ThreadView, 'machine'>): boolean {
+  return !!t.machine && !t.machine.online;
+}
+
 /** Next 9:00 that is at least an hour away: "snooze until tomorrow morning". */
 export function nextMorning(now: Date): Date {
   const d = new Date(now);

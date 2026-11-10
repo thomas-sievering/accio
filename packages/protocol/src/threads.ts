@@ -36,6 +36,11 @@ export type ThreadView = {
   updatedAt: string;
   /** GLOSSARY: Snooze. Hidden until this time; null when not snoozed. */
   snoozedUntil: string | null;
+  /**
+   * GLOSSARY: Snooze. Another machine's thread snoozed until that machine is back, kept by the
+   * hub since the machine is offline. `snoozedUntil` is then the fallback if it stays away.
+   */
+  snoozedUntilOnline?: boolean;
   /** GLOSSARY: Settle. When it was marked done; null while open. */
   settledAt: string | null;
   /** Absent on older threads that still use their original, shared checkout. */

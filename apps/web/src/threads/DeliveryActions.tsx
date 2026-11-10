@@ -78,6 +78,8 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
   }, [phase]);
 
   const settled = !!thread.settledAt;
+  // Snoozed on the hub until the thread's offline machine is back; waking it needs no machine.
+  const untilOnline = !!thread.snoozedUntilOnline;
   const snoozedUntil = !settled && thread.snoozedUntil && new Date(thread.snoozedUntil) > now ? new Date(thread.snoozedUntil) : undefined;
   // A settled or snoozed thread always has its state row, even when it never had a workspace.
   if (!thread.workspace && !settled && !snoozedUntil) return null;
@@ -139,9 +141,10 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
         {status?.canCancel && status.phase !== 'queued' && <button className="delivery-pill" disabled={!!unavailable || busy} onClick={() => call('threads.cancelDelivery')}><Close />Cancel delivery</button>}
       </>}
       {settled && !hasChip && <span className="delivery-settled">Settled</span>}
-      {snoozedUntil && <span className="delivery-settled">Snoozed until {wakeText(snoozedUntil, now)}</span>}
+      {snoozedUntil && <span className="delivery-settled">Snoozed until {untilOnline ? `${thread.machine!.name} is back` : wakeText(snoozedUntil, now)}</span>}
       {settled && <button className="delivery-pill" disabled={!!unavailable || busy} onClick={() => call('threads.reopen')}><Undo />Reopen</button>}
-      {snoozedUntil && <button className="delivery-pill" disabled={!!unavailable || busy} onClick={() => call('threads.reopen')}><Undo />Wake now</button>}
+      {snoozedUntil && <button className="delivery-pill" disabled={(!!unavailable && !untilOnline) || busy}
+        onClick={() => call('threads.reopen')}><Undo />Wake now</button>}
       {!released && (receipt || settled) && thread.workspace && <button className="delivery-pill" disabled={!!unavailable || busy || thread.status === 'running'} title="Frees the workspace, keeps this thread" onClick={() => call('threads.archive')}>
         <Archive />{busy ? 'Archiving…' : 'Archive'}
       </button>}

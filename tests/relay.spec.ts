@@ -60,12 +60,31 @@ test('remote actions match relay support and become read-only when the owner goe
     await expect(page.getByRole('button', { name: /^Rename thread:/ })).toBeDisabled();
     await page.getByRole('button', { name: 'Thread actions', exact: true }).click();
     const menu = page.getByRole('menu', { name: 'Thread actions', exact: true });
-    for (const name of ['Rename…', 'Regenerate title', 'Snooze until morning', 'Settle', 'Delete thread']) await expect(menu.getByRole('menuitem', { name, exact: true })).toBeDisabled();
+    for (const name of ['Rename…', 'Regenerate title', 'Settle', 'Delete thread']) await expect(menu.getByRole('menuitem', { name, exact: true })).toBeDisabled();
+    // It can't be read, so it can't be settled; it can be snoozed here until its machine is back.
+    await expect(menu.getByRole('menuitem', { name: 'Snooze until back online', exact: true })).toBeEnabled();
     await page.keyboard.press('Escape');
     const row = page.locator('.sidebar .row').filter({ hasText: 'Remote cleanup verified' });
     await row.hover();
-    await expect(row.getByRole('button', { name: 'Settle', exact: true })).toBeDisabled();
+    await expect(row.getByRole('button', { name: 'Settle', exact: true })).toHaveCount(0);
+    await expect(row.getByRole('button', { name: 'Snooze', exact: true })).toBeEnabled();
     await page.screenshot({ path: info.outputPath('remote-offline.png') });
+
+    // Without a loaded transcript, the pane says what this client last heard and offers the snooze.
+    await page.reload();
+    await page.locator('.sidebar .row-main').filter({ hasText: 'Remote cleanup verified' }).click();
+    await expect(page.locator('.offline-thread')).toContainText('MacBook is offline');
+    await page.screenshot({ path: info.outputPath('remote-offline-pane.png') });
+    await page.locator('.offline-thread').getByRole('button', { name: 'Snooze until back online', exact: true }).click();
+    await expect(page.locator('.snooze-notice')).toContainText('Snoozed until MacBook is back');
+    await expect(page.locator('.offline-thread')).toContainText('Snoozed until MacBook is back.');
+    const shelf = page.locator('.shelf').filter({ hasText: 'Snoozed' });
+    if ((await shelf.locator('.shelf-head').getAttribute('aria-expanded')) !== 'true') await shelf.locator('.shelf-head').click();
+    const snoozed = shelf.locator('.row').filter({ hasText: 'Remote cleanup verified' });
+    await expect(snoozed.locator('.row-meta')).toHaveText('offline');
+    await snoozed.hover();
+    await snoozed.getByRole('button', { name: 'Wake', exact: true }).click();
+    await expect(shelf.locator('.row').filter({ hasText: 'Remote cleanup verified' })).toHaveCount(0);
     // This machine's own thread still works.
     await page.locator('.sidebar .row-main').filter({ hasText: 'A thread on the PC' }).click();
     await page.locator('.composer textarea').fill('Local works');
