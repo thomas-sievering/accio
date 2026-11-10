@@ -37,7 +37,7 @@ export async function startRemoteSortingHat() {
   };
   let closing: Promise<void> | undefined;
   return {
-    url: hat.url, adminToken: hat.adminToken, auth, anthropic, chatgpt, codex, api, claudeAccount, chatgptAccount,
+    url: hat.url, adminToken: hat.adminToken, dir, auth, anthropic, chatgpt, codex, api, claudeAccount, chatgptAccount,
     // Once only: a test may stop it early to see the hub lose it.
     close: () => closing ??= (async () => { await hat.close(); await anthropic.close(); await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); })(),
   };

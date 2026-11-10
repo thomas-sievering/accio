@@ -46,9 +46,10 @@ export class HubTrust {
     });
   }
   authenticate(token: string): string | undefined { return this.data.devices.find((d) => safeEqual(d.tokenHash, digest(token)))?.id; }
-  modelProfile(token: string): string | undefined {
+  /** The machine and profile a hub model key was made for. */
+  modelOwner(token: string): { machineId: string; profileId: string } | undefined {
     if (!token) return;
-    for (const device of this.data.devices) for (const [profileId, key] of Object.entries(device.keys)) if (safeEqual(key, token)) return profileId;
+    for (const device of this.data.devices) for (const [profileId, key] of Object.entries(device.keys)) if (safeEqual(key, token)) return { machineId: device.id, profileId };
   }
   key(machineId: string, profileId: string): Promise<string> {
     return this.change(async () => {

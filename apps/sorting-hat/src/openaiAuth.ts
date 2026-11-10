@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rm } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { startCodex, type CodexClient, type CodexFactory } from './codex.js';
 import { SIGN_IN_TTL_MS, SignInError } from './claudeOAuth.js';
@@ -121,6 +121,14 @@ export class OpenAIAuth {
   async remove(credentialId: string) {
     await this.refreshing.get(credentialId)?.catch(() => {});
     await rm(this.directory(credentialId), { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  }
+
+  /** An imported account's credential home: its Codex auth.json, checked before it is used. */
+  async restore(credentialId: string, auth: unknown) {
+    const dir = this.directory(credentialId);
+    await mkdir(dir, { recursive: true, mode: 0o700 });
+    await writeFile(join(dir, 'auth.json'), JSON.stringify(auth), { mode: 0o600 });
+    await this.readCredentials(credentialId);
   }
 
   credentials(account: OpenAIAccount, force = false): Promise<OpenAICredentials> {

@@ -1,4 +1,5 @@
 import { createServer, request as httpRequest, type IncomingMessage, type ServerResponse } from 'node:http';
+import { request as httpsRequest } from 'node:https';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { WebSocket, WebSocketServer } from 'ws';
@@ -10,6 +11,7 @@ import { HubError } from './errors.js';
 import { HubTrust } from './trust.js';
 import { accountSelection, profileViews, saveSharedProfile, type HouseSource } from './profile.js';
 import { SortingHatLink } from './sortingHatLink.js';
+import { accountsToMove, moveAccounts } from './accountMove.js';
 import { Resources } from './resources.js';
 import { McpGateway } from './mcp.js';
 import { RESOURCE_WRITES } from './resourceClient.js';
@@ -63,11 +65,27 @@ export async function startHubService(opts: HubServiceOptions) {
   const mcp = new McpGateway(resources, opts.mcpFetch);
   const grants = new Map<string, { machineId: string; release(): void }>();
   await settings.load(opts.seed); await trust.load(); await resources.load(); await secrets.load();
-  // GLOSSARY: Sorting Hat, run in-process until the hub links to one of its own (ADR 0018). Each profile links to its house of the same id.
-  const hat = await startSortingHat({ dir: join(opts.home, 'hub'), claudeFetch: opts.claudeFetch, codexFactory: opts.codexFactory, anthropicUrl: opts.anthropicUrl, openaiUrl: opts.openaiUrl, openaiFetch: opts.openaiFetch });
   // GLOSSARY: Sorting Hat, run on its own. Once linked to one, threads run through it, with hat keys per profile and machine.
   const link = new SortingHatLink(opts.home, secrets, () => settings.profiles().flatMap((p) => p.houseId ? [p.houseId] : []));
   await link.load();
+  const startHat = () => startSortingHat({ dir: join(opts.home, 'hub'), claudeFetch: opts.claudeFetch, codexFactory: opts.codexFactory, anthropicUrl: opts.anthropicUrl, openaiUrl: opts.openaiUrl, openaiFetch: opts.openaiFetch });
+  await moveToLink(false).catch(() => {});
+  // GLOSSARY: Sorting Hat, run in-process until the hub links to one of its own (ADR 0018). Each profile links to its house of the same id.
+  let hat = await startHat();
+  /**
+   * ADR 0018: a linked hub moves the embedded Sorting Hat's accounts there
+   * (accountMove.ts). A running one is stopped first, its sign-ins with it, so
+   * its copy of the credentials never refreshes again, and starts again empty.
+   */
+  async function moveToLink(running: boolean) {
+    if (!link.configured || !await accountsToMove(opts.home)) return false;
+    if (running) { logins.clear(); await hat.close(); }
+    try { await moveAccounts(opts.home, link.require(), settings); await link.poll(); return true; }
+    catch (error) {
+      console.error('[hub] moving accounts to the Sorting Hat failed; it is tried again when the Sorting Hat answers:', (error as Error).message);
+      throw new HubError(`This hub’s accounts could not be moved to the Sorting Hat yet: ${(error as Error).message} It tries again when the Sorting Hat answers.`);
+    } finally { if (running) { hat = await startHat(); hat.onLimitsChanged(announce); } }
+  }
   /** The houses profiles link to: the hub's own Sorting Hat when it has one, else the embedded one. */
   const houses = (): HouseSource => link.configured ? {
     selectedAccounts: (id: string, provider: ProviderId) => link.selectedAccounts(id, provider),
@@ -117,6 +135,13 @@ export async function startHubService(opts: HubServiceOptions) {
   settings.onMachinesChanged(announce);
   hat.onLimitsChanged(announce);
   link.onChanged(announce);
+  // A move that stopped halfway, such as while the Sorting Hat was unreachable, goes on once it answers again.
+  let retrying = false;
+  link.onChanged(() => {
+    if (retrying || !link.view() || link.view()!.problem) return;
+    retrying = true;
+    queue = queue.then(() => moveToLink(true)).then((moved) => { if (moved) announce(); }, () => {}).finally(() => { retrying = false; });
+  });
   secrets.onChanged(announce);
   const modelsRefreshed = hat.refreshCodexModels().then((changed) => { if (changed) announce(); });
   function auth(req: IncomingMessage) { const token = /^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1]; return token ? trust.authenticate(token) : undefined; }
@@ -277,7 +302,7 @@ export async function startHubService(opts: HubServiceOptions) {
       case 'harnesses.setTools': await settings.setHarnessTools(p.harnessId, p.tools); return null;
       case 'threadNaming.save': await settings.setThreadNaming(p); return settings.threadNaming();
       case 'sortingHat.get': return link.view() ?? null;
-      case 'sortingHat.configure': return link.configure(p);
+      case 'sortingHat.configure': await link.configure(p); await moveToLink(true); return link.view();
       case 'sortingHat.disconnect': await link.disconnect(); return null;
       default: throw new HubError(`Unknown hub method ${method}`);
     }
@@ -363,11 +388,17 @@ export async function startHubService(opts: HubServiceOptions) {
     }
     if (req.method !== 'POST' || !['/v1/messages', '/v1/messages/count_tokens', '/openai/responses', '/openai/responses/compact'].includes(path)) return json(res, 404, { error: 'Unknown hub endpoint' });
     const key = /^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1] ?? (typeof req.headers['x-api-key'] === 'string' ? req.headers['x-api-key'] : '');
-    const profileId = trust.modelProfile(key);
-    if (!profileId) return json(res, 401, { error: 'Unknown or revoked model key' });
-    const headers: import('node:http').IncomingHttpHeaders = { ...req.headers, host: new URL(hat.url).host, authorization: `Bearer ${await hat.ensureHouse(profileId)}` };
+    const owner = trust.modelOwner(key);
+    if (!owner) return json(res, 401, { error: 'Unknown or revoked model key' });
+    // A turn started before the accounts moved keeps this key: its requests go on to the Sorting Hat with its machine's hat key.
+    const profile = settings.profiles().find((p) => p.id === owner.profileId);
+    const to = link.configured && profile?.houseId
+      ? { url: link.url!, key: await link.hatKey({ id: owner.machineId, name: settings.machine(owner.machineId)?.name ?? owner.machineId }, profile, profile.houseId) }
+      : { url: hat.url, key: await hat.ensureHouse(owner.profileId) };
+    const address = new URL(to.url + path + target.search);
+    const headers: import('node:http').IncomingHttpHeaders = { ...req.headers, host: address.host, authorization: `Bearer ${to.key}` };
     delete headers['x-api-key'];
-    const upstream = httpRequest(new URL(path + target.search, hat.url), { method: req.method, headers }, (response) => {
+    const upstream = (address.protocol === 'https:' ? httpsRequest : httpRequest)(address, { method: req.method, headers }, (response) => {
       res.writeHead(response.statusCode ?? 502, { ...response.headers, 'cache-control': 'no-store' }); response.pipe(res);
     });
     upstream.on('error', () => { if (!res.headersSent) json(res, 502, { error: 'Could not reach the provider proxy' }); else res.destroy(); });

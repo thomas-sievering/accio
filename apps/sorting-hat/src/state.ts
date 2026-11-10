@@ -72,3 +72,6 @@ function fromEmbedded(stored: EmbeddedData | InlineProfile[]): HatState {
 function orderedAccounts({ id, accountIds, accountId, openaiAccountId }: EmbeddedProfile): StoredHouse {
   return { id, name: id, accountIds: accountIds ?? [accountId, openaiAccountId].filter((a): a is string => !!a) };
 }
+
+/** The state in `dir`, converted as on load; for an app moving the accounts of a Sorting Hat it embedded. */
+export const readState = (dir: string) => loadState(new JsonFile<HatState>(join(dir, STATE_FILE), emptyState));

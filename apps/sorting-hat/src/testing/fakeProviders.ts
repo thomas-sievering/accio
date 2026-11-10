@@ -19,6 +19,8 @@ export function fakeAnthropicAuth() {
   const models: Record<string, { id: string; display_name: string }[] | number> = {};
   /** The headers of every model list request. */
   const modelRequests: Headers[] = [];
+  /** The refresh token of every refresh. */
+  const refreshed: string[] = [];
   const fetch: Fetch = async (url, init) => {
     if (String(url) === 'https://api.anthropic.com/api/oauth/usage') {
       return Response.json(usage[new Headers(init?.headers).get('authorization')!.slice('Bearer '.length)] ?? {});
@@ -33,11 +35,12 @@ export function fakeAnthropicAuth() {
     // Anything else, such as the faked API the Sorting Hat forwards to, goes out as usual.
     if (String(url) !== CLAUDE_OAUTH.tokenUrl) return globalThis.fetch(url, init);
     const body = JSON.parse(String(init?.body));
+    if (body.refresh_token) refreshed.push(body.refresh_token);
     if (body.code === 'bad') return new Response(JSON.stringify({ error_description: 'Invalid code' }), { status: 400 });
     n++;
     return Response.json({ access_token: `token-${n}`, refresh_token: `refresh-${n}`, expires_in: 3600, account: { uuid: `claude-${n}`, email_address: `claude-${n}@example.com` } });
   };
-  return { fetch, usage, models, modelRequests };
+  return { fetch, usage, models, modelRequests, refreshed };
 }
 
 /**

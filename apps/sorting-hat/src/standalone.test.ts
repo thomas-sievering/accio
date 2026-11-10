@@ -7,7 +7,7 @@ import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { startStandalone } from './standalone.js';
-import { FakeCodex, anthropicReply, fakeAnthropicApi, fakeAnthropicAuth, fakeChatGPT, responsesReply } from './testing/fakeProviders.js';
+import { FakeCodex, anthropicReply, fakeAnthropicApi, fakeAnthropicAuth, fakeChatGPT, responsesReply, testJWT } from './testing/fakeProviders.js';
 
 const cleanup: (() => Promise<unknown>)[] = [];
 afterEach(async () => { for (const c of cleanup.splice(0).reverse()) await c(); });
@@ -312,6 +312,34 @@ describe('the standalone Sorting Hat', () => {
     expect(await api('PUT', `houses/${house.id}/accounts`, { anthropic: [] })).toMatchObject({ accounts: { anthropic: [] } });
     expect(await api('DELETE', `accounts/${a.id}`)).toBeUndefined();
     expect((await api('GET', 'accounts')).map((x: { id: string }) => x.id)).toEqual([b.id]);
+  });
+
+  it('imports accounts with their credentials and houses, replacing the same ids when repeated', async () => {
+    const { api, admin, dir, anthropic, chatgpt, claude, responses } = await start();
+    const credentialId = '00000000-0000-4000-8000-000000000002';
+    const claudeLogin = { accessToken: 'moved-token', refreshToken: 'moved-refresh', expiresAt: Date.now() + 3600_000, email: 'me@example.com', claudeAccountId: 'me', organization: null };
+    const body = {
+      accounts: [
+        { id: 'mine', name: 'Mine', providerId: 'anthropic', account: claudeLogin },
+        { id: 'gpt', name: 'GPT', providerId: 'openai', account: null, openai: { credentialId, email: 'gpt@example.com', planType: 'pro', models: [] },
+          codexAuth: { auth_mode: 'chatgpt', tokens: { access_token: testJWT('gpt-me'), account_id: 'gpt-me', refresh_token: 'r' } } },
+      ],
+      houses: [{ id: 'personal', name: 'Personal', accountIds: ['mine', 'gpt'] }],
+    };
+    expect(await admin('POST', 'import', { ...body, houses: [{ id: 'personal', name: 'Personal', accountIds: ['nobody'] }] })).toMatchObject({ status: 400 });
+    expect(await api('GET', 'accounts')).toEqual([]);
+    expect(await api('POST', 'import', body)).toMatchObject({ accounts: [{ id: 'mine', signedIn: true }, { id: 'gpt', signedIn: true, email: 'gpt@example.com' }],
+      houses: [{ id: 'personal', accounts: { anthropic: ['mine'], openai: ['gpt'] }, inUse: { anthropic: 'mine', openai: 'gpt' } }] });
+    await api('POST', 'import', { ...body, accounts: [{ ...body.accounts[0], name: 'Mine again' }, body.accounts[1]] });
+    expect((await api('GET', 'accounts')).map((a: any) => a.name)).toEqual(['Mine again', 'GPT']);
+    expect(await api('GET', 'houses')).toHaveLength(1);
+    expect(JSON.parse(await readFile(join(dir, 'codex', credentialId, 'auth.json'), 'utf8')).tokens.account_id).toBe('gpt-me');
+
+    const { secret } = await api('POST', 'hat-keys', { houseId: 'personal', name: 'test' });
+    const sent = await claude(secret); expect(sent.status).toBe(200); await sent.text();
+    expect(anthropic.seen.at(-1)?.headers.authorization).toBe('Bearer moved-token');
+    const answered = await responses(secret); expect(answered.status).toBe(200); await answered.text();
+    expect(chatgpt.seen.at(-1)?.headers.get('chatgpt-account-id')).toBe('gpt-me');
   });
 });
 

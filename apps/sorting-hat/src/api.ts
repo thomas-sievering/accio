@@ -119,6 +119,12 @@ export function manageSortingHat(hat: SortingHat, adminToken: string, opts: Mana
 
     // Usage
     'GET usage': (_, __, q) => ok(hat.usageReport(usageQuery(q))),
+
+    // Accounts and houses from another Sorting Hat's state, such as the one Accio's hub embedded.
+    'POST import': (_, b) => {
+      if (!Array.isArray(b.accounts) || !Array.isArray(b.houses ?? [])) throw new HatError('accounts and houses must be lists.');
+      return hat.importState(b.accounts, b.houses ?? []).then(ok);
+    },
   };
 
   function signInProvider(id: string) {

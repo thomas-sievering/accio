@@ -1,5 +1,5 @@
 import type { AccountLimitsView, AccountView, ProviderId } from '@accio/protocol';
-import type { CodexModel } from '@accio/sorting-hat';
+import type { CodexModel, ImportedAccount } from '@accio/sorting-hat';
 import { HubError } from './errors.js';
 
 /** The Sorting Hat's house (apps/sorting-hat/API.md). */
@@ -50,6 +50,10 @@ export class SortingHatClient {
   createHatKey(houseId: string, name: string) { return this.request<RemoteHatKey & { secret: string }>('POST', 'hat-keys', { houseId, name }); }
   renameHatKey(id: string, name: string) { return this.request<RemoteHatKey>('PATCH', `hat-keys/${encodeURIComponent(id)}`, { name }); }
   async deleteHatKey(id: string) { await this.request<void>('DELETE', `hat-keys/${encodeURIComponent(id)}`); }
+  /** Accounts with their credentials and houses, as sorting-hat.json stores them; repeating it replaces them. */
+  importAccounts(accounts: ImportedAccount[], houses: { id: string; name: string; accountIds: string[] }[]) {
+    return this.request<{ accounts: AccountView[]; houses: RemoteHouse[] }>('POST', 'import', { accounts, houses }, 60_000);
+  }
   limits() { return this.request<AccountLimitsView[]>('GET', 'limits'); }
   refreshLimits(accountIds?: string[], force = false) { return this.request<AccountLimitsView[]>('POST', 'limits/refresh', { ...(accountIds ? { accountIds } : {}), force }); }
 

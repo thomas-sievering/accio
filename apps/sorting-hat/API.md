@@ -279,6 +279,24 @@ older than 90 days are merged into days. A year of busy use (ten combinations of
 hat key, account and model, each busy 16 hours a day) stays under 3 MB.
 Usage stays after its hat key, house or account is deleted.
 
+### Import
+
+`POST /api/import` takes accounts, with their credentials, and houses as another
+Sorting Hat keeps them in `sorting-hat.json`, such as the one Accio's hub embedded:
+
+```
+{ accounts: { id, name, providerId, account: ClaudeCredentials | null,
+              openai?: { credentialId, email, planType, models } | null,
+              codexAuth?: <the ChatGPT account's Codex auth.json> }[],
+  houses:   { id, name, accountIds: string[] }[] }
+```
+
+It answers `{ accounts: Account[], houses: House[] }`. An account or house whose
+id is already here is replaced, so the same import can be sent again; its hat
+keys stay. Every house's `accountIds` must be accounts here or in the import.
+The accounts' credentials become live here at once: the sender must never use
+its copy again, since refresh tokens rotate.
+
 ## Model routes
 
 With a hat key, the Sorting Hat swaps the key for the credential of the house's

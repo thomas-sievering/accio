@@ -14,7 +14,17 @@ docker exec accio-hub node dist/main.js --pair
 
 In Accio, open Settings / Hubs and enter a name, the public address, and that code within ten minutes. Later codes can also be generated from a paired device. Anyone holding a code can pair a trusted device, so keep it private. There is no public signup or username/password.
 
-Before starting the service, provision `.secrets.env` beside `compose.yaml`, mode 600, containing `ACCIO_SECRET_KEY=<32 random bytes encoded as standard base64>`. Generate it once and preserve it across updates; replacing it makes saved secrets unreadable. Keep a protected backup separately from `/data/configs/accio`. The updater changes only `.env` with the image reference and preserves this key file. Provider credentials and encrypted saved-secret values live in the mounted state; temporary secret deliveries stay on each machine.
+Before starting the service, provision `.secrets.env` beside `compose.yaml`, mode 600, containing `ACCIO_SECRET_KEY=<32 random bytes encoded as standard base64>`. Generate it once and preserve it across updates; replacing it makes saved secrets unreadable. Keep a protected backup separately from `/data/configs/accio`. The updater changes only `.env` with the image reference and preserves this key file. Encrypted saved-secret values (and, until they move to the Sorting Hat, provider credentials) live in the mounted state; temporary secret deliveries stay on each machine.
+
+## Move the accounts to the Sorting Hat
+
+Linking the hub to its Sorting Hat ([deploy/sorting-hat](../sorting-hat/README.md)) moves the hub's accounts there once, with their credentials, and links every profile to a new house of its name with its accounts in order. The hub then deletes its copy. In order:
+
+1. Back up `/data/configs/accio` (see below) and check that the Sorting Hat is healthy.
+2. Deploy a hub image with this move, then in Accio open Settings / Hubs and link the hub's Sorting Hat with the address `http://sorting-hat:47330` and the admin token.
+3. Check the profiles: each shows its house and accounts, signed in. The Sorting Hat's dashboard lists the accounts and houses. `/data/configs/accio/hub` keeps no `codex/` folder and no `sorting-hat-move.json`.
+
+The hub stops its own accounts before it uploads them and never starts them again. If the upload fails, linking says so and the hub tries again whenever the Sorting Hat answers, and on every start, until it is done. Running threads carry on: the hub passes their requests on to the Sorting Hat with a hat key, and their next turn gets a hat key and the Sorting Hat's address from the hub. Do not restore the backup onto a running hub afterwards: it would bring back a second live copy of the moved refresh tokens.
 
 ## Automatic updates
 
