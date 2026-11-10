@@ -92,6 +92,7 @@ verification suites.
 
 - Machine: `~/.accio` (`ACCIO_HOME` overrides). Remote hubs' projects, threads and media live under `hubs/<hub-id>`; hub credentials are server-only in `hub-connections.json`.
 - Standalone hub: `~/.accio-hub`. Its `hub` directory holds account credentials, Codex homes, shared settings, secrets and device trust; keep it private and back it up as one unit. See [deploy/hub/README.md](deploy/hub/README.md) for Docker, Cloudflare Tunnel and automatic updates.
+- Sorting Hat: `~/.sorting-hat` when run on its own; on the home server `/data/configs/sorting-hat`, holding every account's refresh tokens. See [deploy/sorting-hat/README.md](deploy/sorting-hat/README.md) for Docker, Cloudflare Access, automatic updates and backups.
 - Dev hub: `%LOCALAPPDATA%/accio-dev` on Windows (`ACCIO_DEV_HUB_HOME`, `ACCIO_DEV_HUB_PORT` override). Pair it once as Local dev and switch in the sidebar.
 
 ## Layout

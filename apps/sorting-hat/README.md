@@ -178,6 +178,12 @@ pi takes its model list from its own catalog and `models.json`; it reads the
 Sorting Hat's [model lists](#model-lists) only through a provider extension that
 discovers models (`refreshModels`), which has not been tried either.
 
+## Deploy
+
+`Dockerfile.sorting-hat` builds its image; the home-server deployment at
+`sortinghat.mediatom.cc`, behind Cloudflare Access, is described in
+[deploy/sorting-hat](../../deploy/sorting-hat/README.md).
+
 ## Develop
 
 `pnpm exec vitest run apps/sorting-hat` runs its tests with faked providers.

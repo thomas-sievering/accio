@@ -1,0 +1,19 @@
+FROM node:24-bookworm-slim AS build
+WORKDIR /src
+RUN npm install --global pnpm@12.16.1
+COPY . .
+ARG PNPM_MINIMUM_RELEASE_AGE=1440
+RUN pnpm --config.minimumReleaseAge=${PNPM_MINIMUM_RELEASE_AGE} install --frozen-lockfile --ignore-scripts
+RUN pnpm --config.minimumReleaseAge=${PNPM_MINIMUM_RELEASE_AGE} --filter '@accio/sorting-hat...' build
+# Installs only this platform's Codex binary (@openai/codex-linux-x64), which ChatGPT accounts run.
+RUN pnpm --config.minimumReleaseAge=${PNPM_MINIMUM_RELEASE_AGE} --filter @accio/sorting-hat deploy --prod --legacy /opt/sorting-hat
+
+FROM node:24-bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
+ENV NODE_ENV=production SORTING_HAT_DIR=/data SORTING_HAT_HOST=0.0.0.0 SORTING_HAT_PORT=47330
+WORKDIR /app
+COPY --from=build --chown=node:node /opt/sorting-hat/ ./
+USER node
+EXPOSE 47330
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s CMD node -e "fetch('http://127.0.0.1:47330/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+CMD ["node", "dist/main.js"]
