@@ -21,14 +21,14 @@ Before starting the service, provision `.secrets.env` beside `compose.yaml`, mod
 Linking the hub to its Sorting Hat ([deploy/sorting-hat](../sorting-hat/README.md)) moves the hub's accounts there once, with their credentials, and links every profile to a new house of its name with its accounts in order. The hub then deletes its copy. In order:
 
 1. Back up `/data/configs/accio` (see below) and check that the Sorting Hat is healthy. Let running threads finish: the new hub serves no model requests itself.
-2. Deploy a hub image with this move, then in Accio open Settings / Hubs and link the hub's Sorting Hat with the address `http://sorting-hat:47330`, the address for threads `https://sortinghat.mediatom.cc` and the admin token. The hub reaches the Sorting Hat on the Docker network; threads on other machines get the public address.
+2. Copy the new `deploy.sh` (it follows `stable-v2`) to `/home/tom/accio` and run it, then in Accio open Settings / Hubs and link the hub's Sorting Hat with the address `http://sorting-hat:47330`, the address for threads `https://sortinghat.mediatom.cc` and the admin token. The hub reaches the Sorting Hat on the Docker network; threads on other machines get the public address.
 3. Check the profiles: each shows its house and accounts, signed in. The Sorting Hat's dashboard lists the accounts and houses. `/data/configs/accio/hub` keeps no `profiles.json`, no `codex/` folder and no `sorting-hat-move.json`.
 
 The new hub never uses its old accounts; until it is linked, no thread can run. If the upload fails, linking says so and the hub tries again whenever the Sorting Hat answers, and on every start, until it is done. Each thread's next turn gets a hat key and the address for threads from the hub. Do not restore the backup onto a running hub afterwards: it would bring back a second live copy of the moved refresh tokens.
 
 ## Automatic updates
 
-GitHub Actions in `.github/workflows/hub.yml` verifies changes before publishing a commit image. Successful `main` builds also advance `stable-v1`. A branch build publishes only its commit tag. The private registry requires a token with `read:packages` on the server, supplied privately to `docker login ghcr.io --password-stdin`.
+GitHub Actions in `.github/workflows/hub.yml` verifies changes before publishing a commit image. Successful `main` builds also advance `stable-v<HUB_PROTOCOL>` (now `stable-v2`, the first hub without accounts); the server follows the tag named in its `deploy.sh`. A branch build publishes only its commit tag. The private registry requires a token with `read:packages` on the server, supplied privately to `docker login ghcr.io --password-stdin`.
 
 Install `accio-update.service` and `accio-update.timer` under `~/.config/systemd/user/`, then run:
 

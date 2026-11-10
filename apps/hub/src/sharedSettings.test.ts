@@ -94,3 +94,27 @@ it('keeps each profile’s GitHub account per machine, clears it on request and 
   expect(settings.machine('here')?.profileGitHub).toEqual({});
   await expect(settings.setProfileGitHub('here', 'work', 'work_hrc')).rejects.toThrow(/No profile/);
 });
+
+it('keeps snoozes until a machine is back, and drops them when it reconnects', async () => {
+  const settings = await setup();
+  const away = { ...hello, id: 'away', name: 'Laptop' };
+  await settings.machineConnected(away);
+  const until = new Date(Date.now() + 60_000).toISOString();
+  await expect(settings.setOfflineSnooze('t1', { machineId: 'away', until })).rejects.toThrow(/Laptop is online/);
+  await expect(settings.setOfflineSnooze('t1', { machineId: 'nobody', until })).rejects.toThrow(/No machine/);
+  await settings.machineDisconnected('away');
+  await settings.setOfflineSnooze('t1', { machineId: 'away', until });
+  await settings.setOfflineSnooze('t2', { machineId: 'away', until: new Date(Date.now() - 1).toISOString() });
+  expect(settings.offlineSnoozes()).toEqual({ t1: { machineId: 'away', until } });
+
+  const reloaded = new SharedSettings(home);
+  await reloaded.load();
+  expect(reloaded.offlineSnoozes()).toEqual({ t1: { machineId: 'away', until } });
+  await settings.setOfflineSnooze('t1', null);
+  expect(settings.offlineSnoozes()).toEqual({});
+
+  await settings.setOfflineSnooze('t1', { machineId: 'away', until });
+  await settings.machineConnected(away);
+  await settings.machineDisconnected('away');
+  expect(settings.offlineSnoozes()).toEqual({});
+});

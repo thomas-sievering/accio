@@ -34,8 +34,17 @@ export type ThreadView = {
   needsSecret?: boolean;
   createdAt: string;
   updatedAt: string;
+  /** When the running turn started. */
+  runningSince?: string;
+  /** Time this run already spent running before accio restarted, so its running time excludes the downtime. */
+  ranMs?: number;
   /** GLOSSARY: Snooze. Hidden until this time; null when not snoozed. */
   snoozedUntil: string | null;
+  /**
+   * GLOSSARY: Snooze. Another machine's thread snoozed until that machine is back, kept by the
+   * hub since the machine is offline. `snoozedUntil` is then the fallback if it stays away.
+   */
+  snoozedUntilOnline?: boolean;
   /** GLOSSARY: Settle. When it was marked done; null while open. */
   settledAt: string | null;
   /** Absent on older threads that still use their original, shared checkout. */
@@ -121,6 +130,8 @@ export type ThreadDelivery = {
   keepOpen?: boolean;
   followUpsStoppedAt?: string;
   ci?: DeliveryCI;
+  /** Why a delivered revision has no checks: the repository has no active workflows, or none of their filters cover the change. */
+  noChecks?: 'no-workflows' | 'filtered';
   /** When the current delivery turn started; reset by each delivery turn. */
   startedAt?: string;
   /** What the current delivery turn last reported doing; cleared when one starts. */
@@ -208,6 +219,8 @@ export type PromptCacheUsage = {
 export type TranscriptItem =
   | SecretRequestItem
   | { kind: 'usage'; id: string; turnId: string; provider: 'anthropic'; usage: PromptCacheUsage }
+  /** GLOSSARY: Context window. How full it was at the turn's latest request, as the harness reported; one per turn. */
+  | { kind: 'context'; id: string; turnId: string; usedTokens: number; windowTokens: number; compactAtTokens?: number }
   | { kind: 'promptSize'; id: string; turnId: string; harnessId: string; measurement: PromptMeasurement }
   | { kind: 'user'; id: string; turnId: string; text: string; at: string; images?: ThreadAsset[]; resume?: boolean; delivery?: DeliveryMode; pick?: ChoicePick; steered?: boolean; goal?: 'continue' }
   | { kind: 'assistant'; id: string; turnId: string; text: string; media?: MediaBinding[] }
@@ -230,7 +243,9 @@ export type TranscriptSnapshot = { items: TranscriptItem[]; cursor: number };
 const ThreadId = z.object({ threadId: z.string() });
 /** GLOSSARY: Image attachment. Uploads from `threads.upload` on this machine, sent with a message. */
 const Images = z.array(z.string().uuid()).max(IMAGES_PER_MESSAGE).optional();
-const StartCommon = { text: z.string().trim(), images: Images, model: ModelSelection.optional(), machineId: z.string().optional() };
+/** A picked issue, claimed for the thread once it starts: its reference as `threads.issues` lists it, and its title for the thread's. */
+const StartIssue = z.object({ ref: z.string().min(1).max(4096), title: z.string().trim().max(500) });
+const StartCommon = { text: z.string().trim(), images: Images, model: ModelSelection.optional(), machineId: z.string().optional(), issue: StartIssue.optional() };
 const said = (start: { text: string; images?: string[] }) => start.text.length > 0 || !!start.images?.length;
 const Start = z.union([
   z.object({ checkoutId: z.string().min(1), ...StartCommon }).refine(said, { message: 'Write a message' }),

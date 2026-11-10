@@ -17,6 +17,7 @@ const NO_MODELS: never[] = [];
 import { Choice, optionName } from './Choice';
 import { MentionTargets } from './Mentions';
 import { UserMessageText } from './PastedText';
+import { ReactionBar } from './Reactions';
 import { useModels } from './useModels';
 import { useThreads } from './threads';
 
@@ -30,11 +31,13 @@ export function Transcript({ threadId, items, working, onOpenSecrets }: { thread
   const [away, setAway] = useState(false);
   const lastTurn = items.findLast((item) => item.kind === 'user')?.turnId;
   const picks = useMemo(() => pickedOptions(items), [items]);
-  const profileId = useThreads().threads?.find((thread) => thread.id === threadId)?.profileId;
+  const allThreads = useThreads().threads;
+  const profileId = allThreads?.find((thread) => thread.id === threadId)?.profileId;
+  const profileThreads = useMemo(() => allThreads?.filter((thread) => thread.profileId === profileId && thread.id !== threadId), [allThreads, profileId, threadId]);
   const models = useModels(profileId).data?.models;
   const client = useClient();
   const machines = useLive(() => client.call('machines.list', {}), 'machines.changed');
-  const mentionTargets = useMemo(() => ({ models: models ?? NO_MODELS, machines: machines ?? NO_MODELS }), [models, machines]);
+  const mentionTargets = useMemo(() => ({ models: models ?? NO_MODELS, machines: machines ?? NO_MODELS, threads: profileThreads ?? NO_MODELS }), [models, machines, profileThreads]);
   // Another pane (the skills panel) can ask to show an item, even one folded away.
   const [reveal, setReveal] = useState<Reveal>();
   useAppEvent('transcript.reveal', (request) => {
@@ -125,6 +128,7 @@ export function Transcript({ threadId, items, working, onOpenSecrets }: { thread
           {working && !lastTurn && <div className="typing" aria-label="Working"><i /><i /><i /></div>}
         </div>
       </div>
+      <ReactionBar threadId={threadId} container={content} />
       {away && <button className="jump-latest" onClick={() => {
         pinned.current = true;
         setAway(false);
@@ -205,7 +209,7 @@ const Item = memo(function Item({ threadId, item, preparing, picked, pickName }:
 }) {
   const onOpenSecrets = useContext(OpenSecrets);
   switch (item.kind) {
-    case 'usage': case 'promptSize': return null;
+    case 'usage': case 'promptSize': case 'context': return null;
     case 'user':
       // GLOSSARY: Goal. A turn accio started itself is a divider, not something you said.
       if (item.goal === 'continue') return <div className="goal-continue" data-item-id={item.id}>Continuing toward the goal</div>;

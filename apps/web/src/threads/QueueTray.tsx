@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { joinPastes, pastesIn, summarizePastes, typedText, type ThreadView } from '@accio/protocol';
+import { pastesIn, reactionsIn, retypeMessage, summarizePastes, typedText, type ThreadView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { useAction } from '../app/useAction';
 import { Close, Queue } from '../app/icons';
@@ -30,10 +30,10 @@ export function QueueTray({ thread }: { thread: ThreadView }) {
       <Queue />
       {edit?.id === message.id ? <form onSubmit={e => {
         e.preventDefault();
-        if (!unavailable && !busy) void run(async () => { await action(message.id, 'save', joinPastes(pastesIn(message.text), edit.text)); setEdit(undefined); });
+        if (!unavailable && !busy) void run(async () => { await action(message.id, 'save', retypeMessage(message.text, edit.text)); setEdit(undefined); });
       }}>
         <input aria-label="Edit queued message" autoFocus disabled={!!unavailable} value={edit.text} onChange={e => setEdit({ ...edit, text: e.target.value })} />
-        <button className="queue-save" disabled={!!unavailable || busy || (!edit.text.trim() && !pastesIn(message.text).length)}>Save</button>
+        <button className="queue-save" disabled={!!unavailable || busy || (!edit.text.trim() && !pastesIn(message.text).length && !reactionsIn(message.text).length)}>Save</button>
         <button type="button" disabled={!!unavailable || busy} onClick={() => void run(async () => { await action(message.id, 'cancel'); setEdit(undefined); })}>Cancel</button>
       </form> : <>
         <span className="queued-text" title={summarizePastes(message.text)}>{summarizePastes(message.text).replace(/\s*\n+\s*/g, ' · ') || (message.images?.length ? imageCount(message.images.length) : 'Picked option')}{message.text && message.images?.length ? ` · ${imageCount(message.images.length)}` : ''}</span>

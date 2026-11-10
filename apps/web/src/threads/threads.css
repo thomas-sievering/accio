@@ -1055,8 +1055,51 @@ div.model-picker-empty b { color: var(--ink); font-weight: 500; }
 .mention-option svg { flex: none; width: 13px; height: 13px; }
 .mention-option[aria-selected="true"] { background: var(--raised-2); color: var(--ink-strong); }
 .mention-option.limited { opacity: 0.5; }
-.mention-option.first-machine { position: relative; margin-top: 7px; }
-.mention-option.first-machine::before { content: ""; position: absolute; top: -4px; left: 4px; right: 4px; border-top: 1px solid var(--line-2); }
+.mention-option.new-kind { position: relative; margin-top: 7px; }
+.mention-option.new-kind::before { content: ""; position: absolute; top: -4px; left: 4px; right: 4px; border-top: 1px solid var(--line-2); }
+/* A thread list's group (Open, Working, Snoozed, Settled) labels its first thread. */
+.mention-option[data-group] { position: relative; margin-top: 20px; }
+.mention-option[data-group]:first-child, .mention-back + .mention-option[data-group] { margin-top: 18px; }
+.mention-option[data-group]::after { content: attr(data-group); position: absolute; top: -17px; left: 9px; color: var(--muted); font-size: 11px; pointer-events: none; }
+.mention-option > svg:last-child:not(:first-child) { margin-left: auto; color: var(--muted); }
+.mention-thread { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.mention-back { display: flex; align-items: center; gap: 6px; min-height: 26px; padding: 0 9px; color: var(--muted); font-size: 12px; cursor: pointer; border-bottom: 1px solid var(--line-2); margin-bottom: 3px; }
+.mention-back svg { width: 12px; height: 12px; }
+.mention-back:hover { color: var(--ink); }
+.mention-back small { margin-left: auto; font-size: 11px; }
+.mention.thread { max-width: 32ch; overflow: hidden; text-overflow: ellipsis; }
+
+/* The composer's text redrawn behind a transparent textarea, so mentions show as pills.
+   Pills keep the typed characters' widths: padding comes from a shadow, the @ gives way to an icon. */
+.composer-input { position: relative; display: flex; flex-direction: column; }
+.composer-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  overflow: hidden;
+  padding: 2px 0;
+  line-height: 20px;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  color: var(--ink);
+  pointer-events: none;
+}
+.composer-input.pills textarea { color: transparent; caret-color: var(--ink); }
+.composer-input.pills textarea::selection { color: transparent; background: #6aa0ff55; }
+.composer-mention { border-radius: 4px; background: var(--raised-2); box-shadow: 0 0 0 2px var(--raised-2); color: var(--ink-strong); }
+.composer-mention .at { position: relative; color: transparent; }
+.composer-mention .at svg { position: absolute; left: 50%; top: 50%; width: 12px; height: 12px; transform: translate(-50%, -50%); color: var(--ink-strong); }
+.composer-mention small { font-size: inherit; color: var(--muted); }
 .mention-option small { margin-left: auto; color: var(--muted); font-size: 11px; }
 .mention { display: inline-flex; align-items: baseline; gap: 4px; padding: 0 5px; border-radius: 5px; background: var(--raised); color: var(--ink-strong); white-space: nowrap; }
 .mention svg { align-self: center; width: 11px; height: 11px; }
+
+/* Another machine's thread while it is offline: what we last heard, and Snooze until it is back. */
+.offline-thread p { margin-block: 0 6px; }
+.offline-thread-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-block: 12px 6px;
+}

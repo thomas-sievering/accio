@@ -99,24 +99,30 @@ export function withHandoff(context: string, prompt: string) {
   return context ? `${context}\n\nUser message:\n${prompt}` : prompt;
 }
 
-/** The accio tool, listed only on threads that have changed harness. */
-export function readThreadTool(read: (threadId: string, offset: number, limit: number) => Promise<string>, handedOff: (threadId: string) => boolean) {
+/**
+ * The accio tool: this thread's own transcript, such as after a context handoff, or another
+ * thread's that the user mentioned (GLOSSARY: Thread mention). `thread` is undefined for its own.
+ */
+export function readThreadTool(read: (callerId: string, thread: string | undefined, offset: number | undefined, limit: number) => Promise<string>) {
   return accioTool({
     name: READ_THREAD_TOOL,
-    description: 'Read this thread\'s whole conversation from accio\'s transcript, including turns that ran on another harness or were left out of a context handoff. Items are numbered from 0, oldest first.',
+    description: 'Read a conversation from accio\'s transcript: this thread\'s, including turns that ran on another harness or were left out of a context handoff, '
+      + 'or another thread\'s that the user mentioned with @. Items are numbered from 0, oldest first; without an offset you get the newest ones.',
     input: {
-      offset: z.number().int().min(0).default(0).describe('The first item to read'),
+      thread: z.string().trim().min(1).max(200).optional().describe("The handle of a thread the user mentioned with @, such as '@fix-login-redirect-3f2a9c'. Defaults to this thread."),
+      offset: z.number().int().min(0).optional().describe('The first item to read; leave it out for the newest items'),
       limit: z.number().int().min(1).max(200).default(50).describe('How many items to read'),
     },
-    available: handedOff,
-    call: ({ offset, limit }, { threadId }) => read(threadId, offset, limit),
+    call: ({ thread, offset, limit }, { threadId }) => read(threadId, thread, offset, limit),
   });
 }
 
-/** A page of the whole transcript for the read_thread tool. */
-export function readThreadPage(items: readonly TranscriptItem[], offset: number, limit: number): string {
+/** A page of a whole transcript for the read_thread tool: from `offset`, or the newest `limit` items. */
+export function readThreadPage(items: readonly TranscriptItem[], offset: number | undefined, limit: number, heading = 'this thread'): string {
   const rendered = items.flatMap((item) => { const text = renderItem(item); return text ? [text] : []; });
-  const page = rendered.slice(offset, offset + limit).map((text, i) => `#${offset + i}\n${text}`);
-  const next = offset + limit < rendered.length ? `\n\nMore items follow; call again with offset ${offset + limit}.` : '';
-  return `${rendered.length} items in this thread.\n\n${page.join('\n\n')}${next}`;
+  const from = offset ?? Math.max(0, rendered.length - limit);
+  const page = rendered.slice(from, from + limit).map((text, i) => `#${from + i}\n${text}`);
+  const earlier = from > 0 ? ` Showing #${from}–#${from + page.length - 1}; call with offset ${Math.max(0, from - limit)} for the ones before.` : '';
+  const next = from + limit < rendered.length ? `\n\nMore items follow; call again with offset ${from + limit}.` : '';
+  return `${rendered.length} items in ${heading}.${earlier}\n\n${page.join('\n\n')}${next}`;
 }

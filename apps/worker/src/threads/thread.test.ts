@@ -38,6 +38,20 @@ describe('thread lifecycle', () => {
     expect(endTurn(r, 'interrupted', 'now').status).toBe('interrupted');
   });
 
+  it('keeps the time run across restarts, without the downtime, but not across a new message', () => {
+    const running = { ...startTurn(t0, 'a', '2026-01-01T10:00:00Z'), sessionId: 's' };
+    // A clean shutdown marks the turn to resume, then ends it: 30 minutes banked.
+    const quit = recoverAfterRestart([endTurn({ ...running, resumeAfterRestart: true }, 'interrupted', '2026-01-01T10:30:00Z')]).threads[0]!;
+    const resumed = startTurn(quit, 'continue', '2026-01-02T09:00:00Z');
+    expect(resumed).toMatchObject({ ranMs: 30 * 60_000, runningSince: '2026-01-02T09:00:00Z' });
+    // A crash ends nothing: the last activity stands in, adding 10 more minutes.
+    const crashed = recoverAfterRestart([resumed], () => '2026-01-02T09:10:00Z').threads[0]!;
+    expect(crashed).toMatchObject({ status: 'interrupted', ranMs: 40 * 60_000, runningSince: undefined });
+    expect(startTurn(crashed, 'continue', '2026-01-03T09:00:00Z').ranMs).toBe(40 * 60_000);
+    // A finished turn's time does not carry into the next message.
+    expect(startTurn(endTurn(resumed, 'completed', '2026-01-02T10:00:00Z'), 'b', '2026-01-02T11:00:00Z').ranMs).toBeUndefined();
+  });
+
   it('marks turns that were running at restart as interrupted, and only those', () => {
     const running = startTurn(t0, 'a', 'now');
     const idle = { ...t0, id: 'other' };

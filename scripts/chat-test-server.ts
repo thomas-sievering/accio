@@ -11,7 +11,8 @@ import type { HarnessMessage } from '../apps/worker/src/threads/harness.js';
 import { DeliveryGit, DeliveryPending } from '../apps/worker/src/threads/delivery.js';
 import { git } from '../apps/worker/src/git.js';
 import { PROJECT_APP_TIMING } from '../apps/worker/src/projects/projectApps.js';
-import { lineCount, pastesIn, typedText } from '../packages/protocol/src/pastes.js';
+import { lineCount, pastesIn, reactionsIn, typedText } from '../packages/protocol/src/pastes.js';
+import { reactionInfo } from '../packages/protocol/src/reactions.js';
 import { measurePrompt } from '../apps/worker/src/harnesses/promptMeasurement.js';
 
 const home = await mkdtemp(join(tmpdir(), 'accio-chat-browser-'));
@@ -21,6 +22,25 @@ const fixture = (name: string) => readFile(resolve('tests/fixtures', name));
 const token = 'isolated-chat-test-token';
 const image = await fixture('chat.png');
 const reviewHostFile = join(home, 'review-host.json');
+// Issue picker: gh answers only for the issues project, and records each claim.
+const issuesFolder = join(home, 'issues-project');
+const issuesClaimFile = join(home, 'issue-claims.json');
+const fixtureIssues = [
+  { number: 208, title: 'Retry the relay handshake after the hub restarts', labels: [{ name: 'ready-for-agent' }], assignees: [], blockedBy: { nodes: [] }, parent: null },
+  { number: 205, title: 'Snoozed threads lose their goal on restart', labels: [{ name: 'ready-for-agent' }, { name: 'bug' }], assignees: [], blockedBy: { nodes: [] }, parent: null },
+  { number: 201, title: 'Limits indicator flickers when switching profiles', labels: [{ name: 'needs-triage' }], assignees: [], blockedBy: { nodes: [] }, parent: null },
+  { number: 194, title: 'Settle threads once their delivery merges', labels: [], assignees: [], blockedBy: { nodes: [{ number: 205, state: 'OPEN' }] }, parent: null },
+];
+const fixtureGh = async (args: string[], options?: { cwd?: string }) => {
+  if (!options?.cwd?.startsWith(issuesFolder)) throw new Error('gh is not available in this fixture');
+  if (args[0] === 'issue' && args[1] === 'list') return JSON.stringify(fixtureIssues);
+  if (args[0] === 'issue' && args[1] === 'edit') {
+    const claims = JSON.parse(await readFile(issuesClaimFile, 'utf8').catch(() => '[]'));
+    await writeFile(issuesClaimFile, JSON.stringify([...claims, args]));
+    return '';
+  }
+  throw new Error(`Unexpected gh ${args.join(' ')}`);
+};
 let reviewFeature = 0;
 let deliveryFeature = 0;
 // The delivery verification boundary supplies deterministic CI snapshots; Git publication stays real.
@@ -75,6 +95,13 @@ const harness = new FakeHarness(async function* (run) {
     }
     yield* replyWith('Prompt size recorded.'); return;
   }
+  // GLOSSARY: Reaction. A question to react to, then which reactions arrived, each with its meaning as the harness reads it.
+  if (run.prompt === 'Ask me about the cache') { yield* replyWith('Should I keep the existing cache? The watcher debounces writes for 200 ms before flushing.'); return; }
+  const reactions = reactionsIn(run.prompt);
+  if (reactions.length) {
+    const read = reactions.map((r) => run.prompt.includes(`${reactionInfo(r.kind)}\n${r.quote}\n`) ? `${r.kind} on "${r.quote}"` : `${r.kind} unreadable`);
+    yield* replyWith(`Reactions: ${read.join('; ')}. Typed: ${typedText(run.prompt) || 'nothing'}`); return;
+  }
   if (pasted.length) { yield* replyWith(`Read ${pasted.map(lineCount).join(' + ')} pasted lines, then: ${typedText(run.prompt) || 'nothing typed'}`); return; }
   if (run.prompt === 'Cache usage fixture') {
     const message = { id: 'cache-response', content: [{ type: 'text' as const, text: 'Cache usage recorded.' }],
@@ -83,7 +110,9 @@ const harness = new FakeHarness(async function* (run) {
     yield { type: 'stream_event', parent_tool_use_id: null, session_id: SESSION, event: { type: 'message_start', message } };
     yield { type: 'assistant', parent_tool_use_id: null, session_id: SESSION, uuid: 'cache-fragment', message };
     yield { type: 'assistant', parent_tool_use_id: null, session_id: SESSION, uuid: 'cache-fragment', message };
-    yield { type: 'result', subtype: 'success', is_error: false, session_id: SESSION };
+    yield { type: 'harness_event', event: { kind: 'compaction', atTokens: 167_000 } };
+    yield { type: 'result', subtype: 'success', is_error: false, session_id: SESSION,
+      modelUsage: { [run.model ?? 'claude']: { inputTokens: 100, cacheReadInputTokens: 800, cacheCreationInputTokens: 100, contextWindow: 200_000 } } };
     return;
   }
   // GLOSSARY: Goal. "/goal fixture …" works for three turns, then reports achieved; "/goal blocked fixture" reports blocked first.
@@ -281,6 +310,7 @@ const hat = await startTestSortingHat(home, { claudeFetch: (url, init) => String
   ? Promise.resolve(Response.json({ rate_limits_available: false })) : fakeClaudeFetch(url, init) });
 const app = await startApp({ home, host: '127.0.0.1', port: Number(process.env.ACCIO_CHAT_TEST_PORT ?? 47481), hubPort: 0, token, webRoot: resolve(process.env.ACCIO_CHAT_TEST_WEB_ROOT ?? 'apps/web/dist') }, {
   harness,
+  github: fixtureGh,
   // Hosting is the external boundary under test. Git publication and thread state stay real.
   deliveryHosting: async (_cwd, args) => {
     const host = JSON.parse(await readFile(reviewHostFile, 'utf8'));
@@ -330,7 +360,42 @@ await git(reviewFolder, 'remote', 'set-url', 'origin', 'https://github.com/test/
 await client.call('checkouts.add', { path: reviewFolder, profileId: 'personal' });
 await mkdir(resolve('out'), { recursive: true });
 const fixtureMetadata = resolve('out', `chat-test-${app.port}.json`);
-await writeFile(fixtureMetadata, JSON.stringify({ deliveryFolder, deliveryOrigin, reviewFolder, reviewOrigin, reviewHostFile }));
+// Issue picker: a GitHub-tracked project (gh is faked above) and one with local issue files.
+const issuesOrigin = join(home, 'issues-origin.git');
+const localIssuesFolder = join(home, 'scratch-project');
+for (const [folder, files] of [
+  [issuesFolder, { 'README.md': '# Issues fixture\n' }],
+  [localIssuesFolder, {
+    '.scratch/relay-reconnect/issues/01-retry.md': '# Retry the relay handshake after the hub restarts\n\nStatus: ready-for-agent\n\nMachines stay offline.\n',
+    '.scratch/relay-reconnect/issues/02-chip.md': '# Show a reconnecting state on the machine chip\n\nBlocked by: 01\n',
+    '.scratch/issue-picker/issues/01-detect.md': '# Detect the project issue tracker\n\nStatus: ready-for-agent\n',
+  }],
+] as const) {
+  await mkdir(folder);
+  await git(folder, 'init', '--quiet', '-b', 'main');
+  await git(folder, 'config', 'user.name', 'Accio Browser Test');
+  await git(folder, 'config', 'user.email', 'browser@example.test');
+  await git(folder, 'config', 'core.autocrlf', 'false');
+  for (const [path, content] of Object.entries(files)) {
+    await mkdir(join(folder, path, '..'), { recursive: true });
+    await writeFile(join(folder, path), content);
+  }
+  await git(folder, 'add', '.');
+  await git(folder, 'commit', '--quiet', '-m', 'issues fixture');
+}
+await git(home, 'clone', '--quiet', '--bare', issuesFolder, issuesOrigin);
+await git(issuesFolder, 'remote', 'add', 'origin', 'https://github.com/test/accio-issues.git');
+await git(issuesFolder, 'config', `url.${issuesOrigin.replaceAll('\\', '/')}.insteadOf`, 'https://github.com/test/accio-issues.git');
+await git(issuesFolder, 'fetch', '--quiet', 'origin');
+await git(issuesFolder, 'remote', 'set-head', 'origin', 'main');
+const localIssuesOrigin = join(home, 'scratch-origin.git');
+await git(home, 'clone', '--quiet', '--bare', localIssuesFolder, localIssuesOrigin);
+await git(localIssuesFolder, 'remote', 'add', 'origin', localIssuesOrigin);
+await git(localIssuesFolder, 'fetch', '--quiet', 'origin');
+await git(localIssuesFolder, 'remote', 'set-head', 'origin', 'main');
+await client.call('checkouts.add', { path: issuesFolder, profileId: 'personal' });
+await client.call('checkouts.add', { path: localIssuesFolder, profileId: 'personal' });
+await writeFile(fixtureMetadata, JSON.stringify({ deliveryFolder, deliveryOrigin, reviewFolder, reviewOrigin, reviewHostFile, issuesClaimFile }));
 // CI progress publishes to a separate disposable origin, preserving other delivery scenarios' starting main.
 const ciOrigin = join(home, 'ci-origin.git');
 const ciFolder = join(home, 'ci-progress-project');

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { DeliveryStepName, ParamsOf, ShippedNote } from '@accio/protocol';
+import type { DeliveryStepName, ParamsOf, ShippedNote, ThreadView } from '@accio/protocol';
 import type { SecretsAccess } from '@accio/hub';
 import { now } from '../time.js';
 import type { Profiles } from '../profiles/profiles.js';
@@ -48,6 +48,7 @@ import { Turns } from './turns.js';
 import { registerThreadSkills } from './threadSkills.js';
 import { ThreadNaming } from './naming.js';
 import { changeHarness, readThreadPage } from './handoff.js';
+import { Issues } from '../issues/issues.js';
 
 /** Threads on this machine, their transcripts, and the turns running in them. */
 export class Threads {
@@ -57,6 +58,8 @@ export class Threads {
   profileReferences() { return this.state.list.map((thread) => thread.profileId); }
   resources?: ResourceManager;
   onRepairFinished?: (toolId: string) => void;
+  /** GLOSSARY: Thread mention. Every thread this machine knows, other machines' included; set once the relay is up. */
+  knownThreads?: () => readonly ThreadView[];
   /** The hub's built-in tool overrides; accio's defaults apply until it is set. */
   toolOverrides?: () => BuiltinToolOverrides;
   readonly assets: ThreadAssets;
@@ -68,6 +71,7 @@ export class Threads {
   private deliveries: Deliveries;
   private turns: Turns;
   private naming: ThreadNaming;
+  private issues: Issues;
   private changelog: Changelog;
   private restartCandidates = new Set<string>();
   private restartDeliveries = new Set<string>();
@@ -86,6 +90,7 @@ export class Threads {
   ) {
     this.state = new ThreadState(home, projects, broadcast, (threadId) => this.secrets.hasPending(threadId));
     this.naming = new ThreadNaming(this.state, profiles, models, harnesses);
+    this.issues = new Issues((profileId, cwd, args) => machines.github.run(profileId, cwd, args));
     this.previews = new Previews(home);
     this.assets = new ThreadAssets(home, (threadId) => this.state.list.some((thread) => thread.id === threadId));
     this.uploads = new Uploads(home);
@@ -104,7 +109,7 @@ export class Threads {
     }, deliveryHosting);
     this.turns = new Turns(this.state, { profiles, projects, models, machines, harnesses, secrets: this.secrets, content: this.content, deliveries: this.deliveries, tools,
       images: { claim: (threadId, ids) => this.uploads.claim(threadId, ids, this.assets), file: (threadId, asset) => this.assets.harnessFile(threadId, asset) },
-      resources: () => this.resources, toolsOff: (harnessId) => builtinToolsOff(harnessId, this.toolOverrides?.()[harnessId]), onWorkFinished: id => this.naming.refine(id), onRepairFinished: (toolId) => this.onRepairFinished?.(toolId) });
+      resources: () => this.resources, toolsOff: (harnessId) => builtinToolsOff(harnessId, this.toolOverrides?.()[harnessId]), onWorkFinished: id => this.naming.refine(id), onRepairFinished: (toolId) => this.onRepairFinished?.(toolId), knownThreads: () => this.knownThreads?.() ?? this.views() });
     tools?.add(agentTool((threadId, input, { signal, progress }) => this.turns.startSubagent(threadId, input, signal, progress)));
     projects.onRemoveThreads((id) => this.deleteThreads(this.state.list.filter((t) => t.checkoutId === id)));
     projects.onCheckInUse((checkoutId) => this.countUsing((t) => t.checkoutId === checkoutId));
@@ -136,7 +141,9 @@ export class Threads {
       // A title and session id alone do not prove a thread has no conversation.
       if (candidates.has(thread.id) || (await state.transcripts.get(thread.id)).items.length > 0) started.push(thread);
     }
-    const { threads, interrupted } = recoverAfterRestart(started);
+    const savedAt = new Map<string, string | undefined>();
+    for (const t of started) if (t.status === 'running') savedAt.set(t.id, await state.transcripts.savedAt(t.id));
+    const { threads, interrupted } = recoverAfterRestart(started, t => savedAt.get(t.id));
     state.list = threads.map(t => t.delivery?.status === 'delivered' && t.delivery.completedAt && t.status === 'interrupted' ? { ...t, status: 'idle' } : t);
     const recoveredRelease = await this.deliveries.recoverReleases();
     for (const thread of interrupted) {
@@ -206,6 +213,10 @@ export class Threads {
       .on('threads.list', () => state.views())
       .on('threads.start', input => this.start(input))
       .on('threads.setUpProject', ({ projectId }) => this.setUpProject(projectId))
+      .on('threads.issues', ({ checkoutId }) => {
+        const checkout = this.projects.checkout(checkoutId);
+        return this.issues.list(this.projects.projectOf(checkout).profileId, checkout.path);
+      })
       .on('threads.transcript', async ({ threadId }) => {
         const live = await transcripts.get(state.require(threadId).id);
         state.require(threadId);
@@ -404,6 +415,8 @@ export class Threads {
         const goal = parseGoalCommand(text);
         if (goal && goal.type !== 'set') throw new UserError('Start a thread with /goal <objective>.');
         if (goal?.type === 'set') thread.goal = newGoal(goal.objective, now());
+        // GLOSSARY: Issue. A thread from an issue starts with the issue's title, not its reference.
+        if (checkout && input.issue?.title) thread.title = titleFrom(input.issue.ref.startsWith('#') ? `${input.issue.ref} ${input.issue.title}` : input.issue.title);
         if (options.projectSetup && project) Object.assign(thread, { projectSetup: true, title: `Set up ${project.name} app`, titleManual: true });
         if (options.repairToolId) { thread.repairToolId = options.repairToolId; thread.title = `Repair ${this.resources?.state().tools.find(tool => tool.id === options.repairToolId)?.name ?? options.repairToolId}`; }
         if (checkout) thread.workspace = await this.deliveries.git.allocate(thread.id, checkout.path);
@@ -431,12 +444,28 @@ export class Threads {
         }
         await this.uploads.release(uploads);
         this.naming.initial(thread.id);
+        if (checkout && input.issue) void this.claimIssue(thread.id, checkout.path, input.issue.ref);
         return toView(state.require(thread.id));
       } finally {
         release();
         releaseProfile();
       }
     });
+  }
+
+  /** GLOSSARY: Issue. Claims the issue a thread started from; a failure is noted in the thread, never undoing the start. */
+  private async claimIssue(threadId: string, checkoutPath: string, ref: string) {
+    const { state } = this;
+    const thread = state.get(threadId);
+    if (!thread) return;
+    try {
+      await this.issues.claim(thread.profileId, checkoutPath, state.cwd(thread), ref);
+    } catch (error) {
+      if (!state.get(threadId)) return;
+      await state.transcripts.add(threadId, { kind: 'notice', id: `${randomUUID()}:issue`, turnId: 'issue', tone: 'error',
+        text: `Could not claim ${ref}: ${(error as { stderr?: string }).stderr?.trim() || (error as Error).message}` });
+      state.announce();
+    }
   }
 
   /**
@@ -497,12 +526,7 @@ export class Threads {
     return this.state.get(threadId)?.delivery?.status === 'running';
   }
 
-  /** ADR 0017. Whether the thread has run on more than one harness, so its turns may need history they never saw. */
-  handedOff(threadId: string) {
-    return Object.keys(this.state.get(threadId)?.leftHarnesses ?? {}).length > 0;
-  }
-
-  async readThread(threadId: string, offset: number, limit: number) {
+  async readThread(threadId: string, offset: number | undefined, limit: number) {
     return readThreadPage((await this.state.transcripts.get(threadId)).items, offset, limit);
   }
 

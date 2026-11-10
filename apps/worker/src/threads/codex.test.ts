@@ -101,6 +101,10 @@ it('gives Codex accio tools on start and on resume, and keeps tool arguments str
     const opened = fake.latest.requests.find((r) => r.method === (sessionId ? 'thread/resume' : 'thread/start'));
     expect((opened?.params as { config?: unknown }).config).toEqual(expected);
   }
+  expect(codexEvents({ method: 'thread/tokenUsage/updated', params: { threadId: 't', turnId: 'u', tokenUsage: {
+    total: { totalTokens: 500_000 }, last: { totalTokens: 42_000, inputTokens: 41_000, outputTokens: 1_000 }, modelContextWindow: 258_000 } } }))
+    .toEqual([{ kind: 'context', usedTokens: 42_000, windowTokens: 258_000 }]);
+  expect(codexEvents({ method: 'thread/tokenUsage/updated', params: { tokenUsage: { last: { totalTokens: 1 }, modelContextWindow: null } } })).toEqual([]);
   const [call] = codexEvents({ method: 'item/started', params: { item: { type: 'mcpToolCall', id: 'c', server: 'accio', tool: 'offer_choice', arguments: { question: 'Q' }, status: 'inProgress' } } });
   expect(call).toMatchObject({ kind: 'tool', name: 'accio/offer_choice', input: { question: 'Q' } });
   const fake = new FakeCodex();

@@ -8,6 +8,7 @@ import { now } from '../time.js';
 import { git, maybeGit } from '../git.js';
 import { DELIVERY_STEP_INSTRUCTIONS } from './deliveryStep.js';
 import { SHIPPED_NOTE_INSTRUCTIONS } from './shippedNote.js';
+import { type TriggerEvent, workflowMayRun } from './workflowTriggers.js';
 
 const exec = promisify(execFile);
 /** Waiting uses machine-side checks; a model is woken only when it has more work. */
@@ -215,7 +216,8 @@ export class DeliveryGit {
         if (pr.isDraft || pr.reviewDecision === 'CHANGES_REQUESTED') throw new DeliveryPending('The PR needs review changes. Continuing in the owning thread.', true, 'review');
         if (pr.mergeable === 'CONFLICTING') throw new DeliveryPending('The PR has conflicts. Continuing in the owning thread.', true, 'merge');
         await assertChecksWithProgress(workspace.sourcePath, slug!, revision, pr.statusCheckRollup ?? [], host);
-        await verifyGitHubChecks(workspace.sourcePath, slug!, revision!, delivery.requestedAt, host);
+        await verifyGitHubChecks(workspace.sourcePath, slug!, revision!, delivery.requestedAt, host, { since: workspace.startRevision,
+          events: [{ name: 'push', branch: workspace.branch }, { name: 'pull_request', base: delivery.baseBranch }], baseRef: `refs/remotes/origin/${delivery.baseBranch}` });
         if (pr.reviewDecision === 'REVIEW_REQUIRED') throw new DeliveryPending('Waiting for the required PR review.', false, 'review');
         if (delivery.mode === 'review') return { ...result, ci: undefined, status: 'ready', waitingOn: 'merge', detail: undefined, observationError: undefined, observationFailures: 0 };
         if (pr.autoMergeRequest || pr.mergeStateStatus === 'QUEUED') throw new DeliveryPending('Waiting for the PR to merge.', false, 'merge');
@@ -232,8 +234,10 @@ export class DeliveryGit {
       throw new UserError('This revision has not reached the target branch. The workspace has been kept.');
     }
     await record({ publishedRevision, integratedAt: result.integratedAt ?? checkedAt });
+    let noChecks: ThreadDelivery['noChecks'];
     if (slug) {
-      try { await verifyGitHubChecks(workspace.sourcePath, slug, publishedRevision, result.integratedAt ?? delivery.requestedAt, host); }
+      const scope = { since: workspace.startRevision, events: [{ name: 'push' as const, branch: delivery.baseBranch }] };
+      try { noChecks = await verifyGitHubChecks(workspace.sourcePath, slug, publishedRevision, result.integratedAt ?? delivery.requestedAt, host, scope); }
       catch (error) {
         const checks = error instanceof DeliveryPending ? error.ci?.checks : undefined;
         const cancelled = checks?.some(c => c.status === 'cancelled')
@@ -243,13 +247,13 @@ export class DeliveryGit {
         // Branch concurrency can cancel this revision's run when a newer push contains it.
         // Require CI proof on that containing target instead of treating cancellation as a code failure.
         if (tip === publishedRevision) throw error;
-        await verifyGitHubChecks(workspace.sourcePath, slug, tip, result.integratedAt ?? delivery.requestedAt, host);
+        noChecks = await verifyGitHubChecks(workspace.sourcePath, slug, tip, result.integratedAt ?? delivery.requestedAt, host, scope);
       }
     }
     // Host reads can take time. Files or commits added meanwhile still belong to this thread.
     if (await git(workspace.path, 'rev-parse', 'HEAD') !== revision || await git(workspace.path, 'branch', '--show-current') !== workspace.branch
       || await git(workspace.path, 'status', '--porcelain', '--untracked-files=all')) throw new UserError('The worktree changed during delivery verification. Its new work has been kept.');
-    return { ...result, ci: undefined, status: 'delivered', revision, publishedRevision, completedAt: result.completedAt ?? checkedAt, waitingOn: undefined, detail: undefined, observationError: undefined, observationFailures: 0 };
+    return { ...result, ci: undefined, noChecks, status: 'delivered', revision, publishedRevision, completedAt: result.completedAt ?? checkedAt, waitingOn: undefined, detail: undefined, observationError: undefined, observationFailures: 0 };
   }
 
   /** True when the worktree holds no work: still at its start revision on its own branch, with nothing uncommitted or untracked. Ignored files do not count. */
@@ -315,20 +319,46 @@ function assertChecks(checks: any[]) {
   if (failed.length) throw new DeliveryPending(`Checks are failing: ${failed.map(c => `${c.name ?? c.context ?? 'CI check'} (${String(c.conclusion ?? c.state).toLowerCase()})`).join(', ')}.`, true);
   if (conclusions.some(c => !['success', 'neutral', 'skipped'].includes(c))) throw new DeliveryPending('Waiting for checks to finish.');
 }
-async function verifyGitHubChecks(cwd: string, slug: string, revision: string, requestedAt: string, hostingJson: typeof ghJson) {
+/** How GitHub could have been asked to run workflows for a revision. */
+type CheckScope = {
+  /** An ancestor of the revision from before this delivery; its changes since are a superset of what path filters compare. */
+  since: string;
+  events: TriggerEvent[];
+  /** For pull requests, GitHub may read workflows from the target branch too. */
+  baseRef?: string;
+};
+
+/** Resolves when the revision's checks pass, or with why it has none. */
+async function verifyGitHubChecks(cwd: string, slug: string, revision: string, requestedAt: string, hostingJson: typeof ghJson, scope: CheckScope): Promise<ThreadDelivery['noChecks']> {
   const checks = await hostingJson(cwd, ['api', `repos/${slug}/commits/${revision}/check-runs?per_page=100`]);
   const statuses = await hostingJson(cwd, ['api', `repos/${slug}/commits/${revision}/status?per_page=100`]);
   if (checks.total_count > 100 || statuses.total_count > 100) throw new UserError('Too many checks to verify automatically. The workspace has been kept.');
   await assertChecksWithProgress(cwd, slug, revision, [...(checks.check_runs ?? []), ...(statuses.statuses ?? [])], hostingJson);
-  if (!(checks.check_runs?.length || statuses.statuses?.length)) {
-    const workflows = await hostingJson(cwd, ['api', `repos/${slug}/actions/workflows?per_page=100`]);
-    if (workflows.workflows?.some((w: any) => w.state === 'active')) {
-      // Active workflows may exclude this branch or its changed paths. Allow
-      // registration time, but never infer that missing checks passed.
-      if (Date.now() - Date.parse(requestedAt) < 2 * 60_000) throw new DeliveryPending('Waiting for GitHub to report checks for this revision.');
-      throw new UserError('GitHub reported no checks for this revision within two minutes of the delivery request. Workflows may exclude its branch or changed paths. Run the applicable verification, then request delivery again. The workspace has been kept.');
+  if (checks.check_runs?.length || statuses.statuses?.length) return undefined;
+  const workflows = await hostingJson(cwd, ['api', `repos/${slug}/actions/workflows?per_page=100`]);
+  const active: { path?: unknown }[] = workflows.workflows?.filter((w: any) => w.state === 'active') ?? [];
+  if (!active.length) return 'no-workflows';
+  if (!await anyWorkflowMayRun(cwd, revision, active, scope)) return 'filtered';
+  // A workflow should run, but GitHub may still be registering it. Allow
+  // registration time, but never infer that missing checks passed.
+  if (Date.now() - Date.parse(requestedAt) < 2 * 60_000) throw new DeliveryPending('Waiting for GitHub to report checks for this revision.');
+  throw new UserError('GitHub reported no checks for this revision within two minutes of the delivery request, although a workflow’s filters cover it. Run the applicable verification, then request delivery again. The workspace has been kept.');
+}
+
+/** True unless every active workflow's triggers provably exclude the revision. Anything unreadable counts as may run. */
+async function anyWorkflowMayRun(cwd: string, revision: string, workflows: { path?: unknown }[], scope: CheckScope): Promise<boolean> {
+  if (await maybeGit(cwd, 'merge-base', '--is-ancestor', scope.since, revision) === null) return true;
+  const changed = await maybeGit(cwd, 'log', '-m', '--no-renames', '--format=', '--name-only', `${scope.since}..${revision}`);
+  if (changed === null) return true;
+  const files = [...new Set(changed.split('\n').map(f => f.trim()).filter(Boolean))];
+  for (const workflow of workflows) {
+    if (typeof workflow.path !== 'string') return true;
+    for (const ref of [revision, ...(scope.baseRef ? [scope.baseRef] : [])]) {
+      const source = await maybeGit(cwd, 'show', `${ref}:${workflow.path}`);
+      if (source === null || workflowMayRun(source, scope.events, files)) return true;
     }
   }
+  return false;
 }
 
 /** Progress is optional evidence: a missing Actions permission must never change delivery decisions. */

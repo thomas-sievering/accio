@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import { lineCount, pasteGist, splitPastes } from '@accio/protocol';
 import { Chevron, Close, ScrollText } from '../app/icons';
 import { MentionText } from './Mentions';
+import { ReactionCard } from './Reactions';
 import './pasted-text.css';
 
 const encoder = new TextEncoder();
@@ -100,13 +101,15 @@ function FoldedText({ children }: { children: ReactNode }) {
   </>;
 }
 
-/** A user message's text: its Pasted text as cards, then what was typed, folded when long. */
+/** A user message's text: its Pasted text as cards, then its Reactions, then what was typed, folded when long. */
 export function UserMessageText({ text }: { text: string }) {
   const parts = splitPastes(text);
   const typed = parts.filter((part) => part.kind === 'text').map((part) => part.text).join('\n\n');
   const pastes = parts.filter((part) => part.kind === 'paste');
+  const reactions = parts.filter((part) => part.kind === 'reaction');
   return <>
     {pastes.length > 0 && <div className="msg-pastes">{pastes.map((part, i) => <PasteCard key={i} text={part.text} />)}</div>}
+    {reactions.length > 0 && <div className="msg-reactions">{reactions.map((part, i) => <ReactionCard key={i} reaction={part.reaction} />)}</div>}
     {typed && <FoldedText><MentionText text={typed} /></FoldedText>}
   </>;
 }

@@ -1,6 +1,6 @@
 import type { CheckoutView, ChoicePick, MachineView, ProjectView, RemoteMachine, ThreadView } from '@accio/protocol';
-import { type ModelSelection } from '@accio/protocol';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { issueMessage, type IssueList, type IssueView, type ModelSelection } from '@accio/protocol';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useClient } from '../app/connection';
 import { useLive } from '../app/useLive';
 import { accountForModel, defaultModel, useProfiles } from '../profiles/profiles';
@@ -15,14 +15,15 @@ import { GoalBar } from './GoalBar';
 import { PendingPick, optionName } from './Choice';
 import { DeliveryActions } from './DeliveryActions';
 import { MachinePicker } from './MachinePicker';
+import { IssuePicker } from './IssuePicker';
+import { Issue } from '../app/icons';
 import { ModelPicker } from './ModelPicker';
 import { ThreadNotice } from './ThreadNotice';
 import { ThreadActionsMenu } from './ThreadActionsMenu';
 import { TitleEdit } from './ThreadMenu';
 import { EditableTitle } from './EditableTitle';
 import { Transcript } from './Transcript';
-import { CacheUsage } from './CacheUsage';
-import { PromptUsage } from './PromptUsage';
+import { ContextMeter } from './ContextMeter';
 import { useReportPendingSecrets } from '../secrets/pendingSecrets';
 import { viewTransition } from '../ui/viewTransition';
 import { firstMessage, forgetFirstMessage, keepFirstMessage } from './sentImages';
@@ -30,6 +31,7 @@ import { useThreads, useTranscript } from './threads';
 import { newThreadDraftId } from './drafts';
 import { useThreadAvailability, remoteImagesReason } from './useThreadAvailability';
 import { UserMessageText } from './PastedText';
+import { OfflineThread } from './OfflineThread';
 
 /** Where a thread runs, looked up once for the header, the notice and the composer. */
 function usePlace(checkoutId: string, profileId?: string, projectId?: string) {
@@ -72,7 +74,7 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
       {!visibleItems && !error && starting ? <StartingTranscript {...starting} /> : visibleItems ? <PendingPick.Provider value={{ pick, setPick, enabled: !running && !unavailable }}>
         <Transcript threadId={thread.id} items={visibleItems} working={running} onOpenSecrets={onOpenSecrets} />
       </PendingPick.Provider> : (
-        <div className="empty">
+        thread.machine && !thread.machine.online && error ? <OfflineThread thread={{ ...thread, machine: thread.machine }} onRetry={retry} /> : <div className="empty">
           {error && <>
             <p className="error" role="alert">Could not load transcript: {error}</p>
             <button className="ghost" onClick={retry}>Retry</button>
@@ -106,9 +108,7 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
             try { await client.call('threads.setModel', { threadId: thread.id, model }); }
             finally { setSavingModel(false); }
           }} />
-          {place.profile && <LimitsIndicator active={active} account={accountForModel(place.profile, thread.model)} onOpen={() => onOpenLimits(place.profile!.id)} />}
-          <CacheUsage items={items ?? []} />
-          <PromptUsage items={items ?? []} />
+          <ContextMeter items={items ?? []} limits={place.profile && <LimitsIndicator active={active} account={accountForModel(place.profile, thread.model)} onOpen={() => onOpenLimits(place.profile!.id)} />} />
         </>}
       />
     </>
@@ -137,6 +137,17 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
   // Until the list loads, a send goes to this machine, as the server does without a machine id.
   const unavailable = !!machines && !machine?.connected;
   const [starting, setStarting] = useState<FirstMessage>();
+  // GLOSSARY: Issue. The checkout's open issues, offered on this machine, where the checkout is.
+  const [issues, setIssues] = useState<{ checkoutId: string; list: IssueList }>();
+  const [picked, setPicked] = useState<{ checkoutId: string; issue: IssueView }>();
+  const issue = picked?.checkoutId === checkoutId ? picked.issue : undefined;
+  const readIssues = useCallback(() => {
+    if (!checkoutId) return;
+    client.call('threads.issues', { checkoutId }).then((list) => setIssues({ checkoutId, list }), () => {});
+  }, [client, checkoutId]);
+  useEffect(readIssues, [readIssues]);
+  const issueList = issues?.checkoutId === checkoutId ? issues.list : undefined;
+  const offersIssues = !!issueList && (issueList.issues.length > 0 || !!issueList.unavailable || !!issue) && (!machines || !!machine?.thisMachine);
   // A start can take a while; moving elsewhere meanwhile unmounts the draft, and the new thread must not pull focus back.
   const open = useRef(true);
   useEffect(() => { open.current = true; return () => { open.current = false; }; }, []);
@@ -159,11 +170,14 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
           disabled={!!starting || !place.profile || !accountForModel(place.profile, model)?.signedIn || unavailable}
           placeholder={`Ask ${model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}
           model={model}
-          onSend={async (text, _mode, uploads, previews) => {
+          attachment={offersIssues && issue ? { label: `${issue.label} ${issue.title}`, icon: <span className="issue-chip-mark"><Issue /></span>, onRemove: () => setPicked(undefined) } : undefined}
+          onSend={async (notes, _mode, uploads, previews) => {
+            const sent = offersIssues ? issue : undefined;
+            const text = sent ? issueMessage(sent, notes) : notes;
             const shown = viewTransition('thread-start', () => setStarting({ text, images: previews }));
             try {
               const images = uploads.length ? { images: uploads } : {};
-              const thread = await client.call('threads.start', checkoutId ? { checkoutId, text, model, machineId, ...images } : { profileId: profileId!, text, model, machineId, ...images });
+              const thread = await client.call('threads.start', checkoutId ? { checkoutId, text, model, machineId, ...images, ...(sent ? { issue: { ref: sent.ref, title: sent.title } } : {}) } : { profileId: profileId!, text, model, machineId, ...images });
               keepFirstMessage(client, thread.id, text, previews);
               await shown;
               if (open.current) await viewTransition('thread-open', () => select(thread.id));
@@ -179,8 +193,9 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
             {place.profile && <LimitsIndicator active={active} account={accountForModel(place.profile, model)} onOpen={() => onOpenLimits(place.profile!.id)} />}
           </>}
         />
-        <div className="draft-machine">
+        <div className="draft-machine draft-context">
           <MachinePicker machines={startable} value={machineId} onChange={setChosenMachineId} note={(m) => noCheckout(m) ? 'No checkout yet' : undefined} />
+          {offersIssues && <IssuePicker list={issueList!} value={issue} onOpen={readIssues} onChange={(issue) => setPicked({ checkoutId, issue })} />}
         </div>
       </div>
     </>

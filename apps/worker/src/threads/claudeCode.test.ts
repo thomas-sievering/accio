@@ -189,3 +189,18 @@ it('removes switched-off built-in tools from the model by name', async () => {
   expect(queryMock.mock.calls[0]![0].options.disallowedTools).toEqual(['CronCreate', 'CronList']);
   q.close(); await output;
 });
+
+it.each([
+  ['reports where Claude compacts before the result', { isAutoCompactEnabled: true, autoCompactThreshold: 167_000 }, [{ type: 'harness_event', event: { kind: 'compaction', atTokens: 167_000 } }]],
+  ['reports nothing when auto-compaction is off', { isAutoCompactEnabled: false, autoCompactThreshold: 167_000 }, []],
+  ['reports nothing when Claude cannot answer', new Error('unsupported'), []],
+])('%s', async (_, answer, before) => {
+  const q = Object.assign(query(), { getContextUsage: vi.fn(async () => { if (answer instanceof Error) throw answer; return answer; }) });
+  const result = { type: 'result', subtype: 'success', is_error: false, session_id: 's' };
+  q.next.mockResolvedValueOnce({ done: false, value: result });
+  queryMock.mockReturnValue(q);
+  const messages = [];
+  for await (const message of claudeCode.run({ cwd: '.', prompt: 'hi', sessionId: null, env: {}, signal: new AbortController().signal })) messages.push(message);
+  expect(messages).toEqual([...before, result]);
+  expect(q.getContextUsage).toHaveBeenCalledWith({ detail: 'summary' });
+});

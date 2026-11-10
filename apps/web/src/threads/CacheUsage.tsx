@@ -1,5 +1,4 @@
 import type { TranscriptItem } from '@accio/protocol';
-import './cache-usage.css';
 
 /** Recorded Claude main-conversation requests, including repeated input across turns. */
 export function CacheUsage({ items }: { items: TranscriptItem[] }) {
@@ -16,18 +15,14 @@ export function CacheUsage({ items }: { items: TranscriptItem[] }) {
   const percent = Math.round(100 * totals.read / total);
   const tokens = (n: number) => n.toLocaleString();
   const hasHour = records.some((item) => item.usage.cacheWrite1hTokens !== undefined);
-  return <details className="cache-usage">
-    <summary aria-label={`Claude cache usage: ${percent}% of input read from cache`}>Cache {percent}%</summary>
-    <div className="cache-usage-details">
-      <strong>Claude prompt cache</strong>
-      <p>{percent}% of recorded input tokens were read from cache.</p>
-      <dl>
-        <dt>Read from cache</dt><dd>{tokens(totals.read)}</dd>
-        <dt>Written to cache</dt><dd>{tokens(totals.write)}</dd>
-        {hasHour && <><dt>Reported 1-hour writes</dt><dd>{tokens(totals.hour)}</dd></>}
-        <dt>Uncached input</dt><dd>{tokens(totals.input)}</dd>
-      </dl>
-      <p>Tokens across recorded Claude requests in this thread. Includes the main conversation; excludes subagents and title generation. Older requests without usage reports are excluded.</p>
-    </div>
+  return <details className="context-section cache-usage">
+    <summary aria-label={`Claude cache usage: ${percent}% of input read from cache`}><span>Prompt cache</span><span>{percent}% read</span></summary>
+    <dl>
+      <dt>Read from cache</dt><dd>{tokens(totals.read)}</dd>
+      <dt>Written to cache</dt><dd>{tokens(totals.write)}</dd>
+      {hasHour && <><dt>Reported 1-hour writes</dt><dd>{tokens(totals.hour)}</dd></>}
+      <dt>Uncached input</dt><dd>{tokens(totals.input)}</dd>
+    </dl>
+    <p>Tokens across recorded Claude requests in this thread. Includes the main conversation; excludes subagents and title generation. Older requests without usage reports are excluded.</p>
   </details>;
 }

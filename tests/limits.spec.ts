@@ -181,6 +181,8 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
   await button('Send').click();
   await expect(page.getByText('Limits fixture reply', { exact: true })).toBeVisible();
   await page.locator('.composer textarea').fill('Unsent follow-up');
+  // In a thread, limits sit in the context popover.
+  await page.locator('.context-meter > summary').click();
   await page.locator('.limits-chip').click();
   await expect(page.getByRole('radio', { name: 'Personal', exact: true })).toHaveAttribute('aria-checked', 'true');
   await page.locator('.sidebar').getByRole('button', { name: /A fixture-only turn/ }).click();

@@ -1,5 +1,6 @@
 import type { z } from 'zod';
 import { hubMethods, type HubEvents } from './hub.js';
+import { issueMethods } from './issues.js';
 import { limitsMethods, type LimitsEvents } from './limits.js';
 import { machineMethods, type MachineEvents } from './machine.js';
 import { modelMethods, type ModelEvents } from './models.js';
@@ -12,10 +13,12 @@ import { updateMethods, type UpdateEvents } from './update.js';
 import { workspaceSkillMethods } from './workspaceSkills.js';
 
 export * from './hub.js';
+export * from './issues.js';
 export * from './limits.js';
 export * from './machine.js';
 export * from './media.js';
 export * from './pastes.js';
+export * from './reactions.js';
 export * from './mentions.js';
 export * from './models.js';
 export * from './profiles.js';
@@ -31,6 +34,7 @@ export * from './workspaceSkills.js';
 
 export const methods = {
   ...workspaceSkillMethods,
+  ...issueMethods,
   ...resourceMethods,
   ...machineMethods,
   ...hubMethods,

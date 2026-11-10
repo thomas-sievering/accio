@@ -29,7 +29,7 @@ The process on a machine that runs harnesses, executes turns and provides access
 _Avoid_: Server (for the role), machine (for the process), agent, sub-agent
 
 **Relay**:
-The hub passing messages between workers on different machines, so you can read and drive a thread from any client. The thread stays on its worker's machine; nothing is copied. Each client lists every machine's threads together, with the owning machine's name on the others. While that machine is offline its threads stay listed from the last list it sent, greyed and read-only. A new thread can start on any machine on the relay: one without a checkout of the project's repository clones it first, into the profile's folder there or else its home folder. No project starts on any machine. Saved images and files can be viewed through the relay. Sending image attachments, editing thread skills and Open app for an owned preview require the thread's machine. See the [relay plan](docs/plans/thread-relay.md).
+The hub passing messages between workers on different machines, so you can read and drive a thread from any client. The thread stays on its worker's machine; nothing is copied. Each client lists every machine's threads together, with the owning machine's name on the others. While that machine is offline its threads stay listed from the last list it sent, greyed and read-only, except that you can snooze them until the machine is back. A new thread can start on any machine on the relay: one without a checkout of the project's repository clones it first, into the profile's folder there or else its home folder. No project starts on any machine. Saved images and files can be viewed through the relay. Sending image attachments, editing thread skills and Open app for an owned preview require the thread's machine. See the [relay plan](docs/plans/thread-relay.md).
 _Avoid_: Sync (for threads), tunnel
 
 **Update**:
@@ -116,7 +116,7 @@ The tokens a house's requests used, per hat key, account and model over time, as
 _Avoid_: Consumption, spend, quota
 
 **Limits**:
-The allowance windows and reset times a provider reports for an account, read by the Sorting Hat with the account's own credentials. Houses that share an account share one allowance. Shown in Accio from the sidebar, the composer indicator and account settings, and on the Sorting Hat's dashboard.
+The allowance windows and reset times a provider reports for an account, read by the Sorting Hat with the account's own credentials. Houses that share an account share one allowance. Shown in Accio from the sidebar, a draft's composer, a thread's Context window popover and account settings, and on the Sorting Hat's dashboard.
 _Avoid_: Quota, usage, rate limit (in UI text)
 
 ## Work
@@ -145,6 +145,10 @@ _Avoid_: Unsent thread, pending thread
 Work by the harness until it finishes or is interrupted, started by a user message, Resume or a delivery request. Each turn uses the account in use of the profile's house for that harness's provider. Steering can add messages during the same turn.
 _Avoid_: Run, request
 
+**Context window**:
+How many tokens the model can take in one request, and how full a thread's latest request left it. The harness reports both: Claude Code when a turn ends, Codex as it goes. Accio never assumes a size from the model's name. The latest request counts with its reply, which the next request carries. Claude Code also reports where it compacts the conversation, marked on the window. A pill in the thread's composer shows it; its popover also holds the account's limits, the prompt cache and the last request's prompt size.
+_Avoid_: Token count, memory, context size (in UI text)
+
 **Queued message**:
 A message saved to start a later turn after the current turn finishes. It can be edited, removed or sent as steering while the harness accepts input.
 
@@ -156,11 +160,15 @@ _Avoid_: Upload, file (in UI text)
 A long text paste (4,000 characters or 60 lines) that the composer keeps out of the message box as a chip. It is sent inside the message, before the typed text, as a fenced block the harness reads as plain text, and the thread shows it folded to its size and first line. Ctrl+Shift+V pastes it into the message instead, and the chip puts it back there.
 _Avoid_: Attachment, file (in UI text)
 
+**Reaction**:
+A 👍 (agree), ❓ (unclear: explain it again) or 👎 (disagree) on a passage selected in an assistant message, picked from the small bar that appears over the selection. It goes into that thread's composer as a chip whose emoji switches the reaction; several can travel in one message, with or without typed text. It is sent after any Pasted text and before the typed text, as a fenced block whose info string says what it means, and the thread shows it as the emoji beside the quoted passage.
+_Avoid_: Citation, quote (for the whole thing), feedback
+
 **Steering**:
 Sending a message to the harness during its current turn, without interrupting it or starting a separate turn.
 
 **Handoff**:
-Moving a thread to another harness by choosing one of its models. The next turn on that harness starts a new session, or resumes the one it left, with the conversation it has not seen, taken from accio's transcript and trimmed to fit. The harness can read the whole thread with the read_thread accio tool (ADR 0017).
+Moving a thread to another harness by choosing one of its models. The next turn on that harness starts a new session, or resumes the one it left, with the conversation it has not seen, taken from accio's transcript and trimmed to fit. The harness can read the whole thread with the read_thread accio tool (ADR 0017), which also reads a thread you mention.
 _Avoid_: Switch, transfer, migration
 
 **Running**:
@@ -191,15 +199,27 @@ A new thread that another thread starts through the start_thread accio tool, whe
 _Avoid_: Child thread, spawned thread, sub-thread
 
 **Model mention**:
-Naming a model in a message with `@` and its handle, such as `@sonnet` or `@sol`, so sub-agents for that work run on it, on either harness. The handle is the model's family; when two offered models share one, both add their version, such as `@opus-5.5`. Typing `@` in the composer lists the profile's models, then the online machines; the sent message keeps the text and shows each mention as a chip. The thread's own model does not change.
+Naming a model in a message with `@` and its handle, such as `@sonnet` or `@sol`, so sub-agents for that work run on it, on either harness. The handle is the model's family; when two offered models share one, both add their version, such as `@opus-5.5`. Typing only `@` in the composer offers Models, Machines and Threads, each opening its list; typing after it lists the matches of every kind. Each mention shows as a pill in the composer and as a chip in the sent message, which keeps the text. The thread's own model does not change.
 _Avoid_: Tag, model reference
+
+**Issue tracker**:
+Where a project's open issues live, as its agent skills record it in `docs/agents/issue-tracker.md` or the Agent skills block of CLAUDE.md or AGENTS.md: GitHub Issues, or markdown files under `.scratch/<feature>/issues/`. Without that record, local issue files, else a GitHub origin, stand in. Accio reads GitHub through the profile's GitHub account; it cannot list other trackers yet.
+_Avoid_: Backlog, ticket system
+
+**Issue**:
+One open issue a new thread can pick up. In a project's draft, the Pick an issue chip beside the machine lists them: GitHub issues by triage label, ready for an agent first and blocked last; local issues by feature. The chip shows only when the tracker has open issues. The picked issue sits above the message, which may then be empty; sending names it in the first message (`Work on #208: …`), starts the thread's title from it, and claims it once the thread has started: assigned to you on GitHub, or `Status: claimed` in the thread's worktree copy of a local file. A claim that fails is noted in the thread.
+_Avoid_: Ticket, task
 
 **Machine mention**:
 Naming a machine in a message with `@` and its handle, such as `@laptop`, so the turn's machine tools, such as App screenshot and Update, act on that machine. The handle is the machine's name in lowercase words joined by dashes; when two machines share one, both add the start of their id. A model's handle wins over a machine's. The thread keeps running where it is.
 _Avoid_: Machine tag, target
 
+**Thread mention**:
+Naming another thread of the same profile in a message with `@` and its handle, such as `@fix-login-redirect-3f2a9c`, so the agent can read it. The handle is the first words of the thread's title and the start of its id; only the id part counts, so it still works after a rename. The harness gets a line about each mentioned thread after the message (its title, where it sits in the sidebar, its machine, branch and PR), not its conversation; it reads that with the read_thread accio tool, newest items first, on any machine through the relay. Before you type, the @ menu's Threads lists recent ones: open first, then Working, then recently settled; typing searches all of them by title.
+_Avoid_: Thread link, thread reference
+
 **Snooze**:
-Hiding a thread until a chosen time, when it comes back.
+Hiding a thread until a chosen time, when it comes back. Another machine's thread can't be read or settled while that machine is offline, so it is snoozed until the machine is back instead, or for a week if it stays away. Its machine can't record that snooze, so the hub keeps it, and every machine shows it; the hub drops it when the machine reconnects, so the thread wakes everywhere at once.
 _Avoid_: Mute, defer
 
 **Settle**:

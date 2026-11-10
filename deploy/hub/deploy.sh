@@ -3,7 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 exec 9>.deploy.lock
 flock -n 9 || exit 0
-image="${1:-ghcr.io/thomas-sievering/accio-hub:stable-v1}"
+image="${1:-ghcr.io/thomas-sievering/accio-hub:stable-v2}"
 docker pull "$image" >/dev/null
 digest="$(docker image inspect --format '{{.Id}}' "$image")"
 reference="$(docker image inspect --format '{{index .RepoDigests 0}}' "$image")"

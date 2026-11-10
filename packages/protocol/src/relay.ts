@@ -31,6 +31,15 @@ export type RelaySnapshot = {
   version: { boot: string; seq: number };
 };
 
+/**
+ * GLOSSARY: Snooze. Another machine's thread snoozed until that machine is back. The hub keeps it,
+ * by thread id, since the machine can't, and drops it when the machine reconnects.
+ */
+export type OfflineSnooze = { machineId: string; until: string };
+
+/** How long a thread snoozed until its machine is back stays away if the machine never returns. */
+export const OFFLINE_SNOOZE_MS = 7 * 24 * 3_600_000;
+
 /** A thread owned by another machine, as the viewing machine shows it. */
 export type RemoteMachine = { id: string; name: string; online: boolean };
 

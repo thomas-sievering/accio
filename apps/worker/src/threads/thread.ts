@@ -71,12 +71,18 @@ export function reopen(thread: Thread): Thread {
   return { ...thread, snoozedUntil: null, settledAt: null };
 }
 
-/** A turn may start only when none is running. Talking to a snoozed or settled thread reopens it. */
+/**
+ * A turn may start only when none is running. Talking to a snoozed or settled thread reopens it.
+ * The turn that continues work cut off by a restart keeps the time already run, so downtime never counts.
+ */
 export function startTurn(thread: Thread, firstText: string, now: string): Thread {
   if (thread.status === 'running') throw new UserError('This thread is already working. Stop it or wait for it to finish.');
+  const continuing = thread.status === 'interrupted' && thread.resumeAfterRestart;
   return {
     ...reopen(thread),
     status: 'running',
+    runningSince: now,
+    ranMs: continuing ? thread.ranMs : undefined,
     resumeAfterRestart: undefined,
     title: thread.title === NEW_THREAD_TITLE && !thread.titleManual ? titleFrom(firstText) : thread.title,
     updatedAt: now,
@@ -103,7 +109,14 @@ export type TurnOutcome = 'completed' | 'failed' | 'interrupted';
 /** Where a thread stands once its turn has ended. */
 export function endTurn(thread: Thread, outcome: TurnOutcome, now: string): Thread {
   const status = outcome === 'completed' ? 'idle' : outcome;
-  return { ...thread, status, updatedAt: now, resumeAfterRestart: outcome === 'interrupted' ? thread.resumeAfterRestart : undefined };
+  return { ...thread, status, updatedAt: now, resumeAfterRestart: outcome === 'interrupted' ? thread.resumeAfterRestart : undefined,
+    runningSince: undefined, ranMs: outcome === 'interrupted' ? ranUntil(thread, now) : undefined };
+}
+
+/** The time a run has spent running, banked when its turn stops at `end`. Unknown ends add nothing. */
+function ranUntil(thread: Thread, end: string | undefined): number | undefined {
+  const ran = thread.runningSince && end ? Math.max(0, Date.parse(end) - Date.parse(thread.runningSince)) : 0;
+  return (thread.ranMs ?? 0) + ran || undefined;
 }
 
 /** What a turn cut off by accio shutting down says, so it does not read as an explicit Stop. */
@@ -115,7 +128,7 @@ export const RESTART_NOTICE = 'Interrupted: accio stopped while this turn was ru
  * A Ship cut off this way stays requested and continues too: a delivery turn
  * resumes with the rest, and a scripted ship, which ran without a turn, runs again.
  */
-export function recoverAfterRestart(threads: readonly Thread[]): { threads: Thread[]; interrupted: Thread[] } {
+export function recoverAfterRestart(threads: readonly Thread[], lastActive: (t: Thread) => string | undefined = () => undefined): { threads: Thread[]; interrupted: Thread[] } {
   const interrupted = threads.filter((t) => t.status === 'running');
   const next = threads.map((t): Thread => {
     if (t.status === 'running') {
@@ -124,7 +137,8 @@ export function recoverAfterRestart(threads: readonly Thread[]): { threads: Thre
         ? { ...t.delivery, status: 'queued' as const }
         : { ...t.delivery, status: 'blocked' as const, detail: 'Delivery was interrupted. Check the conversation and request Ship again to continue safely.' }
         : t.delivery;
-      return { ...t, status: 'interrupted', resumeAfterRestart, delivery };
+      // The process died without ending the turn: its last activity stands in for when it stopped running.
+      return { ...t, status: 'interrupted', resumeAfterRestart, delivery, runningSince: undefined, ranMs: ranUntil(t, lastActive(t)) };
     }
     // Running without a turn is a scripted ship. Clearing its start runs the script again.
     if (t.delivery?.status === 'running') return { ...t, delivery: { ...t.delivery, status: 'queued', startedAt: undefined, step: undefined } };

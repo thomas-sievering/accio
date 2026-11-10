@@ -12,21 +12,32 @@ test('Claude cache usage shows provider accounting once and survives reopening',
   await page.locator('.sidebar').getByRole('button', { name: 'New thread', exact: true }).click();
   await page.getByRole('option', { name: 'No project', exact: true }).click();
   if (await page.getByRole('combobox', { name: 'Search profiles' }).isVisible()) await page.getByRole('option', { name: 'Personal', exact: true }).click();
-  await expect(page.locator('.cache-usage')).toHaveCount(0);
+  await expect(page.locator('.context-meter')).toHaveCount(0);
   await page.locator('.composer textarea').fill('Cache usage fixture');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect(page.getByText('Cache usage recorded.', { exact: true })).toBeVisible();
   await expect(page.locator('.composer .stop')).toHaveCount(0);
+  // GLOSSARY: Context window. The pill shows it; cache and limits wait in its popover.
+  const meter = page.locator('.context-meter');
+  await expect(meter.locator('> summary')).toHaveText('1k / 200k');
+  await expect(meter.locator('> summary')).toHaveAttribute('aria-label', 'Context: 1,000 tokens of 200,000 (1%)');
+  await expect(page.locator('.composer-bar .limits-chip')).toBeHidden();
   const stat = page.locator('.cache-usage');
-  await expect(stat.locator('summary')).toHaveText('Cache 80%');
-  await stat.locator('summary').click();
-  await expect(stat.locator('dd')).toHaveText(['800', '100', '100', '100']);
+  const open = async () => {
+    await meter.locator('> summary').click();
+    await expect(meter.getByRole('meter', { name: 'Context window used' })).toHaveAttribute('aria-valuenow', '1');
+    await expect(meter.locator('.context-compact-tick')).toBeVisible();
+    await expect(meter).toContainText('Compacts automatically at about 167,000 tokens.');
+    await expect(meter.locator('.limits-chip')).toBeVisible();
+    await expect(stat.locator('summary')).toHaveText('Prompt cache80% read');
+    await stat.locator('summary').click();
+    await expect(stat.locator('dd')).toHaveText(['800', '100', '100', '100']);
+  };
+  await open();
   await expect(stat).toContainText('excludes subagents and title generation');
   await page.screenshot({ path: testInfo.outputPath('cache-usage.png') });
   await page.reload();
-  await expect(stat.locator('summary')).toHaveText('Cache 80%');
-  await stat.locator('summary').click();
-  await expect(stat.locator('dd')).toHaveText(['800', '100', '100', '100']);
+  await open();
 });
 
 for (const submit of ['Enter', 'Send'] as const) {

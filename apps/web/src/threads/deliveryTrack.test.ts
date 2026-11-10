@@ -75,4 +75,11 @@ describe('deliveryTrack', () => {
     // Waiting on checks after the agent's push, before the push itself was observed.
     expect(states(thread({ policy: 'direct', waitingOn: 'checks', ci }))).toEqual(['prepare:done', 'publish:done', 'target:waiting']);
   });
+
+  it('says when a delivered revision had no checks to run', () => {
+    const delivered = (noChecks?: ThreadDelivery['noChecks']) => deliveryTrack(thread({ policy: 'direct', status: 'delivered', publishedRevision: 'c'.repeat(40), ...(noChecks ? { noChecks } : {}) }))!.stations[2]!;
+    expect(delivered('filtered')).toMatchObject({ state: 'done', detail: 'ccccccc · No workflow covers these changes' });
+    expect(delivered('no-workflows').detail).toBe('ccccccc · No workflows');
+    expect(delivered().detail).toBe('ccccccc');
+  });
 });

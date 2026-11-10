@@ -8,7 +8,7 @@ import { StatusGlyphIcon } from './StatusMark';
 import { shortStatus, statusText, threadStatus } from './status';
 import { RowRename, useRenaming, useThreadMenu } from './ThreadMenu';
 import { snoozeThread } from './SnoozeNotice';
-import { wakeText, type ShelfPlace } from './shelves';
+import { awaitsMachine, wakeText, type ShelfPlace } from './shelves';
 import { useThreads, type ThreadActions } from './threads';
 import { useThreadAvailability } from './useThreadAvailability';
 
@@ -42,18 +42,19 @@ export function ThreadRow({ thread: t, place, withinProject = false }: { thread:
   };
 
   const { unavailable } = useThreadAvailability(t);
+  const untilOnline = !!t.snoozedUntilOnline;
   const actions = (
     <span className="row-actions">
-      {hoverActions(t, place).map((a) => (
+      {hoverActions(t, place, untilOnline).map((a) => (
         <button
           key={a.label}
           className="row-action"
           // Pointer shortcuts only; the keyboard reaches the same actions through the row menu (Shift+F10).
           tabIndex={-1}
-          disabled={!!unavailable}
-          title={unavailable ?? a.title}
+          disabled={!!unavailable && !a.whileOffline}
+          title={a.whileOffline ? a.title : unavailable ?? a.title}
           aria-label={a.label}
-          onClick={() => void (a.run === 'snooze' ? snoozeThread(act, t.id) : act[a.run](t.id)).catch((e: Error) => console.error(e.message))}
+          onClick={() => void (a.run === 'snooze' ? snoozeThread(act, t) : act[a.run](t.id)).catch((e: Error) => console.error(e.message))}
         >
           {a.icon}
         </button>
@@ -89,7 +90,7 @@ export function ThreadRow({ thread: t, place, withinProject = false }: { thread:
           </span>}
         </span>
         <span className="row-status">
-          <span className="row-meta">{meta(t, place, now)}</span>
+          <span className="row-meta">{untilOnline && place === 'snoozed' ? 'offline' : meta(t, place, now)}</span>
           {open && <span className={`row-mark tone-${status.tone}`} role="img" aria-label={statusLine}>
             <StatusGlyphIcon glyph={status.glyph} tone={status.tone} />
           </span>}
@@ -101,13 +102,19 @@ export function ThreadRow({ thread: t, place, withinProject = false }: { thread:
   );
 }
 
-type HoverAction = { label: string; title: string; icon: React.ReactNode; run: keyof ThreadActions };
+/** The hub carries out `whileOffline` actions, so they stay available while the thread's machine is offline. */
+type HoverAction = { label: string; title: string; icon: React.ReactNode; run: keyof ThreadActions; whileOffline?: boolean };
 
-/** A running thread offers Stop; an open one Snooze and Settle; a shelved one the way back. */
-function hoverActions(t: ThreadView, place: ShelfPlace): HoverAction[] {
-  if (place === 'snoozed') return [{ label: 'Wake', title: 'Wake now', icon: <Undo />, run: 'reopen' }];
+/**
+ * A running thread offers Stop; an open one Snooze and Settle; a shelved one the way back.
+ * While another machine's thread can't be read, it can't be settled either: it offers only
+ * Snooze until that machine is back.
+ */
+function hoverActions(t: ThreadView, place: ShelfPlace, untilOnline: boolean): HoverAction[] {
+  if (place === 'snoozed') return [{ label: 'Wake', title: 'Wake now', icon: <Undo />, run: 'reopen', whileOffline: untilOnline }];
   if (place === 'settled') return [{ label: 'Reopen', title: 'Reopen', icon: <Undo />, run: 'reopen' }];
   if (t.status === 'running') return [{ label: 'Stop', title: 'Stop this turn', icon: <StopSquare />, run: 'stop' }];
+  if (awaitsMachine(t)) return [{ label: 'Snooze', title: `Snooze until ${t.machine!.name} is back online`, icon: <Clock />, run: 'snooze', whileOffline: true }];
   return [
     { label: 'Snooze', title: 'Snooze until morning', icon: <Clock />, run: 'snooze' },
     { label: 'Settle', title: 'Settle', icon: <Check />, run: 'settle' },
@@ -117,11 +124,17 @@ function hoverActions(t: ThreadView, place: ShelfPlace): HoverAction[] {
 function meta(t: ThreadView, place: ShelfPlace, now: Date): string {
   if (place === 'snoozed' && t.snoozedUntil) return wakeText(new Date(t.snoozedUntil), now);
   if (place === 'settled' && t.settledAt) return timeAgo(t.settledAt, now);
+  // A running thread shows how long it has run, including before a restart but not the downtime.
+  if (t.status === 'running' && t.runningSince) return duration((t.ranMs ?? 0) + now.getTime() - Date.parse(t.runningSince));
   return timeAgo(t.updatedAt, now);
 }
 
-function timeAgo(iso: string, now: Date): string {
-  const minutes = Math.round((now.getTime() - new Date(iso).getTime()) / 60_000);
+export function timeAgo(iso: string, now: Date): string {
+  return duration(now.getTime() - new Date(iso).getTime());
+}
+
+function duration(ms: number): string {
+  const minutes = Math.round(ms / 60_000);
   if (minutes < 1) return 'now';
   if (minutes < 60) return `${minutes}m`;
   const hours = Math.round(minutes / 60);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findMentionedMachine, findMentionedModel, machineHandles, modelHandles, prettyModelName, splitMentions } from './mentions.js';
+import { findMentionedMachine, findMentionedModel, findMentionedThread, machineHandles, modelHandles, prettyModelName, splitMentions, threadHandle } from './mentions.js';
 
 describe('prettyModelName', () => {
   it.each([
@@ -62,6 +62,32 @@ describe('machine mentions', () => {
     const models = [{ name: 'Claude Opus 5.5' }];
     expect(splitMentions('screenshot @thomas-s-laptop with @opus.', models, machines)).toEqual([
       { text: 'screenshot ' }, { text: '@thomas-s-laptop', machine: machines[0] }, { text: ' with ' }, { text: '@opus', model: models[0] }, { text: '.' },
+    ]);
+  });
+});
+
+describe('thread mentions', () => {
+  const threads = [
+    { id: '3F2A9C10-aaaa-4bbb-8ccc-000000000001', title: 'Fix the login redirect loop on Safari' },
+    { id: '77d0e4bb-aaaa-4bbb-8ccc-000000000002', title: '' },
+    { id: 'c0ffee00-aaaa-4bbb-8ccc-000000000003', title: 'Internationalisation-of-everything everywhere' },
+  ];
+
+  it('names a thread by the first words of its title and the start of its id', () => {
+    expect(threads.map(threadHandle)).toEqual(['fix-the-login-3f2a9c', 'thread-77d0e4', 'internationalisation-of-c0ffee']);
+  });
+
+  it('finds a thread by the id part of its handle, so a renamed thread still resolves', () => {
+    expect(findMentionedThread(threads, '@fix-the-login-3f2a9c')).toBe(threads[0]);
+    expect(findMentionedThread(threads, 'old-title-3f2a9c')).toBe(threads[0]);
+    expect(findMentionedThread(threads, threads[1]!.id)).toBe(threads[1]);
+    expect(findMentionedThread(threads, 'fix-the-login')).toBeUndefined();
+  });
+
+  it('splits thread mentions out after models and machines', () => {
+    const models = [{ name: 'Claude Opus 5.5' }];
+    expect(splitMentions('ask @opus about @thread-77d0e4.', models, [], threads)).toEqual([
+      { text: 'ask ' }, { text: '@opus', model: models[0] }, { text: ' about ' }, { text: '@thread-77d0e4', thread: threads[1] }, { text: '.' },
     ]);
   });
 });

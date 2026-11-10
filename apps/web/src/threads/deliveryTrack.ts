@@ -91,7 +91,11 @@ export function deliveryTrack(t: ThreadView, now = new Date()): DeliveryTrack | 
     if (blocked) { verify.state = 'failed'; verify.detail = d.detail ?? 'Needs attention'; verify.ci = status.ci; }
     else { verify.state = 'waiting'; verify.ci = status.ci; }
   }
-  if (d.status === 'delivered' && status.revision) verify.detail = status.revision;
+  if (d.status === 'delivered') {
+    // Say plainly that nothing ran, so a green station is not read as passed CI.
+    const none = d.noChecks === 'filtered' ? 'No workflow covers these changes' : d.noChecks === 'no-workflows' ? 'No workflows' : undefined;
+    verify.detail = [status.revision, none].filter(Boolean).join(' · ') || undefined;
+  }
   stations.push(verify);
 
   // An observation failure keeps the last known track; say so on the open station.

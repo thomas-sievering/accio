@@ -1,21 +1,24 @@
 import { useMemo, useSyncExternalStore } from 'react';
+import { REACTION_KINDS, type Reaction } from '@accio/protocol';
 
 /** GLOSSARY: Image attachment. A pasted image in the composer; it can be sent once uploaded. */
 export type PendingImage = { key: string; name: string; mimeType: string; url: string; uploadId?: string };
 
 /** What a composer holds before it sends. */
-export type DraftContent = { text: string; pastes: string[]; images: PendingImage[] };
+export type DraftContent = { text: string; pastes: string[]; reactions: Reaction[]; images: PendingImage[] };
 
 type Update<T> = T | ((current: T) => T);
 
 /**
  * GLOSSARY: Draft. Unsent composer content, kept per composer key outside any component, so it
- * survives moving to another thread and back. Text and Pasted text are also saved in localStorage,
+ * survives moving to another thread and back. Text, Pasted text and Reactions are also saved in localStorage,
  * so a restart keeps them; images stay in memory for this session only.
  */
 const contents = new Map<string, DraftContent>();
 const listeners = new Set<() => void>();
-const EMPTY: DraftContent = { text: '', pastes: [], images: [] };
+const EMPTY: DraftContent = { text: '', pastes: [], reactions: [], images: [] };
+/** The parts saved beside the text, each under its own key suffix. */
+const SAVED_PARTS = ['pastes', 'reactions'] as const;
 let scanned = false;
 let version = 0;
 
@@ -26,7 +29,17 @@ function readSaved(key: string): DraftContent {
     const saved: unknown = JSON.parse(localStorage.getItem(`${key}:pastes`) ?? '[]');
     if (Array.isArray(saved)) pastes = saved.filter((p): p is string => typeof p === 'string');
   } catch { /* An unreadable copy is no draft. */ }
-  return text || pastes.length ? { text, pastes, images: [] } : EMPTY;
+  let reactions: Reaction[] = [];
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem(`${key}:reactions`) ?? '[]');
+    if (Array.isArray(saved)) reactions = saved.filter(isReaction);
+  } catch { /* An unreadable copy is no draft. */ }
+  return text || pastes.length || reactions.length ? { text, pastes, reactions, images: [] } : EMPTY;
+}
+
+function isReaction(value: unknown): value is Reaction {
+  const r = value as Partial<Reaction> | null;
+  return !!r && typeof r.quote === 'string' && (REACTION_KINDS as readonly unknown[]).includes(r.kind);
 }
 
 function contentOf(key: string): DraftContent {
@@ -42,7 +55,8 @@ function scan() {
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
     if (!key || !key.includes(':composer:')) continue;
-    contentOf(key.endsWith(':pastes') ? key.slice(0, -':pastes'.length) : key);
+    const part = SAVED_PARTS.find((name) => key.endsWith(`:${name}`));
+    contentOf(part ? key.slice(0, -(part.length + 1)) : key);
   }
 }
 
@@ -51,8 +65,9 @@ function change(key: string, next: DraftContent) {
   if (next.text !== before.text) {
     if (next.text) localStorage.setItem(key, next.text); else localStorage.removeItem(key);
   }
-  if (next.pastes !== before.pastes) {
-    try { if (next.pastes.length) localStorage.setItem(`${key}:pastes`, JSON.stringify(next.pastes)); else localStorage.removeItem(`${key}:pastes`); }
+  for (const part of SAVED_PARTS) {
+    if (next[part] === before[part]) continue;
+    try { if (next[part].length) localStorage.setItem(`${key}:${part}`, JSON.stringify(next[part])); else localStorage.removeItem(`${key}:${part}`); }
     catch { /* Too large to keep across a restart; it still sends. */ }
   }
   contents.set(key, next);
@@ -80,6 +95,7 @@ export function useDraft(key: string) {
     ...content,
     setText: (update: Update<string>) => editDraft(key, 'text', update),
     setPastes: (update: Update<string[]>) => editDraft(key, 'pastes', update),
+    setReactions: (update: Update<Reaction[]>) => editDraft(key, 'reactions', update),
     setImages: (update: Update<PendingImage[]>) => editDraft(key, 'images', update),
   }), [key, content]);
 }
@@ -103,7 +119,7 @@ export function newThreadDraftId(checkoutId: string, profileId?: string) {
 export type NewThreadDraft = DraftContent & { key: string; checkoutId: string; profileId?: string };
 
 function hasContent(c: DraftContent) {
-  return !!c.text.trim() || c.pastes.length > 0 || c.images.length > 0;
+  return !!c.text.trim() || c.pastes.length > 0 || c.reactions.length > 0 || c.images.length > 0;
 }
 
 let listed: { hubId: string; version: number; drafts: NewThreadDraft[] } | undefined;

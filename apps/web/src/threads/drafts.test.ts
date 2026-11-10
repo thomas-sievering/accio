@@ -40,6 +40,15 @@ describe('new-thread drafts', () => {
     expect(saved.has(key)).toBe(false);
   });
 
+  it('saves Reactions beside the text and forgets them when emptied', () => {
+    const key = drafts.composerKey('h1', 'thread:t1');
+    drafts.editDraft(key, 'reactions', [{ kind: 'unclear', quote: 'the watcher' }]);
+    expect(JSON.parse(saved.get(`${key}:reactions`)!)).toEqual([{ kind: 'unclear', quote: 'the watcher' }]);
+    expect(listed()).toHaveLength(2);
+    drafts.discardDraft(key);
+    expect(saved.has(`${key}:reactions`)).toBe(false);
+  });
+
   it('keeps the same list while nothing changes', () => {
     expect(drafts.draftsOf('h1')).toBe(drafts.draftsOf('h1'));
   });
