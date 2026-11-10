@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import type { AccessConfig } from './access.js';
 import { OpenAIAuth } from './openaiAuth.js';
 import { startServer } from './server.js';
 import { SortingHat } from './sortingHat.js';
@@ -17,6 +18,9 @@ export type StandaloneOptions = {
   port?: number;
   /** Used instead of the admin-token file, for example from a deployment's secrets. */
   adminToken?: string;
+  /** Cloudflare Access in front of the dashboard and management API (README.md, "Dashboard"). */
+  access?: AccessConfig;
+  accessFetch?: Fetch;
   claudeFetch?: Fetch;
   codexFactory?: CodexFactory;
   anthropicUrl?: string;
@@ -33,7 +37,7 @@ export async function startStandalone(opts: StandaloneOptions) {
   let server;
   try {
     server = await startServer({ hat, host: opts.host ?? '127.0.0.1', port: opts.port ?? 0, adminToken: admin.token,
-      upstream: opts.anthropicUrl, fetchImpl: opts.claudeFetch, openaiUpstream: opts.openaiUrl, openaiFetch: opts.openaiFetch });
+      access: opts.access, accessFetch: opts.accessFetch, upstream: opts.anthropicUrl, fetchImpl: opts.claudeFetch, openaiUpstream: opts.openaiUrl, openaiFetch: opts.openaiFetch });
   } catch (error) { await hat.close(); throw error; }
   // ChatGPT accounts' models change over time; read them again once per start, as the hub does.
   const modelsRefreshed = hat.refreshCodexModels().catch(() => false);

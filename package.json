@@ -16,6 +16,7 @@
     "test:chat": "pnpm build && playwright test --project chat",
     "test:secrets": "pnpm build && playwright test --project secrets",
     "test:limits": "pnpm build && playwright test --project limits",
+    "test:sortinghat": "pnpm build && playwright test --project sortinghat",
     "verify": "pnpm build && node .agents/skills/3-verify/scripts/verify.mjs",
     "verify:ui": "node scripts/verify-ui.mjs",
     "test:verification": "node --test scripts/verify-ui.test.mjs",

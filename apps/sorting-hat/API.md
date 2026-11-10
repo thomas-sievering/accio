@@ -6,7 +6,8 @@ The Sorting Hat holds provider accounts, groups them into **houses** and issues
 | Paths | Who may call | What |
 | --- | --- | --- |
 | `GET /healthz` | anyone | `{"ok":true}` while the server runs |
-| `/api/...` | the admin token | the management API below |
+| `/api/...` | the admin token, or the dashboard | the management API below |
+| `GET /`, `/dashboard/...` | the dashboard's visitor | the dashboard (README.md, "Dashboard") |
 | every other path | a hat key | model routes, forwarded to the house's account in use |
 
 All bodies are JSON (`content-type: application/json`). Ids are opaque strings.
@@ -41,6 +42,24 @@ created on first start and written to `<state dir>/admin-token` (readable only b
 its owner), and printed once. Set `SORTING_HAT_ADMIN_TOKEN` to use another one
 instead. Hat keys are never accepted here.
 
+### The dashboard
+
+Without the admin token, the management API answers the dashboard's own
+calls: requests with `x-sorting-hat-dashboard: 1` that pass the dashboard's
+check, and, for anything but `GET`, an `Origin` header equal to `Host`
+(otherwise 403 `permission_error`). The dashboard's check is:
+
+- with `SORTING_HAT_ACCESS_TEAM_DOMAIN` and `SORTING_HAT_ACCESS_AUD` set, a valid
+  Cloudflare Access token in `Cf-Access-Jwt-Assertion` (or else the
+  `CF_Authorization` cookie): RS256, signed by a key
+  from `https://<team>.cloudflareaccess.com/cdn-cgi/access/certs`, `iss` that
+  address, `aud` containing the configured tag, not expired. Certs are cached
+  for an hour and read again when a token names an unknown key (at most every 30 s);
+- without them, a request from a loopback address with a loopback `Host`.
+
+`GET /dashboard/session` tells the page which applies:
+`{ "mode": "access" | "loopback", "email": string | null }`.
+
 ### Hat keys
 
 Model routes take a hat key as `Authorization: Bearer <hat key>` or
@@ -60,6 +79,7 @@ Every refusal has an error body:
 | --- | --- | --- |
 | 400 | `invalid_request_error` | the body or a value is not acceptable, or a sign-in failed |
 | 401 | `authentication_error` | missing or wrong admin token or hat key |
+| 403 | `permission_error` | a dashboard change without the dashboard's own `Origin` |
 | 404 | `not_found_error` | no such route, account, house, hat key or sign-in |
 | 405 | `invalid_request_error` | the path exists but not with this method |
 | 409 | `conflict_error` | the id is taken, an account is still in a house, a sign-in is already complete |
@@ -259,7 +279,8 @@ With a hat key, the Sorting Hat swaps the key for the credential of the house's
 account in use and forwards the request unchanged otherwise. It changes no
 model, prompt or tool.
 
-- **Anthropic**: any path other than those above and the [model lists](#models), such as `POST /v1/messages`
+- **Anthropic**: any path other than those above, the [model lists](#models) and
+  the dashboard (`/` and `/dashboard/`), such as `POST /v1/messages`
   and `POST /v1/messages/count_tokens`, goes to `https://api.anthropic.com` with
   the Claude account's OAuth token. Claude subscriptions may only be used through
   the real Claude Code, so point Claude Code (or a tool that runs it) here.

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Sorting Hat</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 3 9 22h14z' fill='%236b5b95'/%3E%3Crect x='4' y='22' width='24' height='5' rx='2.5' fill='%234a3f6b'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/dashboard/app.css">
+  <script type="module" src="/dashboard/app.js"></script>
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3 9 22h14z"/><rect x="4" y="22" width="24" height="5" rx="2.5"/></svg>
+      <h1>Sorting Hat</h1>
+    </div>
+    <p id="session" class="muted"></p>
+    <button type="button" id="refresh-limits">Refresh limits</button>
+  </header>
+  <div id="toast" role="alert" hidden></div>
+  <main>
+    <section id="accounts" aria-labelledby="accounts-title">
+      <div class="section-head">
+        <div>
+          <h2 id="accounts-title">Accounts</h2>
+          <p class="muted">Logins at a provider. Credentials stay on the Sorting Hat.</p>
+        </div>
+        <div class="actions">
+          <button type="button" data-add-account="anthropic">Add Claude account</button>
+          <button type="button" data-add-account="openai">Add ChatGPT account</button>
+        </div>
+      </div>
+      <div id="account-list" class="grid"></div>
+    </section>
+
+    <section id="houses" aria-labelledby="houses-title">
+      <div class="section-head">
+        <div>
+          <h2 id="houses-title">Houses</h2>
+          <p class="muted">Groups of accounts, ordered per provider. Apps reach a house with its hat keys.</p>
+        </div>
+        <div class="actions"><button type="button" id="add-house">New house</button></div>
+      </div>
+      <div id="house-list" class="stack"></div>
+    </section>
+
+    <!-- Usage charts per hat key, account and model go here (#134). -->
+    <section id="usage" aria-labelledby="usage-title">
+      <div class="section-head">
+        <div>
+          <h2 id="usage-title">Usage</h2>
+          <p class="muted">Tokens used per hat key, account and model.</p>
+        </div>
+      </div>
+      <div id="usage-body" class="placeholder">Usage is not shown here yet.</div>
+    </section>
+  </main>
+  <dialog id="dialog" aria-labelledby="dialog-title"></dialog>
+</body>
+</html>
