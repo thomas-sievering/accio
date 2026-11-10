@@ -5,7 +5,7 @@ import { configFolderOf, type HubAccess } from '../profiles/claudeConfigFolder.j
 /**
  * Variables that could carry another login, another provider or another config
  * into a thread. They are dropped before the profile's own values are set, so a
- * thread can only ever reach its profile's hub proxy (ADR 0002, ADR 0007).
+ * thread can only ever reach its profile's hub proxy or Sorting Hat house (ADR 0018).
  */
 const INHERITED_BLOCKLIST = [
   /^ACCIO_SECRET_/,

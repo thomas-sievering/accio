@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-/** How a profile's threads reach the hub: its address and this profile's access key. */
+/** How a profile's threads reach their models: the hub's proxy and a model key, or the hub's Sorting Hat and a hat key. */
 export type HubAccess = { baseUrl: string; accessKey: string };
 
 /**

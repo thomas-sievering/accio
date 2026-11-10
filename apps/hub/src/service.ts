@@ -3,12 +3,13 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { WebSocket, WebSocketServer } from 'ws';
 import { z } from 'zod';
-import { GitHubLogin, methods, ResourceScope, SecretSlot, type AccountView, type AccountLimitsView, type ProfileView, type ResourcesState, type SecretSummary } from '@accio/protocol';
+import { GitHubLogin, methods, noHouseMessage, ResourceScope, SecretSlot, type AccountView, type AccountLimitsView, type ProfileView, type ProviderId, type ResourcesState, type SaveProfileParams, type SecretSummary, type SortingHatView } from '@accio/protocol';
 import { startSortingHat, HatError, SIGN_IN_TTL_MS, type CodexFactory, type CodexModel, type Fetch } from '@accio/sorting-hat';
 import { SharedSettings, type MachineHello, type SharedSeed } from './sharedSettings.js';
 import { HubError } from './errors.js';
 import { HubTrust } from './trust.js';
-import { accountSelection, profileViews, saveSharedProfile } from './profile.js';
+import { accountSelection, profileViews, saveSharedProfile, type HouseSource } from './profile.js';
+import { SortingHatLink } from './sortingHatLink.js';
 import { Resources } from './resources.js';
 import { McpGateway } from './mcp.js';
 import { RESOURCE_WRITES } from './resourceClient.js';
@@ -31,6 +32,8 @@ export type HubSnapshot = {
   resources: ResourcesState;
   limits: AccountLimitsView[];
   secrets: SecretSummary[];
+  /** The hub's own Sorting Hat, when it has one; never its admin token. */
+  sortingHat?: SortingHatView;
 };
 export type HubServiceOptions = {
   home: string; host?: string; port?: number; seed?: () => Promise<SharedSeed>;
@@ -50,6 +53,8 @@ const secretCalls = {
   'secrets.used': z.object({ id: SecretId, version: z.number().int().positive(), scope: SecretScope }),
 };
 type Login = { machineId: string; accountId: string; startedAt: number; complete?: AccountView };
+/** Account changes go to the Sorting Hat's dashboard while the hub uses one of its own (until #136). */
+const ACCOUNT_WRITES = new Set(['accounts.save', 'accounts.delete', 'accounts.signOut', 'accounts.beginSignIn', 'accounts.completeSignIn', 'accounts.signInStatus', 'accounts.callback', 'accounts.cancelSignIn']);
 
 /** The same service runs on loopback for development and behind HTTPS at home. */
 export async function startHubService(opts: HubServiceOptions) {
@@ -60,8 +65,17 @@ export async function startHubService(opts: HubServiceOptions) {
   const mcp = new McpGateway(resources, opts.mcpFetch);
   const grants = new Map<string, { machineId: string; release(): void }>();
   await settings.load(opts.seed); await trust.load(); await resources.load(); await secrets.load();
-  // GLOSSARY: Sorting Hat, run in-process for now (ADR 0018). Each profile links to the house of the same id.
+  // GLOSSARY: Sorting Hat, run in-process until the hub links to one of its own (ADR 0018). Each profile links to its house of the same id.
   const hat = await startSortingHat({ dir: join(opts.home, 'hub'), claudeFetch: opts.claudeFetch, codexFactory: opts.codexFactory, anthropicUrl: opts.anthropicUrl, openaiUrl: opts.openaiUrl, openaiFetch: opts.openaiFetch });
+  // GLOSSARY: Sorting Hat, run on its own. Once linked to one, threads run through it, with hat keys per profile and machine.
+  const link = new SortingHatLink(opts.home, secrets, () => settings.profiles().flatMap((p) => p.houseId ? [p.houseId] : []));
+  await link.load();
+  /** The houses profiles link to: the hub's own Sorting Hat when it has one, else the embedded one. */
+  const houses = (): HouseSource => link.configured ? {
+    selectedAccounts: (id: string, provider: ProviderId) => link.selectedAccounts(id, provider),
+    accountIdInUse: (id: string, provider: ProviderId) => link.accountIdInUse(id, provider),
+    linked: (profile) => profile.houseId ? { id: profile.houseId, name: link.house(profile.houseId)?.name ?? profile.houseId } : null,
+  } : hat;
   const sockets = new WebSocketServer({ noServer: true, maxPayload: 16_384 });
   const owners = new Map<WebSocket, string>();
   const relay = new WebSocketServer({ noServer: true, maxPayload: RELAY_FRAME_BYTES });
@@ -94,14 +108,17 @@ export async function startHubService(opts: HubServiceOptions) {
   let closing = false;
   function snapshot(): HubSnapshot {
     const profiles = settings.profiles();
-    return { hubId: trust.id, protocol: HUB_PROTOCOL, revision, epoch, ...(opts.version ? { version: opts.version } : {}), profiles: profileViews(profiles, hat), accounts: hat.accountViews(), machines: settings.machines(),
+    const remote = link.view();
+    return { hubId: trust.id, protocol: HUB_PROTOCOL, revision, epoch, ...(opts.version ? { version: opts.version } : {}), profiles: profileViews(profiles, houses()), accounts: remote ? link.accountViews() : hat.accountViews(), machines: settings.machines(),
       favorites: Object.fromEntries(profiles.map((p) => [p.id, settings.modelFavorites(p.id)])), harnessTools: settings.harnessTools(),
       threadNaming: settings.threadNaming(),
-      models: Object.fromEntries(profiles.map((p) => [p.id, hat.codexModels(p.id)])), resources: resources.state(), limits: hat.limitViews(), secrets: profiles.flatMap(p => secrets.list(p.id)) };
+      models: Object.fromEntries(profiles.map((p) => [p.id, remote ? p.houseId ? link.codexModels(p.houseId) : [] : hat.codexModels(p.id)])), resources: resources.state(), limits: remote ? link.limitViews() : hat.limitViews(), secrets: profiles.flatMap(p => secrets.list(p.id)),
+      ...(remote ? { sortingHat: remote } : {}) };
   }
   function announce() { revision++; for (const ws of sockets.clients) if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ revision })); }
   settings.onMachinesChanged(announce);
   hat.onLimitsChanged(announce);
+  link.onChanged(announce);
   secrets.onChanged(announce);
   const modelsRefreshed = hat.refreshCodexModels().then((changed) => { if (changed) announce(); });
   function auth(req: IncomingMessage) { const token = /^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1]; return token ? trust.authenticate(token) : undefined; }
@@ -115,6 +132,7 @@ export async function startHubService(opts: HubServiceOptions) {
     const parsed = schema?.safeParse(raw);
     if (parsed && !parsed.success) throw new HubError('Invalid hub request parameters');
     const p = parsed ? parsed.data : raw;
+    if (link.configured && ACCOUNT_WRITES.has(method)) throw new HubError('This hub’s accounts are on its Sorting Hat. Sign in and change them on the Sorting Hat’s dashboard.');
     switch (method) {
       case 'machine.hello': {
         const hello = p as MachineHello;
@@ -126,21 +144,27 @@ export async function startHubService(opts: HubServiceOptions) {
         await trust.references(machineId, p.profiles); return null;
       }
       case 'machine.modelKey': {
-        if (typeof p.profileId !== 'string' || !settings.profiles().some((profile) => profile.id === p.profileId)) throw new HubError('No such profile');
-        return { key: await trust.key(machineId, p.profileId) };
+        const profile = typeof p.profileId === 'string' ? settings.profiles().find((profile) => profile.id === p.profileId) : undefined;
+        if (!profile) throw new HubError('No such profile');
+        if (!link.configured) return { key: await trust.key(machineId, profile.id) };
+        // GLOSSARY: Hat key. One per profile and machine, with the Sorting Hat's address in place of the hub's.
+        if (!profile.houseId) throw new HubError(noHouseMessage(profile.name));
+        const key = await link.hatKey({ id: machineId, name: settings.machine(machineId)?.name ?? machineId }, profile, profile.houseId);
+        return { key, url: link.url };
       }
       case 'hub.pairingCode': return HubTrust.createCode(opts.home);
       case 'hub.revokeMachine': {
         if (typeof p.machineId !== 'string') throw new HubError('Invalid machine');
         await trust.revoke(p.machineId);
+        await link.forgetMachine(p.machineId);
         for (const [token, grant] of grants) if (grant.machineId === p.machineId) { grant.release(); grants.delete(token); }
         for (const [ws, owner] of owners) if (owner === p.machineId) ws.close(4001, 'Pairing revoked');
         closeRelay(p.machineId, 'Pairing revoked');
         await settings.machineDisconnected(p.machineId); return null;
       }
-      case 'accounts.list': return hat.accountViews();
-      case 'accounts.limits': return hat.limitViews();
-      case 'accounts.refreshLimits': return hat.refreshLimits(p.accountIds, p.force);
+      case 'accounts.list': return link.configured ? link.accountViews() : hat.accountViews();
+      case 'accounts.limits': return link.configured ? link.limitViews() : hat.limitViews();
+      case 'accounts.refreshLimits': return link.configured ? link.refreshLimits(p.accountIds, p.force) : hat.refreshLimits(p.accountIds, p.force);
       case 'secrets.status': return secrets.status();
       case 'secrets.list': return secrets.list(p.profileId);
       case 'secrets.save': {
@@ -224,9 +248,10 @@ export async function startHubService(opts: HubServiceOptions) {
         return null;
       }
       case 'accounts.cancelSignIn': login(p.signInId, machineId); await hat.cancelAccountSignIn(p.signInId); logins.delete(p.signInId); return null;
-      case 'profiles.list': return profileViews(settings.profiles(), hat);
+      case 'profiles.list': return profileViews(settings.profiles(), houses());
       case 'profiles.save': {
-        const { saved, profiles } = saveSharedProfile(settings.profiles(), p);
+        if (link.configured) return saveLinkedProfile(p);
+        const { saved, profiles } = saveSharedProfile(settings.profiles(), { ...p, houseId: undefined });
         await hat.configureHouse(saved.id, accountSelection(p), async () => { await settings.setProfiles(profiles); });
         return profileViews([saved], hat)[0];
       }
@@ -234,6 +259,8 @@ export async function startHubService(opts: HubServiceOptions) {
         if (!settings.profiles().some((profile) => profile.id === p.id)) throw new HubError(`No profile ${p.id}`);
         if (secrets.inUse(p.id)) throw new HubError('This profile still has saved secrets. Delete them first.');
         if (trust.referenced(p.id)) throw new HubError('This profile is still used by projects or threads on a paired machine. Remove those references first.');
+        // Its house stays on the Sorting Hat, which other apps may use; only this hub's keys for it go.
+        if (link.configured) { await settings.setProfiles(settings.profiles().filter((profile) => profile.id !== p.id)); await link.forgetProfile(p.id); return null; }
         await hat.removeHouse(p.id, () => settings.setProfiles(settings.profiles().filter((profile) => profile.id !== p.id))); return null;
       }
       case 'machines.rename': await settings.renameMachine(p.machineId, p.name); return null;
@@ -242,8 +269,32 @@ export async function startHubService(opts: HubServiceOptions) {
       case 'models.favorite': await settings.setModelFavorite(p.profileId, p.model, p.favorite); return null;
       case 'harnesses.setTools': await settings.setHarnessTools(p.harnessId, p.tools); return null;
       case 'threadNaming.save': await settings.setThreadNaming(p); return settings.threadNaming();
+      case 'sortingHat.get': return link.view() ?? null;
+      case 'sortingHat.configure': return link.configure(p);
+      case 'sortingHat.disconnect': await link.disconnect(); return null;
       default: throw new HubError(`Unknown hub method ${method}`);
     }
+  }
+  /**
+   * A profile saved on a hub with a Sorting Hat of its own: its link to a house
+   * is checked against the Sorting Hat's houses, and an account selection sets
+   * that house's accounts there, for every app using it. A save that links
+   * another house leaves both houses' accounts as they are.
+   */
+  async function saveLinkedProfile(p: SaveProfileParams) {
+    if (p.houseId && !link.house(p.houseId)) throw new HubError('The Sorting Hat has no such house. Pick one from its list.');
+    const before = p.id ? settings.profiles().find((profile) => profile.id === p.id) : undefined;
+    const { saved, profiles } = saveSharedProfile(settings.profiles(), p);
+    const relinked = p.houseId !== undefined && (p.houseId ?? undefined) !== before?.houseId;
+    const selection = accountSelection(p);
+    const house = saved.houseId ? link.house(saved.houseId) : undefined;
+    if (!relinked && house) {
+      const changes = Object.fromEntries(Object.entries(selection).filter(([provider, ids]) => JSON.stringify(ids) !== JSON.stringify(house.accounts[provider as ProviderId])));
+      if (Object.keys(changes).length) await link.setHouseAccounts(house.id, changes);
+    } else if (!relinked && Object.values(selection).some((ids) => ids?.length)) throw new HubError('Link this profile to a house on the Sorting Hat before choosing its accounts.');
+    await settings.setProfiles(profiles);
+    if (relinked) { await link.forgetStale((id) => settings.profiles().find((profile) => profile.id === id)?.houseId); await link.poll(); }
+    return profileViews([saved], houses())[0];
   }
   const server = createServer((req, res) => { void handle(req, res).catch((error) => {
     if (res.headersSent) { res.destroy(); return; }
@@ -269,6 +320,8 @@ export async function startHubService(opts: HubServiceOptions) {
       const p = await readJson(req);
       if (typeof p.code !== 'string' || typeof p.machineId !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(p.machineId)) throw new HubError('Invalid pairing request');
       const paired = await trust.pair(p.code, p.machineId);
+      // Pairing again starts over, as for the hub's own model keys.
+      await link.forgetMachine(p.machineId);
       for (const [ws, owner] of owners) if (owner === p.machineId) ws.close(4001, 'Pairing renewed');
       closeRelay(p.machineId, 'Pairing renewed');
       return json(res, 200, { ...paired, protocol: HUB_PROTOCOL });
@@ -350,11 +403,11 @@ export async function startHubService(opts: HubServiceOptions) {
   const port = typeof address === 'object' && address ? address.port : opts.port!;
   const url = `http://${opts.host ?? '127.0.0.1'}:${port}`;
   mcp.setUrl(opts.publicUrl ?? url);
-  return { sortingHat: hat, settings, resources, secrets, trust, port, url, snapshot, createPairingCode: () => HubTrust.createCode(opts.home),
+  return { sortingHat: hat, sortingHatLink: link, settings, resources, secrets, trust, port, url, snapshot, createPairingCode: () => HubTrust.createCode(opts.home),
     async close() { closing = true; clearInterval(heartbeat); for (const ws of sockets.clients) ws.terminate(); for (const ws of relay.clients) ws.terminate();
       // server.close() drops only the connections idle right now; a request finishing later would keep its socket open until the client's keep-alive timeout (~3s).
       const sweep = setInterval(() => server.closeIdleConnections(), 25);
-      await new Promise<void>((resolve) => server.close(() => resolve())).finally(() => clearInterval(sweep)); sockets.close(); relay.close(); await queue; for (const grant of grants.values()) grant.release(); await modelsRefreshed; await hat.close(); await secrets.close(); await resources.close(); await settings.close(); await trust.close(); } };
+      await new Promise<void>((resolve) => server.close(() => resolve())).finally(() => clearInterval(sweep)); sockets.close(); relay.close(); await queue; for (const grant of grants.values()) grant.release(); await modelsRefreshed; await link.close(); await hat.close(); await secrets.close(); await resources.close(); await settings.close(); await trust.close(); } };
 }
 
 function json(res: ServerResponse, status: number, value: unknown) { res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify(value)); }

@@ -4,7 +4,9 @@ import { join } from 'node:path';
 import { JsonStore, privateDirectory, privateFile, privatePowerShell } from '@accio/persistence';
 import type { SecretSummary } from '@accio/protocol';
 
-type StoredSecret = SecretSummary & { ciphertext: string; nonce: string; tag: string };
+/** A value encrypted with the vault's key. */
+export type Sealed = { ciphertext: string; nonce: string; tag: string };
+type StoredSecret = SecretSummary & Sealed;
 export type SecretScope = { profileId: string; projectId: string | null; slot: string };
 export type SecretsAccess = Pick<SecretsVault, 'status' | 'list' | 'inUse' | 'current' | 'save' | 'remove' | 'bind' | 'resolve' | 'used' | 'onChanged' | 'close'>;
 export class SecretStoreError extends Error {}
@@ -85,6 +87,23 @@ export class SecretsVault {
     });
   }
   async close() { await this.store.idle(); }
+  /** Encrypts a hub-only value, such as the Sorting Hat's admin token, with the vault's key; `purpose` binds it to one use. */
+  async seal(purpose: string, value: string): Promise<Sealed> {
+    const key = await this.masterKey();
+    const nonce = randomBytes(12); const cipher = createCipheriv('aes-256-gcm', key, nonce);
+    cipher.setAAD(Buffer.from(`sealed\0${purpose}`));
+    const ciphertext = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()]).toString('base64');
+    return { ciphertext, nonce: nonce.toString('base64'), tag: cipher.getAuthTag().toString('base64') };
+  }
+  async unseal(purpose: string, sealed: Sealed): Promise<string> {
+    const key = await this.masterKey();
+    try {
+      const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(sealed.nonce, 'base64'));
+      decipher.setAAD(Buffer.from(`sealed\0${purpose}`));
+      decipher.setAuthTag(Buffer.from(sealed.tag, 'base64'));
+      return Buffer.concat([decipher.update(Buffer.from(sealed.ciphertext, 'base64')), decipher.final()]).toString('utf8');
+    } catch { throw new SecretStoreError('A saved hub credential could not be unlocked. Check the Hub key.'); }
+  }
   private assertUnique(profileId: string, slot: string, projectIds: string[], profileWide: boolean, except?: string) {
     if (this.records.some(r => r.id !== except && r.profileId === profileId && r.slot === slot &&
       (r.profileWide || profileWide || r.projectIds.some(id => projectIds.includes(id))))) {

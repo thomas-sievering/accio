@@ -15,6 +15,7 @@ under `docs/plans` record scope and history and may predate the implementation.
 | Remote thread support | `apps/worker/src/relay/relay.ts`, `packages/protocol/src/relay.ts` |
 | UI action availability | `apps/web/src/threads/useThreadAvailability.ts` |
 | Accounts, houses, hat keys, sign-in, limits, account in use and forwarding; model lists and usage | `apps/sorting-hat/src/sortingHat.ts`, `proxy.ts` (model lists in `models.ts`, usage in `usage.ts` and `usageTap.ts`); its HTTP management API in `api.ts` ([API.md](apps/sorting-hat/API.md)), its dashboard in `dashboard.ts` and `apps/sorting-hat/dashboard/` (Cloudflare Access check in `access.ts`) and standalone start in `standalone.ts` (the hub embeds it through `SortingHatApi` in its `index.ts`) |
+| A hub's own Sorting Hat: admin token, profiles' houses, hat keys per profile and machine | `apps/hub/src/sortingHatLink.ts`, its HTTP client `sortingHatClient.ts`; threads receive the key and address through `machine.modelKey` in `apps/worker/src/profiles/profiles.ts` |
 | Saved media | `apps/worker/src/threads/assets.ts`, web `threads/assetUrl.ts`, `useSavedAsset.ts` |
 | First-message handoff | web `threads/ThreadPane.tsx`, `sentImages.ts` |
 | App boundaries and roles | [README.md](README.md#how-it-fits-together) |

@@ -1,4 +1,4 @@
-import { DEFAULT_MODEL, accountInUse, fallbackEffort, findMentionedModel, imageRefusal, modelHandles, modelKey, readsImage, type HarnessModel, type ModelSelection, type ModelsState, type ModelView } from '@accio/protocol';
+import { DEFAULT_MODEL, accountInUse, noHouseMessage, fallbackEffort, findMentionedModel, imageRefusal, modelHandles, modelKey, readsImage, type HarnessModel, type ModelSelection, type ModelsState, type ModelView } from '@accio/protocol';
 import { HARNESSES, type SettingsAccess } from '@accio/hub';
 import type { Profiles } from '../profiles/profiles.js';
 import { UserError, type Broadcast, type Router } from '../rpc/router.js';
@@ -128,6 +128,8 @@ export class Models {
 
   /** The listed model a choice names, with the effort it accepts; it may be limited. */
   private find(profileId: string, choice: ModelSelection): { selection: ModelSelection; model: ModelView } {
+    const profile = this.profiles.profileView(profileId);
+    if (profile.house === null) throw new UserError(noHouseMessage(profile.name));
     const { effort, ...selection } = this.resolve(profileId, choice);
     const model = this.list(profileId).models.find((m) => m.harnessId === selection.harnessId && m.id === selection.modelId);
     if (!model) throw new UserError('This model is not available to this profile on this machine.');

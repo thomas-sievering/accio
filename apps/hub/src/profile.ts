@@ -3,9 +3,23 @@ import { PROVIDERS, type SharedProfile } from './sharedSettings.js';
 import type { AccountSelection, SortingHatApi } from '@accio/sorting-hat';
 import { HubError } from './errors.js';
 
-/** Each profile with its house's accounts; a profile links to the house of the same id. */
-export function profileViews(profiles: readonly SharedProfile[], hat: Pick<SortingHatApi, 'selectedAccounts' | 'accountIdInUse'>): ProfileView[] {
-  return profiles.map((p) => ({ ...p, providers: PROVIDERS.map((provider) => ({ ...provider, accounts: hat.selectedAccounts(p.id, provider.id), inUseId: hat.accountIdInUse(p.id, provider.id) })) }));
+/**
+ * Where profiles' houses are. `linked` is set for a Sorting Hat of the hub's own,
+ * where a profile links to the house it chose, or to none; without it a profile
+ * links to the embedded house of the same id.
+ */
+export type HouseSource = Pick<SortingHatApi, 'selectedAccounts' | 'accountIdInUse'> & {
+  linked?: (profile: SharedProfile) => { id: string; name: string } | null;
+};
+
+/** Each profile with its house's accounts. */
+export function profileViews(profiles: readonly SharedProfile[], hat: HouseSource): ProfileView[] {
+  return profiles.map(({ houseId: _houseId, ...p }) => {
+    const house = hat.linked ? hat.linked({ ...p, houseId: _houseId }) : undefined;
+    const id = house === undefined ? p.id : house?.id;
+    return { ...p, providers: PROVIDERS.map((provider) => ({ ...provider, accounts: id ? hat.selectedAccounts(id, provider.id) : [], inUseId: id ? hat.accountIdInUse(id, provider.id) : null })),
+      ...(house !== undefined ? { house } : {}) };
+  });
 }
 
 /** The accounts a save selects per provider; the ordered form wins over the single-account one. */
@@ -22,7 +36,8 @@ export function saveSharedProfile(profiles: readonly SharedProfile[], req: SaveP
   const base = req.name.toLowerCase().normalize('NFKD').replace(/\p{M}/gu, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'profile';
   let id = old?.id ?? base;
   for (let n = 2; !old && profiles.some((p) => p.id === id); n++) id = `${base}-${n}`;
-  const saved = { id, name: req.name };
+  const houseId = req.houseId === undefined ? old?.houseId : req.houseId ?? undefined;
+  const saved: SharedProfile = { id, name: req.name, ...(houseId ? { houseId } : {}) };
   if (profiles.some((p) => p.id !== id && p.name.toLowerCase() === req.name.toLowerCase())) throw new HubError(`A profile named ${req.name} already exists`);
   return { saved, profiles: old ? profiles.map((p) => p.id === id ? saved : p) : [...profiles, saved] };
 }
