@@ -2,7 +2,7 @@
 status: superseded by ADR 0014
 ---
 
-> Superseded: sign-in now finishes automatically through a browser callback (ADR 0014); the paste-code step is gone. Accio still runs its own hub.
+> Superseded: sign-in now finishes automatically through a browser callback (ADR 0014); the paste-code step is gone. Accounts and their sign-in moved from the hub to the Sorting Hat (ADR 0018).
 
 # accio runs its own hub, and you sign in with Claude inside accio
 

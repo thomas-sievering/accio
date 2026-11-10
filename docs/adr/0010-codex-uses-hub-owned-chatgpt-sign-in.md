@@ -1,3 +1,5 @@
+> Partly superseded: accounts, their sign-in and the account in use moved from the hub to the Sorting Hat (ADR 0018). What follows still describes how it works there.
+
 # Codex uses hub-owned ChatGPT sign-in and a profile-scoped model proxy
 
 Codex is bundled at a pinned version in `packages/codex`. Both the hub and the machine use its documented stdio app-server protocol. The hub uses only account and model methods; it never starts a thread or turn (ADR 0009). The machine uses thread/start, thread/resume, turn/start and turn/interrupt, and maps Codex item notifications into accio's transcript.

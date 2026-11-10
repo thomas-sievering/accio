@@ -1,3 +1,5 @@
+> Partly superseded: accounts, their sign-in and the account in use moved from the hub to the Sorting Hat (ADR 0018). What follows still describes how it works there.
+
 # Profiles select several accounts per provider, and the hub picks one per request
 
 A profile selects any number of accounts at each provider, in order, instead of at most one (ADR 0010). The hub stores them as one ordered list of account ids per profile. For each model request it picks the account in use among the signed-in ones (`apps/hub/src/accountChoice.ts`):

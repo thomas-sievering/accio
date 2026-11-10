@@ -9,11 +9,11 @@ A connected computer, together with its files and settings. It can run a client,
 _Avoid_: Environment, host, node
 
 **Hub**:
-The service that connects clients and workers, holds profiles, provider accounts and shared settings, trusts paired machines and clients, and forwards workers' model requests to the selected accounts. It never runs turns itself. Each client window uses one hub at a time, with multiple machines connected to that hub. A machine can save several independent hubs, such as Home server and Local dev; hubs have separate state and durable identities. It relays threads between machines without storing them.
+The service that connects clients and workers, holds profiles and shared settings, and trusts paired machines and clients. It holds no accounts: each profile links to a house on the Sorting Hat, and the hub hands threads hat keys for it. It never runs turns itself. Each client window uses one hub at a time, with multiple machines connected to that hub. A machine can save several independent hubs, such as Home server and Local dev; hubs have separate state and durable identities. It relays threads between machines without storing them.
 _Avoid_: Home machine, accio hub, accio proxy, CLI proxy, gateway, master, connector
 
 **Pairing**:
-Trusting a machine or client once so it can reach the hub and receive the shared settings. Unpairing removes that trust and its keys.
+Trusting a machine or client once so it can reach the hub and receive the shared settings. Unpairing removes that trust and its hat keys.
 _Avoid_: Linking, registering
 
 **Client**:
@@ -45,13 +45,13 @@ A PNG of a machine's Accio desktop window, which a thread takes through the app_
 _Avoid_: Capture (as a noun), snapshot
 
 **Shared settings**:
-Everything the hub stores and hands to every paired machine, so that you change it once from any client: the profiles with their providers and accounts, which project belongs to which profile, the harnesses, skill sources, MCP servers, and each machine's profile folders. A few of them apply to one machine only, such as its profile folders, but they are still stored on the hub. A client keeps only its own look and feel, such as the theme.
+Everything the hub stores and hands to every paired machine, so that you change it once from any client: the profiles with their houses on the Sorting Hat, which project belongs to which profile, the harnesses, skill sources, MCP servers, and each machine's profile folders. A few of them apply to one machine only, such as its profile folders, but they are still stored on the hub. A client keeps only its own look and feel, such as the theme.
 _Avoid_: Config, fleet, machine settings (for settings stored on the hub)
 
 ## Profiles
 
 **Profile**:
-A named side of your life that threads run under, such as "personal" or "work". You choose which profiles exist, and they are defined on the hub. It selects named accounts configured separately on the hub and reaches only those accounts through the hub. An account may be selected by several profiles. Each profile selects any number of Claude and ChatGPT accounts, in order per provider, and the hub picks the account in use among them.
+A named side of your life that threads run under, such as "personal" or "work". You choose which profiles exist, and they are defined on the hub. Each profile links to one house on the Sorting Hat, usually of the same name, and its threads reach only that house's accounts. Choosing a profile's accounts in Accio changes that house, for every app that uses it.
 _Avoid_: Account, environment, identity
 
 **Profile folder**:
@@ -86,16 +86,38 @@ _Avoid_: Default tools, native tools, harness tools
 What accio adds to a harness's own instructions for every turn: titled sections that describe accio's chat, such as how to show images inline. Each harness receives it in its own way. Claude Code gets it after its built-in system prompt and Codex as developer instructions. It is read-only and shown under Settings → System prompt.
 _Avoid_: Instructions, preamble, custom prompt
 
+## Sorting Hat
+
+**Sorting Hat**:
+The service that holds provider accounts and sends each model request to one of them. It knows nothing of Accio: any app with a hat key can use it, and Accio is one such app. Its dashboard shows usage, limits, accounts, houses and hat keys.
+_Avoid_: Proxy, gateway, CLI proxy, account service, hub (for this service)
+
+**House**:
+A named group of accounts on the Sorting Hat, ordered per provider, such as "personal" or "hrc". Several apps can use one house: Accio's personal profile and pi can both use "personal". An account may belong to several houses.
+_Avoid_: Pool, group, profile (on the Sorting Hat)
+
+**Hat key**:
+What an app presents to the Sorting Hat to send model requests through one house's accounts, and nothing else. Accio's threads get one per profile and machine; other apps get their own, so each can be revoked alone and its usage shown apart.
+_Avoid_: Model key, access key, API key, token, secret
+
 **Account**:
-One login at a provider, such as a personal Anthropic account. It has a custom name, is set up independently, and can be selected by profiles. An account at Anthropic is called a Claude account; an account at OpenAI is called a ChatGPT account.
+One login at a provider, such as a personal Anthropic account, held by the Sorting Hat. It has a custom name, is set up independently, and can belong to several houses. An account at Anthropic is called a Claude account; an account at OpenAI is called a ChatGPT account.
 
 **Account in use**:
-The account a profile's next request uses at a provider, which the hub chooses among the signed-in accounts it selects there. It skips accounts with 5% or less left in any window until that window resets, and otherwise prefers the account whose weekly allowance resets soonest; the profile's order breaks ties. It can change during a thread.
+The account a house's next request uses at a provider, which the Sorting Hat chooses among its signed-in accounts there. It skips accounts with 5% or less left in any window until that window resets, and otherwise prefers the account whose weekly allowance resets soonest; the house's order breaks ties. It can change during a thread.
 _Avoid_: Login, sign-in (as a noun for the account), subscription, provider instance
 
 **Sign-in**:
-Signing an account in on the provider's page. Claude and ChatGPT finish automatically after browser approval, using a short-lived callback on the browser's PC. Provider credentials remain on the initiating hub. Signing out clears its credentials while preserving its name and profile selections.
+Signing an account in on the provider's page, from Accio or the Sorting Hat's dashboard. Claude and ChatGPT finish automatically after browser approval. Provider credentials stay on the Sorting Hat. Signing out clears its credentials while preserving its name and houses.
 _Avoid_: Login (as a verb or action), auth, connect
+
+**Usage**:
+The tokens a house's requests used, per hat key, account and model over time, as the Sorting Hat counted them. Not the same as limits, which the provider reports.
+_Avoid_: Consumption, spend, quota
+
+**Limits**:
+The allowance windows and reset times a provider reports for an account, read by the Sorting Hat with the account's own credentials. Houses that share an account share one allowance. Shown in Accio from the sidebar, the composer indicator and account settings, and on the Sorting Hat's dashboard.
+_Avoid_: Quota, usage, rate limit (in UI text)
 
 ## Work
 
@@ -112,7 +134,7 @@ A separate Git working copy and branch allocated to one thread. New threads in c
 _Avoid_: Sandbox, project (for the thread's working copy)
 
 **Thread**:
-A durable conversation with a harness, optionally attached to a project's checkout and owned worktree. It exists from its first message on. It keeps its starting hub and profile; its model can change, including to another harness through a handoff. Accounts follow the profile's current selections. A No project thread runs under a profile without a project checkout.
+A durable conversation with a harness, optionally attached to a project's checkout and owned worktree. It exists from its first message on. It keeps its starting hub and profile; its model can change, including to another harness through a handoff. Accounts follow its profile's house. A No project thread runs under a profile without a project checkout.
 _Avoid_: Chat, session, agent, conversation
 
 **Draft**:
@@ -120,7 +142,7 @@ What a composer holds before it sends: text, Pasted text and image attachments. 
 _Avoid_: Unsent thread, pending thread
 
 **Turn**:
-Work by the harness until it finishes or is interrupted, started by a user message, Resume or a delivery request. Each turn uses the profile's account in use for that harness's provider. Steering can add messages during the same turn.
+Work by the harness until it finishes or is interrupted, started by a user message, Resume or a delivery request. Each turn uses the account in use of the profile's house for that harness's provider. Steering can add messages during the same turn.
 _Avoid_: Run, request
 
 **Queued message**:
@@ -234,21 +256,17 @@ _Avoid_: Onboarding, auto-config
 A group of threads in the sidebar apart from the open list: Working, Snoozed and Settled. Working holds threads in progress without you: a running turn, or a delivery GitHub is carrying. A thread comes back to the top of the open list when it finishes or needs you, such as for a secret, a review or a manual merge.
 _Avoid_: Folder, inbox, tab
 
-## Secrets and limits
+## Secrets and hub connections
 
 **Secret**:
 A named token a thread can request through the `request_secret` accio tool. Values stay write-only on the hub, encrypted, and reach the harness only as a temporary file for one turn.
-_Avoid_: Credential (for the hub's provider tokens), key, password
+_Avoid_: Credential (for provider tokens), key, hat key, password
 
 **Save & use**:
 Answering a secret request by keeping the value on the hub for the current profile, project and purpose, so later requests for that purpose are answered automatically.
 
 **Use once**:
 Answering a secret request for the current turn only; nothing is stored.
-
-**Limits**:
-The allowance windows and reset times a provider reports for an account, read by the hub with the account's own credentials. Profiles that select the same account share one allowance. Shown from the sidebar, the composer indicator and account settings.
-_Avoid_: Quota, usage, rate limit (in UI text)
 
 **Hub connection**:
 A machine's saved record of one hub: its name, URL and server-only credential, with its own local workspace under `hubs/<hub-id>`. A window selects one connection at a time.

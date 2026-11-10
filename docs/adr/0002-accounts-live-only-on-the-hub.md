@@ -1,3 +1,9 @@
+---
+status: superseded by ADR 0018
+---
+
+> Superseded: accounts now live in the Sorting Hat, a separate service; threads get hat keys bound to a house and a machine (ADR 0018).
+
 # Accounts live only on the hub
 
 Threads never use a provider login stored on the machine they run on. Each profile reaches its accounts only through the hub (see ADR 0001 for which computer runs it). Machines hold only the hub's address and their pairing credential, which lets every machine run every profile without signing in again.
