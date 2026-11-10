@@ -21,6 +21,7 @@ import { anthropicLimits, openaiLimits, retryAfterMs } from './providerLimits.js
 import { chooseAccount } from './accountChoice.js';
 import type { Forwarding } from './proxy.js';
 import { ClaudeModelLists, type AnthropicModel } from './models.js';
+import { USAGE_FILE, UsageLedger, type UsageEntry, type UsageQuery, type UsageReport } from './usage.js';
 
 /** Per provider, the accounts a house uses in order; a provider left out keeps its accounts. */
 export type AccountSelection = Partial<Record<ProviderId, string[]>>;
@@ -52,6 +53,7 @@ const HOUSE_ID = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 export class SortingHat implements Forwarding {
   private readonly limits: AccountLimits;
   private readonly claudeModelLists: ClaudeModelLists;
+  private readonly usage: UsageLedger;
   private store: JsonStore<HatState>;
   private pending = new Map<string, PendingSignIn & { accountId: string; startedAt: number }>();
   private refreshing = new Map<string, Promise<ClaudeAccount>>();
@@ -66,6 +68,7 @@ export class SortingHat implements Forwarding {
     private openai: OpenAIAuth = new OpenAIAuth(dir),
   ) {
     this.store = new JsonStore(join(dir, STATE_FILE), emptyState);
+    this.usage = new UsageLedger(join(dir, USAGE_FILE));
     this.limits = new AccountLimits(() => this.accountViews(), (id, signal) => this.readAccountLimits(id, signal));
     this.claudeModelLists = new ClaudeModelLists(fetchImpl, (id, force) => this.accountAccessToken(id, force));
   }
@@ -76,6 +79,7 @@ export class SortingHat implements Forwarding {
 
   async load() {
     await this.store.commit(await loadState(this.store.file));
+    await this.usage.load();
   }
 
   // Houses
@@ -340,7 +344,8 @@ export class SortingHat implements Forwarding {
     return results.some(Boolean);
   }
 
-  async openaiCredentials(houseId: string, force = false) {
+  /** The house's ChatGPT account in use (`accountId`), its token and ChatGPT's own id for it. */
+  async openaiCredentials(houseId: string, force = false): Promise<{ accountId: string; accessToken: string; chatgptAccountId: string } | null> {
     this.requireHouse(houseId);
     // An automatic switch while refreshing moves on to the new account, once.
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -349,7 +354,7 @@ export class SortingHat implements Forwarding {
       if (!account) return null;
       const credentials = await this.openai.credentials(account, force);
       // A sign-out or account switch during refresh must not unlock the previous account.
-      if (this.accountIdInUse(houseId, 'openai') === id && this.accounts.find((a) => a.id === id)?.openai === account) return credentials;
+      if (this.accountIdInUse(houseId, 'openai') === id && this.accounts.find((a) => a.id === id)?.openai === account) return { accountId: id!, accessToken: credentials.accessToken, chatgptAccountId: credentials.accountId };
     }
     return null;
   }
@@ -446,8 +451,19 @@ export class SortingHat implements Forwarding {
     return anthropicLimits(await response.json());
   }
 
+  /** Counts one model request's tokens; never throws into forwarding. */
+  recordUsage(entry: UsageEntry) {
+    try { this.usage.record(entry); } catch (error) { console.error('[sorting-hat] could not record usage', (error as Error).message); }
+  }
+
+  /** GLOSSARY: Usage, for a time range, grouped and split as asked. */
+  usageReport(query?: UsageQuery): UsageReport {
+    return this.usage.report(query);
+  }
+
   async close(): Promise<void> {
     await this.limits.close();
+    await this.usage.close();
     await this.store.idle();
     await this.openai.close();
   }

@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { startStandalone } from './standalone.js';
 import { FakeCodex, fakeAnthropicApi, fakeAnthropicAuth, fakeChatGPT } from './testing/fakeProviders.js';
 
@@ -65,6 +65,8 @@ it.skipIf(!await installed('claude'))('runs a real Claude Code turn with a hat k
   const turns = anthropic.seen.filter((s) => s.url.startsWith('/v1/messages'));
   expect(turns.length).toBeGreaterThan(0);
   expect(turns.every((s) => s.headers.authorization === 'Bearer token-1' && !JSON.stringify(s.headers).includes(key))).toBe(true);
+  // Claude Code's streamed turns were counted from their message events.
+  await vi.waitFor(() => expect(hat.hat.usageReport({ where: { provider: 'anthropic' } }).totals).toMatchObject({ requests: turns.filter((s) => !s.url.includes('count_tokens')).length, outputTokens: 8 * turns.filter((s) => !s.url.includes('count_tokens')).length }));
 }, 120_000);
 
 it('runs a real Codex turn through the ChatGPT route with a hat key', async () => {
@@ -83,4 +85,6 @@ it('runs a real Codex turn through the ChatGPT route with a hat key', async () =
   expect(stdout).toContain('Hello from the fake ChatGPT.');
   expect(chatgpt.seen.length).toBeGreaterThan(0);
   expect(chatgpt.seen.every((s) => s.headers.get('chatgpt-account-id') === 'chatgpt-cli' && s.headers.get('authorization') !== `Bearer ${key}`)).toBe(true);
+  // Codex's streamed turn was counted from its response.completed event.
+  await vi.waitFor(() => expect(hat.hat.usageReport({ where: { provider: 'openai' } }).totals).toMatchObject({ requests: chatgpt.seen.length, inputTokens: 6 * chatgpt.seen.length, outputTokens: 8 * chatgpt.seen.length }));
 }, 120_000);

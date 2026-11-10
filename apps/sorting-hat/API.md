@@ -30,6 +30,7 @@ Times are ISO 8601 strings in UTC.
   accounts and nothing else. A house can have many; each can be renamed and
   revoked on its own.
 - **Limits**: the allowance windows and reset times a provider reports for an account.
+- **Usage**: the tokens a house's requests used, per hat key, account and model over time, as the Sorting Hat counted them.
 
 ## Authentication
 
@@ -195,6 +196,62 @@ share one allowance.
 
 Each account is read at most about once a minute unless `force` is set, and never
 more than once every 5 seconds.
+
+### Usage
+
+The tokens model requests used, as the providers reported them, counted per hour,
+hat key, house, account and model. Not the same as limits.
+
+```
+UsageReport = { from: string | null, to: string | null, bucket: "hour" | "day" | null,
+                groupBy: Dimension[], rows: UsageRow[], totals: Totals }
+UsageRow    = Totals & { start?, houseId?, hatKeyId?, accountId?, model?, providerId? }
+Totals      = { requests, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens }
+Dimension   = "house" | "hatKey" | "account" | "model" | "provider"
+```
+
+| Method and path | Answer |
+| --- | --- |
+| `GET /api/usage?from=&to=&groupBy=&bucket=&house=&hatKey=&account=&model=&provider=` | `UsageReport` |
+
+- `from` and `to` are times; a bucket counts when it starts at or after `from`
+  and before `to`. Either may be left out.
+- `groupBy` splits the totals by any of the dimensions; repeat it or separate
+  them with commas (`groupBy=house,model`). A row has a field only for each
+  dimension it is grouped by. Without `groupBy`, there is one row.
+- `bucket` (`hour` or `day`, in UTC) splits them by time as well; each row then
+  has `start`. Rows are in order of `start`, then by most tokens.
+- `house`, `hatKey`, `account`, `model` and `provider` keep only usage with
+  that id. `hatKey=embedded` is the usage of an app embedding the Sorting Hat
+  (Accio's hub), whose rows have `hatKeyId: null`.
+- `totals` sums every row.
+
+What is counted:
+
+- **Claude**: `POST /v1/messages`, from `message_start` and `message_delta` in
+  a stream (the last value of each field) or `usage` in a whole reply.
+  `inputTokens` is `input_tokens`, `cacheReadTokens` `cache_read_input_tokens`
+  and `cacheWriteTokens` `cache_creation_input_tokens`.
+- **ChatGPT**: `POST /openai/responses` and `/openai/responses/compact`, from
+  the `response.completed` (or `response.failed`, `response.incomplete`) event
+  in a stream, or `usage` in a whole answer. Its `input_tokens` counts cached
+  input too, so `inputTokens` is `input_tokens` less
+  `input_tokens_details.cached_tokens`, which is `cacheReadTokens`.
+  `outputTokens` includes reasoning. ChatGPT reports no cache writes.
+- The model is the one the provider reported, otherwise the one the request
+  asked for. The account is the one whose credential sent the request that
+  answered.
+- Every answered request counts once in `requests`, also when the provider
+  refused it or it was cut off; its tokens are whatever was reported until
+  then, possibly none. A request resent with a refreshed token or the next
+  account counts once. Reading the usage never holds back or changes what is
+  forwarded.
+
+Usage is kept in `<state dir>/usage.json`, written about 10 seconds after a
+change and on shutdown, so a crash loses at most the last few seconds. Hours
+older than 90 days are merged into days. A year of busy use (ten combinations of
+hat key, account and model, each busy 16 hours a day) stays under 3 MB.
+Usage stays after its hat key, house or account is deleted.
 
 ## Model routes
 

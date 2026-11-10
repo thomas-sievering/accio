@@ -42,11 +42,14 @@ export function fakeAnthropicAuth() {
 
 /**
  * Anthropic's API: records each request, refuses tokens in `limited` with 429,
- * and otherwise streams a complete Messages reply that Claude Code accepts.
+ * and otherwise streams a complete Messages reply that Claude Code accepts,
+ * or answers it whole when the request has `"stream": false`. With `cutOff`
+ * set, a stream stops after its first event.
  */
 export async function fakeAnthropicApi() {
   const seen: { url: string; headers: IncomingHttpHeaders; body: string }[] = [];
   const limited = new Set<string>();
+  const control = { cutOff: false };
   const server = createServer(async (req, res) => {
     let body = '';
     for await (const c of req) body += c;
@@ -57,23 +60,35 @@ export async function fakeAnthropicApi() {
     }
     if (req.url?.startsWith('/v1/messages/count_tokens')) return void res.writeHead(200, { 'content-type': 'application/json' }).end('{"input_tokens":10}');
     if (!req.url?.startsWith('/v1/messages')) return void res.writeHead(200, { 'content-type': 'application/json' }).end('{}');
-    let model = 'claude-test';
-    try { model = JSON.parse(body).model ?? model; } catch {}
+    let request: { model?: string; stream?: boolean } = {};
+    try { request = JSON.parse(body); } catch {}
+    const model = request.model ?? 'claude-test';
+    if (request.stream === false) {
+      return void res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ id: `msg_${seen.length}`, type: 'message', role: 'assistant', model,
+        content: [{ type: 'text', text: 'Hello from the fake provider.' }], stop_reason: 'end_turn', stop_sequence: null, usage: ANTHROPIC_USAGE }));
+    }
     res.writeHead(200, { 'content-type': 'text/event-stream' });
-    res.end(anthropicReply(model, `msg_${seen.length}`, 'Hello from the fake provider.'));
+    const reply = anthropicReply(model, `msg_${seen.length}`, 'Hello from the fake provider.');
+    if (!control.cutOff) return void res.end(reply);
+    res.write(reply.slice(0, reply.indexOf('\n\n') + 2));
+    setTimeout(() => res.destroy(), 20);
   });
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   return {
     url: `http://127.0.0.1:${(server.address() as { port: number }).port}`,
     seen,
     limited,
+    control,
     close: () => new Promise<void>((r) => { server.close(() => r()); server.closeAllConnections(); }),
   };
 }
 
+/** What every fake Claude reply used, whole: the stream reports output 1 at its start and 8 at its end. */
+export const ANTHROPIC_USAGE = { input_tokens: 10, cache_creation_input_tokens: 4, cache_read_input_tokens: 6, output_tokens: 8 };
+
 export function anthropicReply(model: string, id: string, text: string) {
   const events = [
-    { type: 'message_start', message: { id, type: 'message', role: 'assistant', model, content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 10, output_tokens: 0 } } },
+    { type: 'message_start', message: { id, type: 'message', role: 'assistant', model, content: [], stop_reason: null, stop_sequence: null, usage: { ...ANTHROPIC_USAGE, output_tokens: 1 } } },
     { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
     { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text } },
     { type: 'content_block_stop', index: 0 },
@@ -83,27 +98,36 @@ export function anthropicReply(model: string, id: string, text: string) {
   return events.map((e) => `event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join('');
 }
 
-/** ChatGPT's Responses API (as Codex calls it): records each request and streams a completed reply. */
+/**
+ * ChatGPT's Responses API (as Codex calls it): records each request and streams
+ * a completed reply; compaction answers whole, with its usage.
+ */
 export function fakeChatGPT() {
   const seen: { url: string; headers: Headers; body: string }[] = [];
   const limited = new Set<string>();
   const fetch: Fetch = async (url, init) => {
     const headers = new Headers(init?.headers);
-    seen.push({ url: String(url), headers, body: new TextDecoder().decode(init?.body as Uint8Array) });
+    const body = new TextDecoder().decode(init?.body as Uint8Array);
+    seen.push({ url: String(url), headers, body });
     if (limited.has(headers.get('chatgpt-account-id') ?? '')) return Response.json({ error: { type: 'usage_limit_reached' } }, { status: 429 });
-    return new Response(responsesReply('Hello from the fake ChatGPT.'), { headers: { 'content-type': 'text/event-stream' } });
+    if (String(url).endsWith('/responses/compact')) {
+      return Response.json({ output: [{ type: 'compaction', encrypted_content: 'summary' }], usage: { input_tokens: 30, input_tokens_details: { cached_tokens: 20 }, output_tokens: 5, total_tokens: 35 } });
+    }
+    let model = 'gpt-test';
+    try { model = JSON.parse(body).model ?? model; } catch {}
+    return new Response(responsesReply('Hello from the fake ChatGPT.', model), { headers: { 'content-type': 'text/event-stream' } });
   };
   return { fetch, seen, limited };
 }
 
-export function responsesReply(text: string) {
+export function responsesReply(text: string, model = 'gpt-test') {
   const message = { id: 'msg_1', type: 'message', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text, annotations: [] }] };
   const events = [
     { type: 'response.created', response: { id: 'resp_1', status: 'in_progress', output: [] } },
     { type: 'response.output_item.added', output_index: 0, item: { ...message, status: 'in_progress', content: [] } },
     { type: 'response.output_text.delta', output_index: 0, content_index: 0, item_id: 'msg_1', delta: text },
     { type: 'response.output_item.done', output_index: 0, item: message },
-    { type: 'response.completed', response: { id: 'resp_1', status: 'completed', output: [message], usage: { input_tokens: 10, output_tokens: 8, total_tokens: 18, input_tokens_details: { cached_tokens: 0 }, output_tokens_details: { reasoning_tokens: 0 } } } },
+    { type: 'response.completed', response: { id: 'resp_1', model, status: 'completed', output: [message], usage: { input_tokens: 10, output_tokens: 8, total_tokens: 18, input_tokens_details: { cached_tokens: 4 }, output_tokens_details: { reasoning_tokens: 0 } } } },
   ];
   return events.map((e) => `event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join('');
 }

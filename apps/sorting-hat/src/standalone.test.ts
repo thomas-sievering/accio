@@ -7,7 +7,7 @@ import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { startStandalone } from './standalone.js';
-import { FakeCodex, fakeAnthropicApi, fakeAnthropicAuth, fakeChatGPT } from './testing/fakeProviders.js';
+import { FakeCodex, anthropicReply, fakeAnthropicApi, fakeAnthropicAuth, fakeChatGPT, responsesReply } from './testing/fakeProviders.js';
 
 const cleanup: (() => Promise<unknown>)[] = [];
 afterEach(async () => { for (const c of cleanup.splice(0).reverse()) await c(); });
@@ -19,8 +19,8 @@ async function tempDir() {
 }
 
 /** The standalone Sorting Hat, in this process, with every provider faked. */
-async function start() {
-  const dir = await tempDir();
+async function start(dir?: string) {
+  dir ??= await tempDir();
   const auth = fakeAnthropicAuth();
   const anthropic = await fakeAnthropicApi();
   const chatgpt = fakeChatGPT();
@@ -179,6 +179,64 @@ describe('the standalone Sorting Hat', () => {
     // A house with only First has nowhere to go: the provider's 429 reaches the app.
     expect((await claude(onlyKey.secret)).status).toBe(429);
     expect((await api('GET', `houses/${only.id}`)).inUse.anthropic).toBe(first.id);
+  });
+
+  it('records usage per hat key, house, account and model, streamed or not, and keeps it across a restart', async () => {
+    const { dir, hat, api, admin, claude, responses, anthropic, codex, claudeAccount } = await start();
+    const mine = await claudeAccount('Mine');
+    const gpt = await api('POST', 'accounts', { name: 'ChatGPT', providerId: 'openai' });
+    const device = await api('POST', `accounts/${gpt.id}/sign-in`, { flow: 'device' });
+    await codex.latest.complete('chatgpt-personal');
+    await api('GET', `sign-ins/${device.signInId}`);
+    const house = await api('POST', 'houses', { name: 'Personal', accounts: { anthropic: [mine.id], openai: [gpt.id] } });
+    const key = await api('POST', 'hat-keys', { houseId: house.id, name: 'pi' });
+    const embedded = await hat.hat.ensureHouse(house.id);
+    const post = (path: string, body: unknown) => fetch(`${hat.url}${path}`, { method: 'POST', headers: { authorization: `Bearer ${key.secret}`, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+
+    // Streamed and whole Claude replies; count_tokens uses none.
+    // What the caller gets is exactly what the provider sent.
+    expect(await (await claude(key.secret)).text()).toBe(anthropicReply('claude-test', 'msg_1', 'Hello from the fake provider.'));
+    const whole = await post('/v1/messages', { model: 'claude-test', stream: false, messages: [] });
+    expect(await whole.json()).toMatchObject({ usage: { input_tokens: 10 } });
+    expect((await post('/v1/messages/count_tokens', { model: 'claude-test', messages: [] })).status).toBe(200);
+    // The embedding app's key counts apart.
+    expect((await (await claude(embedded)).text()).length).toBeGreaterThan(0);
+    // A stream cut off after message_start counts what it reported; the caller sees it cut off too.
+    anthropic.control.cutOff = true;
+    const cut = await claude(key.secret);
+    await expect(cut.text()).rejects.toThrow();
+    anthropic.control.cutOff = false;
+    // A refused request counts as a request without tokens.
+    anthropic.limited.add('token-1');
+    expect((await claude(key.secret)).status).toBe(429);
+    anthropic.limited.delete('token-1');
+    // ChatGPT: a Responses stream and a compaction.
+    expect(await (await responses(key.secret)).text()).toBe(responsesReply('Hello from the fake ChatGPT.'));
+    expect(await (await post('/openai/responses/compact', { model: 'gpt-test', input: [] })).json()).toMatchObject({ usage: { input_tokens: 30 } });
+
+    const usage = async (query = '') => api('GET', `usage${query}`);
+    await vi.waitFor(async () => expect((await usage()).totals.requests).toBe(7));
+    const expected = [
+      { providerId: 'anthropic', accountId: mine.id, model: 'claude-test', requests: 5, inputTokens: 40, outputTokens: 25, cacheReadTokens: 24, cacheWriteTokens: 16 },
+      { providerId: 'openai', accountId: gpt.id, model: 'gpt-test', requests: 2, inputTokens: 16, outputTokens: 13, cacheReadTokens: 24, cacheWriteTokens: 0 },
+    ];
+    expect((await usage('?groupBy=provider&groupBy=account,model')).rows).toEqual(expected);
+    expect((await usage('?groupBy=hatKey')).rows).toEqual([
+      expect.objectContaining({ hatKeyId: key.id, requests: 6 }),
+      expect.objectContaining({ hatKeyId: null, requests: 1, inputTokens: 10, outputTokens: 8 }),
+    ]);
+    expect((await usage('?hatKey=embedded')).totals).toMatchObject({ requests: 1 });
+    const hour = new Date(Math.floor(Date.now() / 3_600_000) * 3_600_000).toISOString().replace('.000Z', 'Z');
+    expect((await usage('?bucket=hour&groupBy=house')).rows).toEqual([expect.objectContaining({ start: hour, houseId: 'personal', requests: 7 })]);
+    expect((await usage(`?from=${encodeURIComponent(new Date(Date.now() + 3_600_000).toISOString())}`)).totals.requests).toBe(0);
+    expect(await admin('GET', 'usage?groupBy=colour')).toMatchObject({ status: 400 });
+    expect(await admin('GET', 'usage?from=yesterday')).toMatchObject({ status: 400 });
+    expect(await admin('GET', 'usage?bucket=week')).toMatchObject({ status: 400 });
+
+    // Restarted on the same state, the Sorting Hat still has it.
+    await hat.close();
+    const again = await start(dir);
+    expect((await again.api('GET', 'usage?groupBy=provider,account,model')).rows).toEqual(expected);
   });
 
   it('lists each house’s models in Anthropic’s and OpenAI’s shapes, cached per account', async () => {

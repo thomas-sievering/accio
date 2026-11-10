@@ -4,6 +4,7 @@ import { SIGN_IN_TTL_MS } from './claudeOAuth.js';
 import { HatError } from './errors.js';
 import type { AccountSelection, SortingHat } from './sortingHat.js';
 import type { AccountView, ProviderId } from './types.js';
+import { USAGE_DIMENSIONS, type UsageDimension, type UsageQuery } from './usage.js';
 
 /** Where the management API lives; everything else on the server is a model route. */
 export const API_PREFIX = '/api/';
@@ -14,8 +15,8 @@ type Reply = { status: number; body?: unknown };
 type Route = (params: string[], body: any, query: URLSearchParams) => Promise<Reply> | Reply;
 
 /**
- * The management API (API.md): accounts and their sign-in, houses, hat keys
- * and limits, as JSON, for whoever holds the admin token.
+ * The management API (API.md): accounts and their sign-in, houses, hat keys,
+ * limits and usage, as JSON, for whoever holds the admin token.
  */
 export function manageSortingHat(hat: SortingHat, adminToken: string) {
   const admin = digest(adminToken);
@@ -105,6 +106,9 @@ export function manageSortingHat(hat: SortingHat, adminToken: string) {
       if (b.accountIds !== undefined && (!Array.isArray(b.accountIds) || b.accountIds.some((a: unknown) => typeof a !== 'string'))) throw new HatError('accountIds must be a list of account ids.');
       return hat.refreshLimits(b.accountIds, b.force === true).then(() => ok(hat.limitViews()));
     },
+
+    // Usage
+    'GET usage': (_, __, q) => ok(hat.usageReport(usageQuery(q))),
   };
 
   function signInProvider(id: string) {
@@ -159,6 +163,31 @@ function accountSelection(value: unknown): AccountSelection {
     selection[provider as ProviderId] = ids;
   }
   return selection;
+}
+
+/**
+ * `from` and `to` are times; `groupBy` and `bucket` say how to split; house,
+ * hatKey, account, model and provider filter (hatKey `embedded` is the
+ * embedding app's). `groupBy` may repeat or list several, comma-separated.
+ */
+function usageQuery(q: URLSearchParams): UsageQuery {
+  const time = (field: string) => {
+    const value = q.get(field);
+    if (value === null || value === '') return undefined;
+    const ms = Date.parse(value);
+    if (Number.isNaN(ms)) throw new HatError(`${field} must be a time, such as 2026-11-01T00:00:00Z.`);
+    return ms;
+  };
+  const groupBy = q.getAll('groupBy').flatMap((g) => g.split(',')).map((g) => g.trim()).filter(Boolean);
+  for (const g of groupBy) if (!USAGE_DIMENSIONS.includes(g as UsageDimension)) throw new HatError(`groupBy must be among ${USAGE_DIMENSIONS.join(', ')}.`);
+  const bucket = q.get('bucket') || undefined;
+  if (bucket !== undefined && bucket !== 'hour' && bucket !== 'day') throw new HatError('bucket must be hour or day.');
+  const where: UsageQuery['where'] = {};
+  for (const d of USAGE_DIMENSIONS) {
+    const value = q.get(d);
+    if (value !== null) where[d] = d === 'hatKey' && value === 'embedded' ? null : value;
+  }
+  return { from: time('from'), to: time('to'), groupBy: groupBy as UsageDimension[], bucket, where };
 }
 
 /** The hub's rule for Claude's browser callback: a localhost page on the caller's own machine. */

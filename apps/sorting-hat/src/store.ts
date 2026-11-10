@@ -17,6 +17,8 @@ export class JsonFile<T> {
     readonly path: string,
     private fallback: () => T,
     private mode = 0o600,
+    /** Indentation, as JSON.stringify takes it; 0 writes one line. */
+    private space = 2,
   ) {}
 
   async read(): Promise<T> {
@@ -49,7 +51,7 @@ export class JsonFile<T> {
   }
 
   write(value: T): Promise<void> {
-    const body = JSON.stringify(value, null, 2);
+    const body = JSON.stringify(value, null, this.space);
     const run = async () => {
       await mkdir(dirname(this.path), { recursive: true, mode: 0o700 });
       const tmp = `${this.path}.${process.pid}.${randomUUID()}.tmp`;

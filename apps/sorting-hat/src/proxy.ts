@@ -2,6 +2,8 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { Readable } from 'node:stream';
 import { anthropicList, openaiList, openaiModel, type AnthropicModel } from './models.js';
 import type { CodexModel } from './openaiAuth.js';
+import type { UsageEntry } from './usage.js';
+import { usageTap, type Reported } from './usageTap.js';
 import type { Fetch, ProviderId } from './types.js';
 
 const ANTHROPIC_API = 'https://api.anthropic.com';
@@ -33,7 +35,7 @@ export interface Forwarding {
   /** The house's Claude account in use and its token, refreshed first when close to expiry or forced. */
   claudeAccess(houseId: string, force?: boolean): Promise<{ accountId: string; token: string } | null>;
   /** The house's ChatGPT account in use's credentials, refreshed first when close to expiry or forced. */
-  openaiCredentials(houseId: string, force?: boolean): Promise<{ accessToken: string; accountId: string } | null>;
+  openaiCredentials(houseId: string, force?: boolean): Promise<{ accountId: string; accessToken: string; chatgptAccountId: string } | null>;
   accountIdInUse(houseId: string, providerId: ProviderId): string | null;
   /** Keeps the limits behind the account choice current while the house is in use. */
   noteRequest(houseId: string, providerId: ProviderId): void;
@@ -43,6 +45,8 @@ export interface Forwarding {
   claudeModels(houseId: string): Promise<AnthropicModel[]>;
   /** The models the house's ChatGPT account in use offers. */
   codexModels(houseId: string): CodexModel[];
+  /** Counts one model request's tokens. */
+  recordUsage(entry: UsageEntry): void;
 }
 
 export type ForwardingOptions = { accounts: Forwarding; upstream?: string; fetchImpl?: Fetch; openaiUpstream?: string; openaiFetch?: Fetch };
@@ -71,8 +75,9 @@ export function forwardModelRequests({ accounts, upstream = ANTHROPIC_API, fetch
     if (!house) return sendError(res, 401, 'authentication_error', 'Unknown or revoked hat key');
     const listing = modelListing(req.url ?? '/');
     if (listing) return listModels(req, res, house.id, listing);
-    if (req.url?.startsWith('/openai/')) return handleOpenAI(req, res, house.id);
+    if (req.url?.startsWith('/openai/')) return handleOpenAI(req, res, house);
 
+    const at = Date.now();
     accounts.noteRequest(house.id, 'anthropic');
     let access = await accounts.claudeAccess(house.id);
     if (!access) return sendError(res, 401, 'authentication_error', `House ${house.id} has no signed-in Claude account`);
@@ -96,16 +101,19 @@ export function forwardModelRequests({ accounts, upstream = ANTHROPIC_API, fetch
     if (upstreamRes.status === 429 && await accounts.recheckAfterLimit(house.id, 'anthropic', access.accountId)) {
       // This account ran out; the request moves to the house's next account once.
       const next = await accounts.claudeAccess(house.id);
-      if (next) { await upstreamRes.body?.cancel(); upstreamRes = await send(next.token); }
+      if (next) { await upstreamRes.body?.cancel(); upstreamRes = await send(next.token); access = next; }
     }
 
-    const headers: Record<string, string> = {};
-    upstreamRes.headers.forEach((v, k) => {
-      if (!DROP_RESPONSE.has(k)) headers[k] = v;
-    });
-    res.writeHead(upstreamRes.status, headers);
-    if (!upstreamRes.body) return void res.end();
-    Readable.fromWeb(upstreamRes.body as import('node:stream/web').ReadableStream).pipe(res);
+    // Messages are counted; other paths, such as count_tokens, use no tokens.
+    const counted = req.method === 'POST' && (req.url ?? '').split('?')[0] === '/v1/messages';
+    const accountId = access.accountId;
+    relay(upstreamRes, res, new Set(), counted ? usageTap('anthropic', upstreamRes.headers.get('content-type'), (reported) =>
+      record({ at, providerId: 'anthropic', house, accountId, body, reported })) : undefined);
+  }
+
+  /** Counts a request's usage once its response is done, failed or cut off. */
+  function record({ at, providerId, house, accountId, body, reported }: { at: number; providerId: ProviderId; house: { id: string; hatKeyId: string | null }; accountId: string; body: Buffer; reported: Reported }) {
+    accounts.recordUsage({ at, providerId, houseId: house.id, hatKeyId: house.hatKeyId, accountId, model: reported.model ?? requestedModel(body), tokens: reported.tokens });
   }
 
   /** The house's models, answered here rather than forwarded: each provider's list shape, for the account in use. */
@@ -125,9 +133,11 @@ export function forwardModelRequests({ accounts, upstream = ANTHROPIC_API, fetch
     res.end(JSON.stringify({ error: { type: 'invalid_request_error', code: 'model_not_found', param: null, message: `House ${houseId} has no ChatGPT model ${modelId}` } }));
   }
 
-  async function handleOpenAI(req: IncomingMessage, res: ServerResponse, houseId: string) {
+  async function handleOpenAI(req: IncomingMessage, res: ServerResponse, house: { id: string; hatKeyId: string | null }) {
+    const houseId = house.id;
     const path = req.url?.split('?')[0];
     if (req.method !== 'POST' || !['/openai/responses', '/openai/responses/compact'].includes(path ?? '')) return sendError(res, 404, 'invalid_request_error', 'Unknown Codex endpoint');
+    const at = Date.now();
     accounts.noteRequest(houseId, 'openai');
     const used = accounts.accountIdInUse(houseId, 'openai');
     let credentials = await accounts.openaiCredentials(houseId);
@@ -142,7 +152,7 @@ export function forwardModelRequests({ accounts, upstream = ANTHROPIC_API, fetch
         headers.set(key, Array.isArray(value) ? value.join(', ') : value);
       }
       headers.set('authorization', `Bearer ${auth.accessToken}`);
-      headers.set('chatgpt-account-id', auth.accountId);
+      headers.set('chatgpt-account-id', auth.chatgptAccountId);
       return openaiFetch(`${openaiUpstream}${path!.slice('/openai'.length)}`, {
         method: 'POST', headers, body: new Uint8Array(body), signal: controller.signal,
       });
@@ -156,16 +166,42 @@ export function forwardModelRequests({ accounts, upstream = ANTHROPIC_API, fetch
     }
     if (response.status === 429 && used && await accounts.recheckAfterLimit(houseId, 'openai', used)) {
       const next = await accounts.openaiCredentials(houseId);
-      if (next) { await response.body?.cancel(); response = await send(next); }
+      if (next) { await response.body?.cancel(); response = await send(next); credentials = next; }
     }
-    const headers: Record<string, string> = {};
-    response.headers.forEach((value, key) => { if (!DROP_RESPONSE.has(key) && key !== 'set-cookie') headers[key] = value; });
-    res.writeHead(response.status, headers);
-    if (!response.body) return void res.end();
-    const stream = Readable.fromWeb(response.body as import('node:stream/web').ReadableStream);
-    stream.once('error', () => res.destroy());
-    stream.pipe(res);
+    const accountId = credentials.accountId;
+    relay(response, res, new Set(['set-cookie']), usageTap('openai', response.headers.get('content-type'), (reported) =>
+      record({ at, providerId: 'openai', house, accountId, body, reported })));
   }
+}
+
+/**
+ * Sends the provider's answer on as it arrives. A usage tap reads a copy of
+ * each chunk after it was passed on, and is ended once the answer is done,
+ * fails, or the caller goes away.
+ */
+function relay(response: Response, res: ServerResponse, dropHeaders: Set<string>, tap?: ReturnType<typeof usageTap>) {
+  const headers: Record<string, string> = {};
+  response.headers.forEach((value, key) => { if (!DROP_RESPONSE.has(key) && !dropHeaders.has(key)) headers[key] = value; });
+  res.writeHead(response.status, headers);
+  if (!response.body) { res.end(); return tap?.end(); }
+  const stream = Readable.fromWeb(response.body as import('node:stream/web').ReadableStream);
+  stream.once('error', () => res.destroy());
+  stream.pipe(res);
+  if (!tap) return;
+  // Added after pipe, in the same tick: the caller gets each chunk first, and nothing flows before pipe does.
+  stream.on('data', (chunk: Buffer) => tap.write(chunk));
+  const end = () => tap.end();
+  stream.once('end', end);
+  stream.once('error', end);
+  res.once('close', end);
+}
+
+/** The model a request asked for, read only after its answer is done. */
+function requestedModel(body: Buffer): string | null {
+  try {
+    const model = JSON.parse(body.toString('utf8'))?.model;
+    return typeof model === 'string' ? model : null;
+  } catch { return null; }
 }
 
 /** Serves only the model routes, on their own port. */

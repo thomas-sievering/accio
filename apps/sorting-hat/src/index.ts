@@ -10,6 +10,7 @@ export { startStandalone, type StandaloneOptions } from './standalone.js';
 export type { CodexModel } from './openaiAuth.js';
 export type { CodexClient, CodexFactory, CodexNotification } from './codex.js';
 export type { AccountSelection, HatKeyView, HouseView } from './sortingHat.js';
+export type { UsageDimension, UsageQuery, UsageReport, UsageRow, UsageTotals } from './usage.js';
 export type { AccountLimitsView, AccountView, Fetch, LimitWindow, LimitsProblem, LimitsSnapshot, ProviderId } from './types.js';
 
 /**

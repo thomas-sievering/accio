@@ -30,6 +30,7 @@ once it listens.
 The state folder holds:
 
 - `sorting-hat.json`: accounts (with Claude credentials), houses and hat keys (hashes only).
+- `usage.json`: usage per hour, hat key, house, account and model ([API.md](API.md#usage)).
 - `admin-token`: the admin token.
 - `codex/<id>/`: each ChatGPT account's Codex credential home.
 
