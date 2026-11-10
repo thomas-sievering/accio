@@ -172,7 +172,7 @@ export async function startHubService(opts: HubServiceOptions) {
         // GLOSSARY: Hat key. One per profile and machine, with the Sorting Hat's address in place of the hub's.
         if (!profile.houseId) throw new HubError(noHouseMessage(profile.name));
         const key = await link.hatKey({ id: machineId, name: settings.machine(machineId)?.name ?? machineId }, profile, profile.houseId);
-        return { key, url: link.url };
+        return { key, url: link.threadUrl };
       }
       case 'hub.pairingCode': return HubTrust.createCode(opts.home);
       case 'hub.revokeMachine': {
@@ -393,7 +393,7 @@ export async function startHubService(opts: HubServiceOptions) {
     // A turn started before the accounts moved keeps this key: its requests go on to the Sorting Hat with its machine's hat key.
     const profile = settings.profiles().find((p) => p.id === owner.profileId);
     const to = link.configured && profile?.houseId
-      ? { url: link.url!, key: await link.hatKey({ id: owner.machineId, name: settings.machine(owner.machineId)?.name ?? owner.machineId }, profile, profile.houseId) }
+      ? { url: link.require().url, key: await link.hatKey({ id: owner.machineId, name: settings.machine(owner.machineId)?.name ?? owner.machineId }, profile, profile.houseId) }
       : { url: hat.url, key: await hat.ensureHouse(owner.profileId) };
     const address = new URL(to.url + path + target.search);
     const headers: import('node:http').IncomingHttpHeaders = { ...req.headers, host: address.host, authorization: `Bearer ${to.key}` };

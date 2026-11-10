@@ -10,6 +10,8 @@ import { SortingHatClient, SortingHatError, sortingHatAddress, type RemoteHouse 
 type StoredKey = { id: string; machineId: string; profileId: string; houseId: string; secret: Sealed };
 type Data = {
   url: string | null;
+  /** The address threads get instead of `url`, such as the public one when `url` is only reachable inside the hub's network. */
+  threadUrl?: string | null;
   hubName: string;
   token: Sealed | null;
   keys: StoredKey[];
@@ -58,19 +60,21 @@ export class SortingHatLink {
 
   /** Configured: threads run through the Sorting Hat. Not configured: the hub's embedded one. */
   get configured() { return !!this.data.url; }
-  get url() { return this.data.url ?? undefined; }
+  /** Where threads send model requests. */
+  get threadUrl() { return this.data.threadUrl ?? this.data.url ?? undefined; }
 
   onChanged(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
 
   view(): SortingHatView | undefined {
     if (!this.data.url) return undefined;
-    return { url: this.data.url, hubName: this.data.hubName, houses: this.cache.houses.map(({ id, name }) => ({ id, name })), problem: this.problem };
+    return { url: this.data.url, threadUrl: this.data.threadUrl ?? null, hubName: this.data.hubName, houses: this.cache.houses.map(({ id, name }) => ({ id, name })), problem: this.problem };
   }
 
   /** Links this hub to a Sorting Hat, checking the address and token first. A new address forgets the keys made on the old one. */
-  configure(input: { url: string; adminToken?: string; hubName: string }) {
+  configure(input: { url: string; adminToken?: string; hubName: string; threadUrl?: string }) {
     return this.store.change(async () => {
       const url = sortingHatAddress(input.url);
+      const threadUrl = input.threadUrl ? sortingHatAddress(input.threadUrl) : null;
       const same = url === this.data.url && !!this.data.token;
       const token = input.adminToken ?? (same ? await this.vault.unseal(TOKEN, this.data.token!) : undefined);
       if (!token) throw new HubError('Paste the admin token from the Sorting Hat’s dashboard.');
@@ -80,7 +84,7 @@ export class SortingHatLink {
       try { sealed = await this.vault.seal(TOKEN, token); }
       catch (error) { throw error instanceof SecretStoreError ? new HubError('The hub can’t store the admin token: its saved-secret storage is unavailable. Configure ACCIO_SECRET_KEY on a headless hub.') : error; }
       if (!same) await this.forgetAll();
-      await this.store.commit({ ...this.data, url, hubName: input.hubName.trim(), token: sealed, ...(same ? {} : { keys: [], deleting: [] }) });
+      await this.store.commit({ ...this.data, url, threadUrl: threadUrl === url ? null : threadUrl, hubName: input.hubName.trim(), token: sealed, ...(same ? {} : { keys: [], deleting: [] }) });
       if (!same) this.cache = empty();
       this.client = client; this.problem = null;
       this.start();

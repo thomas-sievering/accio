@@ -53,6 +53,8 @@ export const noHouseMessage = (profile: string) => `${profile} isn’t linked to
 /** GLOSSARY: Sorting Hat, as clients see the hub's link to one. Never its admin token. */
 export type SortingHatView = {
   url: string;
+  /** Where threads reach it, when other machines can't use `url` (such as a hub's internal network address); null to use `url`. */
+  threadUrl: string | null;
   /** How this hub's hat keys are named on the Sorting Hat's dashboard: "Accio · <hubName> · …". */
   hubName: string;
   /** Its houses, for linking profiles, as last read. */
@@ -66,6 +68,8 @@ const ConfigureSortingHat = z.object({
   /** Omit to keep the token already saved for this address. */
   adminToken: z.string().trim().min(1, 'Paste the admin token from the Sorting Hat’s dashboard').max(500).optional(),
   hubName: z.string().trim().min(1, 'Name this hub').max(80),
+  /** Omit to give threads `url`. */
+  threadUrl: z.string().trim().url('Enter the address threads use, such as https://sortinghat.example.com').max(500).optional(),
 });
 
 export const SaveProfileParams = z.object({

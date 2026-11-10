@@ -47,7 +47,7 @@ describe('a hub with a Sorting Hat of its own', () => {
     await expect(laptop.call('sortingHat.configure', { url: f.remote.url, adminToken: 'hat-admin-wrong', hubName: 'Home server' })).rejects.toThrow(/refused the admin token/);
     await expect(laptop.call('sortingHat.configure', { url: 'http://sorting-hat.example.com', adminToken: f.remote.adminToken, hubName: 'Home server' })).rejects.toThrow(/HTTPS/);
     expect(await laptop.call('sortingHat.configure', { url: f.remote.url, adminToken: f.remote.adminToken, hubName: 'Home server' }))
-      .toEqual({ url: f.remote.url, hubName: 'Home server', houses: [{ id: 'personal', name: 'Personal' }, { id: 'work', name: 'Work' }], problem: null });
+      .toEqual({ url: f.remote.url, threadUrl: null, hubName: 'Home server', houses: [{ id: 'personal', name: 'Personal' }, { id: 'work', name: 'Work' }], problem: null });
     await desktop.refresh(true);
     expect(desktop.snapshot.sortingHat?.url).toBe(f.remote.url);
 
@@ -122,6 +122,10 @@ describe('a hub with a Sorting Hat of its own', () => {
     // Choosing accounts in Accio sets the house's accounts on the Sorting Hat.
     await again.call('profiles.save', { id: profile.id, name: 'Personal', accountIds: { anthropic: [mine.id, theirs.id] } });
     expect((await f.remote.api('GET', 'houses/work')).accounts.anthropic).toEqual([mine.id, theirs.id]);
+
+    // A hub that reaches the Sorting Hat on its own network gives threads the public address instead, keeping their keys.
+    expect(await again.call('sortingHat.configure', { url: f.remote.url, hubName: 'Home server', threadUrl: 'https://sortinghat.example.com/' })).toMatchObject({ url: f.remote.url, threadUrl: 'https://sortinghat.example.com' });
+    expect(await again.call('machine.modelKey', { profileId: profile.id })).toEqual({ key: work.key, url: 'https://sortinghat.example.com' });
   });
 });
 

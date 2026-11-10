@@ -60,8 +60,10 @@ The hub reaches the Sorting Hat over the Docker network, by its alias
 `sorting-hat`, rather than through Cloudflare: the admin token never crosses the
 internet, the management API stays behind Access for everyone else, and no Access
 service token is needed. Both projects join `media_server_default`, so the name
-resolves from `accio-hub`. Hat keys the hub hands to threads on other machines
-come with the public address, since those machines are not on that network.
+resolves from `accio-hub`. Threads on other machines are not on that network, so
+in Accio's Settings / Hubs the link has the address `http://sorting-hat:47330` and
+the address for threads `https://sortinghat.mediatom.cc`; the hat keys the hub
+hands to threads come with the latter.
 
 ### Cloudflare Access
 

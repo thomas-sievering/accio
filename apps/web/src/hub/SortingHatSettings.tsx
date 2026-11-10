@@ -24,7 +24,7 @@ export function SortingHatSettings({ hubName }: { hubName: string }) {
     <SettingsSection title="Sorting Hat">
       {linked && !editing ? <>
         <SettingRow icon={<Hub />} title={new URL(sortingHat.url).host}
-          description={confirming ? 'Threads go back to the accounts this hub keeps itself; its hat keys there are deleted.' : `Hat keys are named “Accio · ${sortingHat.hubName} · …”.`}>
+          description={confirming ? 'Threads go back to the accounts this hub keeps itself; its hat keys there are deleted.' : `${sortingHat.threadUrl ? `Threads use ${new URL(sortingHat.threadUrl).host}. ` : ''}Hat keys are named “Accio · ${sortingHat.hubName} · …”.`}>
           {confirming ? <>
             <button type="button" className="ghost" disabled={busy} autoFocus onClick={() => setConfirming(false)}>Cancel</button>
             <button type="button" className="ghost danger" disabled={busy} onClick={() => void run(async () => { await client.call('sortingHat.disconnect', {}); setConfirming(false); })}>Disconnect</button>
@@ -42,9 +42,10 @@ export function SortingHatSettings({ hubName }: { hubName: string }) {
   );
 }
 
-function SortingHatForm({ saved, hubName, onDone }: { saved?: { url: string }; hubName: string; onDone: () => void }) {
+function SortingHatForm({ saved, hubName, onDone }: { saved?: { url: string; threadUrl: string | null }; hubName: string; onDone: () => void }) {
   const client = useClient();
   const [url, setUrl] = useState(saved?.url ?? '');
+  const [threadUrl, setThreadUrl] = useState(saved?.threadUrl ?? '');
   const [token, setToken] = useState('');
   const [name, setName] = useState(hubName);
   const [tried, setTried] = useState(false);
@@ -60,7 +61,7 @@ function SortingHatForm({ saved, hubName, onDone }: { saved?: { url: string }; h
     e.preventDefault(); setTried(true);
     if (Object.values(problems).some(Boolean)) return focusFirstInvalid(e.currentTarget);
     void run(async () => {
-      await client.call('sortingHat.configure', { url: url.trim(), hubName: name.trim(), ...(token.trim() ? { adminToken: token.trim() } : {}) });
+      await client.call('sortingHat.configure', { url: url.trim(), hubName: name.trim(), ...(token.trim() ? { adminToken: token.trim() } : {}), ...(threadUrl.trim() ? { threadUrl: threadUrl.trim() } : {}) });
       setToken(''); onDone();
     });
   };
@@ -68,6 +69,9 @@ function SortingHatForm({ saved, hubName, onDone }: { saved?: { url: string }; h
     <form className="setting-form" onSubmit={submit} noValidate>
       {!saved && <p className="hint">Run this hub’s threads through a Sorting Hat, which holds the provider accounts. Without one, the hub keeps accounts itself.</p>}
       <Field label="Address" error={tried && problems.url}>{(p) => <input {...p} type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://sortinghat.example.com" required />}</Field>
+      <Field label="Address for threads" hint="Where threads on every machine reach it, when the address above works only from the hub. Leave empty to use that one.">
+        {(p) => <input {...p} type="url" value={threadUrl} onChange={(e) => setThreadUrl(e.target.value)} placeholder="https://sortinghat.example.com" />}
+      </Field>
       <Field label="Admin token" error={tried && problems.token} hint="Stays on the hub; no device or thread receives it.">
         {(p) => <input {...p} type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder={keepsToken ? 'Saved · paste to replace' : 'hat-admin-…'} autoComplete="off" spellCheck={false} />}
       </Field>
