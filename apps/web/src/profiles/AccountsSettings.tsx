@@ -15,16 +15,15 @@ export function AccountsSettings({ accountId, onOpen, onBack }: { accountId?: st
   if (!accounts) return null;
   const account = accounts.find((a) => a.id === accountId);
   if (accountId === 'new' || accountId === 'new-openai' || account) return <AccountForm key={accountId} account={account} providerId={account?.providerId ?? (accountId === 'new-openai' ? 'openai' : 'anthropic')} onSaved={(a) => (account ? onBack() : onOpen(a.id))} onDone={onBack} />;
-  // Until account settings work through the Sorting Hat (#136), its dashboard signs accounts in.
-  const local = !sortingHat;
+  if (sortingHat?.problem) return <p className="error" role="alert">{sortingHat.problem}</p>;
   return <>
-    <p className="note">{local ? 'Name an account, sign in, then select it in a profile.' : <>These accounts are on the Sorting Hat at {sortingHat.url}. Add, sign in, rename and delete them on its dashboard, then select them in a profile.</>}</p>
-    <SettingsSection title="Anthropic" add={local ? { label: 'Add Claude account', onClick: () => onOpen('new') } : undefined}>
+    <p className="note">Name an account, sign in, then select it in a profile.{sortingHat && ` Accounts are kept on the Sorting Hat at ${new URL(sortingHat.url).host}.`}</p>
+    <SettingsSection title="Anthropic" add={{ label: 'Add Claude account', onClick: () => onOpen('new') }}>
       {accounts.filter((a) => a.providerId === 'anthropic').map((a) => <SettingLink key={a.id} icon={<ProviderLogo providerId="anthropic" />} title={a.name} description={[a.email, a.organization].filter(Boolean).join(' · ') || undefined} onClick={() => onOpen(a.id)}>
         <StatusPill tone={a.signedIn ? 'ok' : 'warn'}>{a.signedIn ? 'Signed in' : 'Signed out'}</StatusPill>
       </SettingLink>)}
     </SettingsSection>
-    <SettingsSection title="OpenAI" add={local ? { label: 'Add ChatGPT account', onClick: () => onOpen('new-openai') } : undefined}>
+    <SettingsSection title="OpenAI" add={{ label: 'Add ChatGPT account', onClick: () => onOpen('new-openai') }}>
       {accounts.filter((a) => a.providerId === 'openai').map((a) => <SettingLink key={a.id} icon={<ProviderLogo providerId="openai" />} title={a.name} description={a.email ?? undefined} onClick={() => onOpen(a.id)}>
         <StatusPill tone={a.signedIn ? 'ok' : 'warn'}>{a.signedIn ? 'Signed in' : 'Signed out'}</StatusPill>
       </SettingLink>)}

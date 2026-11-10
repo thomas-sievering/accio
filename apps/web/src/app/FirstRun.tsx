@@ -124,6 +124,7 @@ const Globe = () => (
 
 function AddProfile({ profile, onDone }: { profile?: ProfileView; onDone?: () => void } = {}) {
   const client = useClient();
+  const { sortingHat } = useProfiles();
   const [name, setName] = useState(profile?.name ?? '');
   const [missing, setMissing] = useState(false);
   const input = useRef<HTMLInputElement>(null);
@@ -131,7 +132,10 @@ function AddProfile({ profile, onDone }: { profile?: ProfileView; onDone?: () =>
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (!name.trim()) { setMissing(true); input.current?.focus(); return; }
-    void run(async () => { await client.call('profiles.save', { id: profile?.id, name }); onDone?.(); });
+    // GLOSSARY: House. On a hub with a Sorting Hat, a new profile links the house of its name, made if there is none.
+    const house = sortingHat && !profile ? sortingHat.houses.find((h) => h.name.toLowerCase() === name.trim().toLowerCase()) : undefined;
+    const link = sortingHat && !profile ? house ? { houseId: house.id } : { createHouse: true } : {};
+    void run(async () => { await client.call('profiles.save', { id: profile?.id, name, ...link }); onDone?.(); });
   };
   return (
     <form onSubmit={submit} className="field" noValidate>

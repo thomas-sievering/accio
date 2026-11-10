@@ -86,6 +86,8 @@ export const SaveProfileParams = z.object({
   openaiAccountId: z.string().nullable().optional(),
   /** The Sorting Hat house to link, or null to unlink; omit to keep the link. Only for hubs with a Sorting Hat. */
   houseId: z.string().min(1).max(64).nullable().optional(),
+  /** Make a house of the profile's name on the hub's Sorting Hat and link it, in place of houseId. */
+  createHouse: z.boolean().optional(),
 });
 export type SaveProfileParams = z.output<typeof SaveProfileParams>;
 

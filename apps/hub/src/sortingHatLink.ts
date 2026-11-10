@@ -113,6 +113,22 @@ export class SortingHatLink {
     return limits;
   }
 
+  /** A change made from Accio, read back at once so every client sees it without waiting for the next poll. */
+  async write<T>(change: (client: SortingHatClient) => Promise<T>): Promise<T> {
+    const result = await change(this.require());
+    await this.poll();
+    return result;
+  }
+
+  /** The Sorting Hat keeps an account while any house has it, also another app's; the refusal names those houses. */
+  deleteAccount(id: string) {
+    return this.write((client) => client.deleteAccount(id)).catch((error) => {
+      if (!(error instanceof SortingHatError && error.status === 409)) throw error;
+      const names = this.cache.houses.filter((h) => Object.values(h.accounts).some((ids) => ids.includes(id))).map((h) => h.name);
+      throw new HubError(`This account is still in ${names.length ? `the house${names.length > 1 ? 's' : ''} ${names.join(', ')}` : 'a house'} on the Sorting Hat. Remove it from the profiles using ${names.length > 1 ? 'them' : 'it'}, or on the Sorting Hat’s dashboard, first.`);
+    });
+  }
+
   /** Sets a house's accounts on the Sorting Hat, for every app that uses it. */
   async setHouseAccounts(houseId: string, selection: Partial<Record<ProviderId, string[]>>) {
     const house = await this.require().setHouseAccounts(houseId, selection);
@@ -194,7 +210,7 @@ export class SortingHatLink {
     this.verified.clear();
   }
 
-  private require() {
+  require() {
     if (!this.client) throw new HubError(this.problem ?? 'This hub has no Sorting Hat. Add one in Settings / Hubs.');
     return this.client;
   }

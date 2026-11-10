@@ -22,7 +22,7 @@ Record feature IDs and entry points in `actions.json`. Pair the action trace wit
 - [Hubs](hubs.md): first-device pairing, switching, per-window selection, isolated state, offline status and revocation.
 - [Profiles](profiles.md): first-run creation, settings creation, editing, cancel, delete and provider-account selection.
 - [Accounts](accounts.md): named Claude and ChatGPT accounts, provider sign-in, sign-out and deletion guards.
-- [Sorting Hat](sorting-hat.md): linking a hub to a Sorting Hat of its own, houses for profiles, the unlinked-profile notice and the admin token's boundary.
+- [Sorting Hat](sorting-hat.md): linking a hub to a Sorting Hat of its own, accounts, houses and limits through it, the unlinked-profile and unreachable notices and the admin token’s boundary.
 - [Limits](limits.md): sidebar/composer/account-settings entries, profile scope, shared accounts, refresh, reset confirmation and connection states.
 - [Projects](projects.md): add folders through onboarding or toolbar, inspect duplicates, remote grouping, settings and removal.
 - [Project dashboard](project-dashboard.md): Dashboard in the thread header's project menu, the project app's Start/Stop/Restart/Update and auto-update, threads, commits and logs.
