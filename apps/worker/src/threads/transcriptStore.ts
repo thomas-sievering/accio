@@ -1,4 +1,4 @@
-import { rm } from 'node:fs/promises';
+import { rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { JsonFile } from '@accio/persistence';
 import type { TranscriptItem } from '@accio/protocol';
@@ -89,6 +89,11 @@ export class TranscriptStore {
 
   remove(id: string) {
     return rm(this.path(id), { force: true });
+  }
+
+  /** When the transcript was last saved, which a running turn does shortly after every change. */
+  async savedAt(id: string): Promise<string | undefined> {
+    return stat(this.path(id)).then((s) => s.mtime.toISOString(), () => undefined);
   }
 
   private path(id: string) {

@@ -34,6 +34,10 @@ export type ThreadView = {
   needsSecret?: boolean;
   createdAt: string;
   updatedAt: string;
+  /** When the running turn started. */
+  runningSince?: string;
+  /** Time this run already spent running before accio restarted, so its running time excludes the downtime. */
+  ranMs?: number;
   /** GLOSSARY: Snooze. Hidden until this time; null when not snoozed. */
   snoozedUntil: string | null;
   /**

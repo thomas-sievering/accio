@@ -139,7 +139,9 @@ export class Threads {
       // A title and session id alone do not prove a thread has no conversation.
       if (candidates.has(thread.id) || (await state.transcripts.get(thread.id)).items.length > 0) started.push(thread);
     }
-    const { threads, interrupted } = recoverAfterRestart(started);
+    const savedAt = new Map<string, string | undefined>();
+    for (const t of started) if (t.status === 'running') savedAt.set(t.id, await state.transcripts.savedAt(t.id));
+    const { threads, interrupted } = recoverAfterRestart(started, t => savedAt.get(t.id));
     state.list = threads.map(t => t.delivery?.status === 'delivered' && t.delivery.completedAt && t.status === 'interrupted' ? { ...t, status: 'idle' } : t);
     const recoveredRelease = await this.deliveries.recoverReleases();
     for (const thread of interrupted) {

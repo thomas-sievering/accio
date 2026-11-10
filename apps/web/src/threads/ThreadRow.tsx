@@ -124,11 +124,17 @@ function hoverActions(t: ThreadView, place: ShelfPlace, untilOnline: boolean): H
 function meta(t: ThreadView, place: ShelfPlace, now: Date): string {
   if (place === 'snoozed' && t.snoozedUntil) return wakeText(new Date(t.snoozedUntil), now);
   if (place === 'settled' && t.settledAt) return timeAgo(t.settledAt, now);
+  // A running thread shows how long it has run, including before a restart but not the downtime.
+  if (t.status === 'running' && t.runningSince) return duration((t.ranMs ?? 0) + now.getTime() - Date.parse(t.runningSince));
   return timeAgo(t.updatedAt, now);
 }
 
 export function timeAgo(iso: string, now: Date): string {
-  const minutes = Math.round((now.getTime() - new Date(iso).getTime()) / 60_000);
+  return duration(now.getTime() - new Date(iso).getTime());
+}
+
+function duration(ms: number): string {
+  const minutes = Math.round(ms / 60_000);
   if (minutes < 1) return 'now';
   if (minutes < 60) return `${minutes}m`;
   const hours = Math.round(minutes / 60);
