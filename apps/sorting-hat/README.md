@@ -116,6 +116,12 @@ and pick a `claude-bridge/...` model with `/model`. Exporting
 but then every Anthropic request pi makes gets them. This setup follows the
 bridge's documentation and has not yet been tried end to end with pi.
 
+## Deploy
+
+`Dockerfile.sorting-hat` builds its image; the home-server deployment at
+`sortinghat.mediatom.cc`, behind Cloudflare Access, is described in
+[deploy/sorting-hat](../../deploy/sorting-hat/README.md).
+
 ## Develop
 
 `pnpm exec vitest run apps/sorting-hat` runs its tests with faked providers.

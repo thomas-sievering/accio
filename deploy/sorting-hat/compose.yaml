@@ -1,0 +1,20 @@
+name: sorting-hat
+services:
+  sorting-hat:
+    image: ${SORTING_HAT_IMAGE:?Set SORTING_HAT_IMAGE to an immutable image reference}
+    container_name: sorting-hat
+    restart: unless-stopped
+    # SORTING_HAT_ACCESS_TEAM_DOMAIN and SORTING_HAT_ACCESS_AUD; see README.md.
+    env_file: .secrets.env
+    volumes:
+      - /data/configs/sorting-hat:/data
+    networks:
+      # The tunnel reaches it here as http://sorting-hat:47330, and so does the hub, without Cloudflare.
+      media:
+        aliases: [sorting-hat]
+    stop_grace_period: 30s
+    security_opt: [no-new-privileges:true]
+networks:
+  media:
+    external: true
+    name: media_server_default
