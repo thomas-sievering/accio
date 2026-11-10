@@ -1,0 +1,39 @@
+.context-meter { position: relative; flex: none; color: var(--muted); font-size: 12px; }
+.context-meter > summary { display: inline-flex; align-items: center; gap: 6px; padding: 5px 7px; border-radius: 6px; cursor: pointer; list-style: none; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.context-meter > summary::-webkit-details-marker { display: none; }
+.context-meter > summary:hover, .context-meter[open] > summary { background: var(--hover); color: var(--ink); }
+.context-ring { display: block; flex: none; }
+.context-ring circle { fill: none; stroke-width: 2; }
+.context-ring-track { stroke: var(--line-2); }
+.context-ring-fill { stroke: currentColor; stroke-linecap: round; transition: stroke-dasharray 400ms var(--ease-settle, ease); }
+.context-meter.filling > summary { color: var(--amber); }
+.context-meter.full > summary { color: var(--red); }
+/* Limits live in the popover; when they run low the pill takes their tone. */
+.context-meter:has(.limits-chip.low) > summary { color: var(--amber); }
+.context-meter:has(.limits-chip.exhausted) > summary { color: var(--red); }
+
+.context-panel { position: absolute; bottom: calc(100% + 8px); right: 0; z-index: 20; display: grid; width: min(340px, 85vw); max-height: 70vh; overflow: auto; padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--ink); box-shadow: 0 8px 30px #0003; }
+.context-panel p { margin: 8px 0 0; line-height: 1.5; color: var(--muted); }
+.context-window { padding: 10px 10px 12px; }
+.context-heading { display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; }
+.context-heading span { color: var(--muted); }
+.context-bar { position: relative; height: 4px; margin-top: 10px; border-radius: 2px; background: var(--line); }
+.context-bar span { display: block; height: 100%; min-width: 3px; border-radius: 2px; background: var(--muted); }
+.context-compact-tick { position: absolute; top: -3px; width: 1px; height: 10px; translate: -50%; background: var(--ink); opacity: 0.6; }
+.context-meter.filling .context-bar span { background: var(--amber); }
+.context-meter.full .context-bar span { background: var(--red); }
+
+.context-limits, .context-section { border-top: 1px solid var(--line); }
+.context-limits { padding: 4px 0; }
+.context-limits .limits-chip { width: 100%; padding: 6px 10px; }
+.context-section > summary { display: flex; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 6px; cursor: pointer; list-style: none; color: var(--muted); font-variant-numeric: tabular-nums; }
+.context-section > summary::-webkit-details-marker { display: none; }
+.context-section > summary:hover { background: var(--hover); color: var(--ink); }
+.context-section > summary > span:first-child { color: var(--ink); }
+.context-section > :not(summary) { margin-left: 10px; margin-right: 10px; }
+.context-section > :last-child { margin-bottom: 10px; }
+.context-section dl { display: grid; grid-template-columns: 1fr auto; gap: 8px 16px; margin-top: 6px; margin-bottom: 0; }
+.context-section :is(dt, dd) { margin: 0; font-weight: 400; }
+.context-section dt { color: var(--muted); }
+.context-section dd { font-variant-numeric: tabular-nums; }
+.context-panel:has(.prompt-usage[open]) { width: min(460px, 85vw); }

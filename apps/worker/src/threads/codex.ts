@@ -158,6 +158,12 @@ export function codexHarness(factory: CodexFactory = startCodex): Harness {
 /** Keep streamed assistant text and authoritative item completion in the same transcript item. */
 export function codexEvents({ method, params }: CodexNotification): HarnessEvent[] {
   if (method === 'item/agentMessage/delta') return [{ kind: 'text', id: params.itemId, text: params.delta, append: true }];
+  // GLOSSARY: Context window. Codex counts the latest request and its reply against the model's window.
+  if (method === 'thread/tokenUsage/updated') {
+    const { last, modelContextWindow } = params.tokenUsage ?? {};
+    return typeof modelContextWindow === 'number' && modelContextWindow > 0 && typeof last?.totalTokens === 'number'
+      ? [{ kind: 'context', usedTokens: last.totalTokens, windowTokens: modelContextWindow }] : [];
+  }
   if (method !== 'item/started' && method !== 'item/completed') return [];
   const item = params.item;
   const done = method === 'item/completed';

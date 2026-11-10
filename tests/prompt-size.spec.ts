@@ -20,6 +20,8 @@ test('measures a settings baseline and shows the persisted last request in a thr
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect(page.getByText('Prompt size recorded.', { exact: true })).toBeVisible();
   const stat = page.locator('.prompt-usage');
+  const meter = page.locator('.context-meter > summary');
+  await meter.click();
   await stat.getByLabel('Prompt size', { exact: true }).click();
   await expect(stat.getByRole('row', { name: /Harness \/ other instructions/ }).getByRole('cell')).toHaveText(['6', '24']);
   await expect(stat.getByRole('row', { name: /Accio prompt/ }).getByRole('cell')).toHaveText(['3', '10']);
@@ -27,6 +29,7 @@ test('measures a settings baseline and shows the persisted last request in a thr
   await expect(stat).toContainText('Tool definitions (1)');
   await page.screenshot({ path: testInfo.outputPath('thread-prompt-size.png') });
   await page.reload();
+  await meter.click();
   await stat.getByLabel('Prompt size', { exact: true }).click();
   await expect(stat.getByRole('row', { name: /Accio prompt/ }).getByRole('cell')).toHaveText(['3', '10']);
   await expect(page.locator('.messages')).not.toContainText('Harness instructions');

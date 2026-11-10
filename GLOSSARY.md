@@ -116,7 +116,7 @@ The tokens a house's requests used, per hat key, account and model over time, as
 _Avoid_: Consumption, spend, quota
 
 **Limits**:
-The allowance windows and reset times a provider reports for an account, read by the Sorting Hat with the account's own credentials. Houses that share an account share one allowance. Shown in Accio from the sidebar, the composer indicator and account settings, and on the Sorting Hat's dashboard.
+The allowance windows and reset times a provider reports for an account, read by the Sorting Hat with the account's own credentials. Houses that share an account share one allowance. Shown in Accio from the sidebar, a draft's composer, a thread's Context window popover and account settings, and on the Sorting Hat's dashboard.
 _Avoid_: Quota, usage, rate limit (in UI text)
 
 ## Work
@@ -144,6 +144,10 @@ _Avoid_: Unsent thread, pending thread
 **Turn**:
 Work by the harness until it finishes or is interrupted, started by a user message, Resume or a delivery request. Each turn uses the account in use of the profile's house for that harness's provider. Steering can add messages during the same turn.
 _Avoid_: Run, request
+
+**Context window**:
+How many tokens the model can take in one request, and how full a thread's latest request left it. The harness reports both: Claude Code when a turn ends, Codex as it goes. Accio never assumes a size from the model's name. The latest request counts with its reply, which the next request carries. Claude Code also reports where it compacts the conversation, marked on the window. A pill in the thread's composer shows it; its popover also holds the account's limits, the prompt cache and the last request's prompt size.
+_Avoid_: Token count, memory, context size (in UI text)
 
 **Queued message**:
 A message saved to start a later turn after the current turn finishes. It can be edited, removed or sent as steering while the harness accepts input.

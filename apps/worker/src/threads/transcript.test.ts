@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ContentBlock, HarnessMessage } from './harness.js';
 import { harnessEnv } from './harnessEnv.js';
-import { summarizeTool, TurnTranscript, type TranscriptChange } from './transcript.js';
+import { contextWindowOf, summarizeTool, TurnTranscript, type TranscriptChange } from './transcript.js';
 
 const S = 'sess-1';
 const stream = (event: object): HarnessMessage => ({ type: 'stream_event', event, parent_tool_use_id: null, session_id: S }) as HarnessMessage;
@@ -25,6 +25,51 @@ describe('TurnTranscript', () => {
       { type: 'item', item: { id: 't1:usage:m1', usage: { inputTokens: 120 } } },
     ]);
     expect(t.accept({ ...envelope, parent_tool_use_id: 'subagent' })).toEqual([]);
+  });
+
+  it('reports the main model context window, the latest request with its reply, and where it compacts', () => {
+    const t = new TurnTranscript('t1');
+    const start = (id: string, model: string, input: number, read: number) => stream({ type: 'message_start', message: { id, model,
+      usage: { input_tokens: input, cache_read_input_tokens: read, cache_creation_input_tokens: 0, output_tokens: 1 } } });
+    t.accept(start('m1', 'claude-opus-5-5', 10, 50_000));
+    t.accept(stream({ type: 'message_delta', usage: { output_tokens: 300 } }));
+    t.accept(start('m2', 'claude-opus-5-5', 6_000, 100_000));
+    t.accept(stream({ type: 'message_delta', usage: { output_tokens: 1_500 } }));
+    // A sub-agent's request is not the thread's context, even when it read more.
+    t.accept({ ...start('s1', 'claude-haiku-5-5', 150_000, 0), parent_tool_use_id: 'agent' } as HarnessMessage);
+    expect(t.accept({ type: 'harness_event', event: { kind: 'compaction', atTokens: 167_000 } })).toEqual([]);
+    const changes = t.accept({ type: 'result', subtype: 'success', is_error: false, session_id: S, modelUsage: {
+      'claude-haiku-5-5': { inputTokens: 150_000, contextWindow: 200_000 },
+      'claude-opus-5-5[1m]': { inputTokens: 6_010, cacheReadInputTokens: 150_000, contextWindow: 1_000_000 },
+    } });
+    expect(changes).toEqual([
+      { type: 'item', item: { kind: 'context', id: 't1:context', turnId: 't1', usedTokens: 107_500, windowTokens: 1_000_000, compactAtTokens: 167_000 } },
+      { type: 'end', outcome: 'completed' },
+    ]);
+  });
+
+  it.each([
+    ['the exact key', { 'claude-opus-5-5': 200_000, 'claude-haiku-5-5': 100_000 }, 'claude-opus-5-5', 200_000],
+    ['a dated response model', { 'claude-opus-5-5[1m]': 1_000_000, 'claude-haiku-5-5': 200_000 }, 'claude-opus-5-5-20261001', 1_000_000],
+    ['a lone entry', { opus: 200_000 }, 'claude-opus-5-5', 200_000],
+    ['no main entry among several', { 'claude-haiku-5-5': 200_000, 'claude-sonnet-5-5': 200_000 }, 'claude-opus-5-5', undefined],
+  ] as const)('picks the context window by %s', (_, windows, model, expected) => {
+    const modelUsage = Object.fromEntries(Object.entries(windows).map(([key, contextWindow]) => [key, { contextWindow }]));
+    expect(contextWindowOf(modelUsage, model)).toBe(expected);
+  });
+
+  it('reports no context window without a reported window or request', () => {
+    const t = new TurnTranscript('t1');
+    expect(t.accept({ type: 'result', subtype: 'success', is_error: false, session_id: S, modelUsage: { m: { inputTokens: 1, contextWindow: 200_000 } } })).toEqual([{ type: 'end', outcome: 'completed' }]);
+    const u = new TurnTranscript('t2');
+    u.accept(stream({ type: 'message_start', message: { id: 'm1', usage: { input_tokens: 10, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } }));
+    expect(u.accept({ type: 'result', subtype: 'success', is_error: false, session_id: S })).toEqual([{ type: 'end', outcome: 'completed' }]);
+  });
+
+  it('passes a harness context report through as the turn context item', () => {
+    const t = new TurnTranscript('t1');
+    expect(t.accept({ type: 'harness_event', event: { kind: 'context', usedTokens: 42_000, windowTokens: 258_000 } }))
+      .toEqual([{ type: 'item', item: { kind: 'context', id: 't1:context', turnId: 't1', usedTokens: 42_000, windowTokens: 258_000 } }]);
   });
 
   it('does not invent cache accounting when usage is absent, incomplete or invalid', () => {

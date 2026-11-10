@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import { query, type Query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { systemPromptText } from '../harnesses/systemPrompt.js';
 import { measuredHarness } from '../harnesses/promptMeasurement.js';
 import { ACCIO_MCP_SERVER } from '../tools/tools.js';
@@ -111,6 +111,8 @@ export const claudeCode: Harness = measuredHarness('claudeCode', {
           // A steer cuts the reply short with a result of its own, then Claude carries on with it.
           if (!input.answers(step.value)) continue;
           registerSteer?.(undefined);
+          const compactAt = await compactionPoint(q);
+          if (compactAt) yield { type: 'harness_event', event: { kind: 'compaction', atTokens: compactAt } };
           yield step.value as HarnessMessage;
           return;
         }
@@ -131,6 +133,27 @@ export const claudeCode: Harness = measuredHarness('claudeCode', {
     }
   },
 });
+
+/** How long the end of a turn waits for Claude Code to say where it compacts. */
+const COMPACTION_POINT_TIMEOUT_MS = 2000;
+
+/**
+ * GLOSSARY: Context window. Where Claude Code compacts the conversation, as its /context
+ * reports it: the summary detail answers locally, without token-count requests.
+ */
+async function compactionPoint(q: Pick<Query, 'getContextUsage'>): Promise<number | undefined> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const usage = await Promise.race([
+      q.getContextUsage({ detail: 'summary' }),
+      new Promise<undefined>((done) => { timer = setTimeout(() => done(undefined), COMPACTION_POINT_TIMEOUT_MS); }),
+    ]);
+    const at = usage?.isAutoCompactEnabled ? usage.autoCompactThreshold : undefined;
+    return typeof at === 'number' && at > 0 ? at : undefined;
+  } catch {
+    return undefined;
+  } finally { clearTimeout(timer); }
+}
 
 type UserContent = SDKUserMessage['message']['content'];
 

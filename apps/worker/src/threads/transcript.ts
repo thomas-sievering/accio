@@ -88,6 +88,9 @@ export class TurnTranscript {
         const key = JSON.stringify([r.subtype, r.is_error, r.errors, r.result]);
         if (this.endResult === key) break;
         this.endResult = key;
+        const windowTokens = contextWindowOf(r.modelUsage, this.request.model);
+        const used = this.request.input + this.request.output;
+        if (windowTokens && this.request.input) out.push(this.context(used, windowTokens));
         if (r.is_error || r.subtype !== 'success') {
           const error = r.errors?.join('\n') || r.result || `Turn ended with ${r.subtype}`;
           out.push({ type: 'item', item: { kind: 'notice', id: this.nextId('n'), turnId: this.turnId, tone: 'error', text: error } });
@@ -112,8 +115,15 @@ export class TurnTranscript {
     return unfinished;
   }
 
+  private context(usedTokens: number, windowTokens: number): TranscriptChange {
+    return { type: 'item', item: { kind: 'context', id: `${this.turnId}:context`, turnId: this.turnId, usedTokens, windowTokens,
+      ...(this.compactAtTokens ? { compactAtTokens: this.compactAtTokens } : {}) } };
+  }
+
   private onEvent(event: HarnessEvent): TranscriptChange[] {
     if (event.kind === 'session') return [{ type: 'session', sessionId: event.id }];
+    if (event.kind === 'context') return [this.context(event.usedTokens, event.windowTokens)];
+    if (event.kind === 'compaction') { this.compactAtTokens = event.atTokens; return []; }
     if (event.kind === 'end') return event.error ? [
       { type: 'item', item: { kind: 'notice', id: this.nextId('n'), turnId: this.turnId, tone: 'error', text: event.error } },
       { type: 'end', outcome: 'failed', error: event.error },
@@ -143,12 +153,14 @@ export class TurnTranscript {
 
   private onStream(event: StreamEvent, out: TranscriptChange[]) {
     if (event.type === 'message_start') {
-      const message = (event as { message: { id: string; usage?: unknown } }).message;
+      const message = (event as { message: { id: string; model?: unknown; usage?: unknown } }).message;
       this.currentMessageId = message.id;
+      this.onRequest(message.id, message.model, message.usage);
       this.onUsage(message.id, message.usage, out);
       this.message(this.currentMessageId);
       return;
     }
+    if (event.type === 'message_delta') this.onRequest(this.currentMessageId, undefined, (event as { usage?: unknown }).usage);
     const e = event as { type: string; index?: number; content_block?: ContentBlock; delta?: { type: string; text?: string; partial_json?: string } };
     if (typeof e.index !== 'number') return;
     const message = this.message(this.currentMessageId);
@@ -197,6 +209,7 @@ export class TurnTranscript {
   }
 
   private onAssistant(msg: Extract<HarnessMessage, { type: 'assistant' }>, out: TranscriptChange[]) {
+    this.onRequest(msg.message.id, (msg.message as { model?: unknown }).model, msg.message.usage);
     this.onUsage(msg.message.id, msg.message.usage, out);
     const message = this.message(msg.message.id);
     const content = msg.message.content;
@@ -254,6 +267,20 @@ export class TurnTranscript {
   }
 
   private usage = new Map<string, string>();
+  /**
+   * GLOSSARY: Context window. The main conversation's latest request: its model, its input
+   * cached or not, and its reply so far, which the next request carries too.
+   */
+  private request = { id: '', model: '', input: 0, output: 0 };
+  /** Where the harness compacts the conversation, as it reported at the turn's end. */
+  private compactAtTokens?: number;
+
+  private onRequest(messageId: string, model: unknown, raw: unknown) {
+    if (messageId !== this.request.id) this.request = { id: messageId, model: '', input: 0, output: 0 };
+    if (typeof model === 'string' && model) this.request.model = model;
+    const output = (raw as Record<string, unknown> | undefined)?.output_tokens;
+    if (typeof output === 'number' && Number.isSafeInteger(output) && output > this.request.output) this.request.output = output;
+  }
 
   private onUsage(messageId: string, raw: unknown, out: TranscriptChange[]) {
     if (!raw || typeof raw !== 'object') return;
@@ -266,6 +293,7 @@ export class TurnTranscript {
       cacheWriteTokens: value.cache_creation_input_tokens,
       ...(count(creation?.ephemeral_1h_input_tokens) ? { cacheWrite1hTokens: creation.ephemeral_1h_input_tokens } : {}),
     };
+    if (messageId === this.request.id) this.request.input = usage.inputTokens + usage.cacheReadTokens + usage.cacheWriteTokens;
     const key = JSON.stringify(usage);
     if (this.usage.get(messageId) === key) return;
     this.usage.set(messageId, key);
@@ -373,4 +401,18 @@ function truncate(s: string): string {
   if (s.length <= OUTPUT_LIMIT) return s;
   const suffix = '\n… (preview truncated; expand for full output)';
   return `${s.slice(0, OUTPUT_LIMIT - suffix.length)}${suffix}`;
+}
+
+/**
+ * GLOSSARY: Context window. Claude reports a window for each model a turn used, keyed by the
+ * model it asked for ("claude-opus-5-5[1m]") while responses name the one that answered.
+ * Sub-agents add other models, so without the main model's entry only a lone entry counts.
+ */
+export function contextWindowOf(modelUsage: unknown, model: string): number | undefined {
+  if (!modelUsage || typeof modelUsage !== 'object') return undefined;
+  const windows = Object.entries(modelUsage as Record<string, Record<string, unknown> | null>).flatMap(([key, u]) =>
+    typeof u?.contextWindow === 'number' && u.contextWindow > 0 ? [{ key, canonical: u.canonicalModel, window: u.contextWindow }] : []);
+  const base = (name: unknown) => typeof name === 'string' ? name.replace(/\[[^\]]*\]$/, '') : undefined;
+  const main = windows.find((w) => w.key === model) ?? windows.find((w) => model && (base(w.key) === model || w.canonical === model || model.startsWith(`${base(w.key)}-`)));
+  return (main ?? (windows.length === 1 ? windows[0] : undefined))?.window;
 }

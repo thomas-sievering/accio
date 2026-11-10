@@ -210,6 +210,8 @@ export type PromptCacheUsage = {
 export type TranscriptItem =
   | SecretRequestItem
   | { kind: 'usage'; id: string; turnId: string; provider: 'anthropic'; usage: PromptCacheUsage }
+  /** GLOSSARY: Context window. How full it was at the turn's latest request, as the harness reported; one per turn. */
+  | { kind: 'context'; id: string; turnId: string; usedTokens: number; windowTokens: number; compactAtTokens?: number }
   | { kind: 'promptSize'; id: string; turnId: string; harnessId: string; measurement: PromptMeasurement }
   | { kind: 'user'; id: string; turnId: string; text: string; at: string; images?: ThreadAsset[]; resume?: boolean; delivery?: DeliveryMode; pick?: ChoicePick; steered?: boolean; goal?: 'continue' }
   | { kind: 'assistant'; id: string; turnId: string; text: string; media?: MediaBinding[] }

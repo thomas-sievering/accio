@@ -102,7 +102,9 @@ const harness = new FakeHarness(async function* (run) {
     yield { type: 'stream_event', parent_tool_use_id: null, session_id: SESSION, event: { type: 'message_start', message } };
     yield { type: 'assistant', parent_tool_use_id: null, session_id: SESSION, uuid: 'cache-fragment', message };
     yield { type: 'assistant', parent_tool_use_id: null, session_id: SESSION, uuid: 'cache-fragment', message };
-    yield { type: 'result', subtype: 'success', is_error: false, session_id: SESSION };
+    yield { type: 'harness_event', event: { kind: 'compaction', atTokens: 167_000 } };
+    yield { type: 'result', subtype: 'success', is_error: false, session_id: SESSION,
+      modelUsage: { [run.model ?? 'claude']: { inputTokens: 100, cacheReadInputTokens: 800, cacheCreationInputTokens: 100, contextWindow: 200_000 } } };
     return;
   }
   // GLOSSARY: Goal. "/goal fixture …" works for three turns, then reports achieved; "/goal blocked fixture" reports blocked first.

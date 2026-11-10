@@ -27,6 +27,10 @@ export type HarnessEvent =
   | { kind: 'session'; id: string }
   | { kind: 'text'; id: string; text: string; append?: boolean }
   | { kind: 'tool'; id: string; name: string; summary: string; status: 'running' | 'done' | 'error'; output?: string; input?: unknown }
+  /** GLOSSARY: Context window. Tokens in the latest request, against the window the harness reports for its model. */
+  | { kind: 'context'; usedTokens: number; windowTokens: number }
+  /** GLOSSARY: Context window. Where the harness compacts the conversation; reported before the turn's end. */
+  | { kind: 'compaction'; atTokens: number }
   | { kind: 'end'; error?: string };
 
 export type HarnessMessage =
@@ -43,7 +47,7 @@ export type HarnessMessage =
       error?: unknown;
     }
   | { type: 'user'; message: { content: string | ContentBlock[] }; parent_tool_use_id: string | null; session_id: string }
-  | { type: 'result'; subtype: string; is_error: boolean; session_id: string; result?: string; errors?: string[] }
+  | { type: 'result'; subtype: string; is_error: boolean; session_id: string; result?: string; errors?: string[]; modelUsage?: unknown }
   | { type: string; session_id?: string; [k: string]: unknown };
 
 /** GLOSSARY: Image attachment. A saved image file named for its type, given to the harness with a message. */
