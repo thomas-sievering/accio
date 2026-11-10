@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { access } from 'node:fs/promises';
 import { JsonFile } from '@accio/persistence';
 import { HubClient, hubAddress, remoteSettings, remoteResources, remoteMcp, remoteSecrets, type SecretsAccess, type HubSnapshot, type HarnessInstall } from '@accio/hub';
-import type { Events, HubConnectionView, MachineInfo, ThreadView } from '@accio/protocol';
+import type { Events, HubConnectionView, MachineInfo, ThreadView, TranscriptItem } from '@accio/protocol';
 import { Router, UserError, type Broadcast } from '../rpc/router.js';
 import { Profiles } from '../profiles/profiles.js';
 import { Machines } from '../machine/machine.js';
@@ -13,6 +13,7 @@ import { deliveryStepTool } from '../threads/deliveryStep.js';
 import { shippedNoteTool } from '../threads/shippedNote.js';
 import { projectSettingsTool } from '../projects/projectSettings.js';
 import { readThreadTool } from '../threads/handoff.js';
+import { readMentionedThread } from '../threads/threadMentions.js';
 import { startThreadTool } from '../threads/startThread.js';
 import { Projects } from '../projects/projects.js';
 import { ProjectApps } from '../projects/projectApps.js';
@@ -108,7 +109,13 @@ export class HubConnections {
       deliveryStepTool((id, step, note) => threads.reportDeliveryStep(id, step, note), (id) => threads.deliveryRunning(id)),
       shippedNoteTool((id, note) => threads.recordShippedNote(id, note), (id) => threads.deliveryRunning(id)),
       projectSettingsTool((id, app) => threads.saveProjectSettings(id, app), (id) => threads.projectSetupRunning(id)),
-      readThreadTool((id, offset, limit) => threads.readThread(id, offset, limit), (id) => threads.handedOff(id))]);
+      readThreadTool((id, handle, offset, limit) => handle
+        ? readMentionedThread({ threads: () => relay.merged(), transcript: async (threadId) => {
+          const response = await router.handle({ id: 0, method: 'threads.transcript', params: { threadId } });
+          if (!response?.ok) throw new Error(response?.error ?? 'Invalid request');
+          return response.result as TranscriptItem[];
+        } }, id, handle, offset, limit)
+        : threads.readThread(id, offset, limit))]);
     registerHarnesses(router, settings, models, this.runners, tools);
     const updates = this.updates;
     if (updates) {
@@ -156,7 +163,7 @@ export class HubConnections {
       const folder = resources.tools.folder(tool);
       return (await threads.start({ profileId: profile.id, machineId: this.here.id, text: `Repair ${tool.name} on this machine\n\nDiagnose the failure, fix the installation, test it and verify the result. Work on this machine only.\nPackage: ${tool.package}@${tool.version}\nExecutable: ${tool.executable}\nManaged installation folder: ${folder}\nInstall with npm install --prefix <that folder> ${tool.package}@${tool.version}. Keep the installation inside that folder.\nHealth check arguments: ${JSON.stringify(tool.checkArgs)}\nFailure:\n${detail}\n\nAccio will rerun the health check after this thread completes. Report what you changed and the commands and results that prove it works.` }, { repairToolId: tool.id })).id;
     }, this.resourceCommand);
-    resources.register(router); threads.resources = resources; threads.toolOverrides = () => settings.harnessTools(); threads.onRepairFinished = id => resources.tools.afterRepair(id);
+    resources.register(router); threads.resources = resources; threads.toolOverrides = () => settings.harnessTools(); threads.onRepairFinished = id => resources.tools.afterRepair(id); threads.knownThreads = () => relay.merged();
     profiles.setReferenceSource(() => [...projects.state().projects.map((p) => p.profileId), ...threads.profileReferences()]);
     let reconciliation: Promise<unknown> = Promise.resolve();
     let initialized = false;

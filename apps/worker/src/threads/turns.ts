@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mediaKind, mediaMimeType, normalizeMarkdownSource, type ChoicePick, type ModelSelection, type ThreadAsset, type WorkspaceSkill } from '@accio/protocol';
+import { mediaKind, mediaMimeType, normalizeMarkdownSource, type ChoicePick, type ModelSelection, type ThreadAsset, type ThreadView, type WorkspaceSkill } from '@accio/protocol';
 import { mentionedModel, type Models } from '../harnesses/models.js';
 import type { Machines } from '../machine/machine.js';
 import type { Profiles } from '../profiles/profiles.js';
@@ -21,6 +21,7 @@ import { AGENT_TOOL_LABEL, isAgentTool, runSubagent, type AgentInput, type Subag
 import { assertResumable, endTurn, RESTART_NOTICE, retryOf, startTurn, type Thread, type TurnOutcome } from './thread.js';
 import { TurnTranscript, type TranscriptChange } from './transcript.js';
 import { handoffContext, withHandoff } from './handoff.js';
+import { threadMentionContext, withThreadMentions } from './threadMentions.js';
 import type { BuiltinTool } from '../harnesses/builtinTools.js';
 import { afterGoalTurn, CONTINUE_PROMPT, goalInstructions, goalTurnStarted, newGoalPrompt, parseGoalCommand } from '../goals/goal.js';
 
@@ -49,6 +50,8 @@ export type TurnDeps = {
   onWorkFinished?: (threadId: string) => void;
   /** GLOSSARY: Image attachment. */
   images: { claim: (threadId: string, uploadIds: string[]) => Promise<ThreadAsset[]>; file: (threadId: string, asset: ThreadAsset) => Promise<string> };
+  /** GLOSSARY: Thread mention. Every thread a message can mention, other machines' included. */
+  knownThreads?: () => readonly ThreadView[];
 };
 
 /** Starting, running, steering and finishing the turns of threads on this machine. */
@@ -106,7 +109,7 @@ export class Turns {
     const thread = this.state.require(id);
     this.deps.models.assertReadsImages(thread.profileId, thread.model, images);
     const files = await this.imageFiles(id, images);
-    await send(withImageFiles(harnessText, files), files);
+    await send(withImageFiles(this.withMentionedThreads(thread, harnessText), files), files);
     await this.state.transcripts.add(id, { kind: 'user', id: randomUUID(), turnId: input.turnId, text, at: now(), steered: true, ...(images.length ? { images } : {}), ...(pick ? { pick } : {}) });
     await this.state.transcripts.flush(id);
   }
@@ -127,6 +130,12 @@ export class Turns {
     await this.dispatchQueued(threadId);
     await this.continueGoal(threadId);
     await this.deps.deliveries.dispatch(threadId);
+  }
+
+  /** The message with a line about each thread it mentions, which the agent can then read. */
+  private withMentionedThreads(thread: Thread, text: string) {
+    const known = this.deps.knownThreads?.();
+    return known ? withThreadMentions(text, threadMentionContext(text, known, thread)) : text;
   }
 
   private async imageFiles(threadId: string, images: readonly ThreadAsset[]): Promise<HarnessImage[]> {
@@ -183,7 +192,7 @@ export class Turns {
       const cwd = state.cwd(thread);
       const goalCommand = parseGoalCommand(picked);
       // A /goal message never reaches the harness as typed: Claude Code would run its own /goal.
-      const ownPrompt = delivering && !resume ? deliveryPrompt(thread.workspace!, requested!) : withImageFiles(goalCommand?.type === 'set' ? newGoalPrompt(goalCommand.objective) : picked, files);
+      const ownPrompt = delivering && !resume ? deliveryPrompt(thread.workspace!, requested!) : withImageFiles(goalCommand?.type === 'set' ? newGoalPrompt(goalCommand.objective) : this.withMentionedThreads(thread, picked), files);
       // ADR 0017: after a change of harness, the first turn on the new one carries what it missed.
       const prompt = thread.handoff ? withHandoff(handoffContext((await transcripts.get(threadId)).items, thread.handoff), ownPrompt) : ownPrompt;
       if (delivering && !resume) text = thread.delivery!.mode === 'review' ? 'Prepare for review.' : `Ship to ${thread.delivery!.baseBranch} when ready.`;

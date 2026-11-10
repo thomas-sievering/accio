@@ -15,6 +15,7 @@
 }
 .hero.starting > :not(.composer-wrap) { display: none; }
 .hero.starting textarea { max-height: 44px; overflow: hidden; color: transparent; }
+.hero.starting .composer-backdrop { visibility: hidden; }
 /* Sent images leave the composer with the text; they travel into the message. */
 .hero.starting .composer-chips { display: none; }
 

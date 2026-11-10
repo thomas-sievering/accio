@@ -5,7 +5,7 @@ import { useLiveState, useLocalState } from '../app/useLive';
 import { useProjects } from '../projects/projects';
 import { useProfiles } from '../profiles/profiles';
 import { observeTranscript, type TranscriptState } from './observeTranscript';
-import { createPlacementTracker, filterThreads, nextMorning, shelveThreads, type ThreadShelves } from './shelves';
+import { createPlacementTracker, filterThreads, nextMorning, shelveThreads, type Placement, type ThreadShelves } from './shelves';
 import { clearFirstMessages } from './sentImages';
 
 type ThreadsCtx = {
@@ -22,6 +22,8 @@ type ThreadsCtx = {
   navigation: number;
   /** The open list plus the Working, Snoozed and Settled shelves, after the project scope and search. */
   shelves: ThreadShelves;
+  /** Where the sidebar places a thread, so other lists of threads group them as it does. */
+  placement: Placement;
   /** The one project the sidebar is narrowed to, or '' for every visible project. */
   projectScope: string;
   setProjectScope: (projectId: string) => void;
@@ -79,6 +81,7 @@ export function ThreadsProvider({ children }: { children: ReactNode }) {
         setNavigation((n) => n + 1);
       },
       navigation,
+      placement,
       shelves: shelveThreads(filterThreads(threads ?? [], { project: projectScope, profileId: filter, projects: projects?.projects ?? [] }, query), now, placement),
       projectScope,
       setProjectScope,

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { DeliveryStepName, ParamsOf, ShippedNote } from '@accio/protocol';
+import type { DeliveryStepName, ParamsOf, ShippedNote, ThreadView } from '@accio/protocol';
 import type { SecretsAccess } from '@accio/hub';
 import { now } from '../time.js';
 import type { Profiles } from '../profiles/profiles.js';
@@ -58,6 +58,8 @@ export class Threads {
   profileReferences() { return this.state.list.map((thread) => thread.profileId); }
   resources?: ResourceManager;
   onRepairFinished?: (toolId: string) => void;
+  /** GLOSSARY: Thread mention. Every thread this machine knows, other machines' included; set once the relay is up. */
+  knownThreads?: () => readonly ThreadView[];
   /** The hub's built-in tool overrides; accio's defaults apply until it is set. */
   toolOverrides?: () => BuiltinToolOverrides;
   readonly assets: ThreadAssets;
@@ -107,7 +109,7 @@ export class Threads {
     }, deliveryHosting);
     this.turns = new Turns(this.state, { profiles, projects, models, machines, harnesses, secrets: this.secrets, content: this.content, deliveries: this.deliveries, tools,
       images: { claim: (threadId, ids) => this.uploads.claim(threadId, ids, this.assets), file: (threadId, asset) => this.assets.harnessFile(threadId, asset) },
-      resources: () => this.resources, toolsOff: (harnessId) => builtinToolsOff(harnessId, this.toolOverrides?.()[harnessId]), onWorkFinished: id => this.naming.refine(id), onRepairFinished: (toolId) => this.onRepairFinished?.(toolId) });
+      resources: () => this.resources, toolsOff: (harnessId) => builtinToolsOff(harnessId, this.toolOverrides?.()[harnessId]), onWorkFinished: id => this.naming.refine(id), onRepairFinished: (toolId) => this.onRepairFinished?.(toolId), knownThreads: () => this.knownThreads?.() ?? this.views() });
     tools?.add(agentTool((threadId, input, { signal, progress }) => this.turns.startSubagent(threadId, input, signal, progress)));
     projects.onRemoveThreads((id) => this.deleteThreads(this.state.list.filter((t) => t.checkoutId === id)));
     projects.onCheckInUse((checkoutId) => this.countUsing((t) => t.checkoutId === checkoutId));
@@ -524,12 +526,7 @@ export class Threads {
     return this.state.get(threadId)?.delivery?.status === 'running';
   }
 
-  /** ADR 0017. Whether the thread has run on more than one harness, so its turns may need history they never saw. */
-  handedOff(threadId: string) {
-    return Object.keys(this.state.get(threadId)?.leftHarnesses ?? {}).length > 0;
-  }
-
-  async readThread(threadId: string, offset: number, limit: number) {
+  async readThread(threadId: string, offset: number | undefined, limit: number) {
     return readThreadPage((await this.state.transcripts.get(threadId)).items, offset, limit);
   }
 

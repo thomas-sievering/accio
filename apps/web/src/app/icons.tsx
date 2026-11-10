@@ -235,6 +235,13 @@ export const MessageSquarePlus = () => (
   </svg>
 );
 
+// IconMCP: message-square (MessageSquarePlus without the plus)
+export const MessageSquare = () => (
+  <svg {...base}>
+    <path d="M14 10 A1.333 1.333 0 0 1 12.667 11.333 H4.667 L2 14 V3.333 A1.333 1.333 0 0 1 3.333 2 H12.667 A1.333 1.333 0 0 1 14 3.333 Z" />
+  </svg>
+);
+
 // IconMCP: filter
 export const ListFilter = () => (
   <svg {...base}>

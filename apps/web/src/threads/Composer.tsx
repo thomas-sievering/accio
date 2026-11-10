@@ -1,13 +1,14 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ClipboardEvent, type FormEvent, type ReactNode } from 'react';
-import { foldsPaste, IMAGES_PER_MESSAGE, imageRefusal, joinPastes, normalizePaste, readsImage, type ModelSelection } from '@accio/protocol';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent, type FormEvent, type ReactNode } from 'react';
+import { foldsPaste, IMAGES_PER_MESSAGE, imageRefusal, joinPastes, normalizePaste, readsImage, splitMentions, type ModelSelection } from '@accio/protocol';
 import { ArrowUp, Close, Queue, StopSquare } from '../app/icons';
 import { useAppEvent } from '../app/appEvents';
 import { useAction } from '../app/useAction';
 import { useClient } from '../app/connection';
 import { useLive } from '../app/useLive';
 import { useThreads } from './threads';
-import { caretLeft, MentionMenu } from './Mentions';
-import { mentionAt, mentionOptions } from './mentionQuery';
+import { caretLeft, MentionBackdrop, MentionMenu } from './Mentions';
+import { mentionAt, mentionOptions, type MentionKind, type MentionOption } from './mentionQuery';
+import { shelveThreads } from './shelves';
 import { useModels } from './useModels';
 import { base64, pastedImages, prepareImage } from './pastedImage';
 import { PasteChip } from './PastedText';
@@ -16,7 +17,8 @@ import { composerKey, useDraft } from './drafts';
 
 /**
  * Enter steers the running turn; Ctrl+Enter queues. Shift+Enter adds a line.
- * Typing @ lists the profile's models and the online machines to mention (GLOSSARY: Model mention, Machine mention).
+ * Typing @ offers the profile's models, the online machines and the profile's threads to mention, each mention
+ * then drawn as a pill (GLOSSARY: Model mention, Machine mention, Thread mention).
  * Pasted images go above the message when the model reads them (GLOSSARY: Image attachment).
  * A long text paste becomes a chip that sends before the message; Ctrl+Shift+V keeps it in the box (GLOSSARY: Pasted text).
  * A reaction picked over transcript text is a chip too, sent after the pastes (GLOSSARY: Reaction).
@@ -63,7 +65,7 @@ export function Composer({
   imagesUnavailable?: string;
 }) {
   const client = useClient();
-  const { threads, shelves, selectedId, select } = useThreads();
+  const { threads, shelves, selectedId, select, now, placement } = useThreads();
   // GLOSSARY: Draft. Unsent text, Pasted text and images outlive this composer; sending or clearing them removes them.
   const { text, setText, pastes, setPastes, reactions, setReactions, images, setImages } = useDraft(composerKey(client.hubId, draftId));
   /** Set by Ctrl+Shift+V just before its paste event, which then keeps long text in the box. */
@@ -81,12 +83,27 @@ export function Composer({
   const [highlight, setHighlight] = useState(0);
   /** The @ whose menu Escape closed; it stays closed until the caret leaves it. */
   const [dismissed, setDismissed] = useState<number>();
+  /** The kind whose list the menu shows, picked from the first menu for the @ at `start`. */
+  const [browsing, setBrowsing] = useState<{ start: number; kind: MentionKind }>();
+  // Threads of the same profile, other than this one, grouped as the sidebar groups them.
+  const mentionable = useMemo(() => profileId && threads
+    ? shelveThreads(threads.filter((t) => t.profileId === profileId && t.id !== target), now, placement)
+    : undefined, [threads, profileId, target, now, placement]);
   const mention = caret === undefined ? undefined : mentionAt(text, caret);
-  const options = mention && mention.start !== dismissed ? mentionOptions(models, mention.query, machines) : [];
+  const kind = browsing && browsing.start === mention?.start ? browsing.kind : undefined;
+  const options = mention && mention.start !== dismissed ? mentionOptions(models, mention.query, machines, mentionable, kind) : [];
   const active = Math.min(highlight, options.length - 1);
-  const pickMention = (handle: string) => {
+  const pills = useMemo(() => {
+    if (!text.includes('@')) return undefined;
+    const parts = splitMentions(text, models?.models ?? [], machines ?? [], threads?.filter((t) => t.profileId === profileId && t.id !== target) ?? []);
+    return parts.some((part) => 'model' in part || 'machine' in part || 'thread' in part) ? parts : undefined;
+  }, [text, models, machines, threads, profileId, target]);
+  const backdrop = useRef<HTMLDivElement>(null);
+  const pickMention = (option: MentionOption) => {
     const el = input.current;
     if (!el || !mention) return;
+    if ('kind' in option) { setBrowsing({ start: mention.start, kind: option.kind }); setHighlight(0); return; }
+    const { handle } = option;
     const after = text.slice(caret);
     const insert = `@${handle}${/^\s/.test(after) ? '' : ' '}`;
     const end = mention.start + insert.length;
@@ -99,7 +116,7 @@ export function Composer({
     const at = el && document.activeElement === el && el.selectionStart === el.selectionEnd ? el.selectionStart : undefined;
     setCaret(at);
     const next = at === undefined ? undefined : mentionAt(el!.value, at);
-    if (next?.start !== mention?.start) setHighlight(0);
+    if (next?.start !== mention?.start) { setHighlight(0); setBrowsing(undefined); }
     if (dismissed !== undefined && next?.start !== dismissed) setDismissed(undefined);
   };
   const [imageError, setImageError] = useState<string>();
@@ -158,7 +175,16 @@ export function Composer({
     if (!el) return;
     el.style.height = 'auto';
     el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
-  }, [text]);
+    syncBackdrop();
+  }, [text, pills]);
+  /** The pills follow the textarea's scroll, and wrap where its text does beside a scrollbar. */
+  const syncBackdrop = () => {
+    const el = input.current;
+    const back = backdrop.current;
+    if (!el || !back) return;
+    back.style.width = `${el.clientWidth}px`;
+    back.scrollTop = el.scrollTop;
+  };
 
   /** Puts `insert` at the cursor, replacing the selection. */
   const insertAtCursor = (insert: string) => {
@@ -269,8 +295,11 @@ export function Composer({
             onChange={(kind) => setReactions((current) => current.map((r, i) => i === index ? { ...r, kind } : r))}
             onRemove={() => { setReactions((current) => current.filter((_, i) => i !== index)); input.current?.focus(); }} />)}
         </div>}
-        {options.length > 0 && mention && <MentionMenu options={options} active={active} onPick={pickMention} onHover={setHighlight}
+        {options.length > 0 && mention && <MentionMenu options={options} active={active} browsing={kind} onPick={pickMention} onHover={setHighlight}
+          onBack={() => { setBrowsing(undefined); setHighlight(0); }}
           left={Math.min((input.current?.offsetLeft ?? 0) + (input.current ? caretLeft(input.current, mention.start) : 0), (input.current?.parentElement?.clientWidth ?? 0) - 240)} />}
+        <div className={`composer-input${pills ? ' pills' : ''}`}>
+        {pills && <MentionBackdrop ref={backdrop} parts={pills} />}
         <textarea
           ref={input}
           rows={1}
@@ -287,6 +316,7 @@ export function Composer({
           onSelect={trackCaret}
           onFocus={trackCaret}
           onBlur={() => setCaret(undefined)}
+          onScroll={syncBackdrop}
           onKeyDown={(e) => {
             if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && (e.key.toLowerCase() === 'v' || e.code === 'KeyV')) pasteInline.current = Date.now();
             if (options.length > 0 && !e.nativeEvent.isComposing) {
@@ -295,11 +325,13 @@ export function Composer({
                 setHighlight((active + (e.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length);
                 return;
               }
-              if ((e.key === 'Enter' || e.key === 'Tab') && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+              if ((e.key === 'Enter' || e.key === 'Tab' || (e.key === 'ArrowRight' && 'kind' in options[active]!)) && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
                 e.preventDefault();
-                pickMention(options[active]!.handle);
+                pickMention(options[active]!);
                 return;
               }
+              // Inside a kind's list, Backspace on a bare @ goes back to the kinds rather than deleting it.
+              if ((e.key === 'Backspace' || e.key === 'ArrowLeft') && kind && !mention!.query) { e.preventDefault(); setBrowsing(undefined); setHighlight(0); return; }
               if (e.key === 'Escape') { e.preventDefault(); setDismissed(mention!.start); return; }
             }
             if (e.key === 'Tab' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !e.nativeEvent.isComposing && e.keyCode !== 229) {
@@ -315,6 +347,7 @@ export function Composer({
             }
           }}
         />
+        </div>
         <div className="composer-bar">
           {toolbar}
           {onStop && sendable && <button type="button" className="composer-queue" disabled={disabled || busy} onClick={() => void submit('queue')}>Queue <kbd>Ctrl ↵</kbd></button>}

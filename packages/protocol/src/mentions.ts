@@ -71,18 +71,45 @@ export function findMentionedMachine<T extends { id: string; name: string }>(mac
   return machineHandles(machines).find((h) => h.handle === wanted)?.machine;
 }
 
-export type MentionPart<M, C> = { text: string } | { text: string; model: M } | { text: string; machine: C };
+/** How many characters of a thread's id end its handle. */
+const THREAD_ID_CHARS = 6;
 
-/** The text split into plain runs and the mentions of offered models and known machines in it; a model's handle wins. */
-export function splitMentions<M extends Mentionable, C extends { id: string; name: string } = never>(text: string, models: M[], machines: C[] = []): MentionPart<M, C>[] {
-  const parts: MentionPart<M, C>[] = [];
+/**
+ * GLOSSARY: Thread mention. The handle you type after @ to name a thread, such as
+ * `@fix-login-redirect-3f2a9c`: the first words of its title, then the start of its id.
+ * Only the id part identifies it, so the handle keeps working after a rename.
+ */
+export function threadHandle(thread: { id: string; title: string }): string {
+  const words = thread.title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(Boolean).slice(0, 3);
+  let lead = '';
+  for (const word of words) { if ((lead ? lead.length + 1 : 0) + word.length > 24) break; lead = lead ? `${lead}-${word}` : word; }
+  return `${lead || 'thread'}-${thread.id.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, THREAD_ID_CHARS)}`;
+}
+
+/** The thread a handle names by its id part, with or without its leading @; its id itself works too. */
+export function findMentionedThread<T extends { id: string }>(threads: T[], handle: string): T | undefined {
+  const wanted = handle.replace(/^@/, '').toLowerCase();
+  const exact = threads.find((t) => t.id.toLowerCase() === wanted);
+  if (exact) return exact;
+  const id = new RegExp(`-([a-z0-9]{${THREAD_ID_CHARS}})$`).exec(wanted)?.[1];
+  return id ? threads.find((t) => t.id.toLowerCase().replace(/[^a-z0-9]/g, '').startsWith(id)) : undefined;
+}
+
+export type MentionPart<M, C, T = never> = { text: string } | { text: string; model: M } | { text: string; machine: C } | { text: string; thread: T };
+
+/** The text split into plain runs and the mentions of offered models, known machines and threads in it; a model's handle wins, then a machine's. */
+export function splitMentions<M extends Mentionable, C extends { id: string; name: string } = never, T extends { id: string } = never>(
+  text: string, models: M[], machines: C[] = [], threads: T[] = [],
+): MentionPart<M, C, T>[] {
+  const parts: MentionPart<M, C, T>[] = [];
   let at = 0;
   for (const match of text.matchAll(MENTION)) {
     const model = findMentionedModel(models, match[1]!);
     const machine = model ? undefined : findMentionedMachine(machines, match[1]!);
-    if (!model && !machine) continue;
+    const thread = model || machine ? undefined : findMentionedThread(threads, match[1]!);
+    if (!model && !machine && !thread) continue;
     if (match.index > at) parts.push({ text: text.slice(at, match.index) });
-    parts.push(model ? { text: match[0], model } : { text: match[0], machine: machine! });
+    parts.push(model ? { text: match[0], model } : machine ? { text: match[0], machine } : { text: match[0], thread: thread! });
     at = match.index + match[0].length;
   }
   if (at < text.length) parts.push({ text: text.slice(at) });

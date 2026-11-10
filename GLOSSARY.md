@@ -168,7 +168,7 @@ _Avoid_: Citation, quote (for the whole thing), feedback
 Sending a message to the harness during its current turn, without interrupting it or starting a separate turn.
 
 **Handoff**:
-Moving a thread to another harness by choosing one of its models. The next turn on that harness starts a new session, or resumes the one it left, with the conversation it has not seen, taken from accio's transcript and trimmed to fit. The harness can read the whole thread with the read_thread accio tool (ADR 0017).
+Moving a thread to another harness by choosing one of its models. The next turn on that harness starts a new session, or resumes the one it left, with the conversation it has not seen, taken from accio's transcript and trimmed to fit. The harness can read the whole thread with the read_thread accio tool (ADR 0017), which also reads a thread you mention.
 _Avoid_: Switch, transfer, migration
 
 **Running**:
@@ -199,7 +199,7 @@ A new thread that another thread starts through the start_thread accio tool, whe
 _Avoid_: Child thread, spawned thread, sub-thread
 
 **Model mention**:
-Naming a model in a message with `@` and its handle, such as `@sonnet` or `@sol`, so sub-agents for that work run on it, on either harness. The handle is the model's family; when two offered models share one, both add their version, such as `@opus-5.5`. Typing `@` in the composer lists the profile's models, then the online machines; the sent message keeps the text and shows each mention as a chip. The thread's own model does not change.
+Naming a model in a message with `@` and its handle, such as `@sonnet` or `@sol`, so sub-agents for that work run on it, on either harness. The handle is the model's family; when two offered models share one, both add their version, such as `@opus-5.5`. Typing only `@` in the composer offers Models, Machines and Threads, each opening its list; typing after it lists the matches of every kind. Each mention shows as a pill in the composer and as a chip in the sent message, which keeps the text. The thread's own model does not change.
 _Avoid_: Tag, model reference
 
 **Issue tracker**:
@@ -213,6 +213,10 @@ _Avoid_: Ticket, task
 **Machine mention**:
 Naming a machine in a message with `@` and its handle, such as `@laptop`, so the turn's machine tools, such as App screenshot and Update, act on that machine. The handle is the machine's name in lowercase words joined by dashes; when two machines share one, both add the start of their id. A model's handle wins over a machine's. The thread keeps running where it is.
 _Avoid_: Machine tag, target
+
+**Thread mention**:
+Naming another thread of the same profile in a message with `@` and its handle, such as `@fix-login-redirect-3f2a9c`, so the agent can read it. The handle is the first words of the thread's title and the start of its id; only the id part counts, so it still works after a rename. The harness gets a line about each mentioned thread after the message (its title, where it sits in the sidebar, its machine, branch and PR), not its conversation; it reads that with the read_thread accio tool, newest items first, on any machine through the relay. Before you type, the @ menu's Threads lists recent ones: open first, then Working, then recently settled; typing searches all of them by title.
+_Avoid_: Thread link, thread reference
 
 **Snooze**:
 Hiding a thread until a chosen time, when it comes back. Another machine's thread can't be read or settled while that machine is offline, so it is snoozed until the machine is back instead, or for a week if it stays away. Its machine can't record that snooze, so the hub keeps it, and every machine shows it; the hub drops it when the machine reconnects, so the thread wakes everywhere at once.
