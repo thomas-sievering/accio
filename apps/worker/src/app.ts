@@ -58,7 +58,7 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
     const first = connections.workspaces.get(connections.defaultId!)!;
     let closing: Promise<void> | undefined;
     return { ...transport, router: first?.router ?? connections.global, profiles: first?.profiles, projects: first?.projects, threads: first?.threads, machines: first?.machines, tools: first?.tools, resources: first?.resources,
-      hub: local?.hub!, settings: local?.settings!, secrets: first?.secrets, hubUrl: first?.client.url ?? '', connections,
+      sortingHat: local?.sortingHat!, settings: local?.settings!, secrets: first?.secrets, hubUrl: first?.client.url ?? '', connections,
       close: () => { connections.stopAccepting(); return closing ??= (async () => { await transport.close(); await connections.close(); await local?.close(); })(); } };
   } catch (error) { await connections.close().catch(() => {}); await local?.close().catch(() => {}); throw error; }
 }

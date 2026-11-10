@@ -1,7 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
-import type { Fetch } from './claudeOAuth.js';
-import type { Hub } from './hub.js';
+import type { Fetch, ProviderId } from './types.js';
 
 const ANTHROPIC_API = 'https://api.anthropic.com';
 const OAUTH_BETA = 'oauth-2025-04-20';
@@ -25,19 +24,35 @@ const DROP_REQUEST = new Set([
 const dropRequestHeader = (name: string) => DROP_REQUEST.has(name.toLowerCase()) || /^(cf-|x-forwarded-)/i.test(name);
 const DROP_RESPONSE = new Set(['content-encoding', 'content-length', 'transfer-encoding', 'connection', 'keep-alive']);
 
-type ProxyOptions = { hub: Hub; host: string; port: number; upstream?: string; fetchImpl?: Fetch; openaiUpstream?: string; openaiFetch?: Fetch };
+/** What forwarding needs from the accounts: everything else about them stays behind this seam. */
+export interface Forwarding {
+  /** The house a request's key belongs to, or undefined for an unknown key. */
+  houseForKey(key: string): { id: string } | undefined;
+  /** The house's Claude account in use and its token, refreshed first when close to expiry or forced. */
+  claudeAccess(houseId: string, force?: boolean): Promise<{ accountId: string; token: string } | null>;
+  /** The house's ChatGPT account in use's credentials, refreshed first when close to expiry or forced. */
+  openaiCredentials(houseId: string, force?: boolean): Promise<{ accessToken: string; accountId: string } | null>;
+  accountIdInUse(houseId: string, providerId: ProviderId): string | null;
+  /** Keeps the limits behind the account choice current while the house is in use. */
+  noteRequest(houseId: string, providerId: ProviderId): void;
+  /** After a provider refused a request for limits; true when the next request would use another account. */
+  recheckAfterLimit(houseId: string, providerId: ProviderId, accountId: string): Promise<boolean>;
+}
+
+type ForwardingOptions = { accounts: Forwarding; host: string; port: number; upstream?: string; fetchImpl?: Fetch; openaiUpstream?: string; openaiFetch?: Fetch };
 
 /**
- * The hub's front door for threads. Claude Code calls it with a profile's access
- * key (ANTHROPIC_AUTH_TOKEN, or an API key header); the hub swaps that key for the
- * profile's OAuth token and forwards to Anthropic. The caller is the real Claude
- * Code, so nothing else about the request changes (ADR 0007).
+ * The Sorting Hat's front door for model requests. Claude Code calls it with a
+ * house's key (ANTHROPIC_AUTH_TOKEN, or an API key header); it swaps that key
+ * for the account in use's OAuth token and forwards to Anthropic. The caller is
+ * the real Claude Code, so nothing else about the request changes (ADR 0007).
+ * Codex calls the /openai/ routes the same way.
  */
-export async function startHubProxy({ hub, host, port, upstream = ANTHROPIC_API, fetchImpl = fetch, openaiUpstream = 'https://chatgpt.com/backend-api/codex', openaiFetch = fetch }: ProxyOptions) {
+export async function startForwarding({ accounts, host, port, upstream = ANTHROPIC_API, fetchImpl = fetch, openaiUpstream = 'https://chatgpt.com/backend-api/codex', openaiFetch = fetch }: ForwardingOptions) {
   const server = createServer((req, res) => {
     handle(req, res).catch((err) => {
       if (res.destroyed) return;
-      console.error('[hub] proxy error', err);
+      console.error('[sorting-hat] forwarding error', err);
       if (!res.headersSent) sendError(res, 502, 'api_error', 'accio hub could not reach the provider. Check the account sign-in and connection.');
       else res.destroy();
     });
@@ -45,13 +60,13 @@ export async function startHubProxy({ hub, host, port, upstream = ANTHROPIC_API,
 
   async function handle(req: IncomingMessage, res: ServerResponse) {
     const key = keyOf(req);
-    const profile = key ? hub.profileForKey(key) : undefined;
-    if (!profile) return sendError(res, 401, 'authentication_error', 'Unknown accio hub key');
-    if (req.url?.startsWith('/openai/')) return handleOpenAI(req, res, profile.id);
+    const house = key ? accounts.houseForKey(key) : undefined;
+    if (!house) return sendError(res, 401, 'authentication_error', 'Unknown accio hub key');
+    if (req.url?.startsWith('/openai/')) return handleOpenAI(req, res, house.id);
 
-    hub.noteRequest(profile.id, 'anthropic');
-    let access = await hub.claudeAccess(profile.id);
-    if (!access) return sendError(res, 401, 'authentication_error', `accio profile ${profile.id} is not signed in with Claude`);
+    accounts.noteRequest(house.id, 'anthropic');
+    let access = await accounts.claudeAccess(house.id);
+    if (!access) return sendError(res, 401, 'authentication_error', `accio profile ${house.id} is not signed in with Claude`);
 
     const body = await readBody(req);
     const send = (accessToken: string) =>
@@ -65,13 +80,13 @@ export async function startHubProxy({ hub, host, port, upstream = ANTHROPIC_API,
     if (upstreamRes.status === 401) {
       // The token may have been revoked or rotated early: refresh once and retry.
       await upstreamRes.body?.cancel();
-      access = await hub.claudeAccess(profile.id, true);
+      access = await accounts.claudeAccess(house.id, true);
       if (!access) return sendError(res, 401, 'authentication_error', 'This profile is no longer signed in');
       upstreamRes = await send(access.token);
     }
-    if (upstreamRes.status === 429 && await hub.recheckAfterLimit(profile.id, 'anthropic', access.accountId)) {
-      // This account ran out; the request moves to the profile's next account once.
-      const next = await hub.claudeAccess(profile.id);
+    if (upstreamRes.status === 429 && await accounts.recheckAfterLimit(house.id, 'anthropic', access.accountId)) {
+      // This account ran out; the request moves to the house's next account once.
+      const next = await accounts.claudeAccess(house.id);
       if (next) { await upstreamRes.body?.cancel(); upstreamRes = await send(next.token); }
     }
 
@@ -84,12 +99,12 @@ export async function startHubProxy({ hub, host, port, upstream = ANTHROPIC_API,
     Readable.fromWeb(upstreamRes.body as import('node:stream/web').ReadableStream).pipe(res);
   }
 
-  async function handleOpenAI(req: IncomingMessage, res: ServerResponse, profileId: string) {
+  async function handleOpenAI(req: IncomingMessage, res: ServerResponse, houseId: string) {
     const path = req.url?.split('?')[0];
     if (req.method !== 'POST' || !['/openai/responses', '/openai/responses/compact'].includes(path ?? '')) return sendError(res, 404, 'invalid_request_error', 'Unknown Codex endpoint');
-    hub.noteRequest(profileId, 'openai');
-    const used = hub.accountIdInUse(profileId, 'openai');
-    let credentials = await hub.openaiCredentials(profileId);
+    accounts.noteRequest(houseId, 'openai');
+    const used = accounts.accountIdInUse(houseId, 'openai');
+    let credentials = await accounts.openaiCredentials(houseId);
     if (!credentials) return sendError(res, 401, 'authentication_error', 'Select a signed-in ChatGPT account for this profile');
     const body = await readBody(req);
     const controller = new AbortController();
@@ -109,12 +124,12 @@ export async function startHubProxy({ hub, host, port, upstream = ANTHROPIC_API,
     let response = await send(credentials);
     if (response.status === 401) {
       await response.body?.cancel();
-      credentials = await hub.openaiCredentials(profileId, true);
+      credentials = await accounts.openaiCredentials(houseId, true);
       if (!credentials) return sendError(res, 401, 'authentication_error', 'This profile is no longer signed in');
       response = await send(credentials);
     }
-    if (response.status === 429 && used && await hub.recheckAfterLimit(profileId, 'openai', used)) {
-      const next = await hub.openaiCredentials(profileId);
+    if (response.status === 429 && used && await accounts.recheckAfterLimit(houseId, 'openai', used)) {
+      const next = await accounts.openaiCredentials(houseId);
       if (next) { await response.body?.cancel(); response = await send(next); }
     }
     const headers: Record<string, string> = {};

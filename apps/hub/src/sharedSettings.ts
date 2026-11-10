@@ -4,7 +4,7 @@ import { DEFAULT_THREAD_NAMING, type ThreadNamingSettings, type HarnessInstall, 
 
 export type { HarnessInstall };
 
-/** A profile as the hub stores it. Its account selections and keys are kept by Hub (hub.ts). */
+/** A profile as the hub stores it. Its accounts are kept by the house of the same id on the Sorting Hat. */
 export type SharedProfile = { id: string; name: string };
 
 /** What a machine tells the hub about itself when it connects. */

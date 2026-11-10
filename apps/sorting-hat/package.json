@@ -1,0 +1,13 @@
+{
+  "name": "@accio/sorting-hat",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p ."
+  },
+  "dependencies": {
+    "@openai/codex": "0.166.0"
+  }
+}

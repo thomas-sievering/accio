@@ -1,4 +1,4 @@
-import type { AccountLimitsView, AccountView, LimitsProblem, LimitWindow } from '@accio/protocol';
+import type { AccountLimitsView, AccountView, LimitsProblem, LimitWindow } from './types.js';
 
 export class LimitsReadError extends Error {
   constructor(readonly code: LimitsProblem['code'], message: string, readonly retryAfterMs?: number) { super(message); }
@@ -8,7 +8,7 @@ type Entry = { view: AccountLimitsView; failures: number; controller?: AbortCont
 const FRESH_MS = 60_000;
 const COOLDOWN_MS = 5_000;
 
-/** The hub coalesces account reads across profiles, machines and clients. */
+/** Coalesces account reads across houses and callers. */
 export class AccountLimits {
   private entries = new Map<string, Entry>();
   private pending = new Set<Promise<void>>();

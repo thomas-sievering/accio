@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { AccountView, LimitWindow } from '@accio/protocol';
+import type { AccountView, LimitWindow } from './types.js';
 import { AccountLimits, LimitsReadError, type LimitsRead } from './limits.js';
 
 const account = (id = 'shared', signedIn = true): AccountView => ({ id, name: id, providerId: 'anthropic', signedIn, email: 'same@example.com', organization: null });

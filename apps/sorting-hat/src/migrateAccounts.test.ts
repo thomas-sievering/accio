@@ -1,9 +1,9 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { JsonFile } from '@accio/persistence';
+import { JsonFile } from './store.js';
 import { afterEach, expect, it, vi } from 'vitest';
-import { Hub } from './hub.js';
+import { SortingHat } from './sortingHat.js';
 import type { ClaudeAccount } from './claudeOAuth.js';
 
 let home: string;
@@ -17,16 +17,16 @@ it('migrates the original filename and login field, preserving signed-out profil
     { id: 'work', accessKey: 'work-key', login: account },
     { id: 'personal', accessKey: 'personal-key', login: null },
   ]));
-  const hub = new Hub(home);
+  const hub = new SortingHat(join(home, 'hub'));
   await hub.load();
-  expect(await hub.ensureProfile('work')).toBe('work-key');
-  expect(await hub.ensureProfile('personal')).toBe('personal-key');
+  expect(await hub.ensureHouse('work')).toBe('work-key');
+  expect(await hub.ensureHouse('personal')).toBe('personal-key');
   expect(hub.selectedAccount('personal')).toBeNull();
   expect(hub.selectedAccount('work')).toMatchObject({ id: 'account-work', name: 'me@example.com', signedIn: true });
   expect(await hub.accessToken('work')).toBe('token');
   const stored = await readFile(join(home, 'hub', 'profiles.json'), 'utf8');
   await hub.close();
-  const reloaded = new Hub(home);
+  const reloaded = new SortingHat(join(home, 'hub'));
   await reloaded.load();
   expect(reloaded.accountViews()).toEqual(hub.accountViews());
   expect(await readFile(join(home, 'hub', 'profiles.json'), 'utf8')).toBe(stored);
@@ -39,13 +39,13 @@ it('keeps legacy credentials readable when conversion persistence fails', async 
   const legacy = JSON.stringify([{ id: 'work', accessKey: 'kept-key', account }]);
   await writeFile(path, legacy);
   vi.spyOn(JsonFile.prototype, 'write').mockRejectedValueOnce(new Error('disk full'));
-  const failed = new Hub(home);
+  const failed = new SortingHat(join(home, 'hub'));
   await expect(failed.load()).rejects.toThrow('disk full');
   expect(failed.accountViews()).toEqual([]);
   expect(await readFile(path, 'utf8')).toBe(legacy);
-  const retry = new Hub(home);
+  const retry = new SortingHat(join(home, 'hub'));
   await retry.load();
-  expect(await retry.ensureProfile('work')).toBe('kept-key');
+  expect(await retry.ensureHouse('work')).toBe('kept-key');
   expect(await retry.accessToken('work')).toBe('token');
 });
 
@@ -57,7 +57,7 @@ it('turns single-account selections into ordered account lists, keeping each pro
     profiles: [{ id: 'work', accessKey: 'work-key', accountId: 'claude', openaiAccountId: 'gpt' }, { id: 'personal', accessKey: 'personal-key', accountId: null }],
     accounts: [{ id: 'claude', name: 'Claude', account }, { id: 'gpt', name: 'GPT', providerId: 'openai', account: null, openai }],
   }));
-  const hub = new Hub(home);
+  const hub = new SortingHat(join(home, 'hub'));
   await hub.load();
   expect(hub.selectedAccounts('work', 'anthropic').map((a) => a.id)).toEqual(['claude']);
   expect(hub.selectedAccounts('work', 'openai').map((a) => a.id)).toEqual(['gpt']);

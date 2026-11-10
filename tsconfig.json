@@ -11,6 +11,9 @@
       "path": "packages/protocol"
     },
     {
+      "path": "apps/sorting-hat"
+    },
+    {
       "path": "apps/hub"
     },
     {

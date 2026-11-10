@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { join } from 'node:path';
 import { JsonFile, JsonStore } from '@accio/persistence';
-import { SignInError } from './claudeOAuth.js';
+import { HubError } from './errors.js';
 
 type Device = { id: string; tokenHash: string; keys: Record<string, string>; references: string[] };
 type Data = { id: string; devices: Device[] };
@@ -14,7 +14,7 @@ export function safeEqual(a: string, b: string): boolean {
   return x.length === y.length && timingSafeEqual(x, y);
 }
 
-/** Hub identity and device grants. Provider tokens are held separately by Hub. */
+/** Hub identity and device grants. Provider tokens are held separately by the Sorting Hat. */
 export class HubTrust {
   private store: JsonStore<Data>;
   private pairing: ReturnType<typeof pairingFile>;
@@ -36,7 +36,7 @@ export class HubTrust {
   pair(code: string, id: string) {
     return this.change(async () => {
       const pending = await this.pairing.read();
-      if (Date.now() >= pending.expiresAt || !safeEqual(pending.hash, digest(code.replace(/[-\s]/g, '').toUpperCase()))) throw new SignInError('Pairing code is invalid or expired. Generate a new code on the hub.');
+      if (Date.now() >= pending.expiresAt || !safeEqual(pending.hash, digest(code.replace(/[-\s]/g, '').toUpperCase()))) throw new HubError('Pairing code is invalid or expired. Generate a new code on the hub.');
       const previous = this.data.devices.find((d) => d.id === id);
       const token = `accio-device-${randomBytes(32).toString('base64url')}`;
       await this.pairing.write({ hash: '', expiresAt: 0 });
@@ -53,7 +53,7 @@ export class HubTrust {
   key(machineId: string, profileId: string): Promise<string> {
     return this.change(async () => {
       const device = this.data.devices.find((d) => d.id === machineId);
-      if (!device) throw new SignInError('This machine is no longer paired.');
+      if (!device) throw new HubError('This machine is no longer paired.');
       if (device.keys[profileId]) return device.keys[profileId];
       const key = `accio-${randomBytes(32).toString('base64url')}`;
       await this.save(this.data.devices.map((d) => d.id === machineId ? { ...d, keys: { ...d.keys, [profileId]: key } } : d));

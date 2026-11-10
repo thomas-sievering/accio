@@ -1,4 +1,4 @@
-import type { LimitWindow } from '@accio/protocol';
+import type { LimitWindow } from './types.js';
 import { LimitsReadError, type LimitsRead } from './limits.js';
 
 type ObjectValue = Record<string, unknown>;
@@ -75,7 +75,7 @@ export function anthropicLimits(raw: unknown): LimitsRead {
   return { windows: [...allowances.values()] };
 }
 
-/** Full account/rateLimits/read response from the hub's authenticated app-server. */
+/** Full account/rateLimits/read response from the account's authenticated app-server. */
 export function openaiLimits(raw: unknown): LimitsRead {
   const response = object(raw);
   if (!response || !('rateLimits' in response || 'rateLimitsByLimitId' in response)) throw invalid();

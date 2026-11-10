@@ -63,14 +63,14 @@ export function readPastedCode(pasted: string, pending: PendingSignIn): string {
   return code;
 }
 
-/** A Claude account as the hub keeps it: its tokens and who it is. */
+/** A Claude account as the Sorting Hat keeps it: its tokens and who it is. */
 export type ClaudeAccount = {
   accessToken: string;
   refreshToken: string;
   /** Epoch ms; refreshed a few minutes before. */
   expiresAt: number;
   email: string | null;
-  /** Anthropic account id; tells whether two accio profiles use the same Claude account. */
+  /** Anthropic account id; tells whether two accounts are the same Claude account. */
   claudeAccountId: string | null;
   organization: string | null;
 };

@@ -14,6 +14,7 @@ under `docs/plans` record scope and history and may predate the implementation.
 | Model availability and selection | `apps/worker/src/harnesses/models.ts`, `packages/protocol/src/models.ts` |
 | Remote thread support | `apps/worker/src/relay/relay.ts`, `packages/protocol/src/relay.ts` |
 | UI action availability | `apps/web/src/threads/useThreadAvailability.ts` |
+| Accounts, sign-in, limits, account in use and forwarding | `apps/sorting-hat/src/sortingHat.ts`, `proxy.ts` (the hub calls it through `SortingHatApi` in its `index.ts`) |
 | Saved media | `apps/worker/src/threads/assets.ts`, web `threads/assetUrl.ts`, `useSavedAsset.ts` |
 | First-message handoff | web `threads/ThreadPane.tsx`, `sentImages.ts` |
 | App boundaries and roles | [README.md](README.md#how-it-fits-together) |

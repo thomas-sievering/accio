@@ -218,14 +218,19 @@ describe('Codex and ChatGPT accounts', () => {
   });
 
   it('shares concurrent refreshes for one account and does not expose its tokens in profile config', async () => {
-    const fake = new FakeCodex(); t = await startTestApp({ codexFactory: fake.factory }); const c = await t.connect();
+    const forwarded: string[] = [];
+    const fake = new FakeCodex(); t = await startTestApp({ codexFactory: fake.factory, openaiFetch: async (_url, init) => {
+      forwarded.push(new Headers(init?.headers).get('authorization') ?? ''); return Response.json({});
+    } }); const c = await t.connect();
     const { profile } = await signIn(c, fake);
     const loginClient = fake.clients[0]!;
     const authFile = join(loginClient.options.home, 'auth.json');
     const auth = JSON.parse(await readFile(authFile, 'utf8')); auth.tokens.access_token = testJWT('expired', true);
     await writeFile(authFile, JSON.stringify(auth));
-    const credentials = await Promise.all(Array.from({ length: 8 }, () => t.app.hub.openaiCredentials(profile.id)));
-    expect(credentials.every((x) => x?.accessToken === credentials[0]?.accessToken)).toBe(true);
+    const key = await t.app.sortingHat.ensureHouse(profile.id);
+    await Promise.all(Array.from({ length: 8 }, async () => (await fetch(`${t.app.sortingHat.url}/openai/responses`, { method: 'POST', headers: { authorization: `Bearer ${key}` }, body: '{}' })).text()));
+    expect(forwarded).toHaveLength(8);
+    expect(forwarded.every((x) => x === forwarded[0] && x !== `Bearer ${auth.tokens.access_token}`)).toBe(true);
     expect(fake.clients.flatMap((x) => x.requests).filter((r) => r.method === 'account/read' && r.params.refreshToken)).toHaveLength(1);
     const config = await readFile(join(t.home, 'profiles', profile.id, 'claude', 'settings.json'), 'utf8');
     expect(config).not.toContain('refresh-Personal'); expect(config).not.toContain('private-id-token');

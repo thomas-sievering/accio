@@ -7,6 +7,7 @@ export default defineConfig({
       '@accio/codex': fileURLToPath(new URL('./packages/codex/src/index.ts', import.meta.url)),
       '@accio/persistence': fileURLToPath(new URL('./packages/persistence/src/index.ts', import.meta.url)),
       '@accio/protocol': fileURLToPath(new URL('./packages/protocol/src/index.ts', import.meta.url)),
+      '@accio/sorting-hat': fileURLToPath(new URL('./apps/sorting-hat/src/index.ts', import.meta.url)),
       '@accio/hub': fileURLToPath(new URL('./apps/hub/src/index.ts', import.meta.url)),
     },
   },
