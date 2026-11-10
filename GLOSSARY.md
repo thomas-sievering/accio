@@ -194,6 +194,14 @@ _Avoid_: Child thread, spawned thread, sub-thread
 Naming a model in a message with `@` and its handle, such as `@sonnet` or `@sol`, so sub-agents for that work run on it, on either harness. The handle is the model's family; when two offered models share one, both add their version, such as `@opus-5.5`. Typing `@` in the composer lists the profile's models, then the online machines; the sent message keeps the text and shows each mention as a chip. The thread's own model does not change.
 _Avoid_: Tag, model reference
 
+**Issue tracker**:
+Where a project's open issues live, as its agent skills record it in `docs/agents/issue-tracker.md` or the Agent skills block of CLAUDE.md or AGENTS.md: GitHub Issues, or markdown files under `.scratch/<feature>/issues/`. Without that record, local issue files, else a GitHub origin, stand in. Accio reads GitHub through the profile's GitHub account; it cannot list other trackers yet.
+_Avoid_: Backlog, ticket system
+
+**Issue**:
+One open issue a new thread can pick up. In a project's draft, the Pick an issue chip beside the machine lists them: GitHub issues by triage label, ready for an agent first and blocked last; local issues by feature. The chip shows only when the tracker has open issues. The picked issue sits above the message, which may then be empty; sending names it in the first message (`Work on #208: …`), starts the thread's title from it, and claims it once the thread has started: assigned to you on GitHub, or `Status: claimed` in the thread's worktree copy of a local file. A claim that fails is noted in the thread.
+_Avoid_: Ticket, task
+
 **Machine mention**:
 Naming a machine in a message with `@` and its handle, such as `@laptop`, so the turn's machine tools, such as App screenshot and Update, act on that machine. The handle is the machine's name in lowercase words joined by dashes; when two machines share one, both add the start of their id. A model's handle wins over a machine's. The thread keeps running where it is.
 _Avoid_: Machine tag, target

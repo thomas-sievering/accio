@@ -10,6 +10,7 @@ Users choose a project or profile, select a model, send prompts, observe streame
 - `threads-stop`: stop from composer/row/menu; resume interruptions; retry failed turns.
 - `threads-find`: title search, clear, profile/project filters and clear filter chip.
 - `threads-organize`: rename, snooze/wake, settle/reopen, shelf expansion/paging, confirmed deletion.
+- `threads-issues`: Pick an issue beside the machine in a project draft; GitHub and local `.scratch` trackers, search, keyboard pick, removable chip, the first message, the title and the claim.
 - `threads-goal`: `/goal <objective>` in the composer shows the Goal bar (`getByRole('region', { name: 'Goal' })`); accio continues turns ("Continuing toward the goal" dividers) until finish_goal reports achieved or blocked; Pause, Resume and Clear goal buttons and `/goal pause|resume|clear`. Covered by `tests/goal.spec.ts` in `pnpm test:chat` with the scripted harness calling the real MCP tool; real-provider goals need a signed-in account.
 - `threads-delivery`: owned Git worktrees, Ship/review intent, cancellation, remote verification, preview ownership and safe Archive.
 
@@ -56,6 +57,8 @@ Preconditions: healthy instance. New thread, search and filter stay hidden until
   cannot establish motion because view transitions render separate snapshots.
   After the real thread has opened, focus its Working row and wait for the move;
   require focus to follow that thread rather than fall back to the document body.
+
+- **Issue picker:** `tests/issue-picker.spec.ts` in `pnpm test:chat`. The fixture's `issues-project` has a GitHub origin and a faked gh; `scratch-project` has local issue files. Require groups Ready for agent, Needs triage and Blocked (GitHub) or one per feature (local), the list opening below the chip, a searched Enter pick, the composer chip and `#208 · claims on send`, a first message `Work on #208: …`, a thread titled from the issue, and the recorded `gh issue edit 208 --add-assignee @me`; locally, `Status: claimed` in the thread's worktree only. A project without issues shows no chip. Real GitHub assignment needs a disposable repository; never claim on the user's tracker.
 
 - **Prompt size:** see [System prompt](system-prompt.md) for the composer stat, persistence check and measurement scope.
 

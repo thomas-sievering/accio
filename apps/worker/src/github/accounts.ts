@@ -5,11 +5,12 @@ import { maybeGit } from '../git.js';
 const exec = promisify(execFile);
 
 /** Runs gh and returns stdout, or rejects. Injected by tests. */
-export type GhRunner = (args: string[], options?: { cwd?: string; input?: string }) => Promise<string>;
+export type GhRunner = (args: string[], options?: { cwd?: string; input?: string; env?: Record<string, string> }) => Promise<string>;
 /** Asks git's credential helpers which user name it would send to a URL, without prompting. */
 export type GitUserOf = (cwd: string, url: string) => Promise<string | undefined>;
 
-const runGh: GhRunner = async (args, options) => (await exec('gh', args, { cwd: options?.cwd, windowsHide: true, timeout: 15_000 })).stdout;
+const runGh: GhRunner = async (args, options) => (await exec('gh', args, { cwd: options?.cwd, windowsHide: true, timeout: 15_000, maxBuffer: 8 * 1024 * 1024,
+  ...(options?.env ? { env: { ...process.env, ...options.env } } : {}) })).stdout;
 
 /**
  * GLOSSARY: GitHub account. The gh login a profile's threads use on this machine:
@@ -62,6 +63,11 @@ export class GitHubAccounts {
       const token = (await this.gh(['auth', 'token', '--hostname', 'github.com', '--user', login])).trim();
       return token ? { GH_TOKEN: token } : {};
     } catch { return {}; }
+  }
+
+  /** Runs gh in a repository as the profile's GitHub account. */
+  async run(profileId: string, cwd: string, args: string[]): Promise<string> {
+    return this.gh(args, { cwd, env: await this.env(profileId, cwd) });
   }
 }
 

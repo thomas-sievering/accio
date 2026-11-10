@@ -13,6 +13,7 @@
 @import "./app/main.css";
 @import "./ui/menu.css";
 @import "./threads/new-thread.css";
+@import "./threads/issue-picker.css";
 @import "./ui/sheet.css";
 @import "./app/sidebar-toolbar.css";
 @import "./ui/forms.css";

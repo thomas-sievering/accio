@@ -232,7 +232,9 @@ export type TranscriptSnapshot = { items: TranscriptItem[]; cursor: number };
 const ThreadId = z.object({ threadId: z.string() });
 /** GLOSSARY: Image attachment. Uploads from `threads.upload` on this machine, sent with a message. */
 const Images = z.array(z.string().uuid()).max(IMAGES_PER_MESSAGE).optional();
-const StartCommon = { text: z.string().trim(), images: Images, model: ModelSelection.optional(), machineId: z.string().optional() };
+/** A picked issue, claimed for the thread once it starts: its reference as `threads.issues` lists it, and its title for the thread's. */
+const StartIssue = z.object({ ref: z.string().min(1).max(4096), title: z.string().trim().max(500) });
+const StartCommon = { text: z.string().trim(), images: Images, model: ModelSelection.optional(), machineId: z.string().optional(), issue: StartIssue.optional() };
 const said = (start: { text: string; images?: string[] }) => start.text.length > 0 || !!start.images?.length;
 const Start = z.union([
   z.object({ checkoutId: z.string().min(1), ...StartCommon }).refine(said, { message: 'Write a message' }),

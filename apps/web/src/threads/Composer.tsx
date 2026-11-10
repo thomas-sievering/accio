@@ -46,7 +46,7 @@ export function Composer({
   /** Shown left of the send button. */
   toolbar?: ReactNode;
   /** A chip above the message, such as a picked option; with one, the message may be empty. */
-  attachment?: { label: string; onRemove: () => void };
+  attachment?: { label: string; icon?: ReactNode; onRemove: () => void };
   /** Compact thread delivery controls, outside the message input. */
   actions?: ReactNode;
   /** Which `composer.insert` requests this composer accepts: its thread id, or 'draft'. */
@@ -244,7 +244,7 @@ export function Composer({
       <form className="composer" onSubmit={(e: FormEvent) => { e.preventDefault(); void submit(queuing ? 'queue' : 'steer'); }}>
         {(attachment || images.length > 0 || pastes.length > 0) && <div className="composer-chips">
           {attachment && <span className="composer-chip">
-            {attachment.label}
+            {attachment.icon}{attachment.label}
             <button type="button" aria-label={`Remove ${attachment.label}`} onClick={attachment.onRemove}><Close /></button>
           </span>}
           {images.map((image, index) => <span key={image.key} className={`composer-image${image.uploadId ? '' : ' uploading'}`}

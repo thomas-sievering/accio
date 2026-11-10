@@ -4,7 +4,7 @@ import { createServer } from 'node:net';
 /** Browser suites. Each project drives its own fixture server (`scripts/<project>-test-server.ts`, started by tests/servers.ts). */
 const suites = {
   relay: { testMatch: ['relay.spec.ts'], timeout: 30_000 },
-  chat: { testMatch: ['model-isolation.spec.ts', 'naming.spec.ts', 'goal.spec.ts', 'inline-chat.spec.ts', 'delivery.spec.ts', 'delivery-merge.spec.ts', 'effort.spec.ts', 'new-thread.spec.ts', 'skills-panel.spec.ts', 'settings.spec.ts', 'prompt-size.spec.ts', 'project-dashboard.spec.ts', 'mentions.spec.ts', 'images.spec.ts', 'pasted-text.spec.ts'], timeout: 30_000 },
+  chat: { testMatch: ['model-isolation.spec.ts', 'naming.spec.ts', 'goal.spec.ts', 'inline-chat.spec.ts', 'delivery.spec.ts', 'delivery-merge.spec.ts', 'effort.spec.ts', 'new-thread.spec.ts', 'skills-panel.spec.ts', 'settings.spec.ts', 'prompt-size.spec.ts', 'project-dashboard.spec.ts', 'mentions.spec.ts', 'images.spec.ts', 'pasted-text.spec.ts', 'issue-picker.spec.ts'], timeout: 30_000 },
   limits: { testMatch: ['limits.spec.ts'], timeout: 90_000 },
   secrets: { testMatch: ['secret-ui.spec.ts'], timeout: 45_000 },
 };
