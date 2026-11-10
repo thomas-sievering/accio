@@ -121,6 +121,8 @@ export type ThreadDelivery = {
   keepOpen?: boolean;
   followUpsStoppedAt?: string;
   ci?: DeliveryCI;
+  /** Why a delivered revision has no checks: the repository has no active workflows, or none of their filters cover the change. */
+  noChecks?: 'no-workflows' | 'filtered';
   /** When the current delivery turn started; reset by each delivery turn. */
   startedAt?: string;
   /** What the current delivery turn last reported doing; cleared when one starts. */

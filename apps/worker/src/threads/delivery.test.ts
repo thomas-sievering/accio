@@ -691,6 +691,30 @@ it('waits without running the agent again and verifies delivery when checks fini
   expect(restarted.runs).toHaveLength(0);
 });
 
+it.each(['docs/note.md', 'apps/feature.ts'] as const)('delivers a push without checks only when no workflow covers it: %s', async changed => {
+  const { c, source, origin, checkout } = await setup();
+  await mkdir(join(source, '.github', 'workflows'), { recursive: true });
+  await writeFile(join(source, '.github', 'workflows', 'ci.yml'), 'on:\n  push:\n    branches: [main]\n    paths: [apps/**]\n  workflow_dispatch:\n');
+  await git(source, 'add', '.'); await git(source, 'commit', '--quiet', '-m', 'ci'); await git(source, 'push', '--quiet');
+  const thread = await c.call('threads.start', { checkoutId: checkout.id, text: 'work' });
+  await wait(c, thread.id);
+  await mkdir(join(thread.workspace!.path, changed, '..'), { recursive: true });
+  await writeFile(join(thread.workspace!.path, changed), 'change\n');
+  await publish(thread.workspace!.path);
+  await git(source, 'config', `url.${origin.replaceAll('\\', '/')}.insteadOf`, 'https://github.com/test/fixture.git');
+  await git(source, 'remote', 'set-url', 'origin', 'https://github.com/test/fixture.git');
+  const manager = new DeliveryGit(t.home, async (_cwd, args) => {
+    if (args[1]!.includes('check-runs')) return { total_count: 0, check_runs: [] };
+    if (args[1]!.includes('/actions/workflows')) return { workflows: [{ state: 'active', path: '.github/workflows/ci.yml' }] };
+    return { total_count: 0, statuses: [] };
+  });
+  const requestedAt = new Date(Date.now() - 3 * 60_000).toISOString();
+  const intent: ThreadDelivery = { mode: 'ship', policy: 'direct', status: 'running', baseBranch: 'main', requestedAt };
+  if (changed === 'docs/note.md') expect(await manager.verify(thread.workspace!, intent)).toMatchObject({ status: 'delivered', noChecks: 'filtered' });
+  // Covered: keep waiting for GitHub to register the run, counted from the observed push.
+  else await expect(manager.verify(thread.workspace!, intent)).rejects.toBeInstanceOf(DeliveryPending);
+});
+
 it.each(['in_progress', 'success', 'failure', 'original failure'] as const)('follows containing target CI after superseded cancellation: %s', async status => {
   const { c, source, origin, checkout } = await setup();
   const thread = await c.call('threads.start', { checkoutId: checkout.id, text: 'work' });
