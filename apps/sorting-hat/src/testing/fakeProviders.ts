@@ -15,9 +15,20 @@ import type { Fetch } from '../types.js';
 export function fakeAnthropicAuth() {
   let n = 0;
   const usage: Record<string, unknown> = {};
+  /** Per token, the models Anthropic lists for it, or the status it refuses with; unset tokens get 404. */
+  const models: Record<string, { id: string; display_name: string }[] | number> = {};
+  /** The headers of every model list request. */
+  const modelRequests: Headers[] = [];
   const fetch: Fetch = async (url, init) => {
     if (String(url) === 'https://api.anthropic.com/api/oauth/usage') {
       return Response.json(usage[new Headers(init?.headers).get('authorization')!.slice('Bearer '.length)] ?? {});
+    }
+    if (String(url).startsWith('https://api.anthropic.com/v1/models')) {
+      const headers = new Headers(init?.headers);
+      modelRequests.push(headers);
+      const listed = models[headers.get('authorization')!.slice('Bearer '.length)] ?? 404;
+      if (typeof listed === 'number') return Response.json({ type: 'error', error: { type: 'error', message: 'refused' } }, { status: listed });
+      return Response.json({ data: listed.map((m) => ({ type: 'model', created_at: '2026-01-01T00:00:00Z', ...m })), has_more: false });
     }
     // Anything else, such as the faked API the Sorting Hat forwards to, goes out as usual.
     if (String(url) !== CLAUDE_OAUTH.tokenUrl) return globalThis.fetch(url, init);
@@ -26,7 +37,7 @@ export function fakeAnthropicAuth() {
     n++;
     return Response.json({ access_token: `token-${n}`, refresh_token: `refresh-${n}`, expires_in: 3600, account: { uuid: `claude-${n}`, email_address: `claude-${n}@example.com` } });
   };
-  return { fetch, usage };
+  return { fetch, usage, models, modelRequests };
 }
 
 /**

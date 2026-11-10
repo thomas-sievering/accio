@@ -35,6 +35,8 @@ export async function startStandalone(opts: StandaloneOptions) {
     server = await startServer({ hat, host: opts.host ?? '127.0.0.1', port: opts.port ?? 0, adminToken: admin.token,
       upstream: opts.anthropicUrl, fetchImpl: opts.claudeFetch, openaiUpstream: opts.openaiUrl, openaiFetch: opts.openaiFetch });
   } catch (error) { await hat.close(); throw error; }
+  // ChatGPT accounts' models change over time; read them again once per start, as the hub does.
+  const modelsRefreshed = hat.refreshCodexModels().catch(() => false);
   return {
     hat,
     url: server.url,
@@ -43,7 +45,7 @@ export async function startStandalone(opts: StandaloneOptions) {
     /** True when this start created the admin token. */
     createdAdminToken: admin.created,
     adminTokenFile: opts.adminToken ? null : join(opts.dir, ADMIN_TOKEN_FILE),
-    close: async () => { await server.close(); await hat.close(); },
+    close: async () => { await server.close(); await modelsRefreshed; await hat.close(); },
   };
 }
 

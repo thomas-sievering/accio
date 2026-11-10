@@ -202,7 +202,7 @@ With a hat key, the Sorting Hat swaps the key for the credential of the house's
 account in use and forwards the request unchanged otherwise. It changes no
 model, prompt or tool.
 
-- **Anthropic**: any path other than those above, such as `POST /v1/messages`
+- **Anthropic**: any path other than those above and the [model lists](#models), such as `POST /v1/messages`
   and `POST /v1/messages/count_tokens`, goes to `https://api.anthropic.com` with
   the Claude account's OAuth token. Claude subscriptions may only be used through
   the real Claude Code, so point Claude Code (or a tool that runs it) here.
@@ -212,3 +212,33 @@ model, prompt or tool.
 
 A house without a signed-in account at the provider gets 401. If the provider
 rejects a token, the Sorting Hat refreshes it once and resends.
+
+### Models
+
+The Sorting Hat answers these itself, with a hat key, listing the models of the
+house's account in use at that provider. They are not forwarded, and only `GET`
+is allowed.
+
+| Path | Shape | Lists |
+| --- | --- | --- |
+| `GET /v1/models`, `GET /v1/models/{id}` | Anthropic's: `{ data: [{ type: "model", id, display_name, created_at, … }], has_more: false, first_id, last_id }` | the Claude account in use's models |
+| `GET /openai/models`, `GET /openai/models/{id}` | OpenAI's: `{ object: "list", data: [{ id, object: "model", created: 0, owned_by: "openai" }] }` | the ChatGPT account in use's models |
+| `GET /openai/v1/models`, `GET /openai/v1/models/{id}` | the same as `/openai/models` | for clients whose base address ends in `/v1` |
+
+An OpenAI client with the base address `<sorting hat>/openai` (as Codex is set
+up) asks `/openai/models`; one set up with `<sorting hat>/openai/v1` asks
+`/openai/v1/models`. Codex itself does not ask for a list with a custom provider.
+The whole list is one page; paging parameters are ignored. A house without a
+signed-in account at the provider gets an empty list, and an unknown model 404.
+
+- **Claude**: the Sorting Hat asks Anthropic's `GET /v1/models` with the
+  account's OAuth token and the headers the model routes add (`anthropic-beta:
+  oauth-2025-04-20`, plus `anthropic-version: 2023-06-01`), and passes on
+  Anthropic's entries as they are. If Anthropic does not answer with a list, it
+  lists Claude Code's stable aliases `opus`, `sonnet` and `haiku` instead (which
+  Claude Code resolves itself), and asks again after 5 minutes. A list is kept
+  per account for 6 hours, and read again when the account signs in again or
+  out.
+- **ChatGPT**: the account's model catalog, as its Codex app-server reports it:
+  read at sign-in and again each time the Sorting Hat starts. `created` is 0,
+  since ChatGPT reports no creation time.

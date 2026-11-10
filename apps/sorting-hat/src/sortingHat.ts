@@ -20,6 +20,7 @@ import { AccountLimits, LimitsReadError } from './limits.js';
 import { anthropicLimits, openaiLimits, retryAfterMs } from './providerLimits.js';
 import { chooseAccount } from './accountChoice.js';
 import type { Forwarding } from './proxy.js';
+import { ClaudeModelLists, type AnthropicModel } from './models.js';
 
 /** Per provider, the accounts a house uses in order; a provider left out keeps its accounts. */
 export type AccountSelection = Partial<Record<ProviderId, string[]>>;
@@ -50,6 +51,7 @@ const HOUSE_ID = /^[a-z0-9][a-z0-9_-]{0,63}$/;
  */
 export class SortingHat implements Forwarding {
   private readonly limits: AccountLimits;
+  private readonly claudeModelLists: ClaudeModelLists;
   private store: JsonStore<HatState>;
   private pending = new Map<string, PendingSignIn & { accountId: string; startedAt: number }>();
   private refreshing = new Map<string, Promise<ClaudeAccount>>();
@@ -65,6 +67,7 @@ export class SortingHat implements Forwarding {
   ) {
     this.store = new JsonStore(join(dir, STATE_FILE), emptyState);
     this.limits = new AccountLimits(() => this.accountViews(), (id, signal) => this.readAccountLimits(id, signal));
+    this.claudeModelLists = new ClaudeModelLists(fetchImpl, (id, force) => this.accountAccessToken(id, force));
   }
 
   private get houses() { return this.store.data.houses; }
@@ -248,7 +251,7 @@ export class SortingHat implements Forwarding {
     return this.change(async () => {
       if (this.pending.get(signInId) !== p) throw new SignInError('This sign-in was cancelled. Start it again.');
       await this.setAccount(p.accountId, account);
-      this.limits.invalidate(p.accountId);
+      this.signInChanged(p.accountId);
       this.pending.delete(signInId);
       return this.accountView(p.accountId);
     });
@@ -278,7 +281,7 @@ export class SortingHat implements Forwarding {
       if (result.status === 'pending') return result;
       const previous = this.requireAccount(id).openai;
       await this.commit({ accounts: this.accounts.map((a) => a.id === id ? { ...a, openai: result.account } : a) });
-      this.limits.invalidate(id);
+      this.signInChanged(id);
       this.openaiPending.delete(signInId);
       await this.openai.finish(signInId);
       if (previous) await this.openai.remove(previous.credentialId);
@@ -299,6 +302,13 @@ export class SortingHat implements Forwarding {
       this.openaiPending.delete(signInId);
       await this.openai.cancel(signInId);
     });
+  }
+
+  /** The models the house's Claude account in use can use, as Anthropic lists them; empty without a signed-in one. */
+  async claudeModels(houseId: string): Promise<AnthropicModel[]> {
+    this.requireHouse(houseId);
+    const id = this.accountIdInUse(houseId, 'anthropic');
+    return id ? this.claudeModelLists.models(id) : [];
   }
 
   /** The models the house's ChatGPT account in use offers. */
@@ -442,6 +452,12 @@ export class SortingHat implements Forwarding {
     await this.openai.close();
   }
 
+  /** After an account signed in again, out, or was deleted: what was read with its old sign-in is stale. */
+  private signInChanged(id: string) {
+    this.limits.invalidate(id);
+    this.claudeModelLists.forget(id);
+  }
+
   private requireHouse(id: string): StoredHouse {
     const house = this.houses.find((x) => x.id === id);
     if (!house) throw new HatError(`No house ${id}`, 404);
@@ -533,7 +549,7 @@ export class SortingHat implements Forwarding {
       const account = this.requireAccount(id);
       if (this.houses.some((p) => p.accountIds.includes(id))) throw new HatError('Remove this account from its houses before deleting it.', 409);
       await this.commit({ accounts: this.accounts.filter((a) => a.id !== id) });
-      this.limits.invalidate(id);
+      this.signInChanged(id);
       this.cancelSignIn(id);
       await this.cancelOpenAISignIn(id);
       if (account.openai) await this.openai.remove(account.openai.credentialId);
@@ -544,7 +560,7 @@ export class SortingHat implements Forwarding {
     return this.change(async () => {
       const account = this.requireAccount(id);
       await this.commit({ accounts: this.accounts.map((a) => a.id === id ? { ...a, account: null, openai: null } : a) });
-      this.limits.invalidate(id);
+      this.signInChanged(id);
       this.cancelSignIn(id);
       await this.cancelOpenAISignIn(id);
       if (account.openai) await this.openai.remove(account.openai.credentialId);

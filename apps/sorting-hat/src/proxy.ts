@@ -1,5 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
+import { anthropicList, openaiList, openaiModel, type AnthropicModel } from './models.js';
+import type { CodexModel } from './openaiAuth.js';
 import type { Fetch, ProviderId } from './types.js';
 
 const ANTHROPIC_API = 'https://api.anthropic.com';
@@ -37,6 +39,10 @@ export interface Forwarding {
   noteRequest(houseId: string, providerId: ProviderId): void;
   /** After a provider refused a request for limits; true when the next request would use another account. */
   recheckAfterLimit(houseId: string, providerId: ProviderId, accountId: string): Promise<boolean>;
+  /** The models the house's Claude account in use can use, in Anthropic's shape. */
+  claudeModels(houseId: string): Promise<AnthropicModel[]>;
+  /** The models the house's ChatGPT account in use offers. */
+  codexModels(houseId: string): CodexModel[];
 }
 
 export type ForwardingOptions = { accounts: Forwarding; upstream?: string; fetchImpl?: Fetch; openaiUpstream?: string; openaiFetch?: Fetch };
@@ -63,6 +69,8 @@ export function forwardModelRequests({ accounts, upstream = ANTHROPIC_API, fetch
     const key = keyOf(req);
     const house = key ? accounts.houseForKey(key) : undefined;
     if (!house) return sendError(res, 401, 'authentication_error', 'Unknown or revoked hat key');
+    const listing = modelListing(req.url ?? '/');
+    if (listing) return listModels(req, res, house.id, listing);
     if (req.url?.startsWith('/openai/')) return handleOpenAI(req, res, house.id);
 
     accounts.noteRequest(house.id, 'anthropic');
@@ -98,6 +106,23 @@ export function forwardModelRequests({ accounts, upstream = ANTHROPIC_API, fetch
     res.writeHead(upstreamRes.status, headers);
     if (!upstreamRes.body) return void res.end();
     Readable.fromWeb(upstreamRes.body as import('node:stream/web').ReadableStream).pipe(res);
+  }
+
+  /** The house's models, answered here rather than forwarded: each provider's list shape, for the account in use. */
+  async function listModels(req: IncomingMessage, res: ServerResponse, houseId: string, { providerId, modelId }: Listing) {
+    if (req.method !== 'GET') return sendError(res, 405, 'invalid_request_error', `${req.method} is not allowed on ${req.url}`);
+    if (providerId === 'anthropic') {
+      const models = await accounts.claudeModels(houseId);
+      if (modelId === undefined) return sendJson(res, anthropicList(models));
+      const model = models.find((m) => m.id === modelId);
+      return model ? sendJson(res, model) : sendError(res, 404, 'not_found_error', `House ${houseId} has no Claude model ${modelId}`);
+    }
+    const models = accounts.codexModels(houseId);
+    if (modelId === undefined) return sendJson(res, openaiList(models));
+    const model = models.find((m) => m.id === modelId);
+    if (model) return sendJson(res, openaiModel(model));
+    res.writeHead(404, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ error: { type: 'invalid_request_error', code: 'model_not_found', param: null, message: `House ${houseId} has no ChatGPT model ${modelId}` } }));
   }
 
   async function handleOpenAI(req: IncomingMessage, res: ServerResponse, houseId: string) {
@@ -161,6 +186,27 @@ export async function listen(server: Server, host: string, port: number) {
     port: boundPort,
     close: () => new Promise<void>((done) => { server.close(() => done()); }),
   };
+}
+
+type Listing = { providerId: ProviderId; modelId?: string };
+
+/**
+ * The model lists: `/v1/models` as Anthropic's API has it, and OpenAI's under
+ * `/openai/`, both as `/openai/models` (a client whose base address is
+ * `<hat>/openai`, as Codex's is) and `/openai/v1/models` (one that adds `/v1`).
+ */
+function modelListing(url: string): Listing | undefined {
+  const path = url.split('?')[0]!;
+  const match = /^(\/v1|\/openai(?:\/v1)?)\/models(?:\/([^/]+))?\/?$/.exec(path);
+  if (!match) return undefined;
+  let modelId: string | undefined;
+  try { modelId = match[2] === undefined ? undefined : decodeURIComponent(match[2]); } catch { modelId = match[2]; }
+  return { providerId: match[1] === '/v1' ? 'anthropic' : 'openai', modelId };
+}
+
+function sendJson(res: ServerResponse, body: unknown) {
+  res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+  res.end(JSON.stringify(body));
 }
 
 function keyOf(req: IncomingMessage): string | null {

@@ -89,6 +89,19 @@ supports_websockets = false
 
 and run it with `SORTING_HAT_KEY=<hat key> codex`.
 
+### Model lists
+
+With a hat key, `GET /v1/models` lists the house's Claude models in Anthropic's
+shape and `GET /openai/models` (or `/openai/v1/models`) its ChatGPT models in
+OpenAI's, so other apps can discover them:
+
+```sh
+curl -s -H "x-api-key: <hat key>" $HAT/v1/models
+curl -s -H "Authorization: Bearer <hat key>" $HAT/openai/models
+```
+
+See [API.md](API.md#models) for where each list comes from.
+
 ### pi with pi-claude-bridge
 
 [pi-claude-bridge](https://www.npmjs.com/package/pi-claude-bridge) runs the
@@ -115,6 +128,9 @@ and pick a `claude-bridge/...` model with `/model`. Exporting
 `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN` before starting pi works too,
 but then every Anthropic request pi makes gets them. This setup follows the
 bridge's documentation and has not yet been tried end to end with pi.
+pi takes its model list from its own catalog and `models.json`; it reads the
+Sorting Hat's [model lists](#model-lists) only through a provider extension that
+discovers models (`refreshModels`), which has not been tried either.
 
 ## Develop
 

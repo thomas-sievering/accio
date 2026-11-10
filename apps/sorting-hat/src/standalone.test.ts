@@ -181,6 +181,59 @@ describe('the standalone Sorting Hat', () => {
     expect((await api('GET', `houses/${only.id}`)).inUse.anthropic).toBe(first.id);
   });
 
+  it('lists each house’s models in Anthropic’s and OpenAI’s shapes, cached per account', async () => {
+    const { hat, api, auth, codex, claudeAccount } = await start();
+    const mine = await claudeAccount('Mine');
+    const work = await claudeAccount('Work');
+    const gpt = await api('POST', 'accounts', { name: 'ChatGPT', providerId: 'openai' });
+    const device = await api('POST', `accounts/${gpt.id}/sign-in`, { flow: 'device' });
+    await codex.latest.complete('chatgpt-personal');
+    await api('GET', `sign-ins/${device.signInId}`);
+    const personal = await api('POST', 'houses', { name: 'Personal', accounts: { anthropic: [mine.id], openai: [gpt.id] } });
+    const hrc = await api('POST', 'houses', { name: 'HRC', accounts: { anthropic: [work.id] } });
+    const personalKey = (await api('POST', 'hat-keys', { houseId: personal.id, name: 'pi' })).secret;
+    const hrcKey = (await api('POST', 'hat-keys', { houseId: hrc.id, name: 'pi' })).secret;
+    auth.models['token-1'] = [{ id: 'claude-mine-1', display_name: 'Claude Mine 1' }];
+    auth.models['token-2'] = 403;
+    const list = async (path: string, key: string, init: RequestInit = {}) => {
+      const res = await fetch(`${hat.url}${path}`, { ...init, headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' } });
+      return { status: res.status, body: await res.json() };
+    };
+
+    expect(await list('/v1/models', personalKey)).toEqual({ status: 200, body: {
+      data: [{ type: 'model', id: 'claude-mine-1', display_name: 'Claude Mine 1', created_at: '2026-01-01T00:00:00Z' }], has_more: false, first_id: 'claude-mine-1', last_id: 'claude-mine-1' } });
+    expect(auth.modelRequests.map((h) => [h.get('authorization'), h.get('anthropic-beta'), h.get('anthropic-version')])).toEqual([['Bearer token-1', 'oauth-2025-04-20', '2023-06-01']]);
+    // Anthropic refuses the other house's account: Claude Code's aliases stand in.
+    expect((await list('/v1/models', hrcKey)).body.data.map((m: { id: string }) => m.id)).toEqual(['opus', 'sonnet', 'haiku']);
+    expect(await list('/v1/models/claude-mine-1', personalKey)).toMatchObject({ status: 200, body: { id: 'claude-mine-1' } });
+    expect(await list('/v1/models/opus', personalKey)).toMatchObject({ status: 404, body: { type: 'error', error: { type: 'not_found_error' } } });
+    expect((await list('/v1/models', personalKey, { method: 'POST' })).status).toBe(405);
+    // Asked once per account.
+    await list('/v1/models', personalKey);
+    expect(auth.modelRequests).toHaveLength(2);
+
+    const openai = { object: 'list', data: [{ id: 'gpt-test', object: 'model', created: 0, owned_by: 'openai' }] };
+    expect(await list('/openai/models', personalKey)).toEqual({ status: 200, body: openai });
+    expect(await list('/openai/v1/models', personalKey)).toEqual({ status: 200, body: openai });
+    expect(await list('/openai/v1/models/gpt-test', personalKey)).toEqual({ status: 200, body: openai.data[0] });
+    expect(await list('/openai/models/gpt-nope', personalKey)).toMatchObject({ status: 404, body: { error: { code: 'model_not_found' } } });
+    expect(await list('/openai/models', hrcKey)).toEqual({ status: 200, body: { object: 'list', data: [] } });
+    expect((await list('/v1/models', 'hat-unknown')).status).toBe(401);
+
+    // The account in use changes: the house lists the other account's models.
+    await api('PUT', `houses/${personal.id}/accounts`, { anthropic: [work.id, mine.id] });
+    expect((await list('/v1/models', personalKey)).body.data.map((m: { id: string }) => m.id)).toEqual(['opus', 'sonnet', 'haiku']);
+    await api('PUT', `houses/${personal.id}/accounts`, { anthropic: [mine.id] });
+    // Its sign-in changes: the list is read again with the new token.
+    auth.models['token-3'] = [{ id: 'claude-mine-2', display_name: 'Claude Mine 2' }];
+    const signIn = await api('POST', `accounts/${mine.id}/sign-in`);
+    await api('POST', `sign-ins/${signIn.signInId}/complete`, { code: `pasted#${new URL(signIn.url).searchParams.get('state')}` });
+    expect((await list('/v1/models', personalKey)).body.data.map((m: { id: string }) => m.id)).toEqual(['claude-mine-2']);
+    // Signed out, the house has no Claude account to list for.
+    await api('POST', `accounts/${mine.id}/sign-out`);
+    expect((await list('/v1/models', personalKey)).body.data).toEqual([]);
+  });
+
   it('manages accounts, houses and hat keys: rename, order, revoke and delete', async () => {
     const { api, admin, claudeAccount } = await start();
     const a = await claudeAccount('A');
