@@ -4,7 +4,111 @@ import { expect, test, type Page } from '@playwright/test';
 /** Saves a screenshot when SORTING_HAT_SCREENSHOTS names a folder (keep it outside the repository). */
 async function shot(page: Page, name: string, target: Page | ReturnType<Page['locator']> = page) {
   const dir = process.env.SORTING_HAT_SCREENSHOTS;
+  if (dir) await page.mouse.move(0, 0);
   if (dir) await target.screenshot({ path: join(dir, `${name}.png`), ...(target === page ? { fullPage: true } : {}) });
+}
+
+// Away from UTC, so local days differ from the API's UTC days.
+test.use({ timezoneId: 'America/Los_Angeles' });
+
+/** The usage section, with the usage the test server seeded (30 hours, 10 and 60 days ago) and two requests through `pi on laptop`. */
+async function checkUsage(page: Page) {
+  const usage = page.locator('#usage');
+  const table = usage.getByRole('table');
+  const range = (name: string) => usage.getByRole('tab', { name, exact: true }).click();
+  const by = (label: string) => usage.getByRole('combobox', { name: 'Break down by' }).selectOption({ label });
+  const numbers = (row: ReturnType<Page['locator']>) => row.locator('td:not(:first-child):not(.limits-cell)');
+  const row = (name: string) => table.locator('tbody tr').filter({ has: page.getByText(name, { exact: true }) });
+  const shown = (values: number[]) => values.map((v) => v.toLocaleString('en-US'));
+  /** Requests, input, output, cache read, cache write, total. */
+  const expectRow = (name: string, values: number[]) => expect(numbers(row(name))).toHaveText(shown(values));
+  const expectTotal = (values: number[]) => expect(numbers(table.locator('tfoot tr'))).toHaveText(shown(values));
+  const titles = () => usage.locator('svg.chart rect.seg title');
+  const tokens = usage.getByRole('combobox', { name: 'Tokens in the chart' });
+
+  await usage.scrollIntoViewIfNeeded();
+  await range('Last 24 hours');
+  await expect(table).toHaveAccessibleName('Usage by house');
+  await expectRow('Personal', [2, 20, 16, 12, 8, 56]);
+  await expect(row('Deleted house')).toHaveCount(0);
+  await expectTotal([2, 20, 16, 12, 8, 56]);
+  await expect(usage.getByLabel('From', { exact: true })).toBeHidden();
+  await expect(usage.getByLabel('Usage totals')).toContainText('56 tokens');
+  await expect(usage.getByRole('img', { name: 'Chart of tokens per hour' })).toBeVisible();
+  await expect(titles()).toHaveCount(1);
+  await expect(titles().first()).toHaveText(/ · Personal: 56 tokens$/);
+
+  await range('Last 7 days');
+  await expectRow('Deleted house', [3, 1000, 200, 300, 50, 1550]);
+  await expectRow('Personal', [2, 20, 16, 12, 8, 56]);
+  await expectTotal([5, 1020, 216, 312, 58, 1606]);
+  await expect(usage.getByRole('img', { name: 'Chart of tokens per day' })).toBeVisible();
+  // The seeded hour is on its local day in the chart, not its UTC day.
+  const seeded = await page.request.get('/api/usage?house=archive&bucket=hour', { headers: { 'x-sorting-hat-dashboard': '1' } });
+  const thirtyHoursAgo = ((await seeded.json()).rows as { start: string }[]).map((r) => r.start).sort().at(-1)!;
+  const localDate = await page.evaluate((start) => new Date(start).toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }), thirtyHoursAgo);
+  await expect(titles().filter({ hasText: 'Deleted house' })).toHaveText([`${localDate} · Deleted house: 1,550 tokens`]);
+  await tokens.selectOption({ label: 'Output' });
+  await expect(usage.getByRole('img', { name: 'Chart of output tokens per day' })).toBeVisible();
+  await expect(titles().filter({ hasText: 'Deleted house' })).toHaveText([`${localDate} · Deleted house: 200 output tokens`]);
+  await expect(titles().filter({ hasText: 'Personal' })).toHaveText([/ · Personal: 16 output tokens$/]);
+  await tokens.selectOption({ label: 'All tokens' });
+
+  await range('Last 30 days');
+  await expectRow('Deleted house', [5, 6000, 900, 300, 50, 7250]);
+  await expectTotal([7, 6020, 916, 312, 58, 7306]);
+
+  await by('Hat key');
+  await expect(table).toHaveAccessibleName('Usage by hat key');
+  await expectRow('pi on laptop', [2, 20, 16, 12, 8, 56]);
+  await expectRow('Hub (embedded)', [3, 1000, 200, 300, 50, 1550]);
+  await expectRow('Deleted hat key', [2, 5000, 700, 0, 0, 5700]);
+
+  await by('Model');
+  await expectRow('claude-old', [5, 6000, 900, 300, 50, 7250]);
+  await expectRow('claude-test', [1, 10, 8, 6, 4, 28]);
+  await expectRow('claude-other', [1, 10, 8, 6, 4, 28]);
+
+  // By account, each account's limits are beside its usage, also without usage.
+  await by('Account');
+  await expectRow('Work', [2, 20, 16, 12, 8, 56]);
+  await expect(row('Work').getByRole('meter', { name: '5-hour' })).toHaveAttribute('aria-valuenow', '42');
+  await expectRow('Personal ChatGPT', [0, 0, 0, 0, 0, 0]);
+  await expect(row('Personal ChatGPT').getByRole('meter').first()).toHaveAttribute('aria-valuenow', '64');
+  await expectRow('Deleted account', [5, 6000, 900, 300, 50, 7250]);
+  await expectTotal([7, 6020, 916, 312, 58, 7306]);
+  await shot(page, 'sorting-hat-usage-by-account', usage);
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await shot(page, 'sorting-hat-usage-by-account-dark', usage);
+  await page.emulateMedia({ colorScheme: 'light' });
+
+  // A custom range around 60 days ago has only that day's usage.
+  await range('Custom');
+  const day = (daysAgo: number) => page.evaluate((n) => {
+    const d = new Date();
+    d.setDate(d.getDate() - n);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }, daysAgo);
+  await usage.getByLabel('From', { exact: true }).fill(await day(62));
+  await usage.getByLabel('To', { exact: true }).fill(await day(58));
+  await by('House');
+  await expectRow('Deleted house', [1, 400, 100, 50, 0, 550]);
+  await expect(row('Personal')).toHaveCount(0);
+  await expectTotal([1, 400, 100, 50, 0, 550]);
+  await expect(titles()).toHaveCount(1);
+  await usage.getByLabel('To', { exact: true }).fill(await day(70));
+  await expect(usage.getByRole('status')).toHaveText('The start date is after the end date.');
+  // A day or two is shown per hour.
+  await usage.getByLabel('From', { exact: true }).fill(await day(1));
+  await usage.getByLabel('To', { exact: true }).fill(await day(0));
+  await expect(usage.getByRole('img', { name: 'Chart of tokens per hour' })).toBeVisible();
+  await expectRow('Personal', [2, 20, 16, 12, 8, 56]);
+
+  await range('Last 7 days');
+  await shot(page, 'sorting-hat-usage-by-house', usage);
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await shot(page, 'sorting-hat-usage-by-house-dark', usage);
+  await page.emulateMedia({ colorScheme: 'light' });
 }
 
 test('the Sorting Hat dashboard signs accounts in, sets up a house and hands out a hat key once', async ({ page, context, baseURL, request }) => {
@@ -114,10 +218,14 @@ test('the Sorting Hat dashboard signs accounts in, sets up a house and hands out
   await expect(keyRow).toContainText('Created');
 
   // The key works on the model route, until it is revoked.
-  const model = () => request.post('/v1/messages', { headers: { authorization: `Bearer ${secret}` }, data: { model: 'claude-test', messages: [] } });
+  const model = (name = 'claude-test') => request.post('/v1/messages', { headers: { authorization: `Bearer ${secret}` }, data: { model: name, messages: [] } });
   expect((await model()).status()).toBe(200);
+  expect((await model('claude-other')).status()).toBe(200);
   await page.reload();
   await expect(page.locator('body')).not.toContainText(secret);
+
+  // Usage over time, by house, hat key, account and model, beside each account's limits.
+  await checkUsage(page);
   await shot(page, 'sorting-hat-dashboard');
   await button('Revoke', keyRow).click();
   await button('Revoke', dialog).click();

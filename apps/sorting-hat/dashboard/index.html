@@ -45,15 +45,45 @@
       <div id="house-list" class="stack"></div>
     </section>
 
-    <!-- Usage charts per hat key, account and model go here (#134). -->
     <section id="usage" aria-labelledby="usage-title">
       <div class="section-head">
         <div>
           <h2 id="usage-title">Usage</h2>
-          <p class="muted">Tokens used per hat key, account and model.</p>
+          <p class="muted">Tokens the providers reported, per house, hat key, account and model. Days and hours are in this browser’s time zone.</p>
         </div>
       </div>
-      <div id="usage-body" class="placeholder">Usage is not shown here yet.</div>
+      <div class="card usage">
+        <div class="usage-controls">
+          <div class="tabs" role="tablist" aria-label="Range" id="usage-range">
+            <button type="button" role="tab" data-range="day">Last 24 hours</button>
+            <button type="button" role="tab" data-range="week">Last 7 days</button>
+            <button type="button" role="tab" data-range="month">Last 30 days</button>
+            <button type="button" role="tab" data-range="custom">Custom</button>
+          </div>
+          <div class="usage-custom" id="usage-custom" hidden>
+            <label>From <input type="date" id="usage-from"></label>
+            <label>To <input type="date" id="usage-to"></label>
+          </div>
+          <label class="usage-select">By
+            <select id="usage-group" aria-label="Break down by">
+              <option value="house">House</option>
+              <option value="hatKey">Hat key</option>
+              <option value="account">Account</option>
+              <option value="model">Model</option>
+            </select>
+          </label>
+          <label class="usage-select">Chart
+            <select id="usage-tokens" aria-label="Tokens in the chart">
+              <option value="all">All tokens</option>
+              <option value="inputTokens">Input</option>
+              <option value="outputTokens">Output</option>
+              <option value="cacheReadTokens">Cache read</option>
+              <option value="cacheWriteTokens">Cache write</option>
+            </select>
+          </label>
+        </div>
+        <div id="usage-body"><p class="muted small">Loading usage…</p></div>
+      </div>
     </section>
   </main>
   <dialog id="dialog" aria-labelledby="dialog-title"></dialog>

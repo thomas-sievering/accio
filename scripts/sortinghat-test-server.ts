@@ -1,5 +1,5 @@
 /** The standalone Sorting Hat in an empty disposable state folder; only the providers are fixtures. */
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { closeWhenOrphaned } from './fixtureLifetime.js';
@@ -12,6 +12,14 @@ const auth = fakeAnthropicAuth();
 const hour = 3600_000;
 const claudeUsage = { five_hour: { utilization: 42, resets_at: new Date(Date.now() + 2 * hour).toISOString() }, seven_day: { utilization: 18, resets_at: new Date(Date.now() + 80 * hour).toISOString() } };
 for (let n = 1; n <= 20; n++) auth.usage[`token-${n}`] = claudeUsage;
+// Earlier usage, of a house, hat key and account deleted since: 30 hours, 10 days and 60 days ago.
+// Rows: [hour, provider, house, hat key, account, model, requests, input, output, cache read, cache write].
+const seededHour = (hoursAgo: number) => new Date(Math.floor(Date.now() / hour) * hour - hoursAgo * hour).toISOString().replace('.000Z', 'Z');
+await writeFile(join(dir, 'usage.json'), JSON.stringify({ version: 1, days: [], hours: [
+  [seededHour(30), 'anthropic', 'archive', null, 'gone-account', 'claude-old', 3, 1000, 200, 300, 50],
+  [seededHour(240), 'anthropic', 'archive', 'gone-key', 'gone-account', 'claude-old', 2, 5000, 700, 0, 0],
+  [seededHour(1440), 'openai', 'archive', null, 'gone-account', 'gpt-old', 1, 400, 100, 50, 0],
+] }));
 const anthropic = await fakeAnthropicApi();
 const codex = new FakeCodex();
 const hat = await startStandalone({

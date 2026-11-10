@@ -22,9 +22,12 @@ async function api(method, path, body) {
 }
 
 async function load() {
+  const usage = fetchUsage();
+  usage.catch(() => {});
   const [accounts, houses, hatKeys, limits] = await Promise.all([api('GET', 'accounts'), api('GET', 'houses'), api('GET', 'hat-keys'), api('GET', 'limits')]);
   Object.assign(state, { accounts, houses, hatKeys, limits });
   render();
+  await usage.then(showUsage);
 }
 
 /** Runs an action from the page; failures show in the toast. */
@@ -56,7 +59,7 @@ function h(tag, props = {}, ...children) {
     else if (key in el && typeof value !== 'string') el[key] = value;
     else el.setAttribute(key, value === true ? '' : value);
   }
-  for (const child of children.flat()) if (child !== undefined && child !== null && child !== false) el.append(child);
+  for (const child of children.flat(Infinity)) if (child !== undefined && child !== null && child !== false) el.append(child);
   return el;
 }
 
@@ -467,10 +470,283 @@ function showHatKey(house, key) {
   ), () => { load().catch((e) => toast(e.message)); });
 }
 
+// ---------- Usage ----------
+//
+// Time zone: the API's day buckets are UTC days, but this page shows days in the
+// browser's time zone. So it asks for hourly buckets and adds them up into local
+// days itself. The Sorting Hat keeps hours only for the last 90 whole UTC days
+// (older hours become UTC days, API.md "Usage"): for a custom range reaching
+// further back, those days are asked for per UTC day and shown on their UTC
+// date, with a note saying so.
+
+const HOUR = 3_600_000;
+const DAY = 24 * HOUR;
+const HOURLY_FOR_DAYS = 90;
+const TOKEN_TYPES = [['inputTokens', 'Input'], ['outputTokens', 'Output'], ['cacheReadTokens', 'Cache read'], ['cacheWriteTokens', 'Cache write']];
+const GROUPS = {
+  house: { field: 'houseId', title: 'House', groupBy: 'house' },
+  hatKey: { field: 'hatKeyId', title: 'Hat key', groupBy: 'hatKey' },
+  // With the provider, so the rows line up with each account's limits.
+  account: { field: 'accountId', title: 'Account', groupBy: 'account,provider' },
+  model: { field: 'model', title: 'Model', groupBy: 'model' },
+};
+/** Series in the chart; smaller groups share the last colour as "Other". */
+const MAX_SERIES = 7;
+const usageView = { range: 'week', group: 'house', tokens: 'all' };
+let usageSeq = 0;
+
+const tokensOf = (t) => t.inputTokens + t.outputTokens + t.cacheReadTokens + t.cacheWriteTokens;
+const valueOf = (t, tokens) => tokens === 'all' ? tokensOf(t) : t[tokens];
+const zeroTotals = () => ({ requests: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 });
+const addTo = (target, t) => { for (const k of Object.keys(zeroTotals())) target[k] += t[k]; };
+const fmt = new Intl.NumberFormat();
+const compact = new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 });
+const localDay = (ms, add = 0) => { const d = new Date(ms); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + add); return d.getTime(); };
+const dayKey = (d) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+const utcDayKey = (d) => `${d.getUTCFullYear()}-${d.getUTCMonth() + 1}-${d.getUTCDate()}`;
+const parseDate = (value) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value); return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime() : NaN; };
+const dateInput = (ms) => { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+
+/** The chosen range: [from, to) in ms, and its buckets' size. */
+function usageRange(now = Date.now()) {
+  if (usageView.range === 'day') { const to = Math.floor(now / HOUR) * HOUR + HOUR; return { from: to - 24 * HOUR, to, bucket: 'hour' }; }
+  if (usageView.range === 'week') return { from: localDay(now, -6), to: localDay(now, 1), bucket: 'day' };
+  if (usageView.range === 'month') return { from: localDay(now, -29), to: localDay(now, 1), bucket: 'day' };
+  const from = parseDate($('#usage-from').value);
+  const last = parseDate($('#usage-to').value);
+  if (Number.isNaN(from) || Number.isNaN(last)) return { problem: 'Choose both dates.' };
+  if (from > last) return { problem: 'The start date is after the end date.' };
+  const to = localDay(last, 1);
+  const cut = Math.floor(now / DAY) * DAY - HOURLY_FOR_DAYS * DAY;
+  // A day or two in hours, as long as the Sorting Hat still has them.
+  return { from, to, bucket: to - from <= 2 * DAY + HOUR && from >= cut ? 'hour' : 'day' };
+}
+
+/** Fetches the chosen range and breakdown; resolves to null when a newer request has been made. */
+async function fetchUsage() {
+  const seq = ++usageSeq;
+  const view = { ...usageView };
+  const range = usageRange();
+  if (range.problem) return { seq, view, range };
+  const groupBy = GROUPS[view.group].groupBy;
+  const ask = (from, to, bucket) => api('GET', `usage?${new URLSearchParams({ from: new Date(from).toISOString(), to: new Date(to).toISOString(), groupBy, bucket })}`);
+  // Hours are kept for 90 whole UTC days; before that, UTC days (see above).
+  const cut = Math.floor(Date.now() / DAY) * DAY - HOURLY_FOR_DAYS * DAY;
+  const parts = [];
+  let utcBefore = null;
+  if (range.from < cut) {
+    const utcFrom = Date.UTC(new Date(range.from).getFullYear(), new Date(range.from).getMonth(), new Date(range.from).getDate());
+    const last = new Date(range.to - 1);
+    const utcTo = Math.min(cut, Date.UTC(last.getFullYear(), last.getMonth(), last.getDate() + 1));
+    parts.push(ask(utcFrom, utcTo, 'day').then((r) => r.rows.map((row) => ({ ...row, utc: true }))));
+    utcBefore = Math.min(cut, range.to);
+  }
+  if (range.to > Math.max(range.from, cut)) parts.push(ask(Math.max(range.from, cut), range.to, 'hour').then((r) => r.rows));
+  const rows = (await Promise.all(parts)).flat();
+  return { seq, view, range, rows, utcBefore };
+}
+
+function showUsage(result) {
+  if (!result || result.seq !== usageSeq) return;
+  state.usage = result;
+  renderUsage();
+}
+
+function reloadUsage() {
+  syncUsageControls();
+  fetchUsage().then(showUsage).catch((e) => toast(e.message));
+}
+
+function syncUsageControls() {
+  for (const tab of document.querySelectorAll('#usage-range [data-range]')) tab.setAttribute('aria-selected', String(tab.dataset.range === usageView.range));
+  $('#usage-custom').hidden = usageView.range !== 'custom';
+  $('#usage-group').value = usageView.group;
+  $('#usage-tokens').value = usageView.tokens;
+}
+
+/** How a group's id reads: a name, or that it was deleted. */
+function groupLabel(group, id) {
+  if (group === 'house') {
+    const house = state.houses.find((x) => x.id === id);
+    return house ? { name: house.name } : { name: 'Deleted house', detail: id, deleted: true };
+  }
+  if (group === 'hatKey') {
+    if (id === null) return { name: 'Hub (embedded)', detail: 'the app embedding the Sorting Hat' };
+    const key = state.hatKeys.find((x) => x.id === id);
+    if (!key) return { name: 'Deleted hat key', deleted: true };
+    return { name: key.name, detail: [state.houses.find((x) => x.id === key.houseId)?.name, key.revokedAt && 'revoked'].filter(Boolean).join(', ') || undefined };
+  }
+  if (group === 'account') {
+    const account = accountById(id);
+    return account ? { name: account.name, detail: PROVIDERS[account.providerId] } : { name: 'Deleted account', deleted: true };
+  }
+  return id === null ? { name: 'Unknown model', deleted: true } : { name: id };
+}
+
+/** Bucket starts in the range, labels, and where a row's start falls. */
+function usageBuckets(range) {
+  const starts = [];
+  if (range.bucket === 'hour') for (let t = range.from; t < range.to; t += HOUR) starts.push(t);
+  else for (let t = range.from; t < range.to; t = localDay(t, 1)) starts.push(t);
+  const byDay = new Map(starts.map((t, i) => [dayKey(new Date(t)), i]));
+  const indexOf = (row) => {
+    const start = Date.parse(row.start);
+    if (range.bucket === 'hour') return Math.min(starts.length - 1, Math.max(0, Math.floor((start - range.from) / HOUR)));
+    const i = byDay.get(row.utc ? utcDayKey(new Date(start)) : dayKey(new Date(start)));
+    if (i !== undefined) return i;
+    return start < range.from ? 0 : starts.length - 1;
+  };
+  return { starts, indexOf };
+}
+
+function bucketLabel(start, bucket, long = false) {
+  const d = new Date(start);
+  if (bucket === 'hour') return long ? d.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleDateString(undefined, long ? { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric' });
+}
+
+function renderUsage() {
+  const body = $('#usage-body');
+  const result = state.usage;
+  if (!result) return;
+  const { view, range, rows = [] } = result;
+  if (range.problem) return body.replaceChildren(h('p', { class: 'muted small', role: 'status' }, range.problem));
+  const { field, title } = GROUPS[view.group];
+  const groupKey = (row) => JSON.stringify(row[field] ?? null);
+
+  // Per group: totals over the range, and per bucket.
+  const { starts, indexOf } = usageBuckets(range);
+  const groups = new Map();
+  const totals = zeroTotals();
+  for (const row of rows) {
+    const key = groupKey(row);
+    let g = groups.get(key);
+    if (!g) groups.set(key, g = { id: row[field] ?? null, totals: zeroTotals(), buckets: starts.map(() => zeroTotals()) });
+    addTo(g.totals, row);
+    addTo(g.buckets[indexOf(row)], row);
+    addTo(totals, row);
+  }
+  // By account, every account is listed with its limits, also without usage.
+  if (view.group === 'account') {
+    for (const a of state.accounts) if (!groups.has(JSON.stringify(a.id))) groups.set(JSON.stringify(a.id), { id: a.id, totals: zeroTotals(), buckets: starts.map(() => zeroTotals()) });
+  }
+  const list = [...groups.values()].sort((a, b) => valueOf(b.totals, view.tokens) - valueOf(a.totals, view.tokens) || tokensOf(b.totals) - tokensOf(a.totals));
+  list.forEach((g, i) => { g.label = groupLabel(view.group, g.id); g.series = Math.min(i, MAX_SERIES); });
+
+  const tokensName = view.tokens === 'all' ? 'tokens' : `${TOKEN_TYPES.find(([k]) => k === view.tokens)[1].toLowerCase()} tokens`;
+  const summary = h('div', { class: 'usage-summary', 'aria-label': 'Usage totals' },
+    h('span', {}, h('strong', {}, fmt.format(tokensOf(totals))), ' tokens'),
+    h('span', {}, h('strong', {}, fmt.format(totals.requests)), totals.requests === 1 ? ' request' : ' requests'),
+    TOKEN_TYPES.map(([k, name]) => h('span', { class: 'muted' }, `${name} ${fmt.format(totals[k])}`)),
+  );
+  const notes = [
+    result.utcBefore !== null && result.utcBefore !== undefined && h('p', { class: 'muted small' }, `Before ${new Date(result.utcBefore).toLocaleDateString(undefined, { timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric' })}, the Sorting Hat keeps usage per UTC day, so those days are UTC days.`),
+  ];
+  body.replaceChildren(
+    summary,
+    totals.requests ? usageChart(list, starts, range.bucket, view.tokens, tokensName) : h('p', { class: 'empty' }, 'No usage in this range.'),
+    ...notes.filter(Boolean),
+    list.length ? usageTable(list, totals, view, title) : null,
+  );
+}
+
+const SVG = 'http://www.w3.org/2000/svg';
+function s(tag, attrs = {}, ...children) {
+  const el = document.createElementNS(SVG, tag);
+  for (const [k, v] of Object.entries(attrs)) if (v !== undefined && v !== null) el.setAttribute(k, String(v));
+  for (const c of children.flat(Infinity)) if (c !== undefined && c !== null && c !== false) el.append(c);
+  return el;
+}
+
+/** Stacked bars: one per bucket, a segment per group. Hovering shows the numbers. */
+function usageChart(list, starts, bucket, tokens, tokensName) {
+  const W = 760, H = 220, left = 48, right = 8, top = 10, bottom = 26;
+  const n = starts.length;
+  const stacks = starts.map((_, i) => list.reduce((sum, g) => sum + valueOf(g.buckets[i], tokens), 0));
+  const max = niceMax(Math.max(0, ...stacks));
+  const y = (v) => top + (H - top - bottom) * (1 - v / max);
+  const slot = (W - left - right) / n;
+  const barW = Math.max(1, Math.min(36, slot * 0.72));
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => f * max);
+  const every = Math.ceil(n / (bucket === 'hour' ? 8 : 10));
+  const shown = list.filter((g) => g.series < MAX_SERIES);
+  const other = list.filter((g) => g.series === MAX_SERIES);
+  return s('svg', { class: 'chart', viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `Chart of ${tokensName} per ${bucket}` },
+    ticks.map((v) => [
+      s('line', { class: 'grid', x1: left, x2: W - right, y1: y(v), y2: y(v) }),
+      s('text', { x: left - 6, y: y(v) + 4, 'text-anchor': 'end' }, compact.format(v)),
+    ]),
+    starts.map((start, i) => {
+      const x = left + slot * i + (slot - barW) / 2;
+      let base = 0;
+      const segments = [];
+      const parts = [...shown.map((g) => ({ name: g.label.name, series: g.series, value: valueOf(g.buckets[i], tokens) })),
+        { name: 'Other', series: MAX_SERIES, value: other.reduce((sum, g) => sum + valueOf(g.buckets[i], tokens), 0) }].filter((p) => p.value > 0);
+      for (const p of parts) {
+        segments.push(s('rect', { class: `seg s${p.series}`, x, width: barW, y: y(base + p.value), height: Math.max(0, y(base) - y(base + p.value)) },
+          s('title', {}, `${bucketLabel(start, bucket, true)} · ${p.name}: ${fmt.format(p.value)} ${tokensName}`)));
+        base += p.value;
+      }
+      return s('g', { class: 'bucket' },
+        s('rect', { class: 'slot', x: left + slot * i, width: slot, y: top, height: H - top - bottom },
+          s('title', {}, `${bucketLabel(start, bucket, true)}: ${fmt.format(stacks[i])} ${tokensName}`)),
+        segments,
+        i % every === 0 && s('text', { x: left + slot * i + slot / 2, y: H - 8, 'text-anchor': 'middle' }, bucketLabel(start, bucket)),
+      );
+    }),
+  );
+}
+
+function niceMax(v) {
+  if (v <= 0) return 1;
+  const p = 10 ** Math.floor(Math.log10(v));
+  for (const m of [1, 2, 2.5, 4, 5, 10]) if (m * p >= v) return m * p;
+  return 10 * p;
+}
+
+function usageTable(list, totals, view, title) {
+  const byAccount = view.group === 'account';
+  const cells = (t) => [h('td', {}, fmt.format(t.requests)), TOKEN_TYPES.map(([k]) => h('td', {}, fmt.format(t[k]))), h('td', {}, fmt.format(tokensOf(t)))];
+  return h('div', { class: 'table-scroll' }, h('table', { class: 'usage-table', 'aria-label': `Usage by ${title.toLowerCase()}` },
+    h('thead', {}, h('tr', {},
+      h('th', { scope: 'col' }, title), h('th', { scope: 'col' }, 'Requests'),
+      TOKEN_TYPES.map(([, name]) => h('th', { scope: 'col' }, name)), h('th', { scope: 'col' }, 'Total'),
+      byAccount && h('th', { scope: 'col', class: 'limits-cell' }, 'Limits'))),
+    h('tbody', {}, list.map((g) => {
+      const account = byAccount ? accountById(g.id) : undefined;
+      return h('tr', {},
+        h('td', {}, h('div', { class: 'group-name' },
+          h('span', { class: `swatch s${g.series}`, 'aria-hidden': 'true' }),
+          h('span', {}, h('span', { class: g.label.deleted ? 'deleted' : '' }, g.label.name), g.label.detail ? h('span', { class: 'muted small' }, ` · ${g.label.detail}`) : null))),
+        cells(g.totals),
+        byAccount && h('td', { class: 'limits-cell' }, account ? limitsView(account) : h('span', { class: 'muted small' }, '—')));
+    })),
+    h('tfoot', {}, h('tr', {}, h('td', {}, 'Total'), cells(totals), byAccount && h('td', { class: 'limits-cell' })))));
+}
+
 // ---------- Start ----------
 
 for (const el of document.querySelectorAll('[data-add-account]')) el.addEventListener('click', () => addAccount(el.dataset.addAccount));
 $('#add-house').addEventListener('click', addHouse);
+for (const tab of document.querySelectorAll('#usage-range [data-range]')) {
+  tab.addEventListener('click', () => {
+    usageView.range = tab.dataset.range;
+    if (usageView.range === 'custom' && !$('#usage-from').value) {
+      $('#usage-from').value = dateInput(localDay(Date.now(), -29));
+      $('#usage-to').value = dateInput(Date.now());
+    }
+    reloadUsage();
+  });
+}
+for (const id of ['#usage-from', '#usage-to']) $(id).addEventListener('change', reloadUsage);
+$('#usage-group').addEventListener('change', (event) => { usageView.group = event.currentTarget.value; reloadUsage(); });
+// The token type only changes the chart: no new request.
+$('#usage-tokens').addEventListener('change', (event) => {
+  usageView.tokens = event.currentTarget.value;
+  syncUsageControls();
+  if (state.usage) { state.usage.view.tokens = usageView.tokens; renderUsage(); }
+});
+syncUsageControls();
 $('#refresh-limits').addEventListener('click', async (event) => {
   const b = event.currentTarget;
   b.disabled = true;
@@ -483,5 +759,5 @@ fetch('/dashboard/session', { credentials: 'same-origin' }).then((r) => r.json()
 }).catch(() => {});
 
 load().catch((e) => toast(e.message));
-// Keep the account in use and limits current while the page is open, but never under an open dialog.
+// Keep the account in use, limits and usage current while the page is open, but never under an open dialog.
 setInterval(() => { if (!dialog.open && document.visibilityState === 'visible') load().catch(() => {}); }, 30_000);

@@ -50,6 +50,20 @@ limits and each house's account in use, and creates, renames, revokes and
 deletes hat keys. A new hat key is shown once, with settings for Claude Code,
 pi-claude-bridge and Codex that point at the address the dashboard was opened at.
 
+Its **Usage** section charts the tokens used over the last 24 hours (per hour),
+7 or 30 days (per day) or a chosen range of dates (per hour for up to two days),
+stacked by house, hat key, account or model, for all tokens or one type (input,
+output, cache read, cache write). A table beside it lists each group's requests
+and tokens of every type with their totals; by account, it lists every account
+with its limits next to its usage. Usage of a deleted house, hat key or account
+shows as deleted, and an embedding hub's as "Hub (embedded)". It refreshes every
+30 seconds.
+
+Days and hours are in the browser's time zone. The API's day buckets are UTC
+days, so the dashboard asks for hours and adds them up into local days. The
+Sorting Hat keeps hours only for the last 90 days; for a range reaching further
+back, those days are UTC days, and the dashboard says so.
+
 It has no login of its own:
 
 - **On this machine** (no Cloudflare Access settings): the dashboard and its API
