@@ -33,7 +33,6 @@ export default async function smoke({ page, runDir, home, fixture, action, captu
     await button('Save').click();
     await profileRow('Verify work renamed').waitFor();
     await page.reload();
-    await button('Settings').click();
     await section('Profiles').click();
     await profileRow('Verify work renamed').click();
     assert.equal(await page.getByRole('textbox', { name: 'Name', exact: true }).inputValue(), 'Verify work renamed');

@@ -9,6 +9,16 @@ Read [the feature index](features/README.md), then the affected feature files. D
 
 ## Choose the start
 
+For a full app audit, run `pnpm test:e2e`, then the production smoke,
+`resources.mjs`, `hubs.mjs`, and a linked real-turn journey. Use the feature map
+to record additional entry points as passed, failed, or unverified; the committed
+browser suite does not cover every mapped branch. Include Thread naming and
+searches whose only matches are on Snoozed or Settled. For visual quality, follow
+[smooth-ui](../smooth-ui/SKILL.md) and inspect recorded frames through completion
+and the later Working-to-open relocation. Keep fixture-provider results separate
+from live-provider results. For an analysis-only request, preserve application
+failures as findings; verification recipes and selectors may still be corrected.
+
 For focused fixture browser tests, failure diagnosis, or checks after a rebase,
 follow [Verification and shipping](../../../docs/verification.md). `pnpm verify:ui`
 retains complete logs for selected tests. Use the journeys below when the changed
@@ -108,6 +118,8 @@ Real handles in this app:
 - Settings lists end in a dashed `Add <thing>` row whose name is exact (`Add profile`, `Add tool`, `Add MCP server`, `Add skill source`, `Add hub`).
 - `page.getByRole('button', { name: 'Add project', exact: true })`, followed by textbox `Folder`, reaches the local project sheet.
 - `page.getByRole('button', { name: 'New thread', exact: true })` opens the picker. Its inputs are comboboxes `Search projects` and `Search profiles`; choices have role `option`. New thread, `Search threads` and `Filter threads` are hidden until setup is done (a profile with a signed-in account and a project), so the offline baseline cannot reach them.
+- Adding a project opens its draft immediately. Scope New thread to `.sidebar` when reopening the picker; the idle pane's button is absent while a draft is open. The composer textarea has role `combobox` for mentions; use `.composer textarea` for typing.
+- Reload restores the selected view, including Settings. Hub switching can also leave Settings visible; use its `Back` button before asserting onboarding or thread content.
 - Popover menus fade out over about 120 ms. Assert dismissal with `await menu.waitFor({ state: 'hidden' })`, not an immediate `isVisible()`.
 
 Selectors and complete journeys for the remaining branches live in the feature files. Use fresh ARIA snapshots to resolve ambiguities. Preserve Unicode labels literally.

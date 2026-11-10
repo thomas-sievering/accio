@@ -43,6 +43,20 @@ Preconditions: healthy instance. New thread, search and filter stay hidden until
 
 ## Gotchas
 
+- **Search across shelves.** Create a uniquely titled thread through Send, settle
+  it through Thread actions, then search its exact title. Expand Settled and
+  require the matching row; check that `No threads found.` does not appear
+  alongside it. Repeat with a snoozed thread. The November 2026 audit found the
+  empty-state message counts only drafts, open and Working rows, so a passing
+  ordinary search does not cover these branches.
+- **Completion motion.** Record a paced first turn through its completion and
+  the two-second Working delay using [smooth-ui](../../smooth-ui/SKILL.md).
+  Inspect the selected row's move from Working into the open list, the last
+  Working shelf disappearing, and adjacent rows moving. DOM coordinates alone
+  cannot establish motion because view transitions render separate snapshots.
+  After the real thread has opened, focus its Working row and wait for the move;
+  require focus to follow that thread rather than fall back to the document body.
+
 - **Prompt size:** see [System prompt](system-prompt.md) for the composer stat, persistence check and measurement scope.
 
 - **Prompt cache stat:** run the `Claude cache usage` case in `tests/inline-chat.spec.ts` against the chat fixture server. Send `Cache usage fixture` from a new No project thread; require `Cache 80%` beside the model controls, open its breakdown, and require 800 read, 100 written, 100 reported one-hour writes and 100 uncached tokens. Reload and reopen the breakdown with the same counts. The fixture substitutes the coding harness at the production boundary; this proves persistence and UI accounting, while live Anthropic cache hits remain unverified. Main-conversation request usage excludes subagents, title generation and older requests without usage reports.

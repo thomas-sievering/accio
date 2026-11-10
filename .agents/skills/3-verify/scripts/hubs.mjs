@@ -76,6 +76,7 @@ export default async function ({page, context, home, runDir, action, capture}) {
     });
     await action('hubs/switch: restore the original hub without another pairing',async()=>{
       await chooseHub('Local dev');
+      await button('Back').click();
       await page.getByText('Choose an account for Same profile',{exact:true}).waitFor();
       await button('Settings').click(); await page.locator('.sidebar nav').getByRole('button',{name:'Accounts',exact:true}).click();
       assert.equal(await page.getByRole('button',{name:'Other account Signed out',exact:true}).count(),0);
@@ -88,6 +89,7 @@ export default async function ({page, context, home, runDir, action, capture}) {
       try {
         await second.goto(instance.url+'/#token='+encodeURIComponent(token));
         await chooseHub('Other dev',second);
+        await second.getByRole('button',{name:'Back',exact:true}).click();
         await second.getByText('Choose an account for Same profile',{exact:true}).waitFor();
         await openSettings();
         await button('Hub: Local dev').waitFor();
@@ -99,7 +101,6 @@ export default async function ({page, context, home, runDir, action, capture}) {
     });
     await action('hubs/persistence: retain the selected hub after reload',async()=>{
       await chooseHub('Other dev'); await page.reload();
-      await page.getByText('Choose an account for Same profile',{exact:true}).waitFor();
       await openSettings();
       await button('Hub: Other dev').waitFor();
     });

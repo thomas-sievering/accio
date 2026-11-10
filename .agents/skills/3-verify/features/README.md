@@ -27,6 +27,7 @@ Record feature IDs and entry points in `actions.json`. Pair the action trace wit
 - [Project dashboard](project-dashboard.md): Dashboard in the thread header's project menu, the project app's Start/Stop/Restart/Update and auto-update, threads, commits and logs.
 - [Built-in tools](harness-tools.md): per-harness tool switches under Settings → Harnesses, hub-wide, with reset.
 - [System prompt](system-prompt.md): read-only Settings page with each harness's delivery and the shared sections.
+- [Thread naming](thread-naming.md): automatic titles, model choice, instructions, preview, save and navigation with unsaved changes.
 - [Machines](machines.md): status, harness versions, machine names and profile folder defaults.
 - [Threads](threads.md): project/profile picker, models, messages, stop/resume, search/filter, shelves and deletion.
 - [Changelog](changelog.md): delivered changes with their shipped notes, the project dashboard's fold, search and opening a change's thread.

@@ -17,14 +17,14 @@ export default async function realTurn({ page, home, fixture, runDir, action, ca
     await project.waitFor({ state: 'hidden' });
   });
   await action('threads/picker: open a draft in the disposable project', async () => {
-    await page.getByRole('main').getByRole('button', { name: 'New thread', exact: true }).click();
+    await page.locator('.sidebar').getByRole('button', { name: 'New thread', exact: true }).click();
     await page.getByRole('combobox', { name: 'Search projects' }).fill('verify-project');
     await page.getByRole('option', { name: /^verify-project/ }).click();
-    await page.locator('.composer').getByRole('textbox').waitFor();
+    await page.locator('.composer textarea').waitFor();
   });
   await capture('draft');
   await action('threads/turn: send a prompt and receive a real reply', async () => {
-    await page.locator('.composer').getByRole('textbox').fill('Reply with ACCIO_VERIFY_OK and do not run tools.');
+    await page.locator('.composer textarea').fill('Reply with ACCIO_VERIFY_OK and do not run tools.');
     await button('Send').click();
     await page.locator('.messages .msg.user').getByText('Reply with ACCIO_VERIFY_OK').waitFor();
     await page.locator('.messages .msg.assistant').getByText(/ACCIO_VERIFY_OK/).first().waitFor({ timeout: 180_000 });
