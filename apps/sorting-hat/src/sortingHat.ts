@@ -501,7 +501,7 @@ export class SortingHat implements Forwarding {
 
   /**
    * Keeps the limits behind the choice current while a house is in use. The
-   * cache reads each account at most about once a minute, and right after a
+   * cache reads each account at most about every five minutes, and right after a
    * shown reset passes.
    */
   noteRequest(houseId: string, providerId: ProviderId) {

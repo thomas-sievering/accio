@@ -3,8 +3,13 @@ import { accountInUse, type AccountLimitsView, type AccountView, type LimitWindo
 /** 'all' or a profile id. */
 export type LimitsScope = 'all' | (string & {});
 
-/** The hub treats a snapshot as fresh for a minute; the client asks no more often. */
-export const FRESH_MS = 60_000;
+/**
+ * The hub treats a snapshot as fresh for five minutes (longer after the provider
+ * rate-limited it); the client asks no more often.
+ */
+export const FRESH_MS = 5 * 60_000;
+/** How often the client looks for snapshots that have gone stale. */
+export const CHECK_MS = 60_000;
 /** The hub ignores attempts closer together than this. */
 const COOLDOWN_MS = 5_000;
 

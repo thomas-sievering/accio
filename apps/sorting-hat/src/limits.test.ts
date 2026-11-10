@@ -37,7 +37,47 @@ describe('hub account limits', () => {
     expect(limits.views()[0]?.snapshot?.windows[0]?.usedPercent).toBe(40);
     now += 60_001;
     await limits.refresh(['shared']);
+    expect(read).toHaveBeenCalledTimes(2);
+    now += 4 * 60_000;
+    await limits.refresh(['shared']);
     expect(read).toHaveBeenCalledTimes(3);
+    await limits.close();
+  });
+
+  it('waits at least a minute after a rate limit, even when told to retry sooner', async () => {
+    let now = Date.parse('2026-11-03T12:00:00Z');
+    const read = vi.fn().mockRejectedValueOnce(new LimitsReadError('rateLimited', 'Slow down.', 0)).mockResolvedValue({ windows: [] });
+    const limits = new AccountLimits(() => [account()], read, () => now);
+    await limits.refresh(['shared']);
+    expect(limits.views()[0]?.retryAt).toBe(new Date(now + 60_000).toISOString());
+    await limits.close();
+  });
+
+  it('reads a rate-limited account less often until it stays quiet', async () => {
+    let now = Date.parse('2026-11-03T12:00:00Z');
+    const limited = () => new LimitsReadError('rateLimited', 'Slow down.');
+    const read = vi.fn().mockRejectedValueOnce(limited()).mockRejectedValueOnce(limited()).mockResolvedValue({ windows: [] });
+    const limits = new AccountLimits(() => [account()], read, () => now);
+    const step = async (ms: number) => { now += ms; await limits.refresh(['shared']); };
+    await step(0);
+    expect(limits.views()[0]?.retryAt).toBe(new Date(now + 60_000).toISOString());
+    await step(60_000);
+    expect(limits.views()[0]?.retryAt).toBe(new Date(now + 120_000).toISOString());
+    await step(120_000);
+    expect(read).toHaveBeenCalledTimes(3);
+    // Two rate limits: the next reads are 20, then 10, then 5 minutes apart.
+    await step(20 * 60_000 - 1);
+    expect(read).toHaveBeenCalledTimes(3);
+    await step(1);
+    expect(read).toHaveBeenCalledTimes(4);
+    await step(10 * 60_000 - 1);
+    expect(read).toHaveBeenCalledTimes(4);
+    await step(1);
+    expect(read).toHaveBeenCalledTimes(5);
+    await step(5 * 60_000);
+    expect(read).toHaveBeenCalledTimes(6);
+    await step(5 * 60_000);
+    expect(read).toHaveBeenCalledTimes(7);
     await limits.close();
   });
 
@@ -48,7 +88,7 @@ describe('hub account limits', () => {
     const limits = new AccountLimits(() => [account()], read, () => now);
     await limits.refresh(['shared']);
     const observed = limits.views()[0]!.snapshot!.observedAt;
-    now += 60_000;
+    now += 5 * 60_000;
     await limits.refresh(['shared']);
     const failed = limits.views()[0]!;
     expect(failed).toMatchObject({ status: 'error', snapshot: { observedAt: observed }, attemptedAt: new Date(now).toISOString() });

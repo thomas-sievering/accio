@@ -149,7 +149,8 @@ describe('needsRefresh', () => {
   it('asks for missing, stale and reset-passed snapshots only', () => {
     expect(needsRefresh(view({ status: 'idle' }), T)).toBe(true);
     expect(needsRefresh(view({ snapshot: fresh, attemptedAt: iso(-10_000) }), T)).toBe(false);
-    expect(needsRefresh(view({ snapshot: { ...fresh, observedAt: iso(-61_000) }, attemptedAt: iso(-61_000) }), T)).toBe(true);
+    expect(needsRefresh(view({ snapshot: { ...fresh, observedAt: iso(-61_000) }, attemptedAt: iso(-61_000) }), T)).toBe(false);
+    expect(needsRefresh(view({ snapshot: { ...fresh, observedAt: iso(-301_000) }, attemptedAt: iso(-301_000) }), T)).toBe(true);
     const passed = { observedAt: iso(-20_000), windows: [win({ resetsAt: iso(-1_000) })] };
     expect(needsRefresh(view({ snapshot: passed, attemptedAt: iso(-20_000) }), T)).toBe(true);
   });

@@ -3,7 +3,7 @@ import type { AccountLimitsView } from '@accio/protocol';
 import { useClient, useConnectionStatus } from '../app/connection';
 import { observeLive } from '../app/observeLive';
 import type { ConnectionStatus } from '../app/rpcClient';
-import { FRESH_MS, needsRefresh, nextReset } from './limitsModel';
+import { CHECK_MS, needsRefresh, nextReset } from './limitsModel';
 
 type LimitsState = {
   /** Every named account's limits by account id; undefined until the first load. */
@@ -27,7 +27,7 @@ const Ctx = createContext<LimitsState | null>(null);
 /**
  * One client-wide limits cache and refresh schedule. Views and cards only say
  * which accounts are visible; requests are made here: on first sight, on focus,
- * about once a minute while the window is visible, and when a shown reset
+ * when a snapshot is five minutes old while the window is visible, and when a shown reset
  * passes. Only an explicit credential invalidation (idle), not pushed usage
  * values, starts another read.
  */
@@ -107,7 +107,7 @@ export function LimitsProvider({ children }: { children: ReactNode }) {
       void refresh(stale);
     };
     tick();
-    const timer = setInterval(tick, FRESH_MS);
+    const timer = setInterval(tick, CHECK_MS);
     const onVisible = () => { if (document.visibilityState === 'visible') tick(); };
     window.addEventListener('focus', tick);
     document.addEventListener('visibilitychange', onVisible);

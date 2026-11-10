@@ -220,8 +220,12 @@ share one allowance.
 | `GET /api/limits` | | `Limits[]`, the last known for every account |
 | `POST /api/limits/refresh` | `{ accountIds?: string[], force?: boolean }` | `Limits[]` after reading again |
 
-Each account is read at most about once a minute unless `force` is set, and never
-more than once every 5 seconds.
+Each account is read at most about every five minutes, and right after a shown
+reset passes. Reading each account once a minute ran into Anthropic's 429s for
+usage reads, so after a 429 the next read waits at least a minute (or longer, as
+`Retry-After` says), and the five minutes double for each recent 429, up to 40,
+halving again with each successful read. `force` reads at once, but never before
+`retryAt`, nor within 5 seconds of the last attempt.
 
 ### Usage
 

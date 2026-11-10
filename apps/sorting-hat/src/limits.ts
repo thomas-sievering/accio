@@ -4,9 +4,20 @@ export class LimitsReadError extends Error {
   constructor(readonly code: LimitsProblem['code'], message: string, readonly retryAfterMs?: number) { super(message); }
 }
 export type LimitsRead = { windows: LimitWindow[]; unsupported?: false } | { unsupported: true; windows?: never };
-type Entry = { view: AccountLimitsView; failures: number; controller?: AbortController; pending?: Promise<void> };
-const FRESH_MS = 60_000;
+/**
+ * strikes: recent rate limits from the provider; each doubles the wait between
+ * ordinary reads, and each successful read after one removes a strike.
+ * freshMs: how long the last successful read stays current.
+ */
+type Entry = { view: AccountLimitsView; failures: number; strikes: number; freshMs: number; controller?: AbortController; pending?: Promise<void> };
+/**
+ * Reading each account once a minute ran into Anthropic's 429s for usage
+ * reads, so ordinary reads wait five minutes. An explicit refresh or a 429
+ * on a model request (recheck) reads at once, but neither before retryAt.
+ */
+const FRESH_MS = 5 * 60_000;
 const COOLDOWN_MS = 5_000;
+const MAX_STRIKES = 3;
 
 /** Coalesces account reads across houses and callers. */
 export class AccountLimits {
@@ -49,7 +60,7 @@ export class AccountLimits {
   private entry(account: AccountView): Entry {
     let e = this.entries.get(account.id);
     if (!e) {
-      e = { failures: 0, view: {
+      e = { failures: 0, strikes: 0, freshMs: FRESH_MS, view: {
         accountId: account.id, providerId: account.providerId,
         status: account.signedIn ? 'idle' : 'signedOut', snapshot: null,
         attemptedAt: null, retryAt: null, problem: null,
@@ -70,7 +81,8 @@ export class AccountLimits {
     if (view.retryAt && Date.parse(view.retryAt) > now) return;
     const snapshot = view.snapshot;
     const resetPassed = snapshot?.windows.some((w) => w.resetsAt && Date.parse(w.resetsAt) > Date.parse(snapshot.observedAt) && Date.parse(w.resetsAt) <= now);
-    if (!force && snapshot && now - Date.parse(snapshot.observedAt) < FRESH_MS && !resetPassed) return;
+    const age = snapshot ? now - Date.parse(snapshot.observedAt) : Infinity;
+    if (!force && age < entry.freshMs && !resetPassed) return;
     if (!force && view.status === 'unsupported' && view.attemptedAt && now - Date.parse(view.attemptedAt) < FRESH_MS) return;
     const controller = new AbortController();
     entry.controller = controller;
@@ -82,6 +94,8 @@ export class AccountLimits {
         signal.throwIfAborted();
         if (!this.current(id, entry)) return;
         entry.failures = 0;
+        entry.freshMs = FRESH_MS * 2 ** entry.strikes;
+        entry.strikes = Math.max(0, entry.strikes - 1);
         entry.view = { ...entry.view, status: result.unsupported ? 'unsupported' : 'ready',
           snapshot: result.unsupported ? null : { observedAt: new Date(this.now()).toISOString(), windows: result.windows },
         };
@@ -91,8 +105,13 @@ export class AccountLimits {
         const problem: LimitsProblem = error instanceof LimitsReadError
           ? { code: error.code, message: error.message }
           : { code: 'unavailable', message: 'The Sorting Hat could not read this account’s limits. Try again.' };
-        const delay = error instanceof LimitsReadError && error.retryAfterMs !== undefined ? error.retryAfterMs : Math.min(15 * 60_000, 30_000 * 2 ** Math.min(entry.failures - 1, 5));
-        entry.view = { ...entry.view, status: 'error', problem, retryAt: new Date(this.now() + Math.max(COOLDOWN_MS, delay)).toISOString() };
+        const limited = problem.code === 'rateLimited';
+        if (limited) entry.strikes = Math.min(MAX_STRIKES, entry.strikes + 1);
+        // Rate limits back off from a minute, and a shorter Retry-After would only earn another 429.
+        const base = limited ? 60_000 : 30_000;
+        const told = error instanceof LimitsReadError ? error.retryAfterMs : undefined;
+        const delay = told ?? Math.min(15 * 60_000, base * 2 ** Math.min(entry.failures - 1, 5));
+        entry.view = { ...entry.view, status: 'error', problem, retryAt: new Date(this.now() + Math.max(limited ? base : COOLDOWN_MS, delay)).toISOString() };
       } finally {
         if (this.current(id, entry)) { entry.pending = undefined; entry.controller = undefined; }
       }
