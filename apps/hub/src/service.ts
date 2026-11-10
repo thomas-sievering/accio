@@ -52,6 +52,11 @@ const secretCalls = {
   'secrets.used': z.object({ id: SecretId, version: z.number().int().positive(), scope: SecretScope }),
 };
 type Login = { machineId: string; accountId: string; startedAt: number; complete?: AccountView };
+/** Public routes a model key may call. Model lists let OpenAI- and Anthropic-compatible tools discover what a profile offers. */
+const MODEL_ROUTES: Record<string, string[]> = {
+  POST: ['/v1/messages', '/v1/messages/count_tokens', '/openai/responses', '/openai/responses/compact'],
+  GET: ['/v1/models', '/openai/models'],
+};
 
 /** The same service runs on loopback for development and behind HTTPS at home. */
 export async function startHubService(opts: HubServiceOptions) {
@@ -288,10 +293,12 @@ export async function startHubService(opts: HubServiceOptions) {
       if (!independent) queue = operation.catch(() => {});
       return json(res, 200, await operation);
     }
-    if (req.method !== 'POST' || !['/v1/messages', '/v1/messages/count_tokens', '/openai/responses', '/openai/responses/compact'].includes(path)) return json(res, 404, { error: 'Unknown hub endpoint' });
+    if (!MODEL_ROUTES[req.method ?? '']?.includes(path)) return json(res, 404, { error: 'Unknown hub endpoint' });
     const key = /^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1] ?? (typeof req.headers['x-api-key'] === 'string' ? req.headers['x-api-key'] : '');
     const profileId = trust.modelProfile(key);
     if (!profileId) return json(res, 401, { error: 'Unknown or revoked model key' });
+    // Codex models are already known per ChatGPT account; list them in OpenAI's shape for tools that discover models.
+    if (path === '/openai/models') return json(res, 200, { object: 'list', data: hub.codexModels(profileId).map((m) => ({ id: m.id, object: 'model', created: 0, owned_by: 'openai' })) });
     const headers: import('node:http').IncomingHttpHeaders = { ...req.headers, host: new URL(proxy.url).host, authorization: `Bearer ${await hub.ensureProfile(profileId)}` };
     delete headers['x-api-key'];
     const upstream = httpRequest(new URL(path + target.search, proxy.url), { method: req.method, headers }, (response) => {

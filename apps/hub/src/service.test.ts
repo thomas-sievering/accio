@@ -15,11 +15,13 @@ describe('standalone hub trust and network boundary', () => {
     const home = await mkdtemp(join(tmpdir(), 'accio-hub-service-'));
     cleanup.push(() => rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
     const forwarded: string[] = [];
+    const forwardedPaths: string[] = [];
     const mcpForwarded: string[] = [];
     const service = await startHubService({ home, port: 0, secretKey: Buffer.alloc(32, 42).toString('base64'), claudeFetch: async (url, init) => {
       if (String(url).includes('/oauth/token')) return Response.json({ access_token: 'private-provider-token', refresh_token: 'private-refresh-token', expires_in: 3600, account: { uuid: 'me', email_address: 'me@example.com' } });
       if (String(url).endsWith('/api/oauth/usage')) return Response.json({});
       forwarded.push(new Headers(init?.headers).get('authorization') ?? '');
+      forwardedPaths.push(`${init?.method ?? 'GET'} ${new URL(String(url)).pathname}${new URL(String(url)).search}`);
       return new Response('data: hello\n\n', { headers: { 'content-type': 'text/event-stream' } });
     }, mcpFetch: async (_url, init) => { mcpForwarded.push(new Headers(init?.headers).get('authorization') ?? ''); return Response.json({ result: 'ok' }); } });
     cleanup.push(() => service.close());
@@ -32,7 +34,7 @@ describe('standalone hub trust and network boundary', () => {
       await client.start(); cleanup.push(() => client.close());
       return { client, token: p.token as string, code };
     }
-    return { home, service, forwarded, mcpForwarded, pair };
+    return { home, service, forwarded, forwardedPaths, mcpForwarded, pair };
   }
   it('bootstraps a first device with a one-time code and stores only its credential hash', async () => {
     const { home, service, pair } = await fixture();
@@ -77,6 +79,25 @@ describe('standalone hub trust and network boundary', () => {
     expect((await send(key)).status).toBe(401);
     expect((await fetch(service.url + '/state', { headers: { authorization: `Bearer ${first.token}` } })).status).toBe(401);
     const still = await send(otherMachine); expect(still.status).toBe(200); await still.body?.cancel();
+  });
+  it('lists models for a model key: Claude from the provider, Codex from the hub', async () => {
+    const { service, pair, forwarded, forwardedPaths } = await fixture();
+    const first = await pair('first');
+    const account = await first.client.call('accounts.save', { name: 'Claude' });
+    const login = await first.client.call('accounts.beginSignIn', { id: account.id, redirectUri: 'http://localhost:12345/callback' });
+    await first.client.call('accounts.completeSignIn', { signInId: login.signInId, code: 'code' });
+    const personal = await first.client.call('profiles.save', { name: 'Personal', accountId: account.id });
+    const { key } = await first.client.call('machine.modelKey', { profileId: personal.id });
+    const get = (path: string, key?: string) => fetch(service.url + path, { headers: key ? { authorization: `Bearer ${key}` } : {} });
+    expect((await get('/v1/models')).status).toBe(401);
+    expect((await get('/openai/models')).status).toBe(401);
+    const claude = await get('/v1/models?limit=5', key); expect(claude.status).toBe(200); await claude.body?.cancel();
+    expect(forwarded).toEqual(['Bearer private-provider-token']);
+    expect(forwardedPaths).toEqual(['GET /v1/models?limit=5']);
+    const codex = await get('/openai/models', key);
+    expect(codex.status).toBe(200); expect(await codex.json()).toEqual({ object: 'list', data: [] });
+    expect((await fetch(service.url + '/v1/models', { method: 'POST', headers: { authorization: `Bearer ${key}` }, body: '{}' })).status).toBe(404);
+    expect((await fetch(service.url + '/v1/messages', { headers: { authorization: `Bearer ${key}` } })).status).toBe(404);
   });
   it('protects profile references retained for an offline paired machine', async () => {
     const { pair } = await fixture(); const first = await pair('first'); const second = await pair('second');
