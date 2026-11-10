@@ -5,7 +5,8 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc -p ."
+    "build": "tsc -p .",
+    "start": "node dist/main.js"
   },
   "dependencies": {
     "@openai/codex": "0.166.0"

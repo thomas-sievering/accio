@@ -1,19 +1,23 @@
 import { OpenAIAuth } from './openaiAuth.js';
-import { startForwarding } from './proxy.js';
+import { startServer } from './server.js';
 import { SortingHat } from './sortingHat.js';
 import type { CodexFactory } from './codex.js';
 import type { Fetch } from './types.js';
 
 export { SignInError, SIGN_IN_TTL_MS } from './claudeOAuth.js';
+export { HatError } from './errors.js';
+export { startStandalone, type StandaloneOptions } from './standalone.js';
 export type { CodexModel } from './openaiAuth.js';
 export type { CodexClient, CodexFactory, CodexNotification } from './codex.js';
-export type { AccountSelection } from './sortingHat.js';
+export type { AccountSelection, HatKeyView, HouseView } from './sortingHat.js';
 export type { AccountLimitsView, AccountView, Fetch, LimitWindow, LimitsProblem, LimitsSnapshot, ProviderId } from './types.js';
 
 /**
  * What an app embedding the Sorting Hat in-process may call (ADR 0018). Today
- * that app is Accio's hub, which links each profile to the house of the same id.
- * Forwarding is reached over HTTP at `url` with a house's key, never through here.
+ * that app is Accio's hub, which links each profile to the house of the same id
+ * and forwards with the key `ensureHouse` gives it, held only in memory. Model
+ * requests reach `url` over HTTP, never through here. Embedded, the Sorting Hat
+ * serves no management API; standalone (startStandalone) it does.
  */
 export type SortingHatApi = Pick<SortingHat,
   // Accounts
@@ -25,13 +29,13 @@ export type SortingHatApi = Pick<SortingHat,
   // Limits and models
   | 'limitViews' | 'onLimitsChanged' | 'refreshLimits' | 'codexModels' | 'refreshCodexModels'
 > & {
-  /** Where model requests go, with a house's key as bearer token or x-api-key. */
+  /** Where model requests go, with the house's key as bearer token or x-api-key. */
   readonly url: string;
   close(): Promise<void>;
 };
 
 export type SortingHatOptions = {
-  /** The Sorting Hat's state directory: account storage and ChatGPT credential homes. */
+  /** The Sorting Hat's state directory: sorting-hat.json and ChatGPT credential homes. */
   dir: string;
   /** Used for Claude sign-in, refresh, limits and forwarding. */
   claudeFetch?: Fetch;
@@ -41,13 +45,13 @@ export type SortingHatOptions = {
   openaiFetch?: Fetch;
 };
 
-/** Loads the accounts and starts forwarding on a loopback port. */
+/** Loads the state and starts forwarding on a loopback port. */
 export async function startSortingHat(opts: SortingHatOptions): Promise<SortingHatApi> {
   const hat = new SortingHat(opts.dir, opts.claudeFetch, new OpenAIAuth(opts.dir, opts.codexFactory));
   await hat.load();
   let forwarding;
   try {
-    forwarding = await startForwarding({ accounts: hat, host: '127.0.0.1', port: 0, upstream: opts.anthropicUrl, fetchImpl: opts.claudeFetch, openaiUpstream: opts.openaiUrl, openaiFetch: opts.openaiFetch });
+    forwarding = await startServer({ hat, host: '127.0.0.1', port: 0, upstream: opts.anthropicUrl, fetchImpl: opts.claudeFetch, openaiUpstream: opts.openaiUrl, openaiFetch: opts.openaiFetch });
   } catch (error) { await hat.close(); throw error; }
   const close = hat.close.bind(hat);
   // The instance itself, so callers that spy on a method see the calls made through it.

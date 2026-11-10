@@ -123,8 +123,8 @@ describe('profiles slice', () => {
     expect((await c.call('profiles.list', {}))[0]).toMatchObject({ name: 'Personal' });
     expect(claudeAccount((await c.call('profiles.list', {}))[0]!)?.id).toBe(first.id);
     expect(c.events.filter((e) => e.event === 'profiles.changed')).toHaveLength(eventCount);
-    const stored = JSON.parse(await readFile(join(t.home, 'hub', 'profiles.json'), 'utf8'));
-    expect(stored.profiles[0].accountIds).toEqual([first.id]);
+    const stored = JSON.parse(await readFile(join(t.home, 'hub', 'sorting-hat.json'), 'utf8'));
+    expect(stored.houses[0].accountIds).toEqual([first.id]);
     await expect(c.call('profiles.delete', { id: profile.id })).rejects.toThrow('Hub request failed');
     expect((await c.call('profiles.list', {}))[0]?.name).toBe('Personal');
     vi.restoreAllMocks();
@@ -140,8 +140,8 @@ describe('profiles slice', () => {
     await writeFile(block, 'not a directory');
     await expect(c.call('profiles.save', { name: 'Blocked' })).rejects.toThrow();
     expect(await c.call('profiles.list', {})).toEqual([]);
-    const stored = JSON.parse(await readFile(join(t.home, 'hub', 'profiles.json'), 'utf8'));
-    expect(stored.profiles).toEqual([]);
+    const stored = JSON.parse(await readFile(join(t.home, 'hub', 'sorting-hat.json'), 'utf8'));
+    expect(stored.houses).toEqual([]);
     await rm(block);
     expect(await c.call('profiles.save', { name: 'Blocked' })).toMatchObject({ id: 'blocked' });
   });

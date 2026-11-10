@@ -107,24 +107,24 @@ describe('sorting hat', () => {
     await hub.completeAccountSignIn(signInId, `good#${state}`);
     expect(hub.selectedAccount('personal')).toMatchObject({ signedIn: true, email: 'me@example.com', organization: null });
     await hub.close();
-    const stored = JSON.parse(await readFile(join(home, 'hub', 'profiles.json'), 'utf8'));
+    const stored = JSON.parse(await readFile(join(home, 'hub', 'sorting-hat.json'), 'utf8'));
     expect(stored.accounts[0].account.accessToken).toBe('token-1');
     // A sign-in is used once.
     await expect(hub.completeAccountSignIn(signInId, 'good')).rejects.toThrow(/expired/);
   });
 
-  it('migrates inline logins, preserving profile keys and account selections', async () => {
+  it('migrates inline logins, preserving account selections', async () => {
     const { hub, home } = await setup();
     const key = await hub.ensureHouse('personal');
     const start = await beginForHouse(hub, 'personal');
     await hub.completeAccountSignIn(start.signInId, 'good');
     await hub.close();
-    const store = join(home, 'hub', 'profiles.json');
-    const data = JSON.parse(await readFile(store, 'utf8'));
-    await writeFile(store, JSON.stringify([{ id: 'personal', accessKey: key, account: data.accounts[0].account }]));
+    const data = JSON.parse(await readFile(join(home, 'hub', 'sorting-hat.json'), 'utf8'));
+    await rm(join(home, 'hub', 'sorting-hat.json'));
+    await writeFile(join(home, 'hub', 'profiles.json'), JSON.stringify([{ id: 'personal', accessKey: key, account: data.accounts[0].account }]));
     const migrated = new SortingHat(join(home, 'hub'));
     await migrated.load();
-    expect(await migrated.ensureHouse('personal')).toBe(key);
+    expect(await migrated.ensureHouse('personal')).not.toBe(key);
     expect(migrated.selectedAccount('personal')).toMatchObject({ name: 'me@example.com', signedIn: true });
     expect(await migrated.accessToken('personal')).toBe('token-1');
     await migrated.close();
@@ -177,7 +177,7 @@ describe('sorting hat', () => {
     expect((await call('nope')).status).toBe(401);
     const notSignedIn = await call(key);
     expect(notSignedIn.status).toBe(401);
-    expect(await notSignedIn.text()).toMatch(/not signed in/);
+    expect(await notSignedIn.text()).toMatch(/no signed-in Claude account/);
     expect(api.seen).toHaveLength(0);
   });
 
@@ -225,7 +225,7 @@ describe('sorting hat', () => {
     const save = hub.configureHouse('personal', { anthropic: [account.id] }, async () => { preparing(); await wait; });
     await ready;
     const deletion = hub.deleteAccount(account.id);
-    const result = expect(deletion).rejects.toThrow(/profiles/);
+    const result = expect(deletion).rejects.toThrow(/houses/);
     release();
     await save;
     await result;
@@ -372,9 +372,49 @@ describe('sorting hat', () => {
     expect(await hub.accessToken('personal')).toBe(firstToken);
 
     await expect(hub.configureHouse('personal', { anthropic: [gpt.id] }, async () => {})).rejects.toThrow(/anthropic/);
-    await expect(hub.deleteAccount(second.id)).rejects.toThrow(/profiles/);
+    await expect(hub.deleteAccount(second.id)).rejects.toThrow(/houses/);
     await hub.configureHouse('personal', { anthropic: [first.id] }, async () => {});
     await hub.deleteAccount(second.id);
+  });
+
+  it('issues hat keys that reach only their own house, until revoked or their house is deleted', async () => {
+    const { hub, home, api, call } = await setup();
+    const personal = await hub.createHouse('Personal');
+    const hrc = await hub.createHouse('HRC', 'hrc');
+    expect([personal.id, (await hub.createHouse('Personal')).id]).toEqual(['personal', 'personal-2']);
+    await expect(hub.createHouse('Again', 'hrc')).rejects.toMatchObject({ status: 409 });
+    const mine = await hub.saveAccount('Mine');
+    const work = await hub.saveAccount('Work');
+    await hub.completeAccountSignIn(hub.beginAccountSignIn(mine.id).signInId, 'good');
+    await hub.completeAccountSignIn(hub.beginAccountSignIn(work.id).signInId, 'job');
+    await hub.setHouseAccounts(personal.id, { anthropic: [mine.id] });
+    await hub.setHouseAccounts(hrc.id, { anthropic: [work.id] });
+
+    const pi = await hub.createHatKey(personal.id, 'pi on laptop');
+    const accio = await hub.createHatKey(personal.id, 'Accio');
+    const hrcKey = await hub.createHatKey(hrc.id, 'pi at work');
+    expect(pi.secret).toMatch(/^hat-/);
+    expect(hub.hatKeyViews(personal.id).map((k) => k.name)).toEqual(['pi on laptop', 'Accio']);
+    expect(JSON.stringify(hub.hatKeyViews())).not.toContain(pi.secret);
+    expect(hub.houseForKey(pi.secret)).toEqual({ id: personal.id, hatKeyId: pi.id });
+    // Only a hash is stored.
+    expect(await readFile(join(home, 'hub', 'sorting-hat.json'), 'utf8')).not.toContain(pi.secret);
+
+    await (await call(pi.secret)).text();
+    await (await call(hrcKey.secret)).text();
+    expect(api.seen.map((r) => r.headers.authorization)).toEqual(['Bearer token-1', 'Bearer token-2']);
+
+    expect(await hub.renameHatKey(pi.id, 'pi')).toMatchObject({ name: 'pi', revokedAt: null });
+    expect((await hub.revokeHatKey(pi.id)).revokedAt).toEqual(expect.any(String));
+    expect((await call(pi.secret)).status).toBe(401);
+    expect((await call(accio.secret)).status).toBe(200);
+    await hub.deleteHatKey(pi.id);
+    expect(hub.hatKeyViews(personal.id).map((k) => k.id)).toEqual([accio.id]);
+
+    await hub.removeHouse(hrc.id);
+    expect((await call(hrcKey.secret)).status).toBe(401);
+    expect(hub.hatKeyViews().map((k) => k.id)).toEqual([accio.id]);
+    expect(api.seen).toHaveLength(3);
   });
 
 });

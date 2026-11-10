@@ -40,7 +40,7 @@ export class OpenAIAuth {
   constructor(private dir: string, private factory: CodexFactory = startCodex) {}
 
   async begin(browser = false) {
-    if (browser && this.pending.size) throw new SignInError('Another ChatGPT sign-in is in progress on this hub. Finish or cancel it first.');
+    if (browser && this.pending.size) throw new SignInError('Another ChatGPT sign-in is in progress. Finish or cancel it first.');
     const credentialId = randomUUID();
     const dir = this.directory(credentialId);
     await mkdir(dir, { recursive: true });

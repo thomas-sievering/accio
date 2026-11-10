@@ -102,7 +102,7 @@ Code is grouped by domain, one vertical slice each.
 - `packages/codex`: pinned Codex executable and stdio app-server client.
 - `packages/persistence`: atomic JSON files and owner-only private files.
 - `apps/hub`: hub service: pairing, relay, shared settings, profiles and resources; runs the Sorting Hat in-process for accounts.
-- `apps/sorting-hat`: the Sorting Hat (ADR 0018): accounts, sign-in, token refresh, limits, the account in use and model request forwarding. Imports nothing from Accio's packages.
+- `apps/sorting-hat`: the Sorting Hat (ADR 0018): accounts, sign-in, token refresh, limits, houses, hat keys, the account in use and model request forwarding. Imports nothing from Accio's packages. It also runs on its own with a management API; see [its README](apps/sorting-hat/README.md) and [API](apps/sorting-hat/API.md).
 - `apps/worker`: worker implementation: threads, harnesses, delivery and accio tools; also serves the web client and manages local hub connections.
 - `apps/web`: React client.
 - `apps/desktop`: Electron shell that opens the client and starts the local worker.

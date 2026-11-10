@@ -110,7 +110,7 @@ describe('Codex and ChatGPT accounts', () => {
     const c = await t.connect();
     const { profile } = await signIn(c, fake);
     await t.stop({ keepHome: true });
-    const file = join(t.home, 'hub', 'profiles.json');
+    const file = join(t.home, 'hub', 'sorting-hat.json');
     const stored = JSON.parse(await readFile(file, 'utf8'));
     for (const account of stored.accounts) for (const model of account.openai?.models ?? []) { delete model.efforts; delete model.defaultEffort; }
     await writeFile(file, JSON.stringify(stored));

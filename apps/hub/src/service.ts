@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { WebSocket, WebSocketServer } from 'ws';
 import { z } from 'zod';
 import { GitHubLogin, methods, ResourceScope, SecretSlot, type AccountView, type AccountLimitsView, type ProfileView, type ResourcesState, type SecretSummary } from '@accio/protocol';
-import { startSortingHat, SignInError, SIGN_IN_TTL_MS, type CodexFactory, type CodexModel, type Fetch } from '@accio/sorting-hat';
+import { startSortingHat, HatError, SIGN_IN_TTL_MS, type CodexFactory, type CodexModel, type Fetch } from '@accio/sorting-hat';
 import { SharedSettings, type MachineHello, type SharedSeed } from './sharedSettings.js';
 import { HubError } from './errors.js';
 import { HubTrust } from './trust.js';
@@ -183,7 +183,12 @@ export async function startHubService(opts: HubServiceOptions) {
         const grant = grants.get(p.token); if (grant?.machineId === machineId) { grant.release(); grants.delete(p.token); } return null;
       }
       case 'accounts.save': return hat.saveAccount(p.name, p.id, p.providerId);
-      case 'accounts.delete': await hat.deleteAccount(p.id); return null;
+      case 'accounts.delete': {
+        // The Sorting Hat refuses too, in its own words; a profile's accounts are its house's.
+        const { providerId } = hat.accountView(p.id);
+        if (settings.profiles().some((profile) => hat.selectedAccounts(profile.id, providerId).some((a) => a.id === p.id))) throw new HubError('Remove this account from its profiles before deleting it.');
+        await hat.deleteAccount(p.id); return null;
+      }
       case 'accounts.signOut': return hat.signOutAccount(p.id);
       case 'accounts.beginSignIn': {
         const account = hat.accountView(p.id);
@@ -242,7 +247,7 @@ export async function startHubService(opts: HubServiceOptions) {
   }
   const server = createServer((req, res) => { void handle(req, res).catch((error) => {
     if (res.headersSent) { res.destroy(); return; }
-    const safe = error instanceof HubError || error instanceof SignInError || error instanceof SecretStoreError;
+    const safe = error instanceof HubError || error instanceof HatError || error instanceof SecretStoreError;
     json(res, safe ? 400 : 500, { error: safe ? error.message : 'Hub request failed. Check the hub service.' });
   }); });
   async function handle(req: IncomingMessage, res: ServerResponse) {

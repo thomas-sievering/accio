@@ -97,7 +97,7 @@ export class AccountLimits {
         entry.failures++;
         const problem: LimitsProblem = error instanceof LimitsReadError
           ? { code: error.code, message: error.message }
-          : { code: 'unavailable', message: 'The hub could not read this account’s limits. Try again.' };
+          : { code: 'unavailable', message: 'The Sorting Hat could not read this account’s limits. Try again.' };
         const delay = error instanceof LimitsReadError && error.retryAfterMs !== undefined ? error.retryAfterMs : Math.min(15 * 60_000, 30_000 * 2 ** Math.min(entry.failures - 1, 5));
         entry.view = { ...entry.view, status: 'error', problem, retryAt: new Date(this.now() + Math.max(COOLDOWN_MS, delay)).toISOString() };
       } finally {

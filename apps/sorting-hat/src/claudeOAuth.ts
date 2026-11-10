@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
+import { HatError } from './errors.js';
 
 /**
  * Claude OAuth with PKCE and Claude Code's public client. Production sign-in
@@ -35,7 +36,8 @@ export function beginSignIn(random: (n: number) => Buffer = randomBytes, redirec
   return { verifier, state, redirectUri, url: `${CLAUDE_OAUTH.authorizeUrl}?${params}` };
 }
 
-export class SignInError extends Error {}
+/** A sign-in that cannot start or finish; the message is safe to show. */
+export class SignInError extends HatError {}
 
 /** How long any started sign-in stays open. */
 export const SIGN_IN_TTL_MS = 15 * 60 * 1000;

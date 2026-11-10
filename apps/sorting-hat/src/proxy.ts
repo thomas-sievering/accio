@@ -1,4 +1,4 @@
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
 import type { Fetch, ProviderId } from './types.js';
 
@@ -26,8 +26,8 @@ const DROP_RESPONSE = new Set(['content-encoding', 'content-length', 'transfer-e
 
 /** What forwarding needs from the accounts: everything else about them stays behind this seam. */
 export interface Forwarding {
-  /** The house a request's key belongs to, or undefined for an unknown key. */
-  houseForKey(key: string): { id: string } | undefined;
+  /** The house a request's key belongs to, or undefined for an unknown or revoked key. */
+  houseForKey(key: string): { id: string; hatKeyId: string | null } | undefined;
   /** The house's Claude account in use and its token, refreshed first when close to expiry or forced. */
   claudeAccess(houseId: string, force?: boolean): Promise<{ accountId: string; token: string } | null>;
   /** The house's ChatGPT account in use's credentials, refreshed first when close to expiry or forced. */
@@ -39,34 +39,35 @@ export interface Forwarding {
   recheckAfterLimit(houseId: string, providerId: ProviderId, accountId: string): Promise<boolean>;
 }
 
-type ForwardingOptions = { accounts: Forwarding; host: string; port: number; upstream?: string; fetchImpl?: Fetch; openaiUpstream?: string; openaiFetch?: Fetch };
+export type ForwardingOptions = { accounts: Forwarding; upstream?: string; fetchImpl?: Fetch; openaiUpstream?: string; openaiFetch?: Fetch };
+export type RequestHandler = (req: IncomingMessage, res: ServerResponse) => void;
 
 /**
  * The Sorting Hat's front door for model requests. Claude Code calls it with a
- * house's key (ANTHROPIC_AUTH_TOKEN, or an API key header); it swaps that key
- * for the account in use's OAuth token and forwards to Anthropic. The caller is
- * the real Claude Code, so nothing else about the request changes (ADR 0007).
+ * hat key (ANTHROPIC_AUTH_TOKEN, or an API key header); it swaps that key for
+ * the house's account in use's OAuth token and forwards to Anthropic. The caller
+ * is the real Claude Code, so nothing else about the request changes (ADR 0007).
  * Codex calls the /openai/ routes the same way.
  */
-export async function startForwarding({ accounts, host, port, upstream = ANTHROPIC_API, fetchImpl = fetch, openaiUpstream = 'https://chatgpt.com/backend-api/codex', openaiFetch = fetch }: ForwardingOptions) {
-  const server = createServer((req, res) => {
+export function forwardModelRequests({ accounts, upstream = ANTHROPIC_API, fetchImpl = fetch, openaiUpstream = 'https://chatgpt.com/backend-api/codex', openaiFetch = fetch }: ForwardingOptions): RequestHandler {
+  return (req, res) => {
     handle(req, res).catch((err) => {
       if (res.destroyed) return;
       console.error('[sorting-hat] forwarding error', err);
-      if (!res.headersSent) sendError(res, 502, 'api_error', 'accio hub could not reach the provider. Check the account sign-in and connection.');
+      if (!res.headersSent) sendError(res, 502, 'api_error', 'The Sorting Hat could not reach the provider. Check the account sign-in and connection.');
       else res.destroy();
     });
-  });
+  };
 
   async function handle(req: IncomingMessage, res: ServerResponse) {
     const key = keyOf(req);
     const house = key ? accounts.houseForKey(key) : undefined;
-    if (!house) return sendError(res, 401, 'authentication_error', 'Unknown accio hub key');
+    if (!house) return sendError(res, 401, 'authentication_error', 'Unknown or revoked hat key');
     if (req.url?.startsWith('/openai/')) return handleOpenAI(req, res, house.id);
 
     accounts.noteRequest(house.id, 'anthropic');
     let access = await accounts.claudeAccess(house.id);
-    if (!access) return sendError(res, 401, 'authentication_error', `accio profile ${house.id} is not signed in with Claude`);
+    if (!access) return sendError(res, 401, 'authentication_error', `House ${house.id} has no signed-in Claude account`);
 
     const body = await readBody(req);
     const send = (accessToken: string) =>
@@ -81,7 +82,7 @@ export async function startForwarding({ accounts, host, port, upstream = ANTHROP
       // The token may have been revoked or rotated early: refresh once and retry.
       await upstreamRes.body?.cancel();
       access = await accounts.claudeAccess(house.id, true);
-      if (!access) return sendError(res, 401, 'authentication_error', 'This profile is no longer signed in');
+      if (!access) return sendError(res, 401, 'authentication_error', 'This house’s Claude account is no longer signed in');
       upstreamRes = await send(access.token);
     }
     if (upstreamRes.status === 429 && await accounts.recheckAfterLimit(house.id, 'anthropic', access.accountId)) {
@@ -105,7 +106,7 @@ export async function startForwarding({ accounts, host, port, upstream = ANTHROP
     accounts.noteRequest(houseId, 'openai');
     const used = accounts.accountIdInUse(houseId, 'openai');
     let credentials = await accounts.openaiCredentials(houseId);
-    if (!credentials) return sendError(res, 401, 'authentication_error', 'Select a signed-in ChatGPT account for this profile');
+    if (!credentials) return sendError(res, 401, 'authentication_error', `House ${houseId} has no signed-in ChatGPT account`);
     const body = await readBody(req);
     const controller = new AbortController();
     res.once('close', () => controller.abort());
@@ -125,7 +126,7 @@ export async function startForwarding({ accounts, host, port, upstream = ANTHROP
     if (response.status === 401) {
       await response.body?.cancel();
       credentials = await accounts.openaiCredentials(houseId, true);
-      if (!credentials) return sendError(res, 401, 'authentication_error', 'This profile is no longer signed in');
+      if (!credentials) return sendError(res, 401, 'authentication_error', 'This house’s ChatGPT account is no longer signed in');
       response = await send(credentials);
     }
     if (response.status === 429 && used && await accounts.recheckAfterLimit(houseId, 'openai', used)) {
@@ -140,17 +141,25 @@ export async function startForwarding({ accounts, host, port, upstream = ANTHROP
     stream.once('error', () => res.destroy());
     stream.pipe(res);
   }
+}
 
+/** Serves only the model routes, on their own port. */
+export function startForwarding({ host, port, ...options }: ForwardingOptions & { host: string; port: number }) {
+  return listen(createServer(forwardModelRequests(options)), host, port);
+}
+
+export async function listen(server: Server, host: string, port: number) {
   await new Promise<void>((done, fail) => {
     server.once('error', fail);
-    server.listen(port, host, () => done());
+    server.listen(port, host, () => { server.off('error', fail); done(); });
   });
   const address = server.address();
   const boundPort = typeof address === 'object' && address ? address.port : port;
-
+  const shown = host.includes(':') ? `[${host}]` : host === '0.0.0.0' ? '127.0.0.1' : host;
   return {
-    url: `http://${host}:${boundPort}`,
-    close: () => new Promise<void>((done) => server.close(() => done())),
+    url: `http://${shown}:${boundPort}`,
+    port: boundPort,
+    close: () => new Promise<void>((done) => { server.close(() => done()); }),
   };
 }
 
@@ -183,7 +192,7 @@ async function readBody(req: IncomingMessage): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
-function sendError(res: ServerResponse, status: number, type: string, message: string) {
+export function sendError(res: ServerResponse, status: number, type: string, message: string) {
   res.writeHead(status, { 'content-type': 'application/json' });
   res.end(JSON.stringify({ type: 'error', error: { type, message } }));
 }
