@@ -10,6 +10,14 @@ export const API_PREFIX = '/api/';
 const PROVIDERS: ProviderId[] = ['anthropic', 'openai'];
 const MAX_BODY = 1024 * 1024;
 
+export type ManagementOptions = {
+  /**
+   * Asked when a request has no valid admin token: null lets it through, for
+   * the dashboard's own calls (DashboardGate.api); otherwise it is refused so.
+   */
+  allowWithoutToken?: (req: IncomingMessage) => Promise<{ status: 401 | 403; message: string } | null>;
+};
+
 type Reply = { status: number; body?: unknown };
 type Route = (params: string[], body: any, query: URLSearchParams) => Promise<Reply> | Reply;
 
@@ -17,7 +25,7 @@ type Route = (params: string[], body: any, query: URLSearchParams) => Promise<Re
  * The management API (API.md): accounts and their sign-in, houses, hat keys
  * and limits, as JSON, for whoever holds the admin token.
  */
-export function manageSortingHat(hat: SortingHat, adminToken: string) {
+export function manageSortingHat(hat: SortingHat, adminToken: string, opts: ManagementOptions = {}) {
   const admin = digest(adminToken);
   /** Sign-ins that finished, so a late status poll still sees the account. */
   const completed = new Map<string, { account: AccountView; at: number }>();
@@ -116,7 +124,10 @@ export function manageSortingHat(hat: SortingHat, adminToken: string) {
   async function handle(req: IncomingMessage, res: ServerResponse) {
     const url = new URL(req.url ?? '/', 'http://sorting-hat');
     const given = /^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1]?.trim();
-    if (!given || !timingSafeEqual(digest(given), admin)) return send(res, 401, error('authentication_error', 'This needs the Sorting Hat’s admin token.'));
+    if (!given || !timingSafeEqual(digest(given), admin)) {
+      const refusal = opts.allowWithoutToken ? await opts.allowWithoutToken(req) : { status: 401 as const, message: 'This needs the Sorting Hat’s admin token.' };
+      if (refusal) return send(res, refusal.status, error(refusal.status === 403 ? 'permission_error' : 'authentication_error', refusal.message));
+    }
     const segments = url.pathname.slice(API_PREFIX.length).split('/').filter(Boolean).map(decodeURIComponent);
     const match = findRoute(routes, req.method ?? 'GET', segments);
     if (!match) return send(res, 404, error('not_found_error', `No ${req.method} ${url.pathname}`));

@@ -22,6 +22,8 @@ pnpm --filter @accio/sorting-hat start          # node apps/sorting-hat/dist/mai
 | Address | `--host` | `SORTING_HAT_HOST` | `127.0.0.1` |
 | Port | `--port` | `SORTING_HAT_PORT` | `47330` |
 | Admin token | | `SORTING_HAT_ADMIN_TOKEN` | created in the state folder |
+| Cloudflare Access team | | `SORTING_HAT_ACCESS_TEAM_DOMAIN` | none: dashboard on loopback only |
+| Cloudflare Access audience | | `SORTING_HAT_ACCESS_AUD` | none |
 
 On first start it creates the admin token, prints it and keeps it in
 `<state folder>/admin-token`. It prints `SORTING_HAT_READY {"url":…,"port":…}`
@@ -37,6 +39,49 @@ Keep it private: it holds your subscriptions' refresh tokens. Pointing `--dir`
 at an Accio hub's `hub` folder converts the hub's account file
 (`profiles.json`) on first start and removes it; do that only with the hub
 stopped and not using that folder any more, since refresh tokens rotate.
+
+## Dashboard
+
+Open the Sorting Hat's address (`http://127.0.0.1:47330/` by default) in a
+browser. The dashboard signs accounts in and out, renames and deletes them,
+creates houses and orders their accounts per provider, shows each account's
+limits and each house's account in use, and creates, renames, revokes and
+deletes hat keys. A new hat key is shown once, with settings for Claude Code,
+pi-claude-bridge and Codex that point at the address the dashboard was opened at.
+
+It has no login of its own:
+
+- **On this machine** (no Cloudflare Access settings): the dashboard and its API
+  calls are answered only for requests from a loopback address to a loopback
+  name (`127.0.0.1`, `localhost`, `[::1]`). Anyone who can open a connection to
+  that port on this machine counts as its owner, as with the admin-token file,
+  which they could usually read too; on a shared machine, run it behind Access
+  instead. A page at another name that resolves to 127.0.0.1 (DNS rebinding)
+  is refused by the Host check. The dashboard's API calls carry an
+  `x-sorting-hat-dashboard: 1` header, which another site cannot send without a
+  CORS preflight the Sorting Hat never grants, and every change must come with
+  an `Origin` equal to the Host, so other sites open in the same browser cannot
+  drive the API. Bound to another address (`--host 0.0.0.0`, a container),
+  requests from elsewhere get no dashboard.
+- **Behind Cloudflare Access**: set `SORTING_HAT_ACCESS_TEAM_DOMAIN`
+  (`<team>.cloudflareaccess.com`) and `SORTING_HAT_ACCESS_AUD` (the Access
+  application's Application Audience tag). Then the dashboard and the
+  management API refuse any request without a valid Access token in
+  `Cf-Access-Jwt-Assertion`, or else in the `CF_Authorization` cookie Access sets
+  in the browser (RS256, verified against
+  `https://<team>.cloudflareaccess.com/cdn-cgi/access/certs`, checking `aud`,
+  `iss`, `exp` and `nbf`), or the admin token for the API. Loopback earns
+  nothing here, since a Cloudflare Tunnel reaches the server over loopback too.
+  Model routes must not be behind Access, since Claude Code and Codex cannot
+  sign in to it, and the hub calls `/api/` with only the admin token. So in
+  Cloudflare, guard the hostname with an Access application and bypass `/v1/*`,
+  `/openai/*` and `/api/*` there (more specific Bypass applications), or give
+  the hub an Access service token instead of bypassing `/api/*`. Where `/api/*`
+  is bypassed, the dashboard's API calls are checked with the `CF_Authorization`
+  cookie the browser got when it passed Access for the dashboard.
+
+The admin token keeps working for the management API in both cases; that is how
+the hub and scripts call it.
 
 ## Set up a house
 
@@ -119,6 +164,11 @@ bridge's documentation and has not yet been tried end to end with pi.
 ## Develop
 
 `pnpm exec vitest run apps/sorting-hat` runs its tests with faked providers.
+`pnpm test:sortinghat` drives the dashboard in Chromium against a standalone
+Sorting Hat with faked providers (`scripts/sortinghat-test-server.ts`); set
+`SORTING_HAT_SCREENSHOTS=<folder>` to keep screenshots. The dashboard is plain
+HTML, CSS and JavaScript in `dashboard/`, served by `src/dashboard.ts`; a
+deployment image needs that folder beside `dist/`.
 `src/cli.native.test.ts` also runs the real Codex this package pins and, if it
 is installed, the real Claude Code against the standalone Sorting Hat. The
 Sorting Hat imports nothing from Accio's packages; `src/boundary.test.ts`
