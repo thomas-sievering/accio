@@ -11,7 +11,8 @@ import type { HarnessMessage } from '../apps/worker/src/threads/harness.js';
 import { DeliveryGit, DeliveryPending } from '../apps/worker/src/threads/delivery.js';
 import { git } from '../apps/worker/src/git.js';
 import { PROJECT_APP_TIMING } from '../apps/worker/src/projects/projectApps.js';
-import { lineCount, pastesIn, typedText } from '../packages/protocol/src/pastes.js';
+import { lineCount, pastesIn, reactionsIn, typedText } from '../packages/protocol/src/pastes.js';
+import { reactionInfo } from '../packages/protocol/src/reactions.js';
 import { measurePrompt } from '../apps/worker/src/harnesses/promptMeasurement.js';
 
 const home = await mkdtemp(join(tmpdir(), 'accio-chat-browser-'));
@@ -93,6 +94,13 @@ const harness = new FakeHarness(async function* (run) {
         system: `Harness instructions\n\n${systemPromptText({ harnessId: 'claudeCode', model: run.model })}`, tools: [{ name: 'shell' }] }) });
     }
     yield* replyWith('Prompt size recorded.'); return;
+  }
+  // GLOSSARY: Reaction. A question to react to, then which reactions arrived, each with its meaning as the harness reads it.
+  if (run.prompt === 'Ask me about the cache') { yield* replyWith('Should I keep the existing cache? The watcher debounces writes for 200 ms before flushing.'); return; }
+  const reactions = reactionsIn(run.prompt);
+  if (reactions.length) {
+    const read = reactions.map((r) => run.prompt.includes(`${reactionInfo(r.kind)}\n${r.quote}\n`) ? `${r.kind} on "${r.quote}"` : `${r.kind} unreadable`);
+    yield* replyWith(`Reactions: ${read.join('; ')}. Typed: ${typedText(run.prompt) || 'nothing'}`); return;
   }
   if (pasted.length) { yield* replyWith(`Read ${pasted.map(lineCount).join(' + ')} pasted lines, then: ${typedText(run.prompt) || 'nothing typed'}`); return; }
   if (run.prompt === 'Cache usage fixture') {

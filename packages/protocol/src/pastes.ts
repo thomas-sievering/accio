@@ -8,9 +8,12 @@
 export const PASTE_FOLD_CHARS = 4000;
 export const PASTE_FOLD_LINES = 60;
 
+import { reactionInfo, reactionKindOf, reactionLabel, type Reaction } from './reactions.js';
+
 const INFO = 'pasted';
 
-export type MessagePart = { kind: 'text'; text: string } | { kind: 'paste'; text: string };
+/** GLOSSARY: Pasted text, Reaction. The pieces a sent message is made of. */
+export type MessagePart = { kind: 'text'; text: string } | { kind: 'paste'; text: string } | { kind: 'reaction'; reaction: Reaction };
 
 export function foldsPaste(text: string): boolean {
   return text.length >= PASTE_FOLD_CHARS || lineCount(text) >= PASTE_FOLD_LINES;
@@ -27,20 +30,24 @@ export function normalizePaste(text: string): string {
 }
 
 /** The fence is longer than any run of backticks inside, so nothing pasted can close it. */
-function fenced(text: string): string {
+function fenced(text: string, info = INFO): string {
   const longest = Math.max(0, ...(text.match(/`+/g) ?? []).map((run) => run.length));
   const fence = '`'.repeat(Math.max(3, longest + 1));
-  return `${fence}${INFO}\n${text}\n${fence}`;
+  return `${fence}${info}\n${text}\n${fence}`;
 }
 
-/** The message as sent: each paste in its own fence, then the typed text. */
-export function joinPastes(pastes: readonly string[], typed: string): string {
-  return [...pastes.map((paste) => fenced(normalizePaste(paste))), typed.trim()].filter(Boolean).join('\n\n');
+/** The message as sent: each paste in its own fence, then each reaction, then the typed text. */
+export function joinPastes(pastes: readonly string[], typed: string, reactions: readonly Reaction[] = []): string {
+  return [
+    ...pastes.map((paste) => fenced(normalizePaste(paste))),
+    ...reactions.map((reaction) => fenced(reaction.quote, reactionInfo(reaction.kind))),
+    typed.trim(),
+  ].filter(Boolean).join('\n\n');
 }
 
-/** A message split back into what was typed and what was pasted, in order. An unclosed fence stays text. */
+/** A message split back into what was typed, pasted and reacted to, in order. An unclosed fence stays text. */
 export function splitPastes(message: string): MessagePart[] {
-  if (!message.includes(`\`\`\`${INFO}`)) return message ? [{ kind: 'text', text: message }] : [];
+  if (!message.includes(`\`\`\`${INFO}`) && !message.includes('```reaction: ')) return message ? [{ kind: 'text', text: message }] : [];
   const lines = message.split('\n');
   const parts: MessagePart[] = [];
   let typed: string[] = [];
@@ -50,11 +57,13 @@ export function splitPastes(message: string): MessagePart[] {
     typed = [];
   };
   for (let i = 0; i < lines.length; i++) {
-    const open = /^(`{3,})pasted$/.exec(lines[i]!);
-    const close = open ? lines.indexOf(open[1]!, i + 1) : -1;
+    const open = /^(`{3,})(.+)$/.exec(lines[i]!);
+    const reaction = open ? reactionKindOf(open[2]!) : undefined;
+    const close = open && (open[2] === INFO || reaction) ? lines.indexOf(open[1]!, i + 1) : -1;
     if (!open || close < 0) { typed.push(lines[i]!); continue; }
     flush();
-    parts.push({ kind: 'paste', text: lines.slice(i + 1, close).join('\n') });
+    const text = lines.slice(i + 1, close).join('\n');
+    parts.push(reaction ? { kind: 'reaction', reaction: { kind: reaction, quote: text } } : { kind: 'paste', text });
     i = close;
   }
   flush();
@@ -71,6 +80,16 @@ export function pastesIn(message: string): string[] {
   return splitPastes(message).flatMap((part) => part.kind === 'paste' ? [part.text] : []);
 }
 
+/** The reactions alone, in order. */
+export function reactionsIn(message: string): Reaction[] {
+  return splitPastes(message).flatMap((part) => part.kind === 'reaction' ? [part.reaction] : []);
+}
+
+/** The message with its typed text replaced, keeping its pastes and reactions. */
+export function retypeMessage(message: string, typed: string): string {
+  return joinPastes(pastesIn(message), typed, reactionsIn(message));
+}
+
 /** "Pasted text · 412 lines": how a paste reads where its text does not fit. */
 export function pasteLabel(text: string): string {
   const lines = lineCount(text);
@@ -79,7 +98,8 @@ export function pasteLabel(text: string): string {
 
 /** The message with each paste shortened to its label, for titles, previews and naming. */
 export function summarizePastes(message: string): string {
-  return splitPastes(message).map((part) => part.kind === 'text' ? part.text : `[${pasteLabel(part.text)}]`).join('\n\n');
+  return splitPastes(message).map((part) => part.kind === 'text' ? part.text
+    : part.kind === 'paste' ? `[${pasteLabel(part.text)}]` : `[${reactionLabel(part.reaction)}]`).join('\n\n');
 }
 
 /** The first line of a paste with something on it, to recognize it by. */

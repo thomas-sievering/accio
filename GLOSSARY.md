@@ -160,6 +160,10 @@ _Avoid_: Upload, file (in UI text)
 A long text paste (4,000 characters or 60 lines) that the composer keeps out of the message box as a chip. It is sent inside the message, before the typed text, as a fenced block the harness reads as plain text, and the thread shows it folded to its size and first line. Ctrl+Shift+V pastes it into the message instead, and the chip puts it back there.
 _Avoid_: Attachment, file (in UI text)
 
+**Reaction**:
+A 👍 (agree), ❓ (unclear: explain it again) or 👎 (disagree) on a passage selected in an assistant message, picked from the small bar that appears over the selection. It goes into that thread's composer as a chip whose emoji switches the reaction; several can travel in one message, with or without typed text. It is sent after any Pasted text and before the typed text, as a fenced block whose info string says what it means, and the thread shows it as the emoji beside the quoted passage.
+_Avoid_: Citation, quote (for the whole thing), feedback
+
 **Steering**:
 Sending a message to the harness during its current turn, without interrupting it or starting a separate turn.
 

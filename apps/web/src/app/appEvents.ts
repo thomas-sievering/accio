@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import type { Reaction } from '@accio/protocol';
 import type { PanelTab } from './SidePanel';
 import type { SettingsRoute } from './Settings';
 
@@ -10,6 +11,8 @@ import type { SettingsRoute } from './Settings';
 export type AppEvents = {
   /** Put text into the composer of a thread (its id) or of the open draft ('draft'). */
   'composer.insert': { target: string; text: string };
+  /** Add a Reaction to a thread's composer (its id), such as one picked over selected text. */
+  'composer.react': { target: string; reaction: Reaction };
   /** Scroll a thread's transcript to an item, opening any fold it sits in. */
   'transcript.reveal': { threadId: string; itemId: string };
   /** Open settings at a section, such as one MCP server from the side panel. */

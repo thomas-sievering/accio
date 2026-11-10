@@ -18,6 +18,7 @@ export * from './limits.js';
 export * from './machine.js';
 export * from './media.js';
 export * from './pastes.js';
+export * from './reactions.js';
 export * from './mentions.js';
 export * from './models.js';
 export * from './profiles.js';

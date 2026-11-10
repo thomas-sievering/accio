@@ -2,7 +2,7 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import type { ModelSelection, ModelView, ShippedNote, ThreadNamingSettings, TranscriptItem } from '@accio/protocol';
-import { pasteGist, splitPastes } from '@accio/protocol';
+import { pasteGist, reactionLabel, splitPastes } from '@accio/protocol';
 import type { Models } from '../harnesses/models.js';
 import type { Profiles } from '../profiles/profiles.js';
 import { UserError } from '../rpc/router.js';
@@ -38,9 +38,9 @@ export function namingContext(items: TranscriptItem[], initial: boolean): string
   return `${original}\n\nRecent conversation:\n${recent.slice(-5000)}`;
 }
 
-/** GLOSSARY: Pasted text. Each paste shortened to its first line, so a long log leaves room for what was asked about it. */
+/** GLOSSARY: Pasted text, Reaction. Each paste shortened to its first line, so a long log leaves room for what was asked about it; each reaction to its emoji and the start of its quote. */
 function namingText(text: string): string {
-  return splitPastes(text).map(part => part.kind === 'text' ? part.text : `[Pasted text: ${pasteGist(part.text).slice(0, 200)}]`).join('\n\n');
+  return splitPastes(text).map(part => part.kind === 'text' ? part.text : part.kind === 'paste' ? `[Pasted text: ${pasteGist(part.text).slice(0, 200)}]` : `[${reactionLabel(part.reaction, 200)}]`).join('\n\n');
 }
 
 export function namingPrompt(context: string, instructions: string, previousTitle?: string) {

@@ -11,6 +11,7 @@ import { mentionAt, mentionOptions } from './mentionQuery';
 import { useModels } from './useModels';
 import { base64, pastedImages, prepareImage } from './pastedImage';
 import { PasteChip } from './PastedText';
+import { ReactionChip } from './Reactions';
 import { composerKey, useDraft } from './drafts';
 
 /**
@@ -18,6 +19,7 @@ import { composerKey, useDraft } from './drafts';
  * Typing @ lists the profile's models and the online machines to mention (GLOSSARY: Model mention, Machine mention).
  * Pasted images go above the message when the model reads them (GLOSSARY: Image attachment).
  * A long text paste becomes a chip that sends before the message; Ctrl+Shift+V keeps it in the box (GLOSSARY: Pasted text).
+ * A reaction picked over transcript text is a chip too, sent after the pastes (GLOSSARY: Reaction).
  */
 export function Composer({
   onSend,
@@ -63,7 +65,7 @@ export function Composer({
   const client = useClient();
   const { threads, shelves, selectedId, select } = useThreads();
   // GLOSSARY: Draft. Unsent text, Pasted text and images outlive this composer; sending or clearing them removes them.
-  const { text, setText, pastes, setPastes, images, setImages } = useDraft(composerKey(client.hubId, draftId));
+  const { text, setText, pastes, setPastes, reactions, setReactions, images, setImages } = useDraft(composerKey(client.hubId, draftId));
   /** Set by Ctrl+Shift+V just before its paste event, which then keeps long text in the box. */
   const pasteInline = useRef(0);
   const [pasteHint, setPasteHint] = useState(false);
@@ -106,7 +108,7 @@ export function Composer({
   // A model chosen after pasting may not read what is already here.
   const refused = images.map((image) => refusalFor(image.mimeType)).find(Boolean);
   const uploading = images.some((image) => !image.uploadId);
-  const sendable = (!!text.trim() || !!attachment || images.length > 0 || pastes.length > 0) && !uploading && !refused;
+  const sendable = (!!text.trim() || !!attachment || images.length > 0 || pastes.length > 0 || reactions.length > 0) && !uploading && !refused;
   const repairThread = error?.includes('A repair thread was started')
     ? threads?.filter((t) => t.repairToolId).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
     : undefined;
@@ -139,6 +141,13 @@ export function Composer({
     const end = (before + lead + insert + trail).length;
     setText(next);
     requestAnimationFrame(() => { el.focus(); el.setSelectionRange(end, end); });
+  });
+
+  // The same passage reacted to again takes the new reaction rather than a second chip.
+  useAppEvent('composer.react', ({ target: to, reaction }) => {
+    if (!target || to !== target) return;
+    setReactions((current) => [...current.filter((r) => r.quote !== reaction.quote), reaction]);
+    input.current?.focus();
   });
 
   // Picking an option is the start of a message: put the cursor there.
@@ -214,14 +223,16 @@ export function Composer({
     if (!sendable || disabled || sending.current) return;
     const sent = images;
     const sentPastes = pastes;
+    const sentReactions = reactions;
     sending.current = true;
     try {
       await run(async () => {
-        await onSend(joinPastes(sentPastes, value), mode, sent.map((image) => image.uploadId!), sent.map((image) => image.url));
+        await onSend(joinPastes(sentPastes, value, sentReactions), mode, sent.map((image) => image.uploadId!), sent.map((image) => image.url));
         // Sent from a composer that has since closed (a started draft): forget its saved text too.
         if (!input.current || input.current.value === text) setText('');
         setImages((current) => current.filter((image) => !sent.includes(image)));
         setPastes((current) => current.filter((paste) => !sentPastes.includes(paste)));
+        setReactions((current) => current.filter((reaction) => !sentReactions.includes(reaction)));
         setPasteHint(false);
         if (!handsOffImages) for (const image of sent) URL.revokeObjectURL(image.url);
         setImageError(undefined);
@@ -242,7 +253,7 @@ export function Composer({
         Long paste kept as Pasted text, sent before your message. <kbd>{pasteShortcut}</kbd> pastes into the message instead.
       </p>}
       <form className="composer" onSubmit={(e: FormEvent) => { e.preventDefault(); void submit(queuing ? 'queue' : 'steer'); }}>
-        {(attachment || images.length > 0 || pastes.length > 0) && <div className="composer-chips">
+        {(attachment || images.length > 0 || pastes.length > 0 || reactions.length > 0) && <div className="composer-chips">
           {attachment && <span className="composer-chip">
             {attachment.icon}{attachment.label}
             <button type="button" aria-label={`Remove ${attachment.label}`} onClick={attachment.onRemove}><Close /></button>
@@ -254,6 +265,9 @@ export function Composer({
           </span>)}
           {pastes.map((paste, index) => <PasteChip key={index} text={paste} onEdit={() => editPaste(index)}
             onRemove={() => { setPastes((current) => current.filter((_, i) => i !== index)); setPasteHint(false); input.current?.focus(); }} />)}
+          {reactions.map((reaction, index) => <ReactionChip key={`${index}:${reaction.quote}`} reaction={reaction}
+            onChange={(kind) => setReactions((current) => current.map((r, i) => i === index ? { ...r, kind } : r))}
+            onRemove={() => { setReactions((current) => current.filter((_, i) => i !== index)); input.current?.focus(); }} />)}
         </div>}
         {options.length > 0 && mention && <MentionMenu options={options} active={active} onPick={pickMention} onHover={setHighlight}
           left={Math.min((input.current?.offsetLeft ?? 0) + (input.current ? caretLeft(input.current, mention.start) : 0), (input.current?.parentElement?.clientWidth ?? 0) - 240)} />}

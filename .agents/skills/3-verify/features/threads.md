@@ -12,6 +12,7 @@ Users choose a project or profile, select a model, send prompts, observe streame
 - `threads-organize`: rename, snooze/wake, settle/reopen, shelf expansion/paging, confirmed deletion.
 - `threads-issues`: Pick an issue beside the machine in a project draft; GitHub and local `.scratch` trackers, search, keyboard pick, removable chip, the first message, the title and the claim.
 - `threads-goal`: `/goal <objective>` in the composer shows the Goal bar (`getByRole('region', { name: 'Goal' })`); accio continues turns ("Continuing toward the goal" dividers) until finish_goal reports achieved or blocked; Pause, Resume and Clear goal buttons and `/goal pause|resume|clear`. Covered by `tests/goal.spec.ts` in `pnpm test:chat` with the scripted harness calling the real MCP tool; real-provider goals need a signed-in account.
+- `threads-reactions`: select text in an assistant message, pick 👍/❓/👎 from toolbar `React to the selected text`; a chip `.composer-reaction` joins the composer (its emoji switches the reaction, `Remove … reaction` drops it), survives reload, and sends as a fenced `reaction: …` block shown as `.reaction-card` in the message. Covered by `tests/reactions.spec.ts` in `pnpm test:chat`; the scripted harness echoes the reactions it read.
 - `threads-delivery`: owned Git worktrees, Ship/review intent, cancellation, remote verification, preview ownership and safe Archive.
 
 ## How to get to it (user POV)

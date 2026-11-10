@@ -17,6 +17,7 @@ const NO_MODELS: never[] = [];
 import { Choice, optionName } from './Choice';
 import { MentionTargets } from './Mentions';
 import { UserMessageText } from './PastedText';
+import { ReactionBar } from './Reactions';
 import { useModels } from './useModels';
 import { useThreads } from './threads';
 
@@ -125,6 +126,7 @@ export function Transcript({ threadId, items, working, onOpenSecrets }: { thread
           {working && !lastTurn && <div className="typing" aria-label="Working"><i /><i /><i /></div>}
         </div>
       </div>
+      <ReactionBar threadId={threadId} container={content} />
       {away && <button className="jump-latest" onClick={() => {
         pinned.current = true;
         setAway(false);
