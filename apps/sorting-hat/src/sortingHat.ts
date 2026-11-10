@@ -48,9 +48,6 @@ const HOUSE_ID = /^[a-z0-9][a-z0-9_-]{0,63}$/;
  * and issues hat keys; a key only ever unlocks its own house's accounts (ADR
  * 0007, 0018). A house has any number of accounts per provider, in order;
  * chooseAccount picks which signed-in one serves each request.
- *
- * An app embedding the Sorting Hat in-process (Accio's hub, until it calls it
- * over HTTP) gets one key per house from `ensureHouse`, held only in memory.
  */
 export class SortingHat implements Forwarding {
   private readonly limits: AccountLimits;
@@ -60,8 +57,6 @@ export class SortingHat implements Forwarding {
   private pending = new Map<string, PendingSignIn & { accountId: string; startedAt: number }>();
   private refreshing = new Map<string, Promise<ClaudeAccount>>();
   private openaiPending = new Map<string, string>();
-  /** The embedding app's key per house; never stored. */
-  private embeddedKeys = new Map<string, string>();
 
   /** `dir` holds the Sorting Hat's state: sorting-hat.json and each ChatGPT account's credential home. */
   constructor(
@@ -121,51 +116,24 @@ export class SortingHat implements Forwarding {
   setHouseAccounts(id: string, selection: AccountSelection) {
     return this.change(async () => {
       this.requireHouse(id);
-      await this.prepareHouses(this.selecting(id, selection), async () => {});
+      await this.commit({ houses: this.selecting(id, selection) });
       return this.houseView(id);
     });
   }
 
-  /**
-   * For an embedding app: creates the house (named by its id) on first use and
-   * returns the app's key for it, which lasts until this process stops.
-   */
-  async ensureHouse(id: string): Promise<string> {
-    if (!this.houses.some((h) => h.id === id)) {
-      await this.change(async () => {
-        if (!this.houses.some((h) => h.id === id)) await this.commit({ houses: [...this.houses, { id, name: id, accountIds: [] }] });
-      });
-    }
-    let key = this.embeddedKeys.get(id);
-    if (!key) this.embeddedKeys.set(id, key = `hat-${randomBytes(32).toString('base64url')}`);
-    return key;
-  }
-
-  /** Serializes selection with account deletion and lets the caller prepare before publication.
-   * Creates the house, named by its id, if it is new. If preparation fails,
-   * restore the previous durable state without publishing it.
-   */
-  configureHouse(id: string, selection: AccountSelection, prepare: () => Promise<void>) {
-    return this.change(() => this.prepareHouses(this.selecting(id, selection), prepare));
-  }
-
   /** Deletes the house and every hat key it has. */
-  removeHouse(id: string, prepare: () => Promise<void> = async () => {}) {
-    return this.change(async () => {
-      await this.prepareHouses(this.houses.filter((p) => p.id !== id), prepare, this.hatKeys.filter((k) => k.houseId !== id));
-      this.embeddedKeys.delete(id);
-    });
+  removeHouse(id: string) {
+    return this.change(() => this.commit({ houses: this.houses.filter((p) => p.id !== id), hatKeys: this.hatKeys.filter((k) => k.houseId !== id) }));
   }
 
   private selecting(id: string, selection: AccountSelection): StoredHouse[] {
     for (const [providerId, ids] of Object.entries(selection) as [ProviderId, string[]][]) for (const accountId of ids) this.requireProvider(accountId, providerId);
-    const existing = this.houses.find((p) => p.id === id);
-    const house = { ...(existing ?? { id, name: id, accountIds: [] }) };
+    const house = { ...this.requireHouse(id) };
     // Each provider keeps its place relative to the others; only its own accounts change.
     for (const [providerId, ids] of Object.entries(selection) as [ProviderId, string[]][]) {
       house.accountIds = [...house.accountIds.filter((a) => this.providerOf(a) !== providerId), ...new Set(ids)];
     }
-    return existing ? this.houses.map((p) => p.id === id ? house : p) : [...this.houses, house];
+    return this.houses.map((p) => p.id === id ? house : p);
   }
 
   private freeHouseId(name: string) {
@@ -174,22 +142,6 @@ export class SortingHat implements Forwarding {
       const id = n === 1 ? base : `${base}-${n}`;
       if (!this.houses.some((h) => h.id === id)) return id;
     }
-  }
-
-  private async prepareHouses(houses: StoredHouse[], prepare: () => Promise<void>, hatKeys = this.hatKeys) {
-    const next = { ...this.store.data, houses, hatKeys };
-    await this.store.file.write(next);
-    try {
-      await prepare();
-    } catch (error) {
-      try {
-        await this.store.file.write(this.store.data);
-      } catch (rollbackError) {
-        throw new AggregateError([error, rollbackError], 'Preparing the house change and restoring the Sorting Hat’s state both failed.');
-      }
-      throw error;
-    }
-    this.store.data = next;
   }
 
   // Hat keys
@@ -363,13 +315,12 @@ export class SortingHat implements Forwarding {
 
   /**
    * The house a request's key belongs to, and which hat key it is; undefined
-   * for an unknown or revoked key. An embedding app's key has no hat key id.
+   * for an unknown or revoked key.
    */
-  houseForKey(key: string): { id: string; hatKeyId: string | null } | undefined {
+  houseForKey(key: string): { id: string; hatKeyId: string } | undefined {
     const hash = Buffer.from(hashKey(key), 'hex');
     const hatKey = this.hatKeys.find((k) => timingSafeEqual(Buffer.from(k.hash, 'hex'), hash));
     if (hatKey) return hatKey.revokedAt || !this.houses.some((h) => h.id === hatKey.houseId) ? undefined : { id: hatKey.houseId, hatKeyId: hatKey.id };
-    for (const [id, embedded] of this.embeddedKeys) if (safeEqual(embedded, key) && this.houses.some((h) => h.id === id)) return { id, hatKeyId: null };
     return undefined;
   }
 
@@ -418,11 +369,6 @@ export class SortingHat implements Forwarding {
     return this.limits.views();
   }
 
-  /** Called whenever any account's limits view changes; returns an unsubscribe. */
-  onLimitsChanged(listener: (views: AccountLimitsView[]) => void) {
-    return this.limits.subscribe(listener);
-  }
-
   refreshLimits(ids = this.accounts.map((a) => a.id), force = false) {
     for (const id of ids) this.requireAccount(id);
     return this.limits.refresh(ids, force);
@@ -465,7 +411,7 @@ export class SortingHat implements Forwarding {
 
   /**
    * Takes accounts, with their credentials, and houses as another Sorting Hat
-   * stored them, such as the one Accio's hub embedded (API.md, "Import"). Those
+   * stored them, such as an Accio hub moving its accounts here (API.md, "Import"). Those
    * with an id already here are replaced, so it can be repeated; hat keys stay.
    */
   importState(accounts: ImportedAccount[], houses: StoredHouse[]) {
@@ -659,11 +605,6 @@ export class SortingHat implements Forwarding {
   private change<T>(run: () => Promise<T>): Promise<T> {
     return this.store.change(run);
   }
-}
-
-function safeEqual(a: string, b: string): boolean {
-  const x = Buffer.from(a); const y = Buffer.from(b);
-  return x.length === y.length && timingSafeEqual(x, y);
 }
 
 function hashKey(secret: string) {

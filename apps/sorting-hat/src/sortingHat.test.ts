@@ -1,5 +1,5 @@
 import { createServer, type IncomingHttpHeaders } from 'node:http';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -101,7 +101,7 @@ describe('sorting hat', () => {
 
   it('signs a named account in from a pasted code and stores only on the hub', async () => {
     const { hub, home } = await setup();
-    await hub.ensureHouse('personal');
+    await houseKey(hub, 'personal');
     const { signInId, url } = await beginForHouse(hub, 'personal');
     const state = new URL(url).searchParams.get('state');
     await hub.completeAccountSignIn(signInId, `good#${state}`);
@@ -113,34 +113,13 @@ describe('sorting hat', () => {
     await expect(hub.completeAccountSignIn(signInId, 'good')).rejects.toThrow(/expired/);
   });
 
-  it('migrates inline logins, preserving account selections', async () => {
-    const { hub, home } = await setup();
-    const key = await hub.ensureHouse('personal');
-    const start = await beginForHouse(hub, 'personal');
-    await hub.completeAccountSignIn(start.signInId, 'good');
-    await hub.close();
-    const data = JSON.parse(await readFile(join(home, 'hub', 'sorting-hat.json'), 'utf8'));
-    await rm(join(home, 'hub', 'sorting-hat.json'));
-    await writeFile(join(home, 'hub', 'profiles.json'), JSON.stringify([{ id: 'personal', accessKey: key, account: data.accounts[0].account }]));
-    const migrated = new SortingHat(join(home, 'hub'));
-    await migrated.load();
-    expect(await migrated.ensureHouse('personal')).not.toBe(key);
-    expect(migrated.selectedAccount('personal')).toMatchObject({ name: 'me@example.com', signedIn: true });
-    expect(await migrated.accessToken('personal')).toBe('token-1');
-    await migrated.close();
-    const reloaded = new SortingHat(join(home, 'hub'));
-    await reloaded.load();
-    expect(reloaded.accountViews()).toEqual(migrated.accountViews());
-    await reloaded.close();
-  });
-
   it('shares a single refresh across profiles selecting the same account', async () => {
     const { hub, auth } = await setup();
     const account = await hub.saveAccount('Family account');
     const start = hub.beginAccountSignIn(account.id);
     await hub.completeAccountSignIn(start.signInId, 'short');
     for (const id of ['personal', 'work']) {
-      await hub.ensureHouse(id);
+      await houseKey(hub, id);
       await selectAccount(hub, id, account.id);
     }
     expect(await Promise.all([hub.accessToken('personal'), hub.accessToken('work')])).toEqual(['token-2', 'token-2']);
@@ -149,8 +128,8 @@ describe('sorting hat', () => {
 
   it('forwards a profile’s requests with its own token, and only its own', async () => {
     const { hub, api, call } = await setup();
-    const personalKey = await hub.ensureHouse('personal');
-    const hrcKey = await hub.ensureHouse('hrc');
+    const personalKey = await houseKey(hub, 'personal');
+    const hrcKey = await houseKey(hub, 'hrc');
     const a = await beginForHouse(hub, 'personal');
     await hub.completeAccountSignIn(a.signInId, 'good');
     const b = await beginForHouse(hub, 'hrc');
@@ -173,7 +152,7 @@ describe('sorting hat', () => {
 
   it('refuses unknown keys and profiles that are not signed in', async () => {
     const { hub, api, call } = await setup();
-    const key = await hub.ensureHouse('personal');
+    const key = await houseKey(hub, 'personal');
     expect((await call('nope')).status).toBe(401);
     const notSignedIn = await call(key);
     expect(notSignedIn.status).toBe(401);
@@ -183,7 +162,7 @@ describe('sorting hat', () => {
 
   it('refreshes a token close to expiry, and retries once after a 401', async () => {
     const { hub, auth, api, call } = await setup();
-    const key = await hub.ensureHouse('personal');
+    const key = await houseKey(hub, 'personal');
     const s = await beginForHouse(hub, 'personal');
     await hub.completeAccountSignIn(s.signInId, 'short'); // expires within the refresh margin
 
@@ -200,7 +179,7 @@ describe('sorting hat', () => {
   it('does not publish account writes that fail and keeps its mutation queue usable', async () => {
     const { hub, home } = await setup();
     const account = await hub.saveAccount('Original');
-    await hub.ensureHouse('personal');
+    await houseKey(hub, 'personal');
     vi.spyOn(JsonFile.prototype, 'write').mockRejectedValueOnce(new Error('disk full'));
     await expect(hub.saveAccount('Changed', account.id)).rejects.toThrow('disk full');
     expect(hub.accountView(account.id).name).toBe('Original');
@@ -213,26 +192,6 @@ describe('sorting hat', () => {
     await reloaded.load();
     expect(reloaded.accountViews()).toEqual(hub.accountViews());
     await reloaded.close();
-  });
-
-  it('serializes account deletion against a prepared profile selection', async () => {
-    const { hub } = await setup();
-    const account = await hub.saveAccount('Shared');
-    let release!: () => void;
-    let preparing!: () => void;
-    const ready = new Promise<void>((r) => { preparing = r; });
-    const wait = new Promise<void>((r) => { release = r; });
-    const save = hub.configureHouse('personal', { anthropic: [account.id] }, async () => { preparing(); await wait; });
-    await ready;
-    const deletion = hub.deleteAccount(account.id);
-    const result = expect(deletion).rejects.toThrow(/houses/);
-    release();
-    await save;
-    await result;
-    expect(hub.selectedAccounts('personal', 'anthropic').map((a) => a.id)).toEqual([account.id]);
-    await hub.removeHouse('personal');
-    await hub.deleteAccount(account.id);
-    expect(hub.accountViews()).toEqual([]);
   });
 
   it('cancels an in-flight sign-in on sign-out or account deletion', async () => {
@@ -281,7 +240,7 @@ describe('sorting hat', () => {
     const account = await hub.saveAccount('Shared');
     const other = await hub.saveAccount('Other');
     for (const id of ['personal', 'work', 'removed']) {
-      await hub.ensureHouse(id);
+      await houseKey(hub, id);
       await selectAccount(hub, id, account.id);
     }
     const signIn = async (id: string, code: string) => hub.completeAccountSignIn(hub.beginAccountSignIn(id).signInId, code);
@@ -320,8 +279,8 @@ describe('sorting hat', () => {
     const { hub, auth, api, call } = await setup();
     const later = await hub.saveAccount('Later');
     const sooner = await hub.saveAccount('Sooner');
-    await hub.configureHouse('personal', { anthropic: [later.id, sooner.id] }, async () => {});
-    const key = await hub.ensureHouse('personal');
+    const key = await houseKey(hub, 'personal');
+    await hub.setHouseAccounts('personal', { anthropic: [later.id, sooner.id] });
     await hub.completeAccountSignIn(hub.beginAccountSignIn(later.id).signInId, 'good');
     await hub.completeAccountSignIn(hub.beginAccountSignIn(sooner.id).signInId, 'good');
     const at = (hours: number) => new Date(Date.now() + hours * 3_600_000).toISOString();
@@ -352,7 +311,8 @@ describe('sorting hat', () => {
     const second = await hub.saveAccount('Second');
     const gpt = await hub.saveAccount('GPT', undefined, 'openai');
     const signIn = async (id: string) => hub.completeAccountSignIn(hub.beginAccountSignIn(id).signInId, 'good');
-    await hub.configureHouse('personal', { anthropic: [first.id, second.id, first.id], openai: [gpt.id] }, async () => {});
+    await hub.createHouse('personal', 'personal');
+    await hub.setHouseAccounts('personal', { anthropic: [first.id, second.id, first.id], openai: [gpt.id] });
     expect(hub.selectedAccounts('personal', 'anthropic').map((a) => a.name)).toEqual(['First', 'Second']);
     expect(await hub.accessToken('personal')).toBeNull();
 
@@ -365,15 +325,15 @@ describe('sorting hat', () => {
     expect(hub.selectedAccount('personal')?.id).toBe(first.id);
 
     // Putting an account first switches to it; one provider's order leaves the other's alone.
-    await hub.configureHouse('personal', { anthropic: [second.id, first.id] }, async () => {});
+    await hub.setHouseAccounts('personal', { anthropic: [second.id, first.id] });
     expect(await hub.accessToken('personal')).toBe(secondToken);
     expect(hub.selectedAccounts('personal', 'openai').map((a) => a.id)).toEqual([gpt.id]);
     await hub.signOutAccount(second.id);
     expect(await hub.accessToken('personal')).toBe(firstToken);
 
-    await expect(hub.configureHouse('personal', { anthropic: [gpt.id] }, async () => {})).rejects.toThrow(/anthropic/);
+    await expect(hub.setHouseAccounts('personal', { anthropic: [gpt.id] })).rejects.toThrow(/anthropic/);
     await expect(hub.deleteAccount(second.id)).rejects.toThrow(/houses/);
-    await hub.configureHouse('personal', { anthropic: [first.id] }, async () => {});
+    await hub.setHouseAccounts('personal', { anthropic: [first.id] });
     await hub.deleteAccount(second.id);
   });
 
@@ -419,9 +379,16 @@ describe('sorting hat', () => {
 
 });
 
+/** A house with this id, made if new, and a new hat key for it. */
+async function houseKey(hub: SortingHat, id: string) {
+  if (!hub.houseViews().some((h) => h.id === id)) await hub.createHouse(id, id);
+  return (await hub.createHatKey(id, 'test')).secret;
+}
+
 /** Selects a Claude account for a house, creating the house if needed. */
-function selectAccount(hub: SortingHat, houseId: string, accountId: string) {
-  return hub.configureHouse(houseId, { anthropic: [accountId] }, async () => {});
+async function selectAccount(hub: SortingHat, houseId: string, accountId: string) {
+  if (!hub.houseViews().some((h) => h.id === houseId)) await hub.createHouse(houseId, houseId);
+  return hub.setHouseAccounts(houseId, { anthropic: [accountId] });
 }
 
 async function beginForHouse(hub: SortingHat, houseId: string) {

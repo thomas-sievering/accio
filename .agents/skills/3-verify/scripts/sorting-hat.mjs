@@ -172,11 +172,11 @@ export default async function ({ page, context, home, fixture, action, capture }
       await limits.getByText('5-hour', { exact: false }).first().waitFor();
     });
     await capture('sorting-hat-limits');
-    await action('sorting-hat/settings: disconnect returns to the hub’s own accounts', async () => {
+    await action('sorting-hat/settings: disconnect leaves the hub without accounts', async () => {
       await button('Close limits').click();
       await hubs();
       await card.getByRole('button', { name: 'Disconnect', exact: true }).click();
-      await card.getByText(/Threads go back to the accounts this hub keeps itself/).waitFor();
+      await card.getByText(/Threads can’t run until this hub has a Sorting Hat again/).waitFor();
       await card.getByRole('button', { name: 'Disconnect', exact: true }).click();
       await card.getByRole('button', { name: 'Connect Sorting Hat', exact: true }).waitFor();
       assert.deepEqual(await api('GET', 'hat-keys'), []);

@@ -3,7 +3,7 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { startStandalone } from '@accio/sorting-hat';
+import { startStandalone } from '../../../sorting-hat/src/standalone.js';
 import { FakeCodex, fakeAnthropicApi, fakeAnthropicAuth, fakeChatGPT } from '../../../sorting-hat/src/testing/fakeProviders.js';
 
 export async function startRemoteSortingHat() {

@@ -120,7 +120,7 @@ export function manageSortingHat(hat: SortingHat, adminToken: string, opts: Mana
     // Usage
     'GET usage': (_, __, q) => ok(hat.usageReport(usageQuery(q))),
 
-    // Accounts and houses from another Sorting Hat's state, such as the one Accio's hub embedded.
+    // Accounts and houses from elsewhere, with their credentials, such as an Accio hub's.
     'POST import': (_, b) => {
       if (!Array.isArray(b.accounts) || !Array.isArray(b.houses ?? [])) throw new HatError('accounts and houses must be lists.');
       return hat.importState(b.accounts, b.houses ?? []).then(ok);
@@ -186,8 +186,7 @@ function accountSelection(value: unknown): AccountSelection {
 
 /**
  * `from` and `to` are times; `groupBy` and `bucket` say how to split; house,
- * hatKey, account, model and provider filter (hatKey `embedded` is the
- * embedding app's). `groupBy` may repeat or list several, comma-separated.
+ * hatKey, account, model and provider filter. `groupBy` may repeat or list several, comma-separated.
  */
 function usageQuery(q: URLSearchParams): UsageQuery {
   const time = (field: string) => {
@@ -204,7 +203,7 @@ function usageQuery(q: URLSearchParams): UsageQuery {
   const where: UsageQuery['where'] = {};
   for (const d of USAGE_DIMENSIONS) {
     const value = q.get(d);
-    if (value !== null) where[d] = d === 'hatKey' && value === 'embedded' ? null : value;
+    if (value !== null) where[d] = value;
   }
   return { from: time('from'), to: time('to'), groupBy: groupBy as UsageDimension[], bucket, where };
 }

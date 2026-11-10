@@ -1,10 +1,9 @@
 import { join } from 'node:path';
 import { JsonStore } from '@accio/persistence';
-import type { AccountLimitsView, AccountView, ProviderId, SortingHatView } from '@accio/protocol';
-import type { CodexModel } from '@accio/sorting-hat';
+import { noSortingHatMessage, type AccountLimitsView, type AccountView, type ProviderId, type SortingHatView } from '@accio/protocol';
 import { HubError } from './errors.js';
 import { SecretStoreError, type Sealed, type SecretsVault } from './secrets.js';
-import { SortingHatClient, SortingHatError, sortingHatAddress, type RemoteHouse } from './sortingHatClient.js';
+import { SortingHatClient, SortingHatError, sortingHatAddress, type CodexModel, type RemoteHouse } from './sortingHatClient.js';
 
 /** A hat key the hub made for one machine and profile; its secret is sealed with the vault's key. */
 type StoredKey = { id: string; machineId: string; profileId: string; houseId: string; secret: Sealed };
@@ -58,7 +57,7 @@ export class SortingHatLink {
     this.start();
   }
 
-  /** Configured: threads run through the Sorting Hat. Not configured: the hub's embedded one. */
+  /** Without a Sorting Hat, the hub has no accounts and threads can't run. */
   get configured() { return !!this.data.url; }
   /** Where threads send model requests. */
   get threadUrl() { return this.data.threadUrl ?? this.data.url ?? undefined; }
@@ -91,7 +90,7 @@ export class SortingHatLink {
     }).then(() => this.poll()).then(() => { this.changed(); return this.view()!; });
   }
 
-  /** Back to the embedded Sorting Hat. The keys made on this one are deleted there while it answers. */
+  /** Unlinks the Sorting Hat. The keys made on it are deleted there while it answers. */
   disconnect() {
     return this.store.change(async () => {
       await this.forgetAll();
@@ -131,12 +130,6 @@ export class SortingHatLink {
       const names = this.cache.houses.filter((h) => Object.values(h.accounts).some((ids) => ids.includes(id))).map((h) => h.name);
       throw new HubError(`This account is still in ${names.length ? `the house${names.length > 1 ? 's' : ''} ${names.join(', ')}` : 'a house'} on the Sorting Hat. Remove it from the profiles using ${names.length > 1 ? 'them' : 'it'}, or on the Sorting Hat’s dashboard, first.`);
     });
-  }
-
-  /** Sets a house's accounts on the Sorting Hat, for every app that uses it. */
-  async setHouseAccounts(houseId: string, selection: Partial<Record<ProviderId, string[]>>) {
-    const house = await this.require().setHouseAccounts(houseId, selection);
-    this.cache = { ...this.cache, houses: this.cache.houses.map((h) => h.id === house.id ? house : h) }; this.changed();
   }
 
   /**
@@ -215,7 +208,7 @@ export class SortingHatLink {
   }
 
   require() {
-    if (!this.client) throw new HubError(this.problem ?? 'This hub has no Sorting Hat. Add one in Settings / Hubs.');
+    if (!this.client) throw new HubError(this.problem ?? noSortingHatMessage);
     return this.client;
   }
 

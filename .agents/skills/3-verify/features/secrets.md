@@ -10,7 +10,7 @@ Run `pnpm test:secrets`. It builds and drives the production UI/server with a sc
 
 Native bridge coverage is separate: `pnpm exec vitest run apps/worker/src/secrets` includes actual Claude CLI/SDK and pinned Codex calls against local scripted provider responses, including a pre-feature Codex thread resumed through the scoped MCP endpoint. It also checks encryption/reopening, project binding, cross-profile rejection, duplicate answers, cancellation, expiry, replacement/deletion invalidation and private file/media exclusions. These checks establish protocol behavior, not live-provider authentication or remote relay.
 
-For hub connection changes, also run the hub service and machine connection tests. They exercise scoped secret resolution over authenticated HTTP, metadata-only snapshots/cache, rejection of model keys, matching profile IDs on independent hubs, and deletion of a machine-local delivery after hub removal or rotation of its saved secret. These use disposable keys and values; a production tunnel still needs its own observed check.
+For hub connection changes, also run the hub service and machine connection tests. They exercise scoped secret resolution over authenticated HTTP, metadata-only snapshots/cache, matching profile IDs on independent hubs, and deletion of a machine-local delivery after hub removal or rotation of its saved secret. These use disposable keys and values; a production tunnel still needs its own observed check.
 
 ## User-facing entry points
 

@@ -31,7 +31,7 @@ const DROP_RESPONSE = new Set(['content-encoding', 'content-length', 'transfer-e
 /** What forwarding needs from the accounts: everything else about them stays behind this seam. */
 export interface Forwarding {
   /** The house a request's key belongs to, or undefined for an unknown or revoked key. */
-  houseForKey(key: string): { id: string; hatKeyId: string | null } | undefined;
+  houseForKey(key: string): { id: string; hatKeyId: string } | undefined;
   /** The house's Claude account in use and its token, refreshed first when close to expiry or forced. */
   claudeAccess(houseId: string, force?: boolean): Promise<{ accountId: string; token: string } | null>;
   /** The house's ChatGPT account in use's credentials, refreshed first when close to expiry or forced. */
@@ -112,7 +112,7 @@ export function forwardModelRequests({ accounts, upstream = ANTHROPIC_API, fetch
   }
 
   /** Counts a request's usage once its response is done, failed or cut off. */
-  function record({ at, providerId, house, accountId, body, reported }: { at: number; providerId: ProviderId; house: { id: string; hatKeyId: string | null }; accountId: string; body: Buffer; reported: Reported }) {
+  function record({ at, providerId, house, accountId, body, reported }: { at: number; providerId: ProviderId; house: { id: string; hatKeyId: string }; accountId: string; body: Buffer; reported: Reported }) {
     accounts.recordUsage({ at, providerId, houseId: house.id, hatKeyId: house.hatKeyId, accountId, model: reported.model ?? requestedModel(body), tokens: reported.tokens });
   }
 
@@ -133,7 +133,7 @@ export function forwardModelRequests({ accounts, upstream = ANTHROPIC_API, fetch
     res.end(JSON.stringify({ error: { type: 'invalid_request_error', code: 'model_not_found', param: null, message: `House ${houseId} has no ChatGPT model ${modelId}` } }));
   }
 
-  async function handleOpenAI(req: IncomingMessage, res: ServerResponse, house: { id: string; hatKeyId: string | null }) {
+  async function handleOpenAI(req: IncomingMessage, res: ServerResponse, house: { id: string; hatKeyId: string }) {
     const houseId = house.id;
     const path = req.url?.split('?')[0];
     if (req.method !== 'POST' || !['/openai/responses', '/openai/responses/compact'].includes(path ?? '')) return sendError(res, 404, 'invalid_request_error', 'Unknown Codex endpoint');

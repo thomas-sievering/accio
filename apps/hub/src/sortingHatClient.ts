@@ -1,6 +1,10 @@
 import type { AccountLimitsView, AccountView, ProviderId } from '@accio/protocol';
-import type { CodexModel, ImportedAccount } from '@accio/sorting-hat';
 import { HubError } from './errors.js';
+
+/** A model Codex offers a house's ChatGPT accounts (apps/sorting-hat/API.md). */
+export type CodexModel = { id: string; name: string; description: string; isDefault: boolean; efforts?: { id: string; description?: string }[]; defaultEffort?: string; imageTypes?: string[] };
+/** An account with its credentials, as the Sorting Hat's import takes it; a ChatGPT account's Codex auth.json in `codexAuth`. */
+export type ImportedAccount = { id: string; name: string; providerId?: ProviderId; account: unknown; openai?: { credentialId: string } | null; codexAuth?: unknown };
 
 /** The Sorting Hat's house (apps/sorting-hat/API.md). */
 export type RemoteHouse = {
@@ -12,7 +16,7 @@ export type RemoteHatKey = { id: string; houseId: string; name: string; createdA
 
 export type SignInStatus = { status: 'pending' } | { status: 'complete'; account: AccountView };
 
-type Fetch = typeof fetch;
+export type Fetch = typeof fetch;
 
 /** A refusal from the Sorting Hat, safe to show: its own message, or the hub's words for what went wrong in between. */
 export class SortingHatError extends HubError {
@@ -50,7 +54,7 @@ export class SortingHatClient {
   createHatKey(houseId: string, name: string) { return this.request<RemoteHatKey & { secret: string }>('POST', 'hat-keys', { houseId, name }); }
   renameHatKey(id: string, name: string) { return this.request<RemoteHatKey>('PATCH', `hat-keys/${encodeURIComponent(id)}`, { name }); }
   async deleteHatKey(id: string) { await this.request<void>('DELETE', `hat-keys/${encodeURIComponent(id)}`); }
-  /** Accounts with their credentials and houses, as sorting-hat.json stores them; repeating it replaces them. */
+  /** Accounts with their credentials, and houses; repeating it replaces them. */
   importAccounts(accounts: ImportedAccount[], houses: { id: string; name: string; accountIds: string[] }[]) {
     return this.request<{ accounts: AccountView[]; houses: RemoteHouse[] }>('POST', 'import', { accounts, houses }, 60_000);
   }

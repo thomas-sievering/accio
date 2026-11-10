@@ -15,7 +15,7 @@ async function bothProviders(c: TestClient, fake: FakeCodex) {
   const login = await c.call('accounts.beginSignIn', { id: account.id });
   await fake.latest.complete('Personal');
   await c.call('accounts.signInStatus', { signInId: login.signInId });
-  return c.call('profiles.save', { id: profile.id, name: 'Personal', accountId: claudeAccount(profile)!.id, openaiAccountId: account.id });
+  return c.call('profiles.save', { id: profile.id, name: 'Personal', accountIds: { anthropic: [claudeAccount(profile)!.id], openai: [account.id] } });
 }
 
 async function mcp(run: HarnessTurn, method: string, params?: unknown) {

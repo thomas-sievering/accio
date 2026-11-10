@@ -35,7 +35,7 @@ test('pane headers show their profile only while multiple profiles exist', async
 
   await button('Settings').click();
   await page.locator('.sidebar nav').getByRole('button', { name: 'Profiles', exact: true }).click();
-  await page.getByRole('button', { name: 'Header work No account selected', exact: true }).click();
+  await page.getByRole('button', { name: 'Header work House Header work · No account in its house', exact: true }).click();
   await button('Delete').click();
   await button('Delete Header work').click();
   await button('Back').click();

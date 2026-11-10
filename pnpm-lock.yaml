@@ -206,9 +206,6 @@ importers:
       '@accio/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
-      '@accio/sorting-hat':
-        specifier: workspace:*
-        version: link:../sorting-hat
       ws:
         specifier: ^8.22.1
         version: 8.22.1

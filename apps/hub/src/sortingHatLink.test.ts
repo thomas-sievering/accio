@@ -2,6 +2,7 @@ import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { noSortingHatMessage } from '@accio/protocol';
 import { startHubService } from './service.js';
 import { HubClient } from './client.js';
 import { startRemoteSortingHat } from './testing/remoteSortingHat.js';
@@ -91,7 +92,7 @@ describe('a hub with a Sorting Hat of its own', () => {
     await desktopAgain.call('sortingHat.disconnect', {});
     expect(desktopAgain.snapshot.sortingHat).toBeUndefined();
     expect(await names()).toEqual([]);
-    expect((await desktopAgain.call('machine.modelKey', { profileId: personal.id })).key).toMatch(/^accio-/);
+    await expect(desktopAgain.call('machine.modelKey', { profileId: personal.id })).rejects.toThrow(noSortingHatMessage);
   });
 
   it('replaces a key deleted on the dashboard, moves keys with a profile’s house, and sets the house’s accounts', async () => {

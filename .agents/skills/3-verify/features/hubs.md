@@ -12,7 +12,7 @@ Mapped entry points:
 - `hubs/offline`: stop only the journey's additional hub. Require Offline for that saved connection and normal access to the other hub. Restart with the same state; require reconnection without repeating a mutation or turn.
 - `hubs/running`: with a provider or explicit harness fixture, switch during a turn. Require a running indicator on its original hub, no thread on the other hub, and completion/resume on the original profile and session.
 - `hubs/pair-device`: Generate pairing code on a connected hub, then pair a second isolated machine. Require shared account/profile metadata and independent machine keys. Keep the code private.
-- `hubs/revoke`: revoke a paired machine through `hubs.revokeMachine`. Require its control socket to close and old model keys to fail while another machine and the revoked machine's other hub still work. Revocation currently has an RPC entry point; do not claim a UI button.
+- `hubs/revoke`: revoke a paired machine through `hubs.revokeMachine`. Require its control socket to close and its hat keys to be deleted on the Sorting Hat while another machine and the revoked machine's other hub still work. Revocation currently has an RPC entry point; do not claim a UI button.
 - `hubs/sorting-hat`: the `Sorting Hat` card under the hub list links this hub to a Sorting Hat of its own; see [Sorting Hat](sorting-hat.md).
 - `hubs/remove`: Remove an inactive saved connection: `Remove` only asks (`Remove <hub name>`, `Cancel`, "You will be disconnected from this hub."; Escape cancels); require the hub to remain until `Remove <hub name>` is clicked, then its disappearance. Running work or a pending sign-in must prevent removal. Removing local connection metadata does not delete its local work.
 

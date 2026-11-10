@@ -4,7 +4,7 @@ import { method } from './rpc.js';
 /** GLOSSARY: Provider. */
 export type ProviderId = 'anthropic' | 'openai';
 
-/** GLOSSARY: Account. Who it is; its tokens never leave the hub. */
+/** GLOSSARY: Account. Who it is; its tokens never leave the Sorting Hat. */
 export type AccountView = { id: string; name: string; providerId: ProviderId; signedIn: boolean; email: string | null; organization: string | null };
 
 /** One provider as a profile uses it, with the profile's accounts there. */
@@ -15,19 +15,15 @@ export type ProfileProviderView = {
   accountName: string;
   /** Whether accio can sign in to it yet. */
   available: boolean;
-  /** In the profile's order, which breaks ties when the hub chooses among them. */
+  /** In its house's order, which breaks ties when the Sorting Hat chooses among them. */
   accounts: AccountView[];
-  /**
-   * The signed-in account the hub chose for the next request, by limits and
-   * reset times. Absent from hubs that predate the choice.
-   */
-  inUseId?: string | null;
+  /** GLOSSARY: Account in use. The signed-in account the Sorting Hat chose for the next request, by limits and reset times. */
+  inUseId: string | null;
 };
 
-/** The account a profile's turns use at a provider; older hubs use the first signed-in one. */
+/** The account a profile's turns use at a provider. */
 export function accountInUse(provider: ProfileProviderView | undefined): AccountView | null {
-  if (provider?.inUseId !== undefined) return provider.accounts.find((a) => a.id === provider.inUseId) ?? null;
-  return provider?.accounts.find((a) => a.signedIn) ?? null;
+  return provider?.accounts.find((a) => a.id === provider.inUseId) ?? null;
 }
 
 /**
@@ -39,16 +35,15 @@ export type ProfileView = {
   id: string;
   name: string;
   providers: ProfileProviderView[];
-  /**
-   * GLOSSARY: House. The Sorting Hat house this profile links to, when the hub
-   * uses a Sorting Hat of its own; null while it links to none, so its threads
-   * can't run. Absent on hubs that keep accounts themselves.
-   */
-  house?: { id: string; name: string } | null;
+  /** GLOSSARY: House. The Sorting Hat house this profile links to; null while it links to none, so its threads can't run. */
+  house: { id: string; name: string } | null;
 };
 
 /** Why a profile's threads can't run while it links to no house on the hub's Sorting Hat. */
 export const noHouseMessage = (profile: string) => `${profile} isn’t linked to a house on the Sorting Hat. Choose one in Settings / Profiles.`;
+
+/** Why nothing account-related works on a hub without a Sorting Hat. */
+export const noSortingHatMessage = 'This hub has no Sorting Hat, which holds the accounts threads run with. Connect one in Settings / Hubs.';
 
 /** GLOSSARY: Sorting Hat, as clients see the hub's link to one. Never its admin token. */
 export type SortingHatView = {
@@ -76,19 +71,12 @@ export const SaveProfileParams = z.object({
   /** Omit to create. */
   id: z.string().optional(),
   name: z.string().trim().min(1, 'Name is required').max(40),
-  /** Each provider's accounts in order of use. A provider left out keeps its accounts. */
+  /** Each provider's accounts in order of use, set on the profile's house. A provider left out keeps its accounts. */
   accountIds: z.object({
     anthropic: z.array(z.string()).max(20).optional(),
     openai: z.array(z.string()).max(20).optional(),
   }).optional(),
-  /**
-   * The single-account form from before ordered accounts: selects only this
-   * account, or none. accountIds takes precedence; clients send both so a hub
-   * from before still applies the first account.
-   */
-  accountId: z.string().nullable().optional(),
-  openaiAccountId: z.string().nullable().optional(),
-  /** The Sorting Hat house to link, or null to unlink; omit to keep the link. Only for hubs with a Sorting Hat. */
+  /** The Sorting Hat house to link, or null to unlink; omit to keep the link. */
   houseId: z.string().min(1).max(64).nullable().optional(),
   /** Make a house of the profile's name on the hub's Sorting Hat and link it, in place of houseId. */
   createHouse: z.boolean().optional(),

@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import type { AccountView, ProviderId } from '@accio/protocol';
+import { noSortingHatMessage, type AccountView, type ProviderId } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { SettingLink, SettingsFooter, SettingsSection, StatusPill } from '../app/Settings';
 import { Field, focusFirstInvalid } from '../resources/Field';
@@ -15,6 +15,7 @@ export function AccountsSettings({ accountId, onOpen, onBack }: { accountId?: st
   if (!accounts) return null;
   const account = accounts.find((a) => a.id === accountId);
   if (accountId === 'new' || accountId === 'new-openai' || account) return <AccountForm key={accountId} account={account} providerId={account?.providerId ?? (accountId === 'new-openai' ? 'openai' : 'anthropic')} onSaved={(a) => (account ? onBack() : onOpen(a.id))} onDone={onBack} />;
+  if (sortingHat === null) return <p className="note">{noSortingHatMessage}</p>;
   if (sortingHat?.problem) return <p className="error" role="alert">{sortingHat.problem}</p>;
   return <>
     <p className="note">Name an account, sign in, then select it in a profile.{sortingHat && ` Accounts are kept on the Sorting Hat at ${new URL(sortingHat.url).host}.`}</p>

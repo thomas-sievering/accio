@@ -86,7 +86,7 @@ describe('threads slice', () => {
     const run = harness.runs[0]!;
     expect(run).toMatchObject({ cwd: folder, prompt: 'Fix the login bug\nmore detail', sessionId: null });
     expect(run.env).toMatchObject({
-      ANTHROPIC_BASE_URL: t.app.hubUrl,
+      ANTHROPIC_BASE_URL: t.hat.url,
       ANTHROPIC_AUTH_TOKEN: await hubKeyOf(t.home, 'hrc'),
       CLAUDE_CONFIG_DIR: join(t.home, 'profiles', 'hrc', 'claude'),
     });
@@ -207,7 +207,7 @@ describe('threads need a signed-in profile', () => {
       const c = await t.connect();
       const folder = join(t.home, 'repo');
       await mkdir(folder);
-      await c.call('profiles.save', { name: 'Personal' });
+      await c.call('profiles.save', { name: 'Personal', createHouse: true });
       const checkout = await c.call('checkouts.add', { path: folder, profileId: 'personal' });
       await expect(c.call('threads.start', { checkoutId: checkout.id, text: 'hi' })).rejects.toThrow(/Select a signed-in Claude account for Personal/);
       expect(harness.runs).toHaveLength(0);

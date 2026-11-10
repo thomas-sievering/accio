@@ -39,7 +39,7 @@ export async function startStandalone(opts: StandaloneOptions) {
     server = await startServer({ hat, host: opts.host ?? '127.0.0.1', port: opts.port ?? 0, adminToken: admin.token,
       access: opts.access, accessFetch: opts.accessFetch, upstream: opts.anthropicUrl, fetchImpl: opts.claudeFetch, openaiUpstream: opts.openaiUrl, openaiFetch: opts.openaiFetch });
   } catch (error) { await hat.close(); throw error; }
-  // ChatGPT accounts' models change over time; read them again once per start, as the hub does.
+  // ChatGPT accounts' models change over time; read them again once per start.
   const modelsRefreshed = hat.refreshCodexModels().catch(() => false);
   return {
     hat,

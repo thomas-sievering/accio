@@ -47,6 +47,7 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
     await pick(page, 'Add Claude account', new RegExp(`^${claude}\\s*${claude === 'Shared Claude' ? 'shared' : 'work'}@example\\.com`));
     await pick(page, 'Add ChatGPT account', new RegExp(`^${chatgpt}\\s*shared-chatgpt@example\\.com`));
     await button('Save').click();
+    await expect(page.getByRole('button', { name: `${name} House ${name} · ${claude}, ${chatgpt}`, exact: true })).toBeVisible();
   };
 
   await page.goto(`${baseURL}/#token=isolated-limits-test-token`);
@@ -191,6 +192,7 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
   await page.getByRole('button', { name: /^Work / }).click();
   await button('Remove Shared ChatGPT').click();
   await button('Save').click();
+  await expect(page.getByRole('button', { name: /^Add profile/ })).toBeVisible();
   await button('Back').click();
   await button('Limits').click();
   await page.getByRole('radio', { name: 'Work', exact: true }).click();
@@ -211,6 +213,7 @@ test('limits follow profiles and shared accounts through sign-in, retry, reset, 
   const claudeList = page.getByRole('list', { name: 'Anthropic · Claude accounts' });
   await expect(claudeList.getByRole('listitem')).toHaveText([/^Shared Claude.*In use$/, /^Unused Claude/]);
   await button('Save').click();
+  await expect(page.getByRole('button', { name: /^Add profile/ })).toBeVisible();
   await button('Back').click();
   await button('Limits').click();
   await page.getByRole('radio', { name: 'Personal', exact: true }).click();

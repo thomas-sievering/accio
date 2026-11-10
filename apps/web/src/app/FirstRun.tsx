@@ -1,4 +1,4 @@
-import type { ProfileView } from '@accio/protocol';
+import { noSortingHatMessage, type ProfileView } from '@accio/protocol';
 import { useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useClient, useHubs } from './connection';
 import { Monitor, ProviderLogo } from './icons';
@@ -82,10 +82,10 @@ function ChooseHub({ onLocal }: { onLocal: () => void }) {
     </Screen>
   );
   return (
-    <Screen title="Where should Accio keep your accounts?" sub="Profiles and sign-ins live on a hub. You can add more hubs later.">
+    <Screen title="Where should Accio keep your profiles?" sub="Profiles and projects live on a hub. You can add more hubs later.">
       <div className="choice-cards" role="radiogroup" aria-label="Hub">
         <Choice on={where === 'local'} onClick={() => setWhere('local')} icon={<Monitor />} title="This PC" detail="Everything stays on this computer" />
-        <Choice on={where === 'remote'} onClick={() => setWhere('remote')} icon={<Globe />} title="Remote hub" detail="Share accounts across your machines" />
+        <Choice on={where === 'remote'} onClick={() => setWhere('remote')} icon={<Globe />} title="Remote hub" detail="Share profiles across your machines" />
       </div>
       <button type="button" className="ghost primary first-run-next" onClick={() => (where === 'local' ? onLocal() : setJoining(true))}>Continue</button>
     </Screen>
@@ -132,7 +132,7 @@ function AddProfile({ profile, onDone }: { profile?: ProfileView; onDone?: () =>
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (!name.trim()) { setMissing(true); input.current?.focus(); return; }
-    // GLOSSARY: House. On a hub with a Sorting Hat, a new profile links the house of its name, made if there is none.
+    // GLOSSARY: House. A new profile links the house of its name, made if there is none.
     const house = sortingHat && !profile ? sortingHat.houses.find((h) => h.name.toLowerCase() === name.trim().toLowerCase()) : undefined;
     const link = sortingHat && !profile ? house ? { houseId: house.id } : { createHouse: true } : {};
     void run(async () => { await client.call('profiles.save', { id: profile?.id, name, ...link }); onDone?.(); });
@@ -155,7 +155,7 @@ const providers = [
 /** Pick a provider; a new account is named after the profile unless you reuse one the hub already has. */
 function SetUpAccount({ profile, onAddProject, addedProject, onBack }: { profile: ProfileView; onAddProject?: () => void; addedProject?: string; onBack: () => void }) {
   const client = useClient();
-  const { accounts } = useProfiles();
+  const { accounts, sortingHat } = useProfiles();
   const [selected, setSelected] = useState('');
   const started = profile.providers.find((p) => p.accounts.length > 0);
   const [providerId, setProviderId] = useState<'anthropic' | 'openai'>(started?.id ?? 'anthropic');
@@ -171,6 +171,7 @@ function SetUpAccount({ profile, onAddProject, addedProject, onBack }: { profile
       {projectFirst && <><span aria-hidden="true">·</span>{projectFirst}</>}
     </div>
   </>;
+  if (sortingHat === null) return <p className="note">{noSortingHatMessage}</p>;
   const provider = providers.find((p) => p.id === providerId)!;
   const existing = accounts?.filter((a) => a.providerId === providerId) ?? [];
   const submit = (e: FormEvent) => {
@@ -178,7 +179,7 @@ function SetUpAccount({ profile, onAddProject, addedProject, onBack }: { profile
     if (account) return setSigningIn(true);
     void run(async () => {
       const id = selected || (await client.call('accounts.save', { name: `${profile.name} ${provider.name}`, providerId })).id;
-      await client.call('profiles.save', { id: profile.id, name: profile.name, accountIds: { [providerId]: [id] }, ...(providerId === 'openai' ? { openaiAccountId: id } : { accountId: id }) });
+      await client.call('profiles.save', { id: profile.id, name: profile.name, accountIds: { [providerId]: [id] } });
       setSigningIn(true);
     });
   };

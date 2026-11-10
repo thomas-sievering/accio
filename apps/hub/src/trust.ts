@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { JsonFile, JsonStore } from '@accio/persistence';
 import { HubError } from './errors.js';
 
-type Device = { id: string; tokenHash: string; keys: Record<string, string>; references: string[] };
+type Device = { id: string; tokenHash: string; references: string[] };
 type Data = { id: string; devices: Device[] };
 const digest = (text: string) => createHash('sha256').update(text).digest('hex');
 const pairingFile = (home: string) => new JsonFile(join(home, 'hub', 'pairing.json'), () => ({ hash: '', expiresAt: 0 }));
@@ -14,7 +14,7 @@ export function safeEqual(a: string, b: string): boolean {
   return x.length === y.length && timingSafeEqual(x, y);
 }
 
-/** Hub identity and device grants. Provider tokens are held separately by the Sorting Hat. */
+/** Hub identity and device grants. Provider tokens are held by the Sorting Hat. */
 export class HubTrust {
   private store: JsonStore<Data>;
   private pairing: ReturnType<typeof pairingFile>;
@@ -25,8 +25,11 @@ export class HubTrust {
   private get data() { return this.store.data; }
   get id() { return this.data.id; }
   get paired() { return this.data.devices.length > 0; }
-  /** Writes the store back so a newly created hub id is durable. */
-  async load() { await this.store.commit(await this.store.file.read()); }
+  /** Writes the store back so a newly created hub id is durable, without the model keys hubs kept before the Sorting Hat. */
+  async load() {
+    const data = await this.store.file.read();
+    await this.store.commit({ ...data, devices: data.devices.map(({ id, tokenHash, references }) => ({ id, tokenHash, references })) });
+  }
   static async createCode(home: string) {
     const code = randomBytes(8).toString('hex').toUpperCase().match(/.{4}/g)!.join('-');
     const expiresAt = Date.now() + 10 * 60_000;
@@ -40,27 +43,12 @@ export class HubTrust {
       const previous = this.data.devices.find((d) => d.id === id);
       const token = `accio-device-${randomBytes(32).toString('base64url')}`;
       await this.pairing.write({ hash: '', expiresAt: 0 });
-      const devices = [...this.data.devices.filter((d) => d.id !== id), { id, tokenHash: digest(token), keys: {}, references: previous?.references ?? [] }];
+      const devices = [...this.data.devices.filter((d) => d.id !== id), { id, tokenHash: digest(token), references: previous?.references ?? [] }];
       await this.save(devices);
       return { hubId: this.id, token };
     });
   }
   authenticate(token: string): string | undefined { return this.data.devices.find((d) => safeEqual(d.tokenHash, digest(token)))?.id; }
-  /** The machine and profile a hub model key was made for. */
-  modelOwner(token: string): { machineId: string; profileId: string } | undefined {
-    if (!token) return;
-    for (const device of this.data.devices) for (const [profileId, key] of Object.entries(device.keys)) if (safeEqual(key, token)) return { machineId: device.id, profileId };
-  }
-  key(machineId: string, profileId: string): Promise<string> {
-    return this.change(async () => {
-      const device = this.data.devices.find((d) => d.id === machineId);
-      if (!device) throw new HubError('This machine is no longer paired.');
-      if (device.keys[profileId]) return device.keys[profileId];
-      const key = `accio-${randomBytes(32).toString('base64url')}`;
-      await this.save(this.data.devices.map((d) => d.id === machineId ? { ...d, keys: { ...d.keys, [profileId]: key } } : d));
-      return key;
-    });
-  }
   references(machineId: string, profiles: string[]) { return this.change(() => this.save(this.data.devices.map((d) => d.id === machineId ? { ...d, references: [...new Set(profiles)] } : d))); }
   referenced(profileId: string) { return this.data.devices.some((d) => d.references.includes(profileId)); }
   revoke(machineId: string) { return this.change(() => this.save(this.data.devices.filter((d) => d.id !== machineId))); }

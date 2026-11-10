@@ -59,12 +59,9 @@ export function selectionOf(profile?: ProfileView): AccountSelection {
   return { anthropic: ids('anthropic'), openai: ids('openai') };
 }
 
-/**
- * The ordered selection, plus each provider's first account for hubs from before ordered accounts.
- * `houseId` links a house on the hub's Sorting Hat (null for none); leave it out on hubs without one.
- */
+/** The ordered selection; `houseId` links a house on the hub's Sorting Hat (null for none), left out to keep the link. */
 export function profileSave(id: string | undefined, name: string, selection: AccountSelection, houseId?: string | null) {
-  return { id, name, accountIds: selection, accountId: selection.anthropic[0] ?? null, openaiAccountId: selection.openai[0] ?? null, ...(houseId !== undefined ? { houseId } : {}) };
+  return { id, name, accountIds: selection, ...(houseId !== undefined ? { houseId } : {}) };
 }
 
 export function hasSignedInAccount(profile: ProfileView) {

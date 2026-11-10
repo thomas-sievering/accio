@@ -1,33 +1,23 @@
-import type { ProfileView, SaveProfileParams } from '@accio/protocol';
+import type { ProfileView, ProviderId, SaveProfileParams } from '@accio/protocol';
 import { PROVIDERS, type SharedProfile } from './sharedSettings.js';
-import type { AccountSelection, SortingHatApi } from '@accio/sorting-hat';
+import type { SortingHatLink } from './sortingHatLink.js';
 import { HubError } from './errors.js';
 
-/**
- * Where profiles' houses are. `linked` is set for a Sorting Hat of the hub's own,
- * where a profile links to the house it chose, or to none; without it a profile
- * links to the embedded house of the same id.
- */
-export type HouseSource = Pick<SortingHatApi, 'selectedAccounts' | 'accountIdInUse'> & {
-  linked?: (profile: SharedProfile) => { id: string; name: string } | null;
-};
+/** Per provider, the accounts to select in order; a provider left out keeps its selection. */
+export type AccountSelection = Partial<Record<ProviderId, string[]>>;
 
-/** Each profile with its house's accounts. */
-export function profileViews(profiles: readonly SharedProfile[], hat: HouseSource): ProfileView[] {
-  return profiles.map(({ houseId: _houseId, ...p }) => {
-    const house = hat.linked ? hat.linked({ ...p, houseId: _houseId }) : undefined;
-    const id = house === undefined ? p.id : house?.id;
-    return { ...p, providers: PROVIDERS.map((provider) => ({ ...provider, accounts: id ? hat.selectedAccounts(id, provider.id) : [], inUseId: id ? hat.accountIdInUse(id, provider.id) : null })),
-      ...(house !== undefined ? { house } : {}) };
-  });
+/** Each profile with its house on the Sorting Hat and that house's accounts. */
+export function profileViews(profiles: readonly SharedProfile[], link: Pick<SortingHatLink, 'house' | 'selectedAccounts' | 'accountIdInUse'>): ProfileView[] {
+  return profiles.map(({ houseId, ...p }) => ({
+    ...p,
+    house: houseId ? { id: houseId, name: link.house(houseId)?.name ?? houseId } : null,
+    providers: PROVIDERS.map((provider) => ({ ...provider, accounts: houseId ? link.selectedAccounts(houseId, provider.id) : [], inUseId: houseId ? link.accountIdInUse(houseId, provider.id) : null })),
+  }));
 }
 
-/** The accounts a save selects per provider; the ordered form wins over the single-account one. */
+/** The accounts a save selects per provider. */
 export function accountSelection(req: SaveProfileParams): AccountSelection {
-  const single = (id: string | null | undefined) => id === undefined ? undefined : id === null ? [] : [id];
-  const selection: AccountSelection = { anthropic: req.accountIds?.anthropic ?? single(req.accountId), openai: req.accountIds?.openai ?? single(req.openaiAccountId) };
-  for (const key of Object.keys(selection) as (keyof AccountSelection)[]) if (!selection[key]) delete selection[key];
-  return selection;
+  return Object.fromEntries(Object.entries(req.accountIds ?? {}).filter(([, ids]) => ids)) as AccountSelection;
 }
 
 export function saveSharedProfile(profiles: readonly SharedProfile[], req: SaveProfileParams) {

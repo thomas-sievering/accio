@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { accountInUse, type AccountView, type ProfileView } from '@accio/protocol';
+import { accountInUse, noSortingHatMessage, type AccountView, type ProfileView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { ArrowUp, Close, ProviderLogo, User } from '../app/icons';
 import { SettingLink, SettingsFooter, SettingsSection } from '../app/Settings';
@@ -24,7 +24,7 @@ export function ProfilesSettings({
   /** Opens Settings / Secrets filtered to a profile. */
   onOpenSecrets?: (profileId: string) => void;
 }) {
-  const { profiles, sortingHat } = useProfiles();
+  const { profiles } = useProfiles();
   if (!profiles) return null;
   if (profileId === 'new') return <ProfileForm onSaved={(p) => onOpen(p.id)} onDone={onBack} />;
   // Always the latest view, so sign-in changes show up while the form is open.
@@ -36,7 +36,7 @@ export function ProfilesSettings({
     <SettingsSection add={{ label: 'Add profile', onClick: () => onOpen('new') }}>
       {profiles.map((p) => (
         <SettingLink key={p.id} icon={<User />} title={p.name} warn={!hasSignedInAccount(p)} onClick={() => onOpen(p.id)}
-          description={p.house === null ? 'No house on the Sorting Hat' : [p.house && `House ${p.house.name}`, p.providers.flatMap((provider) => provider.accounts.map((a) => `${a.name}${a.signedIn ? '' : ' · Signed out'}`)).join(', ') || (sortingHat ? 'No account in its house' : 'No account selected')].filter(Boolean).join(' · ')} />
+          description={p.house === null ? 'No house on the Sorting Hat' : [p.house && `House ${p.house.name}`, p.providers.flatMap((provider) => provider.accounts.map((a) => `${a.name}${a.signedIn ? '' : ' · Signed out'}`)).join(', ') || 'No account in its house'].filter(Boolean).join(' · ')} />
       ))}
     </SettingsSection>
   </>);
@@ -47,7 +47,7 @@ function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: Pr
   const { accounts, sortingHat } = useProfiles();
   const initial = selectionOf(profile);
   const [selection, setSelection] = useState(initial);
-  // GLOSSARY: House. Only on a hub with a Sorting Hat of its own.
+  // GLOSSARY: House.
   const savedHouse = profile?.house?.id ?? '';
   // A new profile offers a house of its own name, or an existing one.
   const initialHouse = profile || !sortingHat ? savedHouse : NEW_HOUSE;
@@ -89,6 +89,7 @@ function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: Pr
           <Field label="Name" error={touched && !name.trim() && 'Enter a name for the profile.'}>
             {(p) => <input {...p} value={name} onChange={(e) => setName(e.target.value)} placeholder="personal, work…" autoFocus={!profile} required />}
           </Field>
+          {sortingHat === null && <p className="note">{noSortingHatMessage}</p>}
           {sortingHat?.problem && <p className="error" role="alert">{sortingHat.problem}</p>}
           {sortingHat && !sortingHat.problem && (
             <Field label="House on the Sorting Hat" hint={!house ? 'Threads of this profile can’t run until it links to a house.' : house === NEW_HOUSE ? 'Save to make this house on the Sorting Hat.' : relinked ? `Save to use the accounts of ${houseName}.` : undefined}>
@@ -96,13 +97,13 @@ function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: Pr
                 options={[...(profile ? [] : [{ value: NEW_HOUSE, label: `New house ${name.trim() || 'named like this profile'}` }]), ...(savedHouse && !sortingHat.houses.some((h) => h.id === savedHouse) ? [{ value: savedHouse, label: profile?.house?.name ?? savedHouse, detail: 'Not on the Sorting Hat' }] : []), ...sortingHat.houses.map((h) => ({ value: h.id, label: h.name }))]} />}
             </Field>
           )}
-          {(!sortingHat || (house && !relinked && !sortingHat.problem)) && PROVIDERS.map((provider) => (
+          {sortingHat && house && !relinked && !sortingHat.problem && PROVIDERS.map((provider) => (
             <ProviderAccounts key={provider.id} provider={provider} accounts={accounts} selected={selection[provider.id]}
               inUseId={profile && accountInUse(profile.providers.find((p) => p.id === provider.id))?.id}
               onChange={(ids) => setSelection((s) => ({ ...s, [provider.id]: ids }))} />
           ))}
           {error && <p className="error">{error}</p>}
-          <small className="hint">Accounts are set up in Settings / Accounts. {sortingHat ? `Choosing them here sets the accounts of ${houseName ? `the house ${houseName}` : 'its house'} on the Sorting Hat, for every app that uses it.` : 'With several at a provider, accio uses the signed-in one whose weekly allowance resets soonest, skipping any with 5% or less left until that resets; higher accounts win ties.'}{profile && onOpenSecrets && <> <button type="button" className="link" onClick={() => onOpenSecrets(profile.id)}>Saved secrets</button></>}</small>
+          <small className="hint">{sortingHat && `Accounts are set up in Settings / Accounts. Choosing them here sets the accounts of ${houseName ? `the house ${houseName}` : 'its house'} on the Sorting Hat, for every app that uses it.`}{profile && onOpenSecrets && <> <button type="button" className="link" onClick={() => onOpenSecrets(profile.id)}>Saved secrets</button></>}</small>
         </div>
       </SettingsSection>
       {profile && (
@@ -113,7 +114,7 @@ function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: Pr
           </div>
         </SettingsSection>
       )}
-      <SettingsFooter remove={profile && { name: profile.name, run: remove, consequence: sortingHat ? 'Its house and accounts stay on the Sorting Hat; only the profile goes.' : 'Its accounts stay; only the profile goes.' }} busy={busy} onCancel={onDone} saveLabel={profile ? 'Save' : 'Add profile'} saveDisabled={busy || !accounts || (!!profile && !dirty)} dirty={dirty && !busy} />
+      <SettingsFooter remove={profile && { name: profile.name, run: remove, consequence: 'Its house and accounts stay on the Sorting Hat; only the profile goes.' }} busy={busy} onCancel={onDone} saveLabel={profile ? 'Save' : 'Add profile'} saveDisabled={busy || !accounts || (!!profile && !dirty)} dirty={dirty && !busy} />
     </form>
   );
 }

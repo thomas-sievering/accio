@@ -36,10 +36,7 @@ The state folder holds:
 - `admin-token`: the admin token.
 - `codex/<id>/`: each ChatGPT account's Codex credential home.
 
-Keep it private: it holds your subscriptions' refresh tokens. Pointing `--dir`
-at an Accio hub's `hub` folder converts the hub's account file
-(`profiles.json`) on first start and removes it; do that only with the hub
-stopped and not using that folder any more, since refresh tokens rotate.
+Keep it private: it holds your subscriptions' refresh tokens.
 
 ## Dashboard
 
@@ -56,7 +53,7 @@ stacked by house, hat key, account or model, for all tokens or one type (input,
 output, cache read, cache write). A table beside it lists each group's requests
 and tokens of every type with their totals; by account, it lists every account
 with its limits next to its usage. Usage of a deleted house, hat key or account
-shows as deleted, and an embedding hub's as "Hub (embedded)". It refreshes every
+shows as deleted, and usage from before hat keys as "No hat key". It refreshes every
 30 seconds.
 
 Days and hours are in the browser's time zone. The API's day buckets are UTC

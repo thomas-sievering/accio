@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path';
 import { closeWhenOrphaned } from './fixtureLifetime.js';
 import { startApp } from '../apps/worker/src/app.js';
 import { FakeHarness, replyWith } from '../apps/worker/src/testing/fakeHarness.js';
-import { fakeClaudeFetch, TestClient } from '../apps/worker/src/testing/testApp.js';
+import { linkSortingHat, startTestSortingHat, TestClient } from '../apps/worker/src/testing/testApp.js';
 
 const home = await mkdtemp(join(tmpdir(), 'accio-secrets-browser-'));
 const token = 'isolated-secrets-test-token';
@@ -22,7 +22,9 @@ const harness = new FakeHarness(async function* (run) {
   }
   yield* replyWith(`Credential delivery ${delivery.status}.`);
 });
-const app = await startApp({ home, host: '127.0.0.1', port: Number(process.env.ACCIO_SECRETS_TEST_PORT ?? 47483), hubPort: 0, token, webRoot: resolve('apps/web/dist') }, { harness, claudeFetch: fakeClaudeFetch });
+const hat = await startTestSortingHat(home);
+const app = await startApp({ home, host: '127.0.0.1', port: Number(process.env.ACCIO_SECRETS_TEST_PORT ?? 47483), hubPort: 0, token, webRoot: resolve('apps/web/dist') }, { harness });
+await linkSortingHat(app, hat);
 const client = await TestClient.open(`ws://127.0.0.1:${app.port}/ws?token=${token}`);
 const personal = await client.signedIn('Personal'); await client.signedIn('Work');
 const projectPath = join(home, 'secret-project'); await mkdir(projectPath); execFileSync('git', ['init', '--quiet', projectPath], { windowsHide: true });
@@ -33,7 +35,7 @@ process.send?.({ type: 'ready' });
 let closing = false;
 const close = async () => {
   if (closing) return; closing = true;
-  client.close(); await app.close();
+  client.close(); await app.close(); await hat.close();
   for (const directory of ['transcripts', 'thread-details']) {
     for (const file of await readdir(join(home, directory), { recursive: true }).catch(() => [])) {
       if (!String(file).endsWith('.json')) continue;

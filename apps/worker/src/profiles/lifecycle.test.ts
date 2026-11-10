@@ -39,11 +39,11 @@ it('rejects new profile references once deletion has begun', async () => {
   const checkout = await c.call('checkouts.add', { path, profileId: 'other' });
   const entered = gate();
   const held = gate();
-  const remove = t.app.sortingHat.removeHouse.bind(t.app.sortingHat);
-  vi.spyOn(t.app.sortingHat, 'removeHouse').mockImplementation(async (...args) => {
-    entered.release();
-    await held.opened;
-    return remove(...args);
+  const hub = t.app.profiles.client;
+  const call = hub.call.bind(hub);
+  vi.spyOn(hub, 'call').mockImplementation(async (method, params) => {
+    if (method === 'profiles.delete') { entered.release(); await held.opened; }
+    return call(method, params);
   });
   const deleting = rpc('profiles.delete', { id: 'personal' });
   try {

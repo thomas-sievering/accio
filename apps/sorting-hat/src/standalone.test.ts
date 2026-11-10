@@ -190,7 +190,7 @@ describe('the standalone Sorting Hat', () => {
     await api('GET', `sign-ins/${device.signInId}`);
     const house = await api('POST', 'houses', { name: 'Personal', accounts: { anthropic: [mine.id], openai: [gpt.id] } });
     const key = await api('POST', 'hat-keys', { houseId: house.id, name: 'pi' });
-    const embedded = await hat.hat.ensureHouse(house.id);
+    const other = await api('POST', 'hat-keys', { houseId: house.id, name: 'Accio' });
     const post = (path: string, body: unknown) => fetch(`${hat.url}${path}`, { method: 'POST', headers: { authorization: `Bearer ${key.secret}`, 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
     // Streamed and whole Claude replies; count_tokens uses none.
@@ -199,8 +199,8 @@ describe('the standalone Sorting Hat', () => {
     const whole = await post('/v1/messages', { model: 'claude-test', stream: false, messages: [] });
     expect(await whole.json()).toMatchObject({ usage: { input_tokens: 10 } });
     expect((await post('/v1/messages/count_tokens', { model: 'claude-test', messages: [] })).status).toBe(200);
-    // The embedding app's key counts apart.
-    expect((await (await claude(embedded)).text()).length).toBeGreaterThan(0);
+    // Another hat key counts apart.
+    expect((await (await claude(other.secret)).text()).length).toBeGreaterThan(0);
     // A stream cut off after message_start counts what it reported; the caller sees it cut off too.
     anthropic.control.cutOff = true;
     const cut = await claude(key.secret);
@@ -223,9 +223,9 @@ describe('the standalone Sorting Hat', () => {
     expect((await usage('?groupBy=provider&groupBy=account,model')).rows).toEqual(expected);
     expect((await usage('?groupBy=hatKey')).rows).toEqual([
       expect.objectContaining({ hatKeyId: key.id, requests: 6 }),
-      expect.objectContaining({ hatKeyId: null, requests: 1, inputTokens: 10, outputTokens: 8 }),
+      expect.objectContaining({ hatKeyId: other.id, requests: 1, inputTokens: 10, outputTokens: 8 }),
     ]);
-    expect((await usage('?hatKey=embedded')).totals).toMatchObject({ requests: 1 });
+    expect((await usage(`?hatKey=${other.id}`)).totals).toMatchObject({ requests: 1 });
     const hour = new Date(Math.floor(Date.now() / 3_600_000) * 3_600_000).toISOString().replace('.000Z', 'Z');
     expect((await usage('?bucket=hour&groupBy=house')).rows).toEqual([expect.objectContaining({ start: hour, houseId: 'personal', requests: 7 })]);
     expect((await usage(`?from=${encodeURIComponent(new Date(Date.now() + 3_600_000).toISOString())}`)).totals.requests).toBe(0);

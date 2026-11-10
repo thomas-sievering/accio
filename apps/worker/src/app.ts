@@ -18,7 +18,7 @@ import { runCommand } from './resources/process.js';
 import type { GhRunner } from './github/accounts.js';
 
 export type AppOptions = { home: string; host: string; port: number; token: string; hubPort: number; webRoot?: string };
-export type AppDeps = { resourceCommand: CommandRunner; mcpFetch: Fetch; harness: Harness; claudeModels: ClaudeModelSource; claudeFetch: Fetch; anthropicUrl: string; codexHarness: Harness; codexFactory: CodexFactory; openaiUrl: string; openaiFetch: Fetch; deliveryHosting: DeliveryHosting; github: GhRunner; updates: Partial<Omit<UpdateDeps, 'machineId'>> };
+export type AppDeps = { resourceCommand: CommandRunner; mcpFetch: Fetch; harness: Harness; claudeModels: ClaudeModelSource; codexHarness: Harness; codexFactory: CodexFactory; deliveryHosting: DeliveryHosting; github: GhRunner; updates: Partial<Omit<UpdateDeps, 'machineId'>> };
 
 /** The local machine hosts clients and work; all hubs use the standalone service protocol. */
 export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
@@ -40,7 +40,7 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
     if (shouldStartLocal) {
       const settings = new SharedSettings(opts.home);
       await moveProfilesToHub(opts.home, here, settings); await settings.close();
-      local = await startHubService({ home: opts.home, host: '127.0.0.1', port: opts.hubPort, claudeFetch: deps.claudeFetch, codexFactory: deps.codexFactory, anthropicUrl: deps.anthropicUrl, openaiUrl: deps.openaiUrl, openaiFetch: deps.openaiFetch, mcpFetch: deps.mcpFetch, ...(version ? { version } : {}) });
+      local = await startHubService({ home: opts.home, host: '127.0.0.1', port: opts.hubPort, mcpFetch: deps.mcpFetch, ...(version ? { version } : {}) });
       const saved = connections.saved.find((s) => s.managed);
       if (saved) { if (saved.id !== local.trust.id) throw new Error('The managed local hub identity has changed. Restore its state before reconnecting.'); saved.url = local.url; }
       else {
@@ -58,7 +58,7 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
     const first = connections.workspaces.get(connections.defaultId!)!;
     let closing: Promise<void> | undefined;
     return { ...transport, router: first?.router ?? connections.global, profiles: first?.profiles, projects: first?.projects, threads: first?.threads, machines: first?.machines, tools: first?.tools, resources: first?.resources,
-      sortingHat: local?.sortingHat!, settings: local?.settings!, secrets: first?.secrets, hubUrl: first?.client.url ?? '', connections,
+      settings: local?.settings!, secrets: first?.secrets, hubUrl: first?.client.url ?? '', connections,
       close: () => { connections.stopAccepting(); return closing ??= (async () => { await transport.close(); await connections.close(); await local?.close(); })(); } };
   } catch (error) { await connections.close().catch(() => {}); await local?.close().catch(() => {}); throw error; }
 }

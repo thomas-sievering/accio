@@ -11,12 +11,12 @@ const DAY = 24 * HOUR;
 export const HOURLY_FOR_DAYS = 90;
 const WRITE_AFTER_MS = 10_000;
 
-/** One request's usage, as the model routes saw it. An embedding app's key has no hat key id. */
+/** One request's usage, as the model routes saw it. */
 export type UsageEntry = {
   at: number;
   providerId: ProviderId;
   houseId: string;
-  hatKeyId: string | null;
+  hatKeyId: string;
   accountId: string;
   /** The model the provider reported, else the one asked for; null when neither is known. */
   model: string | null;
@@ -36,7 +36,7 @@ export type UsageQuery = {
   groupBy?: UsageDimension[];
   /** Splits the totals by hour or day; without it, one row per group. */
   bucket?: 'hour' | 'day';
-  /** Only usage that matches every one given; hatKey `null` is the embedding app's. */
+  /** Only usage that matches every one given. */
   where?: Partial<Record<UsageDimension, string | null>>;
 };
 export type UsageTotals = { requests: number; inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number };

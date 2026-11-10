@@ -18,7 +18,7 @@ describe('account limits RPC and hub ownership', () => {
     const a = await t.connect(), b = await t.connect();
     const personal = await a.signedIn('Personal');
     const account = personal.providers[0]!.accounts[0]!;
-    await a.call('profiles.save', { name: 'Work', accountId: account.id });
+    await a.call('profiles.save', { createHouse: true, name: 'Work', accountIds: { anthropic: [account.id] } });
     const out = await a.call('accounts.save', { name: 'Signed out' });
     expect((await a.call('accounts.limits', {})).find((v) => v.accountId === out.id)?.status).toBe('signedOut');
     const [first, second] = await Promise.all([
@@ -31,7 +31,7 @@ describe('account limits RPC and hub ownership', () => {
     ] } });
     const pushed = await b.waitFor('accounts.limitsChanged', (views) => views.some((v) => v.accountId === account.id && v.status === 'ready'));
     expect(JSON.stringify(pushed)).not.toMatch(/oauth-|refresh-|accessToken|credentialId|accio-/);
-    await a.call('profiles.save', { id: personal.id, name: personal.name, accountId: null });
+    await a.call('profiles.save', { id: personal.id, name: personal.name, accountIds: { anthropic: [] } });
     expect((await a.call('accounts.limits', {})).find((v) => v.accountId === account.id)?.snapshot).toEqual(first.find((v) => v.accountId === account.id)?.snapshot);
     await a.call('accounts.signOut', { id: account.id });
     expect((await b.call('accounts.limits', {})).find((v) => v.accountId === account.id)).toMatchObject({ status: 'signedOut', snapshot: null });
@@ -102,7 +102,7 @@ describe('account limits RPC and hub ownership', () => {
     await c.call('accounts.signOut', { id: p.providers[0]!.accounts[0]!.id });
   });
 
-  it('queries ChatGPT limits only in its hub credential home and never starts a turn', async () => {
+  it('queries ChatGPT limits only in its Sorting Hat credential home and never starts a turn', async () => {
     const codex = new FakeCodex();
     codex.rateLimitsResponse = { rateLimits: { limitId: 'codex', primary: { usedPercent: 39, windowDurationMins: 300 }, secondary: { usedPercent: 19, windowDurationMins: 10080 } } };
     t = await startTestApp({ codexFactory: codex.factory });
@@ -116,7 +116,7 @@ describe('account limits RPC and hub ownership', () => {
     expect(result[0]).toMatchObject({ providerId: 'openai', status: 'ready', snapshot: { windows: [{ usedPercent: 39 }, { usedPercent: 19 }] } });
     expect(codex.clients).toHaveLength(before + 1);
     const reader = codex.latest;
-    expect(reader.options.home).toContain('hub');
+    expect(reader.options.home).toContain('test-sorting-hat');
     expect(reader.options.home).not.toContain('profiles');
     expect(reader.requests.map((r) => r.method)).toEqual(['account/read', 'account/rateLimits/read']);
     expect(reader.closed).toBe(true);

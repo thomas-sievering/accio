@@ -571,7 +571,7 @@ function groupLabel(group, id) {
     return house ? { name: house.name } : { name: 'Deleted house', detail: id, deleted: true };
   }
   if (group === 'hatKey') {
-    if (id === null) return { name: 'Hub (embedded)', detail: 'the app embedding the Sorting Hat' };
+    if (id === null) return { name: 'No hat key', detail: 'from before hat keys' };
     const key = state.hatKeys.find((x) => x.id === id);
     if (!key) return { name: 'Deleted hat key', deleted: true };
     return { name: key.name, detail: [state.houses.find((x) => x.id === key.houseId)?.name, key.revokedAt && 'revoked'].filter(Boolean).join(', ') || undefined };

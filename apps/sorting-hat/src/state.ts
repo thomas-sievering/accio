@@ -1,6 +1,4 @@
-import { rm } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
-import { JsonFile } from './store.js';
+import type { JsonFile } from './store.js';
 import type { ProviderId } from './types.js';
 import type { ClaudeAccount } from './claudeOAuth.js';
 import type { OpenAIAccount } from './openaiAuth.js';
@@ -26,52 +24,8 @@ export type HatState = { version: 1; houses: StoredHouse[]; hatKeys: StoredHatKe
 
 export const emptyState = (): HatState => ({ version: 1, houses: [], hatKeys: [], accounts: [] });
 
-/**
- * What Accio's hub stored before the Sorting Hat had houses and hat keys
- * (`profiles.json`, earlier `accounts.json`): a house per profile with one
- * access key, which the hub now asks for in memory and is dropped here.
- */
-type EmbeddedProfile = { id: string; accessKey?: string; accountIds?: string[]; accountId?: string | null; openaiAccountId?: string | null };
-type EmbeddedData = { profiles: EmbeddedProfile[]; accounts: StoredAccount[] };
-/** Before named accounts, each profile held its login inline. */
-type InlineProfile = { id: string; accessKey: string; account?: ClaudeAccount; login?: ClaudeAccount };
-
-/**
- * Reads the state document, converting what Accio's hub stored before. The
- * earlier file is removed once the new one is written: refresh tokens rotate,
- * so two live copies would sign each other out (ADR 0018).
- */
+/** Reads the state document, filling in what earlier versions of it lacked. */
 export async function loadState(file: JsonFile<HatState>): Promise<HatState> {
-  if (await file.exists()) {
-    const stored = await file.read();
-    return { ...emptyState(), ...stored, hatKeys: stored.hatKeys ?? [] };
-  }
-  const dir = dirname(file.path);
-  for (const name of ['profiles.json', 'accounts.json']) {
-    const old = join(dir, name);
-    if (!await JsonFile.exists(old)) continue;
-    const state = fromEmbedded(await new JsonFile<EmbeddedData | InlineProfile[]>(old, () => []).read());
-    await file.write(state);
-    await rm(old, { force: true });
-    return state;
-  }
-  return emptyState();
+  const stored = await file.read();
+  return { ...emptyState(), ...stored, hatKeys: stored.hatKeys ?? [] };
 }
-
-function fromEmbedded(stored: EmbeddedData | InlineProfile[]): HatState {
-  if (!Array.isArray(stored)) return { ...emptyState(), accounts: stored.accounts, houses: stored.profiles.map(orderedAccounts) };
-  const accounts = stored.flatMap((p) => {
-    const account = p.account ?? p.login;
-    return account ? [{ id: `account-${p.id}`, name: account.email ?? p.id, account }] : [];
-  });
-  const houses = stored.map((p) => ({ id: p.id, name: p.id, accountIds: accounts.some((a) => a.id === `account-${p.id}`) ? [`account-${p.id}`] : [] }));
-  return { ...emptyState(), houses, accounts };
-}
-
-/** Before ordered accounts, a profile selected at most one account per provider. */
-function orderedAccounts({ id, accountIds, accountId, openaiAccountId }: EmbeddedProfile): StoredHouse {
-  return { id, name: id, accountIds: accountIds ?? [accountId, openaiAccountId].filter((a): a is string => !!a) };
-}
-
-/** The state in `dir`, converted as on load; for an app moving the accounts of a Sorting Hat it embedded. */
-export const readState = (dir: string) => loadState(new JsonFile<HatState>(join(dir, STATE_FILE), emptyState));

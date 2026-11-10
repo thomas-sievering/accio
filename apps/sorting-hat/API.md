@@ -248,8 +248,7 @@ Dimension   = "house" | "hatKey" | "account" | "model" | "provider"
 - `bucket` (`hour` or `day`, in UTC) splits them by time as well; each row then
   has `start`. Rows are in order of `start`, then by most tokens.
 - `house`, `hatKey`, `account`, `model` and `provider` keep only usage with
-  that id. `hatKey=embedded` is the usage of an app embedding the Sorting Hat
-  (Accio's hub), whose rows have `hatKeyId: null`.
+  that id. Usage recorded before hat keys has `hatKeyId: null`.
 - `totals` sums every row.
 
 What is counted:
@@ -281,8 +280,8 @@ Usage stays after its hat key, house or account is deleted.
 
 ### Import
 
-`POST /api/import` takes accounts, with their credentials, and houses as another
-Sorting Hat keeps them in `sorting-hat.json`, such as the one Accio's hub embedded:
+`POST /api/import` takes accounts, with their credentials, and houses as a
+Sorting Hat keeps them in `sorting-hat.json`, such as an Accio hub moving its accounts here:
 
 ```
 { accounts: { id, name, providerId, account: ClaudeCredentials | null,

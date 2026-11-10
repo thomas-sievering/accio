@@ -112,9 +112,9 @@ export class Profiles {
       }));
   }
   private async connect(id: string): Promise<HubAccess> {
-    // A hub with a Sorting Hat of its own answers with a hat key and the Sorting Hat's address; otherwise its own proxy serves the key.
-    const { key, url } = await this.client.call<{ key: string; url?: string }>('machine.modelKey', { profileId: id });
-    const access = { baseUrl: url ?? this.client.url, accessKey: key };
+    // GLOSSARY: Hat key. The hub answers with this machine's key for the profile's house and the address threads reach the Sorting Hat at.
+    const { key, url } = await this.client.call<{ key: string; url: string }>('machine.modelKey', { profileId: id });
+    const access = { baseUrl: url, accessKey: key };
     await writeConfigFolder(this.home, id, access); return access;
   }
   private announce() {

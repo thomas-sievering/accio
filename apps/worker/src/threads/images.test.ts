@@ -97,7 +97,7 @@ describe('image attachments', () => {
     const login = await c.call('accounts.beginSignIn', { id: account.id });
     await fake.latest.complete('Personal');
     await c.call('accounts.signInStatus', { signInId: login.signInId });
-    await c.call('profiles.save', { id: profile.id, name: 'Personal', accountId: claudeAccount(profile)!.id, openaiAccountId: account.id });
+    await c.call('profiles.save', { id: profile.id, name: 'Personal', accountIds: { anthropic: [claudeAccount(profile)!.id], openai: [account.id] } });
     const models = (await c.call('models.list', { profileId: profile.id })).models;
     expect(models.find((m) => m.id === 'test-fast')!.imageTypes).toEqual([]);
     expect(models.find((m) => m.id === 'test-codex')!.imageTypes).toContain('image/png');

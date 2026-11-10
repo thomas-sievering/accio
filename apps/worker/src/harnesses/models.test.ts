@@ -26,7 +26,7 @@ describe('profile model choices', () => {
     const t = await startTestApp(); stop = t.stop;
     const c = await t.connect();
     const personal = await c.signedIn('Personal');
-    const work = await c.call('profiles.save', { name: 'Work' });
+    const work = await c.call('profiles.save', { name: 'Work', createHouse: true });
     const available = await c.call('models.list', { profileId: personal.id });
     expect(available.models.map((m) => [m.harnessId, m.providerId, m.id])).toEqual([
       ['claudeCode', 'anthropic', 'opus'], ['claudeCode', 'anthropic', 'sonnet'], ['claudeCode', 'anthropic', 'haiku'],
@@ -124,7 +124,7 @@ describe('profile model choices', () => {
     await c.waitFor('threads.changed', (ts) => ts.some((x) => x.id === thread.id && x.status === 'idle'));
     expect(harness.runs[0]).toMatchObject({ model: 'claude-fable-5[1m]', effort: 'max', modelName: 'Claude Fable 5' });
     expect(asked).toHaveLength(1);
-    expect(asked[0]).toMatchObject({ CLAUDE_CONFIG_DIR: expect.stringContaining('personal'), ANTHROPIC_AUTH_TOKEN: expect.stringMatching(/^accio-/) });
+    expect(asked[0]).toMatchObject({ CLAUDE_CONFIG_DIR: expect.stringContaining('personal'), ANTHROPIC_AUTH_TOKEN: expect.stringMatching(/^hat-/) });
     expect((await c.call('models.list', { profileId: 'personal' })).models.map((m) => [m.id, m.name, m.description, m.efforts.length])).toEqual([
       ['opus', 'Claude Opus 5.5', 'Best for everyday, complex tasks', 5],
       ['claude-fable-5[1m]', 'Claude Fable 5', 'Most capable for your hardest tasks', 5],

@@ -18,9 +18,6 @@
     { "path": "../../packages/protocol" },
     {
       "path": "../../packages/persistence"
-    },
-    {
-      "path": "../sorting-hat"
     }
   ]
 }

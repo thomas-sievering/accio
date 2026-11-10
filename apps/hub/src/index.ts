@@ -2,7 +2,7 @@ export { SecretsVault, SecretStoreError, checkValue, type SecretScope, type Secr
 export { remoteSecrets } from './secretClient.js';
 export type { McpAccess } from './mcp.js';
 export { Resources, enabled, optionalScope, type McpCredential, type ResourceAccess } from './resources.js';
-export type { Fetch, CodexModel, SortingHatApi } from '@accio/sorting-hat';
+export type { Fetch, CodexModel } from './sortingHatClient.js';
 export { startHubService, type HubSnapshot } from './service.js';
 export { HubClient, hubAddress, remoteSettings, type SettingsAccess } from './client.js';
 export { remoteResources, remoteMcp } from './resourceClient.js';

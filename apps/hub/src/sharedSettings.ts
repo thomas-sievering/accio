@@ -4,11 +4,7 @@ import { DEFAULT_THREAD_NAMING, type ThreadNamingSettings, type HarnessInstall, 
 
 export type { HarnessInstall };
 
-/**
- * A profile as the hub stores it. With a Sorting Hat of its own, `houseId` links
- * it to one of its houses; otherwise its accounts are kept by the embedded
- * Sorting Hat's house of the same id.
- */
+/** A profile as the hub stores it; `houseId` links it to one of the Sorting Hat's houses. */
 export type SharedProfile = { id: string; name: string; houseId?: string };
 
 /** What a machine tells the hub about itself when it connects. */

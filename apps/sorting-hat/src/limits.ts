@@ -12,7 +12,6 @@ const COOLDOWN_MS = 5_000;
 export class AccountLimits {
   private entries = new Map<string, Entry>();
   private pending = new Set<Promise<void>>();
-  private listeners = new Set<(views: AccountLimitsView[]) => void>();
   private closed = false;
   private reading = 0;
   private waiters = new Set<() => void>();
@@ -32,16 +31,10 @@ export class AccountLimits {
     return this.entries.get(id)?.view.snapshot ?? null;
   }
 
-  subscribe(listener: (views: AccountLimitsView[]) => void) {
-    this.listeners.add(listener);
-    return () => { this.listeners.delete(listener); };
-  }
-
   /** Called only when credential ownership changes, not on ordinary token refresh. */
   invalidate(id: string) {
     this.entries.get(id)?.controller?.abort();
     this.entries.delete(id);
-    this.publish();
   }
 
   async refresh(ids: string[], force = false): Promise<AccountLimitsView[]> {
@@ -101,12 +94,11 @@ export class AccountLimits {
         const delay = error instanceof LimitsReadError && error.retryAfterMs !== undefined ? error.retryAfterMs : Math.min(15 * 60_000, 30_000 * 2 ** Math.min(entry.failures - 1, 5));
         entry.view = { ...entry.view, status: 'error', problem, retryAt: new Date(this.now() + Math.max(COOLDOWN_MS, delay)).toISOString() };
       } finally {
-        if (this.current(id, entry)) { entry.pending = undefined; entry.controller = undefined; this.publish(); }
+        if (this.current(id, entry)) { entry.pending = undefined; entry.controller = undefined; }
       }
     });
     entry.pending = run;
     this.pending.add(run);
-    this.publish();
     try { await run; } finally { this.pending.delete(run); }
   }
 
@@ -129,12 +121,10 @@ export class AccountLimits {
   }
 
   private current(id: string, entry: Entry) { return !this.closed && this.entries.get(id) === entry; }
-  private publish() { if (!this.closed) for (const listener of this.listeners) listener(this.views()); }
 
   async close() {
     this.closed = true;
     for (const entry of this.entries.values()) entry.controller?.abort();
-    this.listeners.clear();
     await Promise.allSettled(this.pending);
   }
 }

@@ -24,7 +24,7 @@ export function SortingHatSettings({ hubName }: { hubName: string }) {
     <SettingsSection title="Sorting Hat">
       {linked && !editing ? <>
         <SettingRow icon={<Hub />} title={new URL(sortingHat.url).host}
-          description={confirming ? 'Threads go back to the accounts this hub keeps itself; its hat keys there are deleted.' : `${sortingHat.threadUrl ? `Threads use ${new URL(sortingHat.threadUrl).host}. ` : ''}Hat keys are named “Accio · ${sortingHat.hubName} · …”.`}>
+          description={confirming ? 'Threads can’t run until this hub has a Sorting Hat again; its hat keys there are deleted.' : `${sortingHat.threadUrl ? `Threads use ${new URL(sortingHat.threadUrl).host}. ` : ''}Hat keys are named “Accio · ${sortingHat.hubName} · …”.`}>
           {confirming ? <>
             <button type="button" className="ghost" disabled={busy} autoFocus onClick={() => setConfirming(false)}>Cancel</button>
             <button type="button" className="ghost danger" disabled={busy} onClick={() => void run(async () => { await client.call('sortingHat.disconnect', {}); setConfirming(false); })}>Disconnect</button>
@@ -67,7 +67,7 @@ function SortingHatForm({ saved, hubName, onDone }: { saved?: { url: string; thr
   };
   return (
     <form className="setting-form" onSubmit={submit} noValidate>
-      {!saved && <p className="hint">Run this hub’s threads through a Sorting Hat, which holds the provider accounts. Without one, the hub keeps accounts itself.</p>}
+      {!saved && <p className="hint">The Sorting Hat holds the provider accounts this hub’s threads run with. Without one, threads can’t run.</p>}
       <Field label="Address" error={tried && problems.url}>{(p) => <input {...p} type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://sortinghat.example.com" required />}</Field>
       <Field label="Address for threads" hint="Where threads on every machine reach it, when the address above works only from the hub. Leave empty to use that one.">
         {(p) => <input {...p} type="url" value={threadUrl} onChange={(e) => setThreadUrl(e.target.value)} placeholder="https://sortinghat.example.com" />}

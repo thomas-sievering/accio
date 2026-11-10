@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { closeWhenOrphaned } from './fixtureLifetime.js';
 import { startApp } from '../apps/worker/src/app.js';
-import { fakeClaudeFetch } from '../apps/worker/src/testing/testApp.js';
+import { fakeClaudeFetch, linkSortingHat, startTestSortingHat } from '../apps/worker/src/testing/testApp.js';
 import { FakeCodex } from '../apps/worker/src/testing/fakeCodex.js';
 import { FakeHarness, replyWith } from '../apps/worker/src/testing/fakeHarness.js';
 
@@ -12,8 +12,8 @@ const home = await mkdtemp(join(tmpdir(), 'accio-limits-browser-'));
 const reads = new Map<string, number>();
 const codex = new FakeCodex();
 codex.rateLimitsResponse = { rateLimits: { limitId: 'codex', primary: { usedPercent: 14, windowDurationMins: 300, resetsAt: Math.floor(Date.now() / 1000) + 3600 }, secondary: { usedPercent: 39, windowDurationMins: 10080 } } };
-const app = await startApp({ home, host: '127.0.0.1', port: Number(process.env.ACCIO_LIMITS_TEST_PORT ?? 47482), hubPort: 0, token: 'isolated-limits-test-token', webRoot: resolve('apps/web/dist') }, {
-  harness: new FakeHarness(async function* () { yield* replyWith('Limits fixture reply'); }),
+// GLOSSARY: Sorting Hat. The accounts and their limits live on the app's own Sorting Hat; only its providers are fixtures.
+const hat = await startTestSortingHat(home, {
   codexFactory: async (options) => {
     const client = await codex.factory(options);
     const request = client.request.bind(client);
@@ -46,6 +46,10 @@ const app = await startApp({ home, host: '127.0.0.1', port: Number(process.env.A
     });
   },
 });
+const app = await startApp({ home, host: '127.0.0.1', port: Number(process.env.ACCIO_LIMITS_TEST_PORT ?? 47482), hubPort: 0, token: 'isolated-limits-test-token', webRoot: resolve('apps/web/dist') }, {
+  harness: new FakeHarness(async function* () { yield* replyWith('Limits fixture reply'); }),
+});
+await linkSortingHat(app, hat);
 console.log(`Limits fixture ready: http://127.0.0.1:${app.port}`);
 process.send?.({ type: 'ready' });
 let closing = false;
@@ -53,6 +57,7 @@ const close = async () => {
   if (closing) return;
   closing = true;
   await app.close();
+  await hat.close();
   if (dirname(home) !== resolve(tmpdir()) || !basename(home).startsWith('accio-limits-browser-')) throw new Error('Unexpected fixture home');
   await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
   process.exit();

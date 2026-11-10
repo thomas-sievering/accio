@@ -61,7 +61,7 @@ async function checkUsage(page: Page) {
   await by('Hat key');
   await expect(table).toHaveAccessibleName('Usage by hat key');
   await expectRow('pi on laptop', [2, 20, 16, 12, 8, 56]);
-  await expectRow('Hub (embedded)', [3, 1000, 200, 300, 50, 1550]);
+  await expectRow('No hat key', [3, 1000, 200, 300, 50, 1550]);
   await expectRow('Deleted hat key', [2, 5000, 700, 0, 0, 5700]);
 
   await by('Model');

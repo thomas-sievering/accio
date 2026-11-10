@@ -41,13 +41,11 @@ describe('hub account limits', () => {
     await limits.close();
   });
 
-  it('preserves the successful observation on failure and publishes a usable retry deadline', async () => {
+  it('preserves the successful observation on failure and gives a usable retry deadline', async () => {
     let now = Date.parse('2026-11-03T12:00:00Z');
     const read = vi.fn().mockResolvedValueOnce({ windows: [window()] }).mockRejectedValueOnce(new Error('private bearer token'))
       .mockResolvedValue({ windows: [window(60)] });
     const limits = new AccountLimits(() => [account()], read, () => now);
-    const pushed: string[] = [];
-    limits.subscribe((v) => pushed.push(v[0]!.status));
     await limits.refresh(['shared']);
     const observed = limits.views()[0]!.snapshot!.observedAt;
     now += 60_000;
@@ -62,7 +60,6 @@ describe('hub account limits', () => {
     now += 24_001;
     await limits.refresh(['shared'], true);
     expect(limits.views()[0]).toMatchObject({ status: 'ready', problem: null, retryAt: null, snapshot: { windows: [window(60)] } });
-    expect(pushed).toEqual(['refreshing', 'ready', 'refreshing', 'error', 'refreshing', 'ready']);
     await limits.close();
   });
 
@@ -160,20 +157,17 @@ describe('hub account limits', () => {
     await limits.close();
   });
 
-  it('cancels active and queued reads on shutdown without publishing after close', async () => {
+  it('cancels active and queued reads on shutdown', async () => {
     const accounts = Array.from({ length: 6 }, (_, i) => account(String(i)));
     const signals: AbortSignal[] = [];
     const limits = new AccountLimits(() => accounts, (_id, signal) => new Promise((_resolve, reject) => {
       signals.push(signal);
       signal.addEventListener('abort', () => reject(signal.reason), { once: true });
     }));
-    const listener = vi.fn(); limits.subscribe(listener);
     const reading = limits.refresh(accounts.map((a) => a.id));
     await vi.waitFor(() => expect(signals).toHaveLength(4));
-    const before = listener.mock.calls.length;
     await limits.close();
     await reading;
     expect(signals.every((s) => s.aborted)).toBe(true);
-    expect(listener).toHaveBeenCalledTimes(before);
   });
 });

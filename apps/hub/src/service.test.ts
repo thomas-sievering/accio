@@ -1,9 +1,11 @@
-import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { request } from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
+import { noSortingHatMessage } from '@accio/protocol';
 import { startHubService } from './service.js';
+import { HubTrust } from './trust.js';
 import { HubClient } from './client.js';
 import { remoteSecrets } from './secretClient.js';
 import { remoteResources } from './resourceClient.js';
@@ -14,14 +16,8 @@ describe('standalone hub trust and network boundary', () => {
   async function fixture() {
     const home = await mkdtemp(join(tmpdir(), 'accio-hub-service-'));
     cleanup.push(() => rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
-    const forwarded: string[] = [];
     const mcpForwarded: string[] = [];
-    const service = await startHubService({ home, port: 0, secretKey: Buffer.alloc(32, 42).toString('base64'), claudeFetch: async (url, init) => {
-      if (String(url).includes('/oauth/token')) return Response.json({ access_token: 'private-provider-token', refresh_token: 'private-refresh-token', expires_in: 3600, account: { uuid: 'me', email_address: 'me@example.com' } });
-      if (String(url).endsWith('/api/oauth/usage')) return Response.json({});
-      forwarded.push(new Headers(init?.headers).get('authorization') ?? '');
-      return new Response('data: hello\n\n', { headers: { 'content-type': 'text/event-stream' } });
-    }, mcpFetch: async (_url, init) => { mcpForwarded.push(new Headers(init?.headers).get('authorization') ?? ''); return Response.json({ result: 'ok' }); } });
+    const service = await startHubService({ home, port: 0, secretKey: Buffer.alloc(32, 42).toString('base64'), mcpFetch: async (_url, init) => { mcpForwarded.push(new Headers(init?.headers).get('authorization') ?? ''); return Response.json({ result: 'ok' }); } });
     cleanup.push(() => service.close());
     async function pair(id: string) {
       const { code } = await service.createPairingCode();
@@ -32,7 +28,7 @@ describe('standalone hub trust and network boundary', () => {
       await client.start(); cleanup.push(() => client.close());
       return { client, token: p.token as string, code };
     }
-    return { home, service, forwarded, mcpForwarded, pair };
+    return { home, service, mcpForwarded, pair };
   }
   it('bootstraps a first device with a one-time code and stores only its credential hash', async () => {
     const { home, service, pair } = await fixture();
@@ -55,28 +51,24 @@ describe('standalone hub trust and network boundary', () => {
     const wrong = new HubClient(service.url, 'different', token, { id: 'first', name: 'first', platform: 'test', version: 'test', harnesses: [] });
     cleanup.push(() => wrong.close()); await wrong.start(); expect(wrong.status).toBe('offline'); expect(wrong.snapshot).toBeUndefined();
   });
-  it('scopes model keys to one machine/profile, keeps provider tokens at the hub, and revokes access immediately', async () => {
-    const { service, pair, forwarded } = await fixture();
-    const first = await pair('first'); const second = await pair('second');
-    const account = await first.client.call('accounts.save', { name: 'Claude' });
-    const login = await first.client.call('accounts.beginSignIn', { id: account.id, redirectUri: 'http://localhost:12345/callback' });
-    await expect(second.client.call('accounts.completeSignIn', { signInId: login.signInId, code: 'code' })).rejects.toThrow(/expired|cancelled/);
-    await first.client.call('accounts.completeSignIn', { signInId: login.signInId, code: 'code' });
-    const personal = await first.client.call('profiles.save', { name: 'Personal', accountId: account.id });
-    const work = await first.client.call('profiles.save', { name: 'Work' });
-    const { key } = await first.client.call('machine.modelKey', { profileId: personal.id });
-    const { key: otherMachine } = await second.client.call('machine.modelKey', { profileId: personal.id });
-    const { key: otherProfile } = await first.client.call('machine.modelKey', { profileId: work.id });
-    expect(key).not.toBe(otherMachine); expect(key).not.toBe(otherProfile);
-    expect((await fetch(service.url + '/rpc', { method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' }, body: JSON.stringify({ method: 'accounts.list', params: {} }) })).status).toBe(401);
-    const send = (key: string) => fetch(service.url + '/v1/messages', { method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' }, body: '{}' });
-    const response = await send(key); expect(response.status).toBe(200); expect(await response.text()).toContain('hello');
-    expect(forwarded).toEqual(['Bearer private-provider-token']);
-    expect(JSON.stringify(first.client.snapshot)).not.toMatch(/private-provider-token|private-refresh-token/);
-    await second.client.call('hub.revokeMachine', { machineId: 'first' });
-    expect((await send(key)).status).toBe(401);
-    expect((await fetch(service.url + '/state', { headers: { authorization: `Bearer ${first.token}` } })).status).toBe(401);
-    const still = await send(otherMachine); expect(still.status).toBe(200); await still.body?.cancel();
+  it('has no accounts and no model routes without a Sorting Hat', async () => {
+    const { service, pair } = await fixture();
+    const { client } = await pair('first');
+    const profile = await client.call('profiles.save', { name: 'Personal' });
+    expect(profile).toMatchObject({ house: null, providers: [{ accounts: [], inUseId: null }, { accounts: [], inUseId: null }] });
+    expect(client.snapshot).toMatchObject({ accounts: [], limits: [], models: { [profile.id]: [] } });
+    expect(client.snapshot.sortingHat).toBeUndefined();
+    await expect(client.call('accounts.save', { name: 'Claude' })).rejects.toThrow(noSortingHatMessage);
+    await expect(client.call('machine.modelKey', { profileId: profile.id })).rejects.toThrow(noSortingHatMessage);
+    for (const path of ['/v1/messages', '/openai/responses']) expect((await fetch(service.url + path, { method: 'POST', body: '{}' })).status).toBe(404);
+  });
+  it('drops the model keys hubs kept before the Sorting Hat when it loads', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'accio-hub-trust-'));
+    cleanup.push(() => rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
+    await mkdir(join(home, 'hub'));
+    await writeFile(join(home, 'hub', 'trust.json'), JSON.stringify({ id: 'hub-1', devices: [{ id: 'laptop', tokenHash: 'hash', keys: { personal: 'accio-old-model-key' }, references: ['personal'] }] }));
+    const trust = new HubTrust(home); await trust.load(); await trust.close();
+    expect(JSON.parse(await readFile(join(home, 'hub', 'trust.json'), 'utf8'))).toEqual({ id: 'hub-1', devices: [{ id: 'laptop', tokenHash: 'hash', references: ['personal'] }] });
   });
   it('protects profile references retained for an offline paired machine', async () => {
     const { pair } = await fixture(); const first = await pair('first'); const second = await pair('second');
@@ -86,8 +78,8 @@ describe('standalone hub trust and network boundary', () => {
     await second.client.call('hub.revokeMachine', { machineId: 'first' });
     await second.client.call('profiles.delete', { id: profile.id }); expect(second.client.snapshot.profiles).toEqual([]);
   });
-  it('rejects network-path and absolute request targets before forwarding model credentials', async () => {
-    const { service, forwarded } = await fixture();
+  it('rejects network-path and absolute request targets', async () => {
+    const { service } = await fixture();
     for (const path of ['//attacker.invalid/v1/messages', 'http://attacker.invalid/v1/messages']) {
       const status = await new Promise<number>((resolve, reject) => {
         const req = request(service.url, { method: 'POST', path }, (res) => { res.resume(); resolve(res.statusCode!); });
@@ -95,7 +87,6 @@ describe('standalone hub trust and network boundary', () => {
       });
       expect(status).toBe(404);
     }
-    expect(forwarded).toEqual([]);
   });
   it('shares resource definitions while retaining MCP credentials and revocable grants on the hub', async () => {
     const { service, pair, mcpForwarded } = await fixture();
@@ -147,8 +138,6 @@ describe('standalone hub trust and network boundary', () => {
     expect(await vault.resolve({ ...scope, projectId: 'other' })).toBeNull();
     await expect(vault.bind(saved.id, { ...scope, profileId: work.id })).rejects.toThrow('cannot be assigned');
     await expect(second.client.call('profiles.delete', { id: personal.id })).rejects.toThrow('saved secrets');
-    const { key } = await first.client.call('machine.modelKey', { profileId: personal.id });
-    expect((await fetch(service.url + '/rpc', { method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' }, body: JSON.stringify({ method: 'secrets.resolve', params: scope }) })).status).toBe(401);
     expect(JSON.stringify(first.client.snapshot)).not.toContain('private-secret-marker');
     expect(await readFile(join(home, 'hub/secrets/values.json'), 'utf8')).not.toContain('private-secret-marker');
     await second.client.call('secrets.save', { ...saved, value: 'replacement-secret-marker' });
