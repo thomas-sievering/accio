@@ -52,9 +52,7 @@ const secretCalls = {
   'secrets.bind': z.object({ id: SecretId, scope: SecretScope }),
   'secrets.used': z.object({ id: SecretId, version: z.number().int().positive(), scope: SecretScope }),
 };
-type Login = { machineId: string; accountId: string; startedAt: number; complete?: AccountView };
-/** Account changes go to the Sorting Hat's dashboard while the hub uses one of its own (until #136). */
-const ACCOUNT_WRITES = new Set(['accounts.save', 'accounts.delete', 'accounts.signOut', 'accounts.beginSignIn', 'accounts.completeSignIn', 'accounts.signInStatus', 'accounts.callback', 'accounts.cancelSignIn']);
+type Login = { machineId: string; accountId: string; providerId: ProviderId; startedAt: number; complete?: AccountView };
 
 /** The same service runs on loopback for development and behind HTTPS at home. */
 export async function startHubService(opts: HubServiceOptions) {
@@ -132,7 +130,6 @@ export async function startHubService(opts: HubServiceOptions) {
     const parsed = schema?.safeParse(raw);
     if (parsed && !parsed.success) throw new HubError('Invalid hub request parameters');
     const p = parsed ? parsed.data : raw;
-    if (link.configured && ACCOUNT_WRITES.has(method)) throw new HubError('This hub’s accounts are on its Sorting Hat. Sign in and change them on the Sorting Hat’s dashboard.');
     switch (method) {
       case 'machine.hello': {
         const hello = p as MachineHello;
@@ -206,48 +203,58 @@ export async function startHubService(opts: HubServiceOptions) {
       case 'mcp.release': {
         const grant = grants.get(p.token); if (grant?.machineId === machineId) { grant.release(); grants.delete(p.token); } return null;
       }
-      case 'accounts.save': return hat.saveAccount(p.name, p.id, p.providerId);
+      // GLOSSARY: Account. With a Sorting Hat of its own, the hub passes account changes and sign-ins to its management API, then reads it back.
+      case 'accounts.save':
+        if (!link.configured) return hat.saveAccount(p.name, p.id, p.providerId);
+        return link.write((c) => p.id ? c.renameAccount(p.id, p.name) : c.createAccount(p.name, p.providerId ?? 'anthropic'));
       case 'accounts.delete': {
+        if (link.configured) { await link.deleteAccount(p.id); return null; }
         // The Sorting Hat refuses too, in its own words; a profile's accounts are its house's.
         const { providerId } = hat.accountView(p.id);
         if (settings.profiles().some((profile) => hat.selectedAccounts(profile.id, providerId).some((a) => a.id === p.id))) throw new HubError('Remove this account from its profiles before deleting it.');
         await hat.deleteAccount(p.id); return null;
       }
-      case 'accounts.signOut': return hat.signOutAccount(p.id);
+      case 'accounts.signOut': return link.configured ? link.write((c) => c.signOut(p.id)) : hat.signOutAccount(p.id);
       case 'accounts.beginSignIn': {
-        const account = hat.accountView(p.id);
-        let result;
-        if (account.providerId === 'openai') result = await hat.beginOpenAISignIn(p.id, true);
-        else {
-          const redirectUri = raw.redirectUri;
-          if (redirectUri !== undefined) {
-            const u = new URL(redirectUri);
-            if (u.protocol !== 'http:' || u.hostname !== 'localhost' || u.pathname !== '/callback' || !u.port || u.search || u.hash || u.username || u.password) throw new HubError('Invalid browser callback');
-          }
-          result = hat.beginAccountSignIn(p.id, redirectUri);
+        const redirectUri = raw.redirectUri;
+        if (redirectUri !== undefined) {
+          const u = new URL(redirectUri);
+          if (u.protocol !== 'http:' || u.hostname !== 'localhost' || u.pathname !== '/callback' || !u.port || u.search || u.hash || u.username || u.password) throw new HubError('Invalid browser callback');
         }
-        logins.set(result.signInId, { machineId, accountId: p.id, startedAt: Date.now() }); return result;
+        let result: { signInId: string; url: string; userCode?: string; providerId: ProviderId };
+        if (link.configured) result = await link.write((c) => c.beginSignIn(p.id, redirectUri));
+        else {
+          const { providerId } = hat.accountView(p.id);
+          result = { providerId, ...providerId === 'openai' ? await hat.beginOpenAISignIn(p.id, true) : hat.beginAccountSignIn(p.id, redirectUri) };
+        }
+        logins.set(result.signInId, { machineId, accountId: p.id, providerId: result.providerId, startedAt: Date.now() });
+        return result;
       }
       case 'accounts.completeSignIn': {
         const pending = login(p.signInId, machineId);
-        pending.complete = await hat.completeAccountSignIn(p.signInId, p.code); return pending.complete;
+        pending.complete = link.configured ? await completeRemote(p.signInId, { code: p.code }) : await hat.completeAccountSignIn(p.signInId, p.code);
+        return pending.complete;
       }
       case 'accounts.signInStatus': {
         const pending = login(p.signInId, machineId);
         if (pending.complete) return { status: 'complete', account: pending.complete };
-        if (hat.accountView(pending.accountId).providerId !== 'openai') return { status: 'pending' };
-        const result = await hat.openaiSignInStatus(p.signInId);
-        if (result.status === 'complete') pending.complete = result.account;
+        if (pending.providerId !== 'openai') return { status: 'pending' };
+        const result = link.configured ? await link.require().signInStatus(p.signInId) : await hat.openaiSignInStatus(p.signInId);
+        if (result.status === 'complete') { pending.complete = result.account; if (link.configured) await link.poll(); }
         return result;
       }
       case 'accounts.callback': {
         const pending = login(p.signInId, machineId);
         if (pending.complete) throw new HubError('This sign-in is already complete.');
-        if (hat.accountView(pending.accountId).providerId === 'anthropic') pending.complete = await hat.completeAccountSignIn(p.signInId, p.code);
+        if (link.configured) pending.complete = await completeRemote(p.signInId, pending.providerId === 'anthropic' ? { code: p.code } : { code: p.code, state: p.state });
+        else if (pending.providerId === 'anthropic') pending.complete = await hat.completeAccountSignIn(p.signInId, p.code);
         else await hat.completeOpenAICallback(p.signInId, p.code, p.state);
         return null;
       }
-      case 'accounts.cancelSignIn': login(p.signInId, machineId); await hat.cancelAccountSignIn(p.signInId); logins.delete(p.signInId); return null;
+      case 'accounts.cancelSignIn':
+        login(p.signInId, machineId);
+        await (link.configured ? link.require().cancelSignIn(p.signInId) : hat.cancelAccountSignIn(p.signInId));
+        logins.delete(p.signInId); return null;
       case 'profiles.list': return profileViews(settings.profiles(), houses());
       case 'profiles.save': {
         if (link.configured) return saveLinkedProfile(p);
@@ -279,9 +286,14 @@ export async function startHubService(opts: HubServiceOptions) {
    * A profile saved on a hub with a Sorting Hat of its own: its link to a house
    * is checked against the Sorting Hat's houses, and an account selection sets
    * that house's accounts there, for every app using it. A save that links
-   * another house leaves both houses' accounts as they are.
+   * another house leaves both houses' accounts as they are. `createHouse` makes
+   * a house of the profile's name there and links it.
    */
   async function saveLinkedProfile(p: SaveProfileParams) {
+    if (p.createHouse) {
+      saveSharedProfile(settings.profiles(), p); // An invalid profile makes no house.
+      p = { ...p, houseId: (await link.write((c) => c.createHouse(p.name))).id };
+    }
     if (p.houseId && !link.house(p.houseId)) throw new HubError('The Sorting Hat has no such house. Pick one from its list.');
     const before = p.id ? settings.profiles().find((profile) => profile.id === p.id) : undefined;
     const { saved, profiles } = saveSharedProfile(settings.profiles(), p);
@@ -295,6 +307,11 @@ export async function startHubService(opts: HubServiceOptions) {
     await settings.setProfiles(profiles);
     if (relinked) { await link.forgetStale((id) => settings.profiles().find((profile) => profile.id === id)?.houseId); await link.poll(); }
     return profileViews([saved], houses())[0];
+  }
+  /** Finishes a sign-in on the Sorting Hat; ChatGPT's browser callback stays pending until its status says complete. */
+  async function completeRemote(signInId: string, body: { code: string; state?: string }) {
+    const result = await link.write((c) => c.completeSignIn(signInId, body));
+    return result.status === 'complete' ? result.account : undefined;
   }
   const server = createServer((req, res) => { void handle(req, res).catch((error) => {
     if (res.headersSent) { res.destroy(); return; }
@@ -395,7 +412,8 @@ export async function startHubService(opts: HubServiceOptions) {
       if (!(ws as any).alive || !owner) { ws.terminate(); continue; }
       (ws as any).alive = false; ws.ping();
     }
-    for (const [id, pending] of logins) if (Date.now() - pending.startedAt > SIGN_IN_TTL_MS) { logins.delete(id); void hat.cancelAccountSignIn(id).catch(() => {}); }
+    // The Sorting Hat expires its own sign-ins.
+    for (const [id, pending] of logins) if (Date.now() - pending.startedAt > SIGN_IN_TTL_MS) { logins.delete(id); if (!link.configured) void hat.cancelAccountSignIn(id).catch(() => {}); }
   }, 25_000);
   heartbeat.unref();
   await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(opts.port ?? 47322, opts.host ?? '127.0.0.1', resolve); });

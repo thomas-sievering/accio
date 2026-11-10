@@ -16,6 +16,7 @@ const anthropic = await fakeAnthropicApi();
 const codex = new FakeCodex();
 const hat = await startStandalone({
   dir,
+  adminToken: process.env.SORTING_HAT_ADMIN_TOKEN || undefined,
   port: Number(process.env.ACCIO_SORTINGHAT_TEST_PORT ?? 47483),
   claudeFetch: auth.fetch,
   anthropicUrl: anthropic.url,

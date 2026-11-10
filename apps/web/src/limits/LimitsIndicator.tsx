@@ -1,5 +1,6 @@
 import type { AccountView } from '@accio/protocol';
 import { Limits } from '../app/icons';
+import { useProfiles } from '../profiles/profiles';
 import { useLimits, useWatchLimits } from './limits';
 import { blockingWindow, formatRemaining, level, relativeTime, remainingPercent, resetDue, tightestWindow } from './limitsModel';
 
@@ -12,6 +13,8 @@ import { blockingWindow, formatRemaining, level, relativeTime, remainingPercent,
 export function LimitsIndicator({ account, active = true, onOpen }: { account: AccountView | null; active?: boolean; onOpen: () => void }) {
   useWatchLimits(active && account?.signedIn ? [account.id] : []);
   const { views, status, now } = useLimits();
+  const problem = useProfiles().sortingHat?.problem;
+  if (problem) return <button type="button" className="limits-chip low" onClick={onOpen} title={problem} aria-label={`${problem} Open limits`}><Limits /><span>Sorting Hat unreachable</span></button>;
   if (!account?.signedIn) return null;
   const view = views?.get(account.id);
   const snapshot = view?.snapshot;

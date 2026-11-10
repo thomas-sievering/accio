@@ -8,7 +8,7 @@ Profiles separate personal/work configuration and choose one named account per p
 - `profiles-settings`: add or cancel another profile in Settings.
 - `profiles-edit`: rename and select Claude/ChatGPT accounts independently.
 - `profiles-delete`: delete unused profiles; protect profiles with projects or threads.
-- `profiles-house`: on a hub with a Sorting Hat of its own, link a profile to a house; see [Sorting Hat](sorting-hat.md).
+- `profiles-house`: on a hub with a Sorting Hat of its own, link a profile to a house or make one of its name; see [Sorting Hat](sorting-hat.md).
 
 ## How to get to it (user POV)
 

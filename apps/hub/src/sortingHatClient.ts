@@ -10,6 +10,8 @@ export type RemoteHouse = {
 };
 export type RemoteHatKey = { id: string; houseId: string; name: string; createdAt: string; revokedAt: string | null };
 
+export type SignInStatus = { status: 'pending' } | { status: 'complete'; account: AccountView };
+
 type Fetch = typeof fetch;
 
 /** A refusal from the Sorting Hat, safe to show: its own message, or the hub's words for what went wrong in between. */
@@ -26,6 +28,18 @@ export class SortingHatClient {
   constructor(readonly url: string, private token: string, private fetchImpl: Fetch = fetch) {}
 
   accounts() { return this.request<AccountView[]>('GET', 'accounts'); }
+  createAccount(name: string, providerId: ProviderId) { return this.request<AccountView>('POST', 'accounts', { name, providerId }); }
+  renameAccount(id: string, name: string) { return this.request<AccountView>('PATCH', `accounts/${encodeURIComponent(id)}`, { name }); }
+  async deleteAccount(id: string) { await this.request<void>('DELETE', `accounts/${encodeURIComponent(id)}`); }
+  signOut(id: string) { return this.request<AccountView>('POST', `accounts/${encodeURIComponent(id)}/sign-out`); }
+  /** Claude takes the worker's browser callback; ChatGPT uses its browser flow, the default. */
+  beginSignIn(id: string, redirectUri?: string) {
+    return this.request<{ providerId: ProviderId; signInId: string; url: string; userCode?: string }>('POST', `accounts/${encodeURIComponent(id)}/sign-in`, redirectUri ? { redirectUri } : {});
+  }
+  signInStatus(id: string) { return this.request<SignInStatus>('GET', `sign-ins/${encodeURIComponent(id)}`); }
+  completeSignIn(id: string, body: { code: string; state?: string }) { return this.request<SignInStatus>('POST', `sign-ins/${encodeURIComponent(id)}/complete`, body); }
+  async cancelSignIn(id: string) { await this.request<void>('DELETE', `sign-ins/${encodeURIComponent(id)}`); }
+  createHouse(name: string) { return this.request<RemoteHouse>('POST', 'houses', { name }); }
   houses() { return this.request<RemoteHouse[]>('GET', 'houses'); }
   house(id: string) { return this.request<RemoteHouse>('GET', `houses/${encodeURIComponent(id)}`); }
   setHouseAccounts(id: string, selection: Partial<Record<ProviderId, string[]>>) {
