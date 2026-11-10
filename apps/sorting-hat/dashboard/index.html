@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Sorting Hat</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 3 9 22h14z' fill='%236b5b95'/%3E%3Crect x='4' y='22' width='24' height='5' rx='2.5' fill='%234a3f6b'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/dashboard/app.css">
+  <script type="module" src="/dashboard/app.js"></script>
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3 9 22h14z"/><rect x="4" y="22" width="24" height="5" rx="2.5"/></svg>
+      <h1>Sorting Hat</h1>
+    </div>
+    <p id="session" class="muted"></p>
+    <button type="button" id="refresh-limits">Refresh limits</button>
+  </header>
+  <div id="toast" role="alert" hidden></div>
+  <main>
+    <section id="accounts" aria-labelledby="accounts-title">
+      <div class="section-head">
+        <div>
+          <h2 id="accounts-title">Accounts</h2>
+          <p class="muted">Logins at a provider. Credentials stay on the Sorting Hat.</p>
+        </div>
+        <div class="actions">
+          <button type="button" data-add-account="anthropic">Add Claude account</button>
+          <button type="button" data-add-account="openai">Add ChatGPT account</button>
+        </div>
+      </div>
+      <div id="account-list" class="grid"></div>
+    </section>
+
+    <section id="houses" aria-labelledby="houses-title">
+      <div class="section-head">
+        <div>
+          <h2 id="houses-title">Houses</h2>
+          <p class="muted">Groups of accounts, ordered per provider. Apps reach a house with its hat keys.</p>
+        </div>
+        <div class="actions"><button type="button" id="add-house">New house</button></div>
+      </div>
+      <div id="house-list" class="stack"></div>
+    </section>
+
+    <section id="usage" aria-labelledby="usage-title">
+      <div class="section-head">
+        <div>
+          <h2 id="usage-title">Usage</h2>
+          <p class="muted">Tokens the providers reported, per house, hat key, account and model. Days and hours are in this browser’s time zone.</p>
+        </div>
+      </div>
+      <div class="card usage">
+        <div class="usage-controls">
+          <div class="tabs" role="tablist" aria-label="Range" id="usage-range">
+            <button type="button" role="tab" data-range="day">Last 24 hours</button>
+            <button type="button" role="tab" data-range="week">Last 7 days</button>
+            <button type="button" role="tab" data-range="month">Last 30 days</button>
+            <button type="button" role="tab" data-range="custom">Custom</button>
+          </div>
+          <div class="usage-custom" id="usage-custom" hidden>
+            <label>From <input type="date" id="usage-from"></label>
+            <label>To <input type="date" id="usage-to"></label>
+          </div>
+          <label class="usage-select">By
+            <select id="usage-group" aria-label="Break down by">
+              <option value="house">House</option>
+              <option value="hatKey">Hat key</option>
+              <option value="account">Account</option>
+              <option value="model">Model</option>
+            </select>
+          </label>
+          <label class="usage-select">Chart
+            <select id="usage-tokens" aria-label="Tokens in the chart">
+              <option value="all">All tokens</option>
+              <option value="inputTokens">Input</option>
+              <option value="outputTokens">Output</option>
+              <option value="cacheReadTokens">Cache read</option>
+              <option value="cacheWriteTokens">Cache write</option>
+            </select>
+          </label>
+        </div>
+        <div id="usage-body"><p class="muted small">Loading usage…</p></div>
+      </div>
+    </section>
+  </main>
+  <dialog id="dialog" aria-labelledby="dialog-title"></dialog>
+</body>
+</html>

@@ -3,13 +3,14 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startHubService } from '../apps/hub/src/index.js';
-import { fakeClaudeFetch, TestClient } from '../apps/worker/src/testing/testApp.js';
+import { fakeClaudeFetch, startTestSortingHat, TestClient } from '../apps/worker/src/testing/testApp.js';
 
 /** Real hub switching; the transport holds model replies to expose a stale cached paint. */
 test('model pickers keep identical profile IDs isolated across hubs', async ({ page, baseURL }) => {
   test.setTimeout(60_000);
   const home = await mkdtemp(join(tmpdir(), 'accio-model-hub-'));
-  const other = await startHubService({ home, port: 0, claudeFetch: (url, init) => String(url).endsWith('/api/oauth/usage') ? Promise.resolve(Response.json({ rate_limits_available: false })) : fakeClaudeFetch(url, init), secretKey: Buffer.alloc(32, 17).toString('base64') });
+  const hat = await startTestSortingHat(home, { claudeFetch: (url, init) => String(url).endsWith('/api/oauth/usage') ? Promise.resolve(Response.json({ rate_limits_available: false })) : fakeClaudeFetch(url, init) });
+  const other = await startHubService({ home, port: 0, secretKey: Buffer.alloc(32, 17).toString('base64') });
   const address = `${baseURL!.replace('http:', 'ws:')}/ws?token=isolated-chat-test-token`;
   const root = await TestClient.open(address);
   const original = (await root.call('hubs.list', {}))[0]!;
@@ -20,6 +21,7 @@ test('model pickers keep identical profile IDs isolated across hubs', async ({ p
     pairedId = paired.id;
     const client = await TestClient.open(`${address}&hub=${paired.id}`);
     try {
+      await client.call('sortingHat.configure', { url: hat.url, adminToken: hat.adminToken, hubName: 'Model isolation hub' });
       expect((await client.signedIn('Personal')).id).toBe('personal');
       const folder = join(home, 'other-project');
       await mkdir(folder);
@@ -69,6 +71,7 @@ test('model pickers keep identical profile IDs isolated across hubs', async ({ p
     if (pairedId) await root.call('hubs.remove', { id: pairedId }).catch(() => {});
     root.close();
     await other.close();
+    await hat.close();
     await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
   }
 });

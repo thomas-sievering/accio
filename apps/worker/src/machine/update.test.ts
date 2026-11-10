@@ -6,7 +6,7 @@ import { startHubService } from '@accio/hub';
 import type { UpdateView } from '@accio/protocol';
 import { git } from '../git.js';
 import { runCommand } from '../resources/process.js';
-import { fakeClaudeFetch, startTestApp, TestClient } from '../testing/testApp.js';
+import { startTestApp, TestClient } from '../testing/testApp.js';
 import { Updates, type UpdateDeps } from './update.js';
 import type { DesktopHost } from './desktop.js';
 
@@ -96,7 +96,7 @@ describe('updating a machine’s Accio', () => {
     const { host, desktop } = fakeHost();
     const home = await mkdtemp(join(tmpdir(), 'accio-update-hub-'));
     cleanup.push(() => rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
-    const hub = await startHubService({ home, port: 0, secretKey: Buffer.alloc(32, 7).toString('base64'), claudeFetch: fakeClaudeFetch }); cleanup.push(() => hub.close());
+    const hub = await startHubService({ home, port: 0, secretKey: Buffer.alloc(32, 7).toString('base64') }); cleanup.push(() => hub.close());
     const join_ = async (deps: Parameters<typeof startTestApp>[0]) => {
       const t = await startTestApp(deps); cleanup.push(() => t.stop());
       const root = await t.connect();

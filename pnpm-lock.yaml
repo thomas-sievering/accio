@@ -200,9 +200,6 @@ importers:
 
   apps/hub:
     dependencies:
-      '@accio/codex':
-        specifier: workspace:*
-        version: link:../../packages/codex
       '@accio/persistence':
         specifier: workspace:*
         version: link:../../packages/persistence
@@ -215,6 +212,12 @@ importers:
       zod:
         specifier: ^4.6.7
         version: 4.6.7
+
+  apps/sorting-hat:
+    dependencies:
+      '@openai/codex':
+        specifier: 0.166.0
+        version: 0.166.0
 
   apps/web:
     dependencies:

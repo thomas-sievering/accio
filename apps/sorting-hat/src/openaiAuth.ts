@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rm } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { startCodex, type CodexClient, type CodexFactory } from '@accio/codex';
+import { startCodex, type CodexClient, type CodexFactory } from './codex.js';
 import { SIGN_IN_TTL_MS, SignInError } from './claudeOAuth.js';
 import { LimitsReadError } from './limits.js';
-import { IMAGE_TYPES } from '@accio/protocol';
+import { IMAGE_TYPES } from './types.js';
 
 /** `efforts` is absent on models stored before accio kept them. */
 export type CodexModel = { id: string; name: string; description: string; isDefault: boolean; efforts?: { id: string; description?: string }[]; defaultEffort?: string;
@@ -27,19 +27,20 @@ async function listModels(client: CodexClient): Promise<CodexModel[]> {
   } while (cursor);
   return models;
 }
-/** Only metadata is stored in profiles.json. Codex owns auth.json inside this hub-only credential home. */
+/** Only metadata is stored in profiles.json. Codex owns auth.json inside this account's own credential home. */
 export type OpenAIAccount = { credentialId: string; email: string | null; planType: string | null; models: CodexModel[] };
 type OpenAICredentials = { accessToken: string; accountId: string };
 type Pending = { client: CodexClient; credentialId: string; loginId?: string; success?: boolean; error?: string; authUrl?: string; callbackUsed?: boolean; timer: ReturnType<typeof setTimeout> };
 
-/** Hub-side authentication only. This class never starts a Codex thread or turn. */
+/** ChatGPT sign-in, refresh, models and limits. This class never starts a Codex thread or turn. */
 export class OpenAIAuth {
   private pending = new Map<string, Pending>();
   private refreshing = new Map<string, Promise<OpenAICredentials>>();
-  constructor(private home: string, private factory: CodexFactory = startCodex) {}
+  /** `dir` is the Sorting Hat's state directory; each credential home lives under `codex/`. */
+  constructor(private dir: string, private factory: CodexFactory = startCodex) {}
 
   async begin(browser = false) {
-    if (browser && this.pending.size) throw new SignInError('Another ChatGPT sign-in is in progress on this hub. Finish or cancel it first.');
+    if (browser && this.pending.size) throw new SignInError('Another ChatGPT sign-in is in progress. Finish or cancel it first.');
     const credentialId = randomUUID();
     const dir = this.directory(credentialId);
     await mkdir(dir, { recursive: true });
@@ -80,7 +81,7 @@ export class OpenAIAuth {
     if (response.status === 302 && response.headers.has('location')) {
       const success = new URL(response.headers.get('location')!, target);
       // Native Codex completes local-page logins only when /success is visited.
-      // Keep any token-bearing URL inside the hub and follow only this exact origin/path.
+      // Keep any token-bearing URL inside the Sorting Hat and follow only this exact origin/path.
       if (success.origin === target.origin && success.pathname === '/success' && !success.username && !success.password && !success.hash) {
         const complete = await fetch(success, { redirect: 'manual', signal: AbortSignal.timeout(10_000) });
         await complete.body?.cancel();
@@ -122,6 +123,14 @@ export class OpenAIAuth {
     await rm(this.directory(credentialId), { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   }
 
+  /** An imported account's credential home: its Codex auth.json, checked before it is used. */
+  async restore(credentialId: string, auth: unknown) {
+    const dir = this.directory(credentialId);
+    await mkdir(dir, { recursive: true, mode: 0o700 });
+    await writeFile(join(dir, 'auth.json'), JSON.stringify(auth), { mode: 0o600 });
+    await this.readCredentials(credentialId);
+  }
+
   credentials(account: OpenAIAccount, force = false): Promise<OpenAICredentials> {
     const existing = this.refreshing.get(account.credentialId);
     if (existing) return existing;
@@ -139,7 +148,7 @@ export class OpenAIAuth {
     finally { await client.close(); }
   }
 
-  /** Account-only query in the hub credential home; never starts a thread or turn. */
+  /** Account-only query in the account's credential home; never starts a thread or turn. */
   async rateLimits(account: OpenAIAccount, signal: AbortSignal): Promise<unknown> {
     // Reuse the proxy's refresh coordination rather than rotate tokens independently.
     await this.credentials(account);
@@ -181,7 +190,7 @@ export class OpenAIAuth {
   }
   private directory(id: string) {
     if (!/^[\da-f-]{36}$/i.test(id)) throw new SignInError('Invalid ChatGPT credential id');
-    return join(this.home, 'hub', 'codex', id);
+    return join(this.dir, 'codex', id);
   }
   async close() {
     await Promise.all([...this.pending.keys()].map((id) => this.cancel(id)));

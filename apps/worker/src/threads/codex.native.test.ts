@@ -46,7 +46,7 @@ it.each([[false, false], [true, false], [false, true]])('runs the bundled Codex 
   const signIn = await client.call('accounts.beginSignIn', { id: account.id });
   await login.latest.complete('native');
   await client.call('accounts.signInStatus', { signInId: signIn.signInId });
-  const profile = await client.call('profiles.save', { name: 'Native test', openaiAccountId: account.id });
+  const profile = await client.call('profiles.save', { createHouse: true, name: 'Native test', accountIds: { openai: [account.id] } });
   if (withMcp) await client.call('mcp.save', { id: 'test-remote', name: 'Test remote', transport: 'http', url: 'https://mcp.example.test/mcp', auth: 'none', scope: { global: true, profileIds: [], projectKeys: [] } });
   const thread = await client.call('threads.start', { profileId: profile.id, text: 'Say hello.' });
   await client.waitFor('threads.changed', (threads) => threads.some((t) => t.id === thread.id && t.status !== 'running'), 15_000);

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it } from 'vitest';
 import { startHubService } from '@accio/hub';
 import type { ThreadView } from '@accio/protocol';
-import { fakeClaudeFetch, startTestApp, TestClient } from '../testing/testApp.js';
+import { startTestApp, startTestSortingHat, TestClient } from '../testing/testApp.js';
 import { FakeHarness, gate, replyWith } from '../testing/fakeHarness.js';
 
 /** GLOSSARY: Relay. Two machines on one hub: the PC reads and drives the MacBook's thread. */
@@ -17,7 +17,8 @@ describe('thread relay between machines', () => {
   async function machines(harness = new FakeHarness()) {
     const home = await mkdtemp(join(tmpdir(), 'accio-relay-hub-'));
     cleanup.push(() => rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
-    const hub = await startHubService({ home, port: 0, secretKey: Buffer.alloc(32, 7).toString('base64'), claudeFetch: fakeClaudeFetch }); cleanup.push(() => hub.close());
+    const hat = await startTestSortingHat(home); cleanup.push(() => hat.close());
+    const hub = await startHubService({ home, port: 0, secretKey: Buffer.alloc(32, 7).toString('base64') }); cleanup.push(() => hub.close());
     const join_ = async (deps: Parameters<typeof startTestApp>[0] = {}) => {
       const app = await startTestApp(deps); cleanup.push(() => app.stop());
       const root = await app.connect();
@@ -27,6 +28,7 @@ describe('thread relay between machines', () => {
       return { app, client, saved };
     };
     const mac = await join_({ harness });
+    await mac.client.call('sortingHat.configure', { url: hat.url, adminToken: hat.adminToken, hubName: 'Home' });
     const pc = await join_({ harness: new FakeHarness() });
     return { hub, mac, pc, join: join_ };
   }

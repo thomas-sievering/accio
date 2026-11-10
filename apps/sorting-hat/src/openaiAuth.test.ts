@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
-import type { CodexClient } from '@accio/codex';
+import type { CodexClient } from './codex.js';
 import { OpenAIAuth } from './openaiAuth.js';
 
 it('finishes numeric-loopback logins internally without returning a token-bearing success redirect', async () => {

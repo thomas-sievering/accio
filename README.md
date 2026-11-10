@@ -6,9 +6,9 @@ For development checks and autonomous shipping, follow [Verification and shippin
 
 ## How it fits together
 
-- **Hub.** accio runs its own hub (`apps/hub`): a standalone service, at home or locally, that holds accounts, profiles, shared settings, saved secrets and the model proxy. It never runs threads (ADR 0009). Machines save named hub connections under Settings / Hubs and pair with a one-time code; the hub's startup or `--pair` command issues the first one. Each window selects its own hub; running work stays on its hub (ADR 0014).
-- **Accounts.** Named Claude and ChatGPT accounts under Settings / Accounts. Press **Sign in with Claude** or **Sign in with ChatGPT**, approve in the system browser, and sign-in finishes automatically: a loopback receiver on this PC relays the callback to the hub, which keeps the tokens (ADR 0014, superseding the paste-code flow of ADR 0007). New sign-ins need accio running on the browser's PC.
-- **Profiles** each select Claude and ChatGPT accounts in order (the hub picks one per request by remaining allowance and reset time, ADR 0016) and get their own config folders under `~/.accio/profiles/<id>/`; your regular `~/.claude` and `~/.codex` are untouched. These are credential-routing boundaries, not sandboxes: harnesses run with full permissions (ADR 0005).
+- **Hub.** accio runs its own hub (`apps/hub`): a standalone service, at home or locally, that holds profiles, shared settings and saved secrets. It holds no accounts: it links to a Sorting Hat (`apps/sorting-hat`), a service of its own entered with an admin token under Settings / Hubs, which holds them and forwards model requests (ADR 0018). Without one, threads can't run. The hub never runs threads (ADR 0009). Machines save named hub connections under Settings / Hubs and pair with a one-time code; the hub's startup or `--pair` command issues the first one. Each window selects its own hub; running work stays on its hub (ADR 0014).
+- **Accounts.** Named Claude and ChatGPT accounts under Settings / Accounts. Press **Sign in with Claude** or **Sign in with ChatGPT**, approve in the system browser, and sign-in finishes automatically: a loopback receiver on this PC relays the callback through the hub to its Sorting Hat, which keeps the tokens (ADR 0014, ADR 0018). New sign-ins need accio running on the browser's PC.
+- **Profiles** each link to a house on the Sorting Hat, whose Claude and ChatGPT accounts they choose in order (the Sorting Hat picks one per request by remaining allowance and reset time, ADR 0016); threads get a hat key per profile and machine and get their own config folders under `~/.accio/profiles/<id>/`; your regular `~/.claude` and `~/.codex` are untouched. These are credential-routing boundaries, not sandboxes: harnesses run with full permissions (ADR 0005).
 - **Clients** let you read threads, send prompts and change settings. **Workers** on connected machines execute turns with the Claude Agent SDK and a bundled Codex app-server, in owned Git worktrees, and serve accio tools to harnesses over MCP (ADR 0011). A machine can run either role or both; currently the desktop app starts both, and the web client is served by a worker. Standalone web and iOS clients are planned. Ship / Prepare for review deliver through Git and optional PRs ([ADR 0015](docs/adr/0015-threads-own-delivery-with-optional-pull-requests.md), [delivery notes](docs/plans/thread-delivery.md)).
 - **Secrets** requested by a thread are entered privately, saved encrypted on the hub per profile and project, and delivered as short-lived files (ADR 0013). Off Windows, provision `ACCIO_SECRET_KEY` (32-byte base64) in the hub's environment and back it up separately.
 - **Tools, MCP servers and skills** are managed by the hub under Settings (ADR 0012).
@@ -92,6 +92,7 @@ verification suites.
 
 - Machine: `~/.accio` (`ACCIO_HOME` overrides). Remote hubs' projects, threads and media live under `hubs/<hub-id>`; hub credentials are server-only in `hub-connections.json`.
 - Standalone hub: `~/.accio-hub`. Its `hub` directory holds account credentials, Codex homes, shared settings, secrets and device trust; keep it private and back it up as one unit. See [deploy/hub/README.md](deploy/hub/README.md) for Docker, Cloudflare Tunnel and automatic updates.
+- Sorting Hat: `~/.sorting-hat` when run on its own; on the home server `/data/configs/sorting-hat`, holding every account's refresh tokens. See [deploy/sorting-hat/README.md](deploy/sorting-hat/README.md) for Docker, Cloudflare Access, automatic updates and backups.
 - Dev hub: `%LOCALAPPDATA%/accio-dev` on Windows (`ACCIO_DEV_HUB_HOME`, `ACCIO_DEV_HUB_PORT` override). Pair it once as Local dev and switch in the sidebar.
 
 ## Layout
@@ -101,7 +102,8 @@ Code is grouped by domain, one vertical slice each.
 - `packages/protocol`: client–server messages (zod).
 - `packages/codex`: pinned Codex executable and stdio app-server client.
 - `packages/persistence`: atomic JSON files and owner-only private files.
-- `apps/hub`: hub service: accounts, sign-in, token refresh, shared resources and model proxy.
+- `apps/hub`: hub service: pairing, relay, shared settings, profiles and resources; hands threads hat keys for a Sorting Hat of its own, or runs one in-process for accounts.
+- `apps/sorting-hat`: the Sorting Hat (ADR 0018): accounts, sign-in, token refresh, limits, houses, hat keys, the account in use and model request forwarding. Imports nothing from Accio's packages. It also runs on its own with a management API; see [its README](apps/sorting-hat/README.md) and [API](apps/sorting-hat/API.md).
 - `apps/worker`: worker implementation: threads, harnesses, delivery and accio tools; also serves the web client and manages local hub connections.
 - `apps/web`: React client.
 - `apps/desktop`: Electron shell that opens the client and starts the local worker.

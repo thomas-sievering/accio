@@ -1,0 +1,8 @@
+[Unit]
+Description=Update the Sorting Hat from the verified deployment image
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/tom/sorting-hat
+ExecStart=/home/tom/sorting-hat/deploy.sh

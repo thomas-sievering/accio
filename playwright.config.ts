@@ -7,6 +7,7 @@ const suites = {
   chat: { testMatch: ['model-isolation.spec.ts', 'naming.spec.ts', 'goal.spec.ts', 'inline-chat.spec.ts', 'delivery.spec.ts', 'delivery-merge.spec.ts', 'effort.spec.ts', 'new-thread.spec.ts', 'skills-panel.spec.ts', 'settings.spec.ts', 'prompt-size.spec.ts', 'project-dashboard.spec.ts', 'mentions.spec.ts', 'images.spec.ts', 'pasted-text.spec.ts', 'reactions.spec.ts', 'issue-picker.spec.ts'], timeout: 30_000 },
   limits: { testMatch: ['limits.spec.ts'], timeout: 90_000 },
   secrets: { testMatch: ['secret-ui.spec.ts'], timeout: 45_000 },
+  sortinghat: { testMatch: ['sortinghat.spec.ts'], timeout: 60_000 },
 };
 
 // Each invocation owns its ports; never reuse another checkout's server. Workers reload this

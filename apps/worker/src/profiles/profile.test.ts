@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { saveProfile, slugify, toView, type Profile } from './profile.js';
+import { saveProfile, slugify, type Profile } from './profile.js';
 
 const personal: Profile = { id: 'personal', name: 'Personal' };
-const hrc: Profile = { id: 'hrc', name: 'HRC' };
 describe('saveProfile', () => {
   it('creates a profile with a slug id and keeps it on edit', () => {
     const { saved } = saveProfile([], { name: 'HRC Work' });
@@ -18,25 +17,6 @@ describe('saveProfile', () => {
 });
 
 describe('profile helpers', () => {
-  it('shows the profile as providers and their accounts, with who is signed in and nothing else of the login', () => {
-    const account = { id: 'team', name: 'Team account 1', providerId: 'anthropic' as const, signedIn: true, email: 'me@hrc.example', organization: 'HRC' };
-    const view = toView(hrc, account);
-    expect(view).toEqual({
-      ...hrc,
-      providers: [
-        {
-          id: 'anthropic',
-          name: 'Anthropic',
-          accountName: 'Claude account',
-          available: true,
-          accounts: [account],
-        },
-        { id: 'openai', name: 'OpenAI', accountName: 'ChatGPT account', available: true, accounts: [] },
-      ],
-    });
-    expect(toView(hrc, null).providers[0]?.accounts).toEqual([]);
-  });
-
   it('slugifies names', () => {
     expect(slugify('  Über Work ')).toBe('uber-work');
     expect(slugify('!!!')).toBe('profile');

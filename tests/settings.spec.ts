@@ -66,11 +66,11 @@ test('keeping unsaved settings edits never submits the form and discarding leave
   await page.screenshot({ path: info.outputPath('unsaved-settings.png') });
   await button('Discard').click();
   await section('Profiles').click();
-  await page.getByRole('button', { name: /^Guard original No account selected$/ }).click();
+  await page.getByRole('button', { name: /^Guard original House Guard original · No account in its house$/ }).click();
   await expect(name).toHaveValue('Guard original');
   await expect(button('Save')).toBeDisabled();
   await name.press('Escape');
-  await expect(page.getByRole('button', { name: /^Guard original No account selected$/ })).toBeFocused();
+  await expect(page.getByRole('button', { name: /^Guard original House Guard original · No account in its house$/ })).toBeFocused();
 });
 
 test('Limits returns to its Settings origin and restores keyboard focus', async ({ page, baseURL }) => {

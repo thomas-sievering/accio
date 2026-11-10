@@ -22,7 +22,7 @@ const within = (ms, promise) => Promise.race([Promise.resolve(promise).catch(() 
 
 async function fingerprint() {
   const hash = createHash('sha256');
-  for (const base of ['apps/worker/dist', 'apps/hub/dist', 'apps/web/dist', 'packages/protocol/dist', 'packages/persistence/dist', 'packages/codex/dist']) {
+  for (const base of ['apps/worker/dist', 'apps/hub/dist', 'apps/sorting-hat/dist', 'apps/web/dist', 'packages/protocol/dist', 'packages/persistence/dist', 'packages/codex/dist']) {
     for (const name of (await readdir(join(root, base), { recursive: true })).sort()) {
       if (!/\.(js|html|css)$/.test(name)) continue;
       hash.update(base + '/' + name).update(await readFile(join(root, base, name)));

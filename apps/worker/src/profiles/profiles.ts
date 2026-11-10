@@ -1,5 +1,5 @@
 import { mkdir } from 'node:fs/promises';
-import { accountInUse, type AccountLimitsView, type LimitWindow, type ProfileView, type ProviderId } from '@accio/protocol';
+import { accountInUse, noHouseMessage, type AccountLimitsView, type LimitWindow, type ProfileView, type ProviderId } from '@accio/protocol';
 import { HubClient } from '@accio/hub';
 import type { Broadcast, Router } from '../rpc/router.js';
 import { UserError } from '../rpc/router.js';
@@ -20,6 +20,7 @@ export class Profiles {
   private announcedAccounts = '';
   private announcedModels = '';
   private announcedLimits = '';
+  private announcedSortingHat = '';
   readonly signIns: BrowserSignIns;
   private referenceSource = (): string[] => [];
   private referenceQueue: Promise<unknown> = Promise.resolve();
@@ -29,7 +30,8 @@ export class Profiles {
   }
   async load() {
     if (this.client.status !== 'connected') return;
-    for (const profile of this.all()) await this.connect(profile.id);
+    // A profile without a house on the hub's Sorting Hat gets no key; its threads say why when they start.
+    for (const profile of this.client.snapshot?.profiles ?? []) if (profile.house !== null) await this.connect(profile.id).catch((error) => console.error(`[profiles] ${profile.name}:`, (error as Error).message));
   }
   all(): readonly Profile[] { return this.client.snapshot?.profiles ?? []; }
   get(id: string) { return this.all().find((p) => p.id === id); }
@@ -48,6 +50,7 @@ export class Profiles {
   onLimitsChanged(listener: () => void) { this.client.onChanged(listener); }
   async hubAccess(id: string, providerId: ProviderId = 'anthropic'): Promise<HubAccess> {
     const profile = this.profileView(id);
+    if (profile.house === null) throw new UserError(noHouseMessage(profile.name));
     if (!profile.providers.find((p) => p.id === providerId)?.accounts.some((a) => a.signedIn)) throw new UserError(`Select a signed-in ${providerId === 'openai' ? 'ChatGPT' : 'Claude'} account for ${profile.name} in Profiles.`);
     await this.syncReferences(); return this.connect(id);
   }
@@ -86,11 +89,16 @@ export class Profiles {
       })
       .on('accounts.cancelSignIn', async (p) => { this.signIns.finish(p.signInId); return this.client.call('accounts.cancelSignIn', p); })
       .on('profiles.list', () => this.client.snapshot?.profiles ?? [])
+      .on('sortingHat.get', () => this.client.snapshot?.sortingHat ?? null)
+      // The admin token passes through to the hub, which keeps it; nothing here stores or returns it.
+      .on('sortingHat.configure', (p) => this.client.call('sortingHat.configure', p))
+      .on('sortingHat.disconnect', () => this.client.call('sortingHat.disconnect', {}))
       .on('profiles.save', (p) => this.change(async () => {
         const preview = saveProfile(this.all(), p).saved;
         await mkdir(configFolderOf(this.home, preview.id), { recursive: true });
         const saved = await this.client.call<ProfileView>('profiles.save', p);
-        await this.connect(saved.id); return saved;
+        if (saved.house !== null) await this.connect(saved.id);
+        return saved;
       }))
       .on('profiles.delete', ({ id }) => this.change(async () => {
         const profile = this.require(id);
@@ -104,8 +112,9 @@ export class Profiles {
       }));
   }
   private async connect(id: string): Promise<HubAccess> {
-    const { key } = await this.client.call<{ key: string }>('machine.modelKey', { profileId: id });
-    const access = { baseUrl: this.client.url, accessKey: key };
+    // GLOSSARY: Hat key. The hub answers with this machine's key for the profile's house and the address threads reach the Sorting Hat at.
+    const { key, url } = await this.client.call<{ key: string; url: string }>('machine.modelKey', { profileId: id });
+    const access = { baseUrl: url, accessKey: key };
     await writeConfigFolder(this.home, id, access); return access;
   }
   private announce() {
@@ -116,6 +125,8 @@ export class Profiles {
     if (profileState !== this.announcedProfiles) { this.announcedProfiles = profileState; this.broadcast('profiles.changed', profiles); }
     if (accountState !== this.announcedAccounts) { this.announcedAccounts = accountState; this.broadcast('accounts.changed', accounts); }
     if (modelState !== this.announcedModels) { this.announcedModels = modelState; this.broadcast('models.changed', null); }
+    const sortingHat = this.client.snapshot?.sortingHat ?? null, sortingHatState = JSON.stringify(sortingHat);
+    if (sortingHatState !== this.announcedSortingHat) { this.announcedSortingHat = sortingHatState; this.broadcast('sortingHat.changed', sortingHat); }
     const limits = this.client.snapshot?.limits ?? [], limitState = JSON.stringify(limits);
     if (limitState !== this.announcedLimits) { this.announcedLimits = limitState; this.broadcast('accounts.limitsChanged', limits); }
   }

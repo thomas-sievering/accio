@@ -2,6 +2,8 @@
 
 Users name Claude or ChatGPT accounts, sign in with the provider, and select those accounts in profiles. Referenced accounts cannot be deleted.
 
+Accounts live on the hub's Sorting Hat, so these recipes need one: an empty home has none and only shows how to connect it. Drive them with the Sorting Hat journey in [Sorting Hat](sorting-hat.md), which also lists its differences.
+
 ## Sub-features
 
 - `accounts-named`: add, rename, cancel and delete a named provider account.
@@ -20,7 +22,7 @@ Users name Claude or ChatGPT accounts, sign in with the provider, and select tho
 
 Preconditions: healthy isolated instance; a profile for selection/guard checks. Provider completion requires access to a real provider account and consent by its owner. Baseline has neither authentication nor an OAuth-code fixture; report completion unverified if unavailable. Real turns can use the verify device's hub accounts instead (see [Real model turns](../SKILL.md#real-model-turns)); that is not sign-in proof.
 
-- **Create through settings.** Click `Settings`, then `page.locator('.sidebar nav').getByRole('button', { name: 'Accounts', exact: true })`. Click button matching `/^Add ChatGPT account/` (or `/^Add Claude account/`), fill textbox `Account name`, click exact `Add account`. Require button `Sign in with ChatGPT` (or `Sign in with Claude`), click `Cancel`, require a row named `Verify ChatGPT Signed out` for the smoke's account.
+- **Create through settings.** Click `Settings`, then `page.locator('.sidebar nav').getByRole('button', { name: 'Accounts', exact: true })`. Click button matching `/^Add ChatGPT account/` (or `/^Add Claude account/`), fill textbox `Account name`, click exact `Add account`. Require button `Sign in with ChatGPT` (or `Sign in with Claude`), click `Cancel`, require a row named `<name> Signed out`.
 - **Rename/cancel/delete.** Reopen that account row. Edit `Account name`, click `Save`, require the account list, and reopen to check the value. Cancel a new account via exact `Cancel` and require no new row. For an unreferenced account click `Delete` and require absence from the list.
 - **First-run entry.** On the `Choose an account for …` step, click the `ChatGPT` or `Claude` radio in radiogroup `Provider`, then `Continue`. With no account at that provider yet, this creates `<profile> <provider>` and shows the matching provider sign-in button. When accounts exist, the `ChatGPT account` (or `Claude account`) MenuSelect offers `New account` and each named account; choose one, click `Continue`, and require its selection to persist in Profiles.
 - **Deletion guard.** Select the account in a profile and save (see [Profiles](profiles.md)). Reopen the account in Accounts and assert `await page.getByRole('button', { name: 'Delete', exact: true }).isDisabled()`. Require text explaining the profile using it. Remove its profile reference before testing deletion.

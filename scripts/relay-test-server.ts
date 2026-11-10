@@ -11,14 +11,15 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { startHubService } from '../apps/hub/src/index.js';
 import { startApp } from '../apps/worker/src/app.js';
 import { FakeHarness, replyWith, toolCall } from '../apps/worker/src/testing/fakeHarness.js';
-import { fakeClaudeFetch, TestClient } from '../apps/worker/src/testing/testApp.js';
+import { startTestSortingHat, TestClient } from '../apps/worker/src/testing/testApp.js';
 import { git } from '../apps/worker/src/git.js';
 import { closeWhenOrphaned } from './fixtureLifetime.js';
 
 process.env.ACCIO_SECRET_KEY = Buffer.alloc(32, 9).toString('base64');
 const root = await mkdtemp(join(tmpdir(), 'accio-relay-'));
 const token = 'relay-test-token';
-const hub = await startHubService({ home: join(root, 'hub'), port: 0, claudeFetch: fakeClaudeFetch });
+const hat = await startTestSortingHat(join(root, 'hub'));
+const hub = await startHubService({ home: join(root, 'hub'), port: 0 });
 
 /** A machine already joined to the hub, as if paired through Settings → Hubs. */
 async function machine(name: string, port: number, harness: FakeHarness, webRoot?: string) {
@@ -29,7 +30,7 @@ async function machine(name: string, port: number, harness: FakeHarness, webRoot
   const { code } = await hub.createPairingCode();
   const paired = await fetch(hub.url + '/pair', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code, machineId: id }) }).then((r) => r.json()) as { hubId: string; token: string };
   await writeFile(join(home, 'hub-connections.json'), JSON.stringify([{ id: paired.hubId, name: 'Home', url: hub.url, token: paired.token, home: join(home, 'hubs', paired.hubId), local: true }]));
-  const app = await startApp({ home, host: '127.0.0.1', port, hubPort: 0, token, webRoot }, { claudeFetch: fakeClaudeFetch, harness });
+  const app = await startApp({ home, host: '127.0.0.1', port, hubPort: 0, token, webRoot }, { harness });
   const client = await TestClient.open(`ws://127.0.0.1:${app.port}/ws?token=${token}`);
   await client.call('machines.rename', { machineId: id, name });
   // Both machines have a checkout of the same repository, so it is one project.
@@ -50,6 +51,7 @@ const macHarness = new FakeHarness(async function* (run) {
 });
 const mac = await machine('MacBook', 0, macHarness);
 const pc = await machine('PC', Number(process.env.ACCIO_RELAY_TEST_PORT ?? 47491), new FakeHarness(), resolve('apps/web/dist'));
+await mac.client.call('sortingHat.configure', { url: hat.url, adminToken: hat.adminToken, hubName: 'Home' });
 const profile = await mac.client.signedIn('Personal');
 await pc.client.call('checkouts.add', { path: pc.repo, profileId: profile.id });
 const macCheckout = await mac.client.call('checkouts.add', { path: mac.repo, profileId: profile.id });
@@ -69,7 +71,7 @@ const close = async () => {
   if (closing) return;
   closing = true;
   mac.client.close(); pc.client.close();
-  await pc.app.close(); await mac.app.close(); await hub.close();
+  await pc.app.close(); await mac.app.close(); await hub.close(); await hat.close();
   await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
   process.exit();
 };

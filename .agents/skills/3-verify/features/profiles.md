@@ -8,12 +8,13 @@ Profiles separate personal/work configuration and choose one named account per p
 - `profiles-settings`: add or cancel another profile in Settings.
 - `profiles-edit`: rename and select Claude/ChatGPT accounts independently.
 - `profiles-delete`: delete unused profiles; protect profiles with projects or threads.
+- `profiles-house`: on a hub with a Sorting Hat of its own, link a profile to a house or make one of its name; see [Sorting Hat](sorting-hat.md).
 
 ## How to get to it (user POV)
 
 - From an empty home, keep `This PC` under `Set up Accio` and choose `Continue`, then enter a name and choose `Continue`.
 - Choose `Settings` then `Profiles`; choose `Add profile` or an existing profile row.
-- In a signed-out thread draft, choose `Choose account` to open that profile directly.
+- In a signed-out thread draft, choose `Choose account` to open that profile directly; for a profile without a house on the hub's Sorting Hat, `Choose house`.
 
 ## Driving it with Playwright
 

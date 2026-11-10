@@ -17,7 +17,7 @@ describe('Codex and ChatGPT accounts', () => {
     expect(await client.call('accounts.signInStatus', { signInId: login.signInId })).toEqual({ status: 'pending' });
     await fake.latest.complete(name);
     expect(await client.call('accounts.signInStatus', { signInId: login.signInId })).toMatchObject({ status: 'complete', account: { providerId: 'openai', signedIn: true } });
-    const profile = await client.call('profiles.save', { name, openaiAccountId: account.id });
+    const profile = await client.call('profiles.save', { createHouse: true, name, accountIds: { openai: [account.id] } });
     return { profile, account, login };
   }
 
@@ -67,7 +67,7 @@ describe('Codex and ChatGPT accounts', () => {
     const runner = fake.latest;
     expect(runner.options.home).toBe(join(t.home, 'profiles', profile.id, 'codex'));
     expect(runner.options.env).not.toHaveProperty('ANTHROPIC_AUTH_TOKEN');
-    expect(runner.options.env?.ACCIO_OPENAI_KEY).toMatch(/^accio-/);
+    expect(runner.options.env?.ACCIO_OPENAI_KEY).toMatch(/^hat-/);
     expect(runner.requests.find((r) => r.method === 'thread/start')?.params).toMatchObject({ approvalPolicy: 'never', sandbox: 'danger-full-access', model: 'test-codex', developerInstructions: expect.stringContaining('# Inline media') });
     expect(runner.closed).toBe(true);
     const exposed = JSON.stringify([await c.call('accounts.list', {}), await c.call('profiles.list', {}), transcript, available]);
@@ -110,7 +110,7 @@ describe('Codex and ChatGPT accounts', () => {
     const c = await t.connect();
     const { profile } = await signIn(c, fake);
     await t.stop({ keepHome: true });
-    const file = join(t.home, 'hub', 'profiles.json');
+    const file = join(t.home, 'test-sorting-hat', 'sorting-hat.json');
     const stored = JSON.parse(await readFile(file, 'utf8'));
     for (const account of stored.accounts) for (const model of account.openai?.models ?? []) { delete model.efforts; delete model.defaultEffort; }
     await writeFile(file, JSON.stringify(stored));
@@ -144,11 +144,10 @@ describe('Codex and ChatGPT accounts', () => {
     const c = await t.connect();
     const claude = await c.signedIn('Personal');
     const { profile, account } = await signIn(c, fake, 'Other');
-    await c.call('profiles.save', { id: claude.id, name: claude.name, openaiAccountId: account.id });
+    await c.call('profiles.save', { id: claude.id, name: claude.name, accountIds: { openai: [account.id] } });
     const [selected] = (await c.call('profiles.list', {})).filter((p) => p.id === claude.id);
     expect(selected?.providers.flatMap((p) => p.accounts).map((a) => a.providerId)).toEqual(['anthropic', 'openai']);
-    await expect(c.call('profiles.save', { id: profile.id, name: profile.name, accountId: account.id })).rejects.toThrow(/anthropic/);
-    await expect(c.call('accounts.save', { id: account.id, name: 'changed', providerId: 'anthropic' })).rejects.toThrow(/provider/);
+    await expect(c.call('profiles.save', { id: profile.id, name: profile.name, accountIds: { anthropic: [account.id] } })).rejects.toThrow(/anthropic/);
     await expect(c.call('accounts.completeSignIn', { signInId: 'not-claude', code: 'code' })).rejects.toThrow(/expired/);
     expect((await c.call('profiles.list', {})).find((p) => p.id === profile.id)?.providers[0]?.accounts).toEqual([]);
   });
@@ -193,8 +192,8 @@ describe('Codex and ChatGPT accounts', () => {
       return calls.length === 1 ? new Response('', { status: 401 }) : new Response('data: ok\n\n', { headers: { 'content-type': 'text/event-stream' } });
     } });
     const c = await t.connect(); const { profile } = await signIn(c, fake, 'Work');
-    const { key } = await t.app.profiles.client.call('machine.modelKey', { profileId: profile.id });
-    const response = await fetch(`${t.app.hubUrl}/openai/responses`, { method: 'POST', headers: {
+    const { key, url } = await t.app.profiles.client.call('machine.modelKey', { profileId: profile.id });
+    const response = await fetch(`${url}/openai/responses`, { method: 'POST', headers: {
       authorization: `Bearer ${key}`, 'chatgpt-account-id': 'forged', 'openai-organization': 'forged-org', cookie: 'secret-cookie',
       'cf-connecting-ip': '203.0.113.1', 'cf-ray': 'edge-ray', 'cf-visitor': '{"scheme":"https"}',
       'x-forwarded-for': '203.0.113.1', forwarded: 'for=203.0.113.1', 'cdn-loop': 'cloudflare',
@@ -209,23 +208,28 @@ describe('Codex and ChatGPT accounts', () => {
       expect(call.headers.has('openai-organization')).toBe(false); expect(call.headers.has('cookie')).toBe(false);
       for (const header of ['cf-connecting-ip', 'cf-ray', 'cf-visitor', 'x-forwarded-for', 'forwarded', 'cdn-loop']) expect(call.headers.has(header)).toBe(false);
     }
-    expect((await fetch(`${t.app.hubUrl}/openai/responses`, { method: 'POST', headers: { authorization: 'Bearer invalid' } })).status).toBe(401);
-    const other = await c.call('profiles.save', { name: 'No login' });
+    expect((await fetch(`${url}/openai/responses`, { method: 'POST', headers: { authorization: 'Bearer invalid' } })).status).toBe(401);
+    const other = await c.call('profiles.save', { name: 'No login', createHouse: true });
     const { key: otherKey } = await t.app.profiles.client.call('machine.modelKey', { profileId: other.id });
-    expect((await fetch(`${t.app.hubUrl}/openai/responses`, { method: 'POST', headers: { authorization: `Bearer ${otherKey}` } })).status).toBe(401);
-    expect((await fetch(`${t.app.hubUrl}/openai/https://evil.test`, { method: 'POST', headers: { authorization: `Bearer ${key}` } })).status).toBe(404);
+    expect((await fetch(`${url}/openai/responses`, { method: 'POST', headers: { authorization: `Bearer ${otherKey}` } })).status).toBe(401);
+    expect((await fetch(`${url}/openai/https://evil.test`, { method: 'POST', headers: { authorization: `Bearer ${key}` } })).status).toBe(404);
     expect(calls).toHaveLength(2);
   });
 
   it('shares concurrent refreshes for one account and does not expose its tokens in profile config', async () => {
-    const fake = new FakeCodex(); t = await startTestApp({ codexFactory: fake.factory }); const c = await t.connect();
+    const forwarded: string[] = [];
+    const fake = new FakeCodex(); t = await startTestApp({ codexFactory: fake.factory, openaiFetch: async (_url, init) => {
+      forwarded.push(new Headers(init?.headers).get('authorization') ?? ''); return Response.json({});
+    } }); const c = await t.connect();
     const { profile } = await signIn(c, fake);
     const loginClient = fake.clients[0]!;
     const authFile = join(loginClient.options.home, 'auth.json');
     const auth = JSON.parse(await readFile(authFile, 'utf8')); auth.tokens.access_token = testJWT('expired', true);
     await writeFile(authFile, JSON.stringify(auth));
-    const credentials = await Promise.all(Array.from({ length: 8 }, () => t.app.hub.openaiCredentials(profile.id)));
-    expect(credentials.every((x) => x?.accessToken === credentials[0]?.accessToken)).toBe(true);
+    const { key, url } = await t.app.profiles.client.call('machine.modelKey', { profileId: profile.id });
+    await Promise.all(Array.from({ length: 8 }, async () => (await fetch(`${url}/openai/responses`, { method: 'POST', headers: { authorization: `Bearer ${key}` }, body: '{}' })).text()));
+    expect(forwarded).toHaveLength(8);
+    expect(forwarded.every((x) => x === forwarded[0] && x !== `Bearer ${auth.tokens.access_token}`)).toBe(true);
     expect(fake.clients.flatMap((x) => x.requests).filter((r) => r.method === 'account/read' && r.params.refreshToken)).toHaveLength(1);
     const config = await readFile(join(t.home, 'profiles', profile.id, 'claude', 'settings.json'), 'utf8');
     expect(config).not.toContain('refresh-Personal'); expect(config).not.toContain('private-id-token');

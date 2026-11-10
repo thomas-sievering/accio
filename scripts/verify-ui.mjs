@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { promisify } from 'node:util';
 
-export const help = `Usage: pnpm verify:ui <file.spec.ts>... [--project=chat|limits|secrets|relay] [--grep <pattern>] [--skip-build]
+export const help = `Usage: pnpm verify:ui <file.spec.ts>... [--project=chat|limits|secrets|relay|sortinghat] [--grep <pattern>] [--skip-build]
 
 Builds and typechecks the workspace, runs web unit tests, then only the selected browser files.
 Use --skip-build only with a successful build of the current sources.
@@ -26,7 +26,7 @@ export function parseArgs(args) {
     else if (/^(?:tests\/)?[\w-]+\.spec\.ts$/.test(arg)) options.files.push(arg.replace(/^tests\//, ''));
     else throw new Error(`Unknown argument: ${arg}\n${help}`);
   }
-  if (!['chat', 'limits', 'secrets', 'relay'].includes(options.project)) throw new Error('Choose project chat, limits, secrets or relay.');
+  if (!['chat', 'limits', 'secrets', 'relay', 'sortinghat'].includes(options.project)) throw new Error('Choose project chat, limits, secrets, relay or sortinghat.');
   if (!options.files.length) throw new Error(`Select the browser files covering the change.\n${help}`);
   return options;
 }

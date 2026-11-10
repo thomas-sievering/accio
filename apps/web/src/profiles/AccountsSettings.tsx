@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import type { AccountView, ProviderId } from '@accio/protocol';
+import { noSortingHatMessage, type AccountView, type ProviderId } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { SettingLink, SettingsFooter, SettingsSection, StatusPill } from '../app/Settings';
 import { Field, focusFirstInvalid } from '../resources/Field';
@@ -11,12 +11,14 @@ import { useProfiles } from './profiles';
 import { SignIn } from './SignIn';
 
 export function AccountsSettings({ accountId, onOpen, onBack }: { accountId?: string; onOpen: (id: string) => void; onBack: () => void }) {
-  const { accounts } = useProfiles();
+  const { accounts, sortingHat } = useProfiles();
   if (!accounts) return null;
   const account = accounts.find((a) => a.id === accountId);
   if (accountId === 'new' || accountId === 'new-openai' || account) return <AccountForm key={accountId} account={account} providerId={account?.providerId ?? (accountId === 'new-openai' ? 'openai' : 'anthropic')} onSaved={(a) => (account ? onBack() : onOpen(a.id))} onDone={onBack} />;
+  if (sortingHat === null) return <p className="note">{noSortingHatMessage}</p>;
+  if (sortingHat?.problem) return <p className="error" role="alert">{sortingHat.problem}</p>;
   return <>
-    <p className="note">Name an account, sign in, then select it in a profile.</p>
+    <p className="note">Name an account, sign in, then select it in a profile.{sortingHat && ` Accounts are kept on the Sorting Hat at ${new URL(sortingHat.url).host}.`}</p>
     <SettingsSection title="Anthropic" add={{ label: 'Add Claude account', onClick: () => onOpen('new') }}>
       {accounts.filter((a) => a.providerId === 'anthropic').map((a) => <SettingLink key={a.id} icon={<ProviderLogo providerId="anthropic" />} title={a.name} description={[a.email, a.organization].filter(Boolean).join(' · ') || undefined} onClick={() => onOpen(a.id)}>
         <StatusPill tone={a.signedIn ? 'ok' : 'warn'}>{a.signedIn ? 'Signed in' : 'Signed out'}</StatusPill>

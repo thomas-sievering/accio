@@ -29,7 +29,7 @@ async function closeHub() {
   hub.send({ type: 'shutdown' });
   await exited;
 }
-const watchers = ['apps/hub/dist', 'packages/codex/dist', 'packages/protocol/dist', 'packages/persistence/dist'].map((dir) => watch(dir, { recursive: true }, (_event, file) => {
+const watchers = ['apps/hub/dist', 'packages/protocol/dist', 'packages/persistence/dist'].map((dir) => watch(dir, { recursive: true }, (_event, file) => {
   if (!file?.endsWith('.js') || stopping) return;
   clearTimeout(debounce);
   debounce = setTimeout(() => { restarting = restarting.then(async () => { if (stopping) return; await closeHub(); if (!stopping) hub = start(); }); }, 300);

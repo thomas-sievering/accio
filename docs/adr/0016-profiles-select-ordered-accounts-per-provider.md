@@ -2,7 +2,7 @@
 
 # Profiles select several accounts per provider, and the hub picks one per request
 
-A profile selects any number of accounts at each provider, in order, instead of at most one (ADR 0010). The hub stores them as one ordered list of account ids per profile. For each model request it picks the account in use among the signed-in ones (`apps/hub/src/accountChoice.ts`):
+A profile selects any number of accounts at each provider, in order, instead of at most one (ADR 0010). The hub stores them as one ordered list of account ids per profile. For each model request it picks the account in use among the signed-in ones (now `apps/sorting-hat/src/accountChoice.ts`, ADR 0018):
 
 1. Accounts with 5% or less left in any general window are set aside until that window resets.
 2. Of the rest, the account whose weekly or monthly allowance resets soonest is used, because whatever it has left is lost at that reset. Accounts whose limits are unknown come after those with a known reset.

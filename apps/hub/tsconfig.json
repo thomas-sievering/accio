@@ -11,15 +11,13 @@
     "src"
   ],
   "exclude": [
-    "src/**/*.test.ts"
+    "src/**/*.test.ts",
+    "src/testing"
   ],
   "references": [
     { "path": "../../packages/protocol" },
     {
       "path": "../../packages/persistence"
-    },
-    {
-      "path": "../../packages/codex"
     }
   ]
 }

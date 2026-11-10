@@ -1,4 +1,4 @@
-import type { LimitWindow, LimitsSnapshot } from '@accio/protocol';
+import type { LimitWindow, LimitsSnapshot } from './types.js';
 
 /** An account is set aside once any general window has this much allowance left or less. */
 export const SWITCH_AT_REMAINING_PERCENT = 5;
@@ -6,8 +6,8 @@ export const SWITCH_AT_REMAINING_PERCENT = 5;
 export type Candidate = { id: string; snapshot: LimitsSnapshot | null };
 
 /**
- * GLOSSARY: Account in use. Among a profile's signed-in accounts at one provider,
- * in the profile's order, the one its next request should use:
+ * GLOSSARY: Account in use. Among a house's signed-in accounts at one provider,
+ * in the house's order, the one its next request should use:
  *
  * 1. Skip accounts with a general window at 5% or less that has not reset yet.
  * 2. Of the rest, prefer the account whose weekly or monthly allowance resets
@@ -15,7 +15,7 @@ export type Candidate = { id: string; snapshot: LimitsSnapshot | null };
  *    limits are unknown come after those with a known reset.
  * 3. When every account is low, take the one that becomes available first.
  *
- * Ties keep the profile's order. Null when there is no candidate.
+ * Ties keep the house's order. Null when there is no candidate.
  */
 export function chooseAccount(candidates: Candidate[], now: number): string | null {
   let best: { id: string; rank: [number, number] } | null = null;

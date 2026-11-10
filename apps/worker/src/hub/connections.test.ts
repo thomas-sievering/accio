@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it } from 'vitest';
 import { startHubService } from '@accio/hub';
-import { fakeClaudeFetch, startTestApp, TestClient } from '../testing/testApp.js';
+import { startTestApp, startTestSortingHat, TestClient } from '../testing/testApp.js';
 import { FakeHarness, gate, replyWith } from '../testing/fakeHarness.js';
 
 describe('named hub connections and work ownership', () => {
@@ -12,16 +12,18 @@ describe('named hub connections and work ownership', () => {
   async function fixture(harness = new FakeHarness()) {
     const home = await mkdtemp(join(tmpdir(), 'accio-other-hub-'));
     cleanup.push(() => rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
-    const other = await startHubService({ home, port: 0, secretKey: Buffer.alloc(32, 31).toString('base64'), claudeFetch: fakeClaudeFetch }); cleanup.push(() => other.close());
+    const otherHat = await startTestSortingHat(home); cleanup.push(() => otherHat.close());
+    const other = await startHubService({ home, port: 0, secretKey: Buffer.alloc(32, 31).toString('base64') }); cleanup.push(() => other.close());
     const app = await startTestApp({ harness }); cleanup.push(() => app.stop());
     const local = await app.connect();
     const { code } = await other.createPairingCode();
     const saved = await local.call('hubs.pair', { name: 'Other hub', url: other.url, code });
     const remote = await TestClient.open(`${app.url}?token=test-token&hub=${saved.id}`); cleanup.push(async () => remote.close());
-    return { app, local, remote, other, home, saved };
+    await remote.call('sortingHat.configure', { url: otherHat.url, adminToken: otherHat.adminToken, hubName: 'Other hub' });
+    return { app, local, remote, other, otherHat, home, saved };
   }
   it('keeps matching profile IDs, accounts, project associations, and saved credentials isolated', async () => {
-    const { app, local, remote, saved } = await fixture();
+    const { app, local, remote, saved, otherHat } = await fixture();
     const a = await local.signedIn('Personal', { claudeAccount: 'local-me' });
     const b = await remote.signedIn('Personal', { claudeAccount: 'remote-me' });
     expect(a.id).toBe(b.id);
@@ -37,7 +39,7 @@ describe('named hub connections and work ownership', () => {
     const bAccess = await otherWorkspace.profiles.hubAccess(b.id);
     expect(aAccess.baseUrl).not.toBe(bAccess.baseUrl); expect(aAccess.accessKey).not.toBe(bAccess.accessKey);
     const otherConfig = JSON.parse(await readFile(join(otherWorkspace.home, 'profiles', b.id, 'claude', 'settings.json'), 'utf8'));
-    expect(otherConfig.env.ANTHROPIC_BASE_URL).toBe(saved.url);
+    expect(otherConfig.env.ANTHROPIC_BASE_URL).toBe(otherHat.url);
     const stored = JSON.parse(await readFile(join(app.home, 'hub-connections.json'), 'utf8'));
     expect(stored).toHaveLength(2); expect(stored[0].token).not.toBe(stored[1].token);
   });
@@ -45,7 +47,7 @@ describe('named hub connections and work ownership', () => {
     const held = gate();
     cleanup.push(async () => held.release());
     const harness = new FakeHarness(async function* () { await held.opened; yield* replyWith('done'); });
-    const { app, local, remote, saved } = await fixture(harness);
+    const { app, local, remote } = await fixture(harness);
     const a = await local.signedIn('Personal'); await remote.signedIn('Personal');
     const thread = await local.call('threads.start', { profileId: a.id, text: 'stay here' });
     expect(thread.hubId).toBe(app.app.connections.defaultId);
@@ -53,12 +55,12 @@ describe('named hub connections and work ownership', () => {
     expect((await remote.call('hubs.list', {})).find((h) => h.id === thread.hubId)?.running).toBe(1);
     await expect(remote.call('threads.stop', { threadId: thread.id })).rejects.toThrow(/No such thread/);
     await expect(remote.call('hubs.remove', { id: thread.hubId! })).rejects.toThrow(/running work/);
-    expect(harness.runs[0]?.env.ANTHROPIC_BASE_URL).toBe(app.app.hubUrl);
+    expect(harness.runs[0]?.env.ANTHROPIC_BASE_URL).toBe(app.hat.url);
     await local.call('threads.stop', { threadId: thread.id }); held.release();
     await local.waitFor('threads.changed', (threads) => threads.some((t) => t.id === thread.id && t.status === 'interrupted'));
     await local.call('threads.resume', { threadId: thread.id });
     await local.waitFor('threads.changed', (threads) => threads.some((t) => t.id === thread.id && t.status === 'idle'));
-    expect(harness.runs.at(-1)?.env.ANTHROPIC_BASE_URL).toBe(app.app.hubUrl);
+    expect(harness.runs.at(-1)?.env.ANTHROPIC_BASE_URL).toBe(app.hat.url);
     expect(remote.events.some((e) => e.event === 'threads.changed' && (e.data as any[]).some((t) => t.id === thread.id))).toBe(false);
   });
   it('preserves both pairings across restart and binds legacy data to the original hub', async () => {

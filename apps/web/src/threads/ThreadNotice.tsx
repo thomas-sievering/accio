@@ -1,13 +1,13 @@
-import type { ProfileView, ThreadView, ModelSelection } from '@accio/protocol';
+import { noSortingHatMessage, type ProfileView, type ThreadView, type ModelSelection } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { useAction } from '../app/useAction';
-import { accountForModel, defaultModel } from '../profiles/profiles';
+import { accountForModel, defaultModel, useProfiles } from '../profiles/profiles';
 import { useThreadAvailability } from './useThreadAvailability';
 
 /**
  * The one slot above the composer for "this thread can't go on by itself right
  * now", with the single action that fixes it. The first that applies wins:
- * a missing or signed-out profile, then an interrupted turn, then a failed one.
+ * a missing profile, a hub without a Sorting Hat, an unlinked or signed-out profile, then an interrupted turn, then a failed one.
  */
 export function ThreadNotice({
   thread,
@@ -26,6 +26,7 @@ export function ThreadNotice({
   const client = useClient();
   const { unavailable } = useThreadAvailability(thread);
   const { busy, error, run } = useAction();
+  const { sortingHat } = useProfiles();
 
   let text: React.ReactNode;
   let action: { label: string; run: () => unknown } | undefined;
@@ -36,6 +37,15 @@ export function ThreadNotice({
   } else if (!profile) {
     text = 'The profile this thread started with no longer exists.';
     tone = 'error';
+  } else if (sortingHat === null) {
+    text = noSortingHatMessage;
+  } else if (profile.house === null) {
+    text = (
+      <>
+        <b>{profile.name}</b> isn’t linked to a house on the Sorting Hat, so this thread can’t run yet.
+      </>
+    );
+    action = { label: 'Choose house', run: () => onOpenProfile(profile.id) };
   } else if (!accountForModel(profile, selected)?.signedIn) {
     text = (
       <>

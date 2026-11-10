@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { LimitWindow } from '@accio/protocol';
+import type { LimitWindow } from './types.js';
 import { chooseAccount, type Candidate } from './accountChoice.js';
 
 const T = Date.parse('2026-11-04T12:00:00Z');

@@ -16,7 +16,7 @@ export function LimitsView({ scope, onScope, onClose, onOpenAccount }: {
   onClose: () => void;
   onOpenAccount: (accountId: string) => void;
 }) {
-  const { profiles } = useProfiles();
+  const { profiles, sortingHat } = useProfiles();
   const heading = useRef<HTMLElement>(null);
   useEffect(() => { heading.current?.focus(); }, []);
   const { views, loadError, retryLoad, refreshError, refresh, status, now } = useLimits();
@@ -56,6 +56,7 @@ export function LimitsView({ scope, onScope, onClose, onOpenAccount }: {
         <div className="limits-page">
           {(profiles?.length ?? 0) > 1 && <ScopePicker scope={scope} onScope={onScope} />}
           {disconnected && <p className="limits-banner" role="status">Not connected to Accio’s server. Values below are last known and update once it reconnects.</p>}
+          {!disconnected && sortingHat?.problem && <p className="limits-banner error" role="alert">{sortingHat.problem}</p>}
           {!disconnected && loadError && (
             <div className="limits-banner error" role="alert">
               <span>Couldn’t load limits from the hub: {loadError}</span>

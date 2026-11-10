@@ -169,7 +169,7 @@ describe('a sub-agent on a model the user mentioned', () => {
     const login = await c.call('accounts.beginSignIn', { id: account.id });
     await fake.latest.complete('Personal');
     await c.call('accounts.signInStatus', { signInId: login.signInId });
-    await c.call('profiles.save', { id: profile.id, name: 'Personal', accountId: claudeAccount(profile)!.id, openaiAccountId: account.id });
+    await c.call('profiles.save', { id: profile.id, name: 'Personal', accountIds: { anthropic: [claudeAccount(profile)!.id], openai: [account.id] } });
     const thread = await c.call('threads.start', { profileId: profile.id, model: { harnessId: 'claudeCode', modelId: 'opus', effort: 'high' }, text: 'Count them' });
     await settled(c, thread.id);
     return { claude, codex, row: await agentRow(c, thread.id) };

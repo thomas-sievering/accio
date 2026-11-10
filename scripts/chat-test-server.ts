@@ -6,7 +6,7 @@ import { setTimeout } from 'node:timers/promises';
 import { closeWhenOrphaned } from './fixtureLifetime.js';
 import { startApp } from '../apps/worker/src/app.js';
 import { FakeHarness, SESSION, replyWith, toolCall } from '../apps/worker/src/testing/fakeHarness.js';
-import { fakeClaudeFetch, TestClient } from '../apps/worker/src/testing/testApp.js';
+import { fakeClaudeFetch, linkSortingHat, startTestSortingHat, TestClient } from '../apps/worker/src/testing/testApp.js';
 import type { HarnessMessage } from '../apps/worker/src/threads/harness.js';
 import { DeliveryGit, DeliveryPending } from '../apps/worker/src/threads/delivery.js';
 import { git } from '../apps/worker/src/git.js';
@@ -306,6 +306,8 @@ Object.assign(harness, { generateText: async ({ prompt }: { prompt: string }) =>
   if (!prompt.includes('Naming fixture:')) throw new Error('No naming response for this fixture');
   return JSON.stringify({ title: prompt.includes('Use German') ? 'Anmeldung reparieren' : 'Fix login redirects', needsRefinement: false });
 } });
+const hat = await startTestSortingHat(home, { claudeFetch: (url, init) => String(url).endsWith('/api/oauth/usage')
+  ? Promise.resolve(Response.json({ rate_limits_available: false })) : fakeClaudeFetch(url, init) });
 const app = await startApp({ home, host: '127.0.0.1', port: Number(process.env.ACCIO_CHAT_TEST_PORT ?? 47481), hubPort: 0, token, webRoot: resolve(process.env.ACCIO_CHAT_TEST_WEB_ROOT ?? 'apps/web/dist') }, {
   harness,
   github: fixtureGh,
@@ -320,9 +322,8 @@ const app = await startApp({ home, host: '127.0.0.1', port: Number(process.env.A
     }
     return args[1]!.includes('check-runs') ? { total_count: 1, check_runs: [{ conclusion: host.checks === 'PENDING' ? null : host.checks }] } : { total_count: 0, statuses: [] };
   },
-  claudeFetch: (url, init) => String(url).endsWith('/api/oauth/usage')
-    ? Promise.resolve(Response.json({ rate_limits_available: false })) : fakeClaudeFetch(url, init),
 });
+await linkSortingHat(app, hat);
 const client = await TestClient.open(`ws://127.0.0.1:${app.port}/ws?token=${token}`);
 await client.signedIn('Personal');
 const deliveryFolder = join(home, 'delivery-project');
@@ -462,6 +463,7 @@ const close = async () => {
   closing = true;
   client.close();
   await app.close();
+  await hat.close();
   await rm(fixtureMetadata, { force: true });
   await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
   process.exit();

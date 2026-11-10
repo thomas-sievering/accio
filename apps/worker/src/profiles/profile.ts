@@ -1,20 +1,11 @@
-import type { AccountView, ProfileView, SaveProfileParams } from '@accio/protocol';
-import { PROVIDERS } from '@accio/hub';
+import type { SaveProfileParams } from '@accio/protocol';
 import { UserError } from '../rpc/router.js';
 
-/** GLOSSARY: Profile. It and its accounts live on the hub (ADR 0002, ADR 0004). */
+/** GLOSSARY: Profile. It lives on the hub (ADR 0004); its accounts are its house's on the Sorting Hat (ADR 0018). */
 export type Profile = {
   id: string;
   name: string;
 };
-
-/** Profiles expose selected accounts without credentials. */
-export function toView(profile: Profile, account: AccountView | null, openai: AccountView | null = null): ProfileView {
-  return {
-    ...profile,
-    providers: PROVIDERS.map((p) => ({ ...p, accounts: (p.id === 'anthropic' ? account : openai) ? [p.id === 'anthropic' ? account! : openai!] : [] })),
-  };
-}
 
 export function slugify(name: string): string {
   const slug = name

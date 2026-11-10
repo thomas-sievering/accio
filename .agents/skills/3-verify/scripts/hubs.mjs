@@ -40,10 +40,10 @@ export default async function ({page, context, home, runDir, action, capture}) {
     await action('hubs/isolation: a new hub starts with separate profiles',async()=>{
       await page.getByPlaceholder(/^personal, work/).fill('Same profile'); await button('Continue').click();
       await page.getByText('Choose an account for Same profile',{exact:true}).waitFor();
-      await button('Settings').click(); await page.locator('.sidebar nav').getByRole('button',{name:'Accounts',exact:true}).click();
-      await page.getByRole('button',{name:/^Add ChatGPT account/}).click();
-      await page.getByRole('textbox',{name:'Account name',exact:true}).fill('Other account'); await button('Add account').click();
-      await button('Sign in with ChatGPT').waitFor(); await button('Cancel').click(); await button('Back').click();
+      await button('Settings').click(); await page.locator('.sidebar nav').getByRole('button',{name:'Profiles',exact:true}).click();
+      await page.getByRole('button',{name:/^Add profile/}).click();
+      await page.getByRole('textbox',{name:'Name',exact:true}).fill('Other only'); await button('Add profile').click();
+      await button('Cancel').click(); await page.getByRole('button',{name:/^Other only /}).waitFor(); await button('Back').click();
     });
     await capture('other-hub');
     await action('hubs/menu: themed menu, selected state, keyboard and dismissal',async()=>{
@@ -78,8 +78,9 @@ export default async function ({page, context, home, runDir, action, capture}) {
       await chooseHub('Local dev');
       await button('Back').click();
       await page.getByText('Choose an account for Same profile',{exact:true}).waitFor();
-      await button('Settings').click(); await page.locator('.sidebar nav').getByRole('button',{name:'Accounts',exact:true}).click();
-      assert.equal(await page.getByRole('button',{name:'Other account Signed out',exact:true}).count(),0);
+      await button('Settings').click(); await page.locator('.sidebar nav').getByRole('button',{name:'Profiles',exact:true}).click();
+      await page.getByRole('button',{name:/^Same profile /}).waitFor();
+      assert.equal(await page.getByRole('button',{name:/^Other only /}).count(),0);
       await button('Back').click();
     });
     await action('hubs/windows: a second window chooses its hub independently',async()=>{
@@ -95,8 +96,8 @@ export default async function ({page, context, home, runDir, action, capture}) {
         await button('Hub: Local dev').waitFor();
         await button('Back').click();
         await second.getByRole('button',{name:'Settings',exact:true}).click();
-        await second.locator('.sidebar nav').getByRole('button',{name:'Accounts',exact:true}).click();
-        await second.getByRole('button',{name:'Other account Signed out',exact:true}).waitFor();
+        await second.locator('.sidebar nav').getByRole('button',{name:'Profiles',exact:true}).click();
+        await second.getByRole('button',{name:/^Other only /}).waitFor();
       } finally { await second.close(); }
     });
     await action('hubs/persistence: retain the selected hub after reload',async()=>{

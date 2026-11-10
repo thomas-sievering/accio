@@ -36,7 +36,7 @@ it('executes request_secret through the pinned native Codex dynamic-tool protoco
   const account = await client.call('accounts.save', { name: 'Native secret', providerId: 'openai' });
   const signIn = await client.call('accounts.beginSignIn', { id: account.id }); await login.latest.complete('native-secret');
   await client.call('accounts.signInStatus', { signInId: signIn.signInId });
-  const profile = await client.call('profiles.save', { name: 'Native secret', openaiAccountId: account.id });
+  const profile = await client.call('profiles.save', { createHouse: true, name: 'Native secret', accountIds: { openai: [account.id] } });
   const thread = await client.call('threads.start', { profileId: profile.id, text: 'Use the private token tool.' });
   const card = await client.waitFor('thread.item', e => e.threadId === thread.id && e.item.kind === 'secret' && e.item.status === 'pending', 15_000);
   if (card.item.kind !== 'secret') throw new Error('Missing secret card');
@@ -72,7 +72,7 @@ it('adds the private MCP tool when resuming a native Codex thread created before
   const client = await app.connect(); const account = await client.call('accounts.save', { name: 'Old native', providerId: 'openai' });
   const signIn = await client.call('accounts.beginSignIn', { id: account.id }); await login.latest.complete('old-native');
   await client.call('accounts.signInStatus', { signInId: signIn.signInId });
-  const profile = await client.call('profiles.save', { name: 'Old native', openaiAccountId: account.id });
+  const profile = await client.call('profiles.save', { createHouse: true, name: 'Old native', accountIds: { openai: [account.id] } });
   const thread = await client.call('threads.start', { profileId: profile.id, text: 'Create a pre-secret session.' });
   await expect.poll(async () => (await client.call('threads.list', {})).find(t => t.id === thread.id)?.status, { timeout: 15000 }).toBe('idle');
   client.events.length = 0;

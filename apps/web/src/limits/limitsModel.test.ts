@@ -7,9 +7,9 @@ import {
 const account = (id: string, providerId: 'anthropic' | 'openai' = 'anthropic'): AccountView =>
   ({ id, name: id, providerId, signedIn: true, email: null, organization: null });
 const provider = (id: 'anthropic' | 'openai', accounts: AccountView[], available = true): ProfileProviderView =>
-  ({ id, name: id === 'anthropic' ? 'Anthropic' : 'OpenAI', accountName: id === 'anthropic' ? 'Claude account' : 'ChatGPT account', available, accounts });
+  ({ id, name: id === 'anthropic' ? 'Anthropic' : 'OpenAI', accountName: id === 'anthropic' ? 'Claude account' : 'ChatGPT account', available, accounts, inUseId: accounts.find((a) => a.signedIn)?.id ?? null });
 const profile = (id: string, claude: AccountView | null, chatgpt: AccountView | null = null): ProfileView =>
-  ({ id, name: id, providers: [provider('anthropic', claude ? [claude] : []), provider('openai', chatgpt ? [chatgpt] : [])] });
+  ({ id, name: id, house: { id, name: id }, providers: [provider('anthropic', claude ? [claude] : []), provider('openai', chatgpt ? [chatgpt] : [])] });
 const win = (over: Partial<LimitWindow>): LimitWindow =>
   ({ id: 'w', kind: 'session', label: '5-hour', scope: null, usedPercent: 0, resetsAt: null, durationMinutes: 300, ...over });
 const T = Date.parse('2026-11-03T12:00:00Z');
@@ -47,15 +47,15 @@ describe('limitsLayout', () => {
 
   it('marks which of several accounts at a provider the profile uses', () => {
     const out = { ...account('out'), signedIn: false };
-    const p: ProfileView = { id: 'p', name: 'p', providers: [provider('anthropic', [out, team, own]), provider('openai', [gpt])] };
+    const p: ProfileView = { id: 'p', name: 'p', house: null, providers: [provider('anthropic', [out, team, own]), provider('openai', [gpt])] };
     expect(limitsLayout([p], 'p')[0]!.entries.map((e) => `${e.account.id}:${e.role}`)).toEqual(['out:standby', 'team:inUse', 'own:standby', 'gpt:only']);
-    // The hub's choice wins over the order.
+    // The Sorting Hat's choice wins over the order.
     const chosen: ProfileView = { ...p, providers: [{ ...provider('anthropic', [out, team, own]), inUseId: 'own' }] };
     expect(limitsLayout([chosen], 'p')[0]!.entries.map((e) => e.role)).toEqual(['standby', 'standby', 'inUse']);
   });
 
   it('skips providers with no selected account regardless of availability', () => {
-    const p: ProfileView = { id: 'p', name: 'p', providers: [provider('anthropic', []), provider('openai', [], false)] };
+    const p: ProfileView = { id: 'p', name: 'p', house: null, providers: [provider('anthropic', []), provider('openai', [], false)] };
     expect(limitsLayout([p], 'p')[0]!.entries).toEqual([]);
   });
 

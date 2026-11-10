@@ -6,7 +6,7 @@ export default async function smoke({ page, runDir, home, fixture, action, captu
   const button = (name) => page.getByRole('button', { name, exact: true });
   const settings = page.locator('.sidebar nav');
   const section = (name) => settings.getByRole('button', { name, exact: true });
-  const profileRow = (name) => page.getByRole('button', { name: new RegExp('^' + name + ' No account selected$') });
+  const profileRow = (name) => page.getByRole('button', { name: new RegExp('^' + name + ' No house on the Sorting Hat$') });
   const settingsFile = () => readFile(join(home, 'hub/settings.json'), 'utf8').then(JSON.parse);
 
   await action('profiles/first-run: create Verify personal', async () => {
@@ -53,32 +53,19 @@ export default async function smoke({ page, runDir, home, fixture, action, captu
     assert.deepEqual((await settingsFile()).profiles.map((p) => p.name), ['Verify personal']);
   });
 
-  await action('accounts/settings: create a signed-out ChatGPT account', async () => {
+  // Accounts live on a Sorting Hat; with one, sorting-hat.mjs drives them.
+  await action('accounts/settings: without a Sorting Hat, Accounts and the profile form say to connect one', async () => {
+    const hint = 'This hub has no Sorting Hat, which holds the accounts threads run with. Connect one in Settings / Hubs.';
     await section('Accounts').click();
-    await page.getByRole('button', { name: /^Add ChatGPT account/ }).click();
-    await page.getByRole('textbox', { name: 'Account name', exact: true }).fill('Verify ChatGPT');
-    await button('Add account').click();
-    await button('Sign in with ChatGPT').waitFor();
-    await button('Cancel').click();
-    await page.getByRole('button', { name: 'Verify ChatGPT Signed out', exact: true }).waitFor();
-  });
-  await action('accounts/profiles: select the named account and reopen it', async () => {
+    await page.getByRole('main').getByText(hint, { exact: true }).waitFor();
+    assert.equal(await page.getByRole('button', { name: /^Add Claude account/ }).count(), 0);
     await section('Profiles').click();
     await profileRow('Verify personal').click();
-    await button('Add ChatGPT account').click();
-    await page.getByRole('menu', { name: 'Add ChatGPT account', exact: true }).getByRole('menuitemradio', { name: /^Verify ChatGPT/ }).click();
-    await button('Save').click();
-    await page.getByRole('button', { name: 'Verify personal Verify ChatGPT · Signed out', exact: true }).click();
-    await page.getByRole('list', { name: 'OpenAI · ChatGPT accounts' }).getByText('Verify ChatGPT', { exact: true }).waitFor();
+    await page.getByRole('main').getByText(hint, { exact: true }).waitFor();
+    assert.equal(await page.getByRole('list', { name: 'OpenAI · ChatGPT accounts' }).count(), 0);
     await button('Cancel').click();
   });
-  await capture('accounts-selected');
-  await action('accounts/settings: an account in use cannot be deleted', async () => {
-    await section('Accounts').click();
-    await page.getByRole('button', { name: 'Verify ChatGPT Signed out', exact: true }).click();
-    assert(await button('Delete').isDisabled());
-    await button('Cancel').click();
-  });
+  await capture('accounts-no-sorting-hat');
 
   await action('machines/settings: rename this machine and persist profile folders', async () => {
     await section('Machines').click();
@@ -131,7 +118,7 @@ export default async function smoke({ page, runDir, home, fixture, action, captu
   await writeFile(join(runDir, 'persisted-projects.json'), await readFile(join(home, 'projects.json')));
   await writeFile(join(runDir, 'doctor-after.json'), JSON.stringify(await doctor(), null, 2));
   await writeFile(join(runDir, 'coverage.json'), JSON.stringify({
-    verified: ['profiles: first-run, settings, rename, cancel, delete, reload', 'accounts: create signed out, select, delete protection', 'machines: rename, folders, reopen', 'projects: toolbar add, filter settings, duplicate protection'],
-    unverified: ['provider OAuth completion: no signed-in account in disposable home', 'threads, models, search and shelves with real turns: requires provider authentication', 'Electron native folder picker and OS folder opening: server/browser mode does not supply desktop bridge', 'project remote grouping, removal, profile reassignment and inline first-run add: separate mapped journeys'],
+    verified: ['profiles: first-run, settings, rename, cancel, delete, reload', 'accounts: the no-Sorting-Hat notice', 'machines: rename, folders, reopen', 'projects: toolbar add, filter settings, duplicate protection'],
+    unverified: ['accounts, sign-in and profile accounts: need a Sorting Hat (sorting-hat.mjs)', 'threads, models, search and shelves with real turns: requires provider authentication', 'Electron native folder picker and OS folder opening: server/browser mode does not supply desktop bridge', 'project remote grouping, removal, profile reassignment and inline first-run add: separate mapped journeys'],
   }, null, 2));
 }

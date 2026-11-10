@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { accountInUse, type AccountView, type ProfileView } from '@accio/protocol';
+import { accountInUse, noSortingHatMessage, type AccountView, type ProfileView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { ArrowUp, Close, ProviderLogo, User } from '../app/icons';
 import { SettingLink, SettingsFooter, SettingsSection } from '../app/Settings';
@@ -36,7 +36,7 @@ export function ProfilesSettings({
     <SettingsSection add={{ label: 'Add profile', onClick: () => onOpen('new') }}>
       {profiles.map((p) => (
         <SettingLink key={p.id} icon={<User />} title={p.name} warn={!hasSignedInAccount(p)} onClick={() => onOpen(p.id)}
-          description={p.providers.flatMap((provider) => provider.accounts.map((a) => `${a.name}${a.signedIn ? '' : ' · Signed out'}`)).join(', ') || 'No account selected'} />
+          description={p.house === null ? 'No house on the Sorting Hat' : [p.house && `House ${p.house.name}`, p.providers.flatMap((provider) => provider.accounts.map((a) => `${a.name}${a.signedIn ? '' : ' · Signed out'}`)).join(', ') || 'No account in its house'].filter(Boolean).join(' · ')} />
       ))}
     </SettingsSection>
   </>);
@@ -44,10 +44,17 @@ export function ProfilesSettings({
 
 function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: ProfileView; onSaved: (p: ProfileView) => void; onDone: () => void; onOpenSecrets?: (profileId: string) => void }) {
   const client = useClient();
-  const { accounts } = useProfiles();
+  const { accounts, sortingHat } = useProfiles();
   const initial = selectionOf(profile);
   const [selection, setSelection] = useState(initial);
+  // GLOSSARY: House.
+  const savedHouse = profile?.house?.id ?? '';
+  // A new profile offers a house of its own name, or an existing one.
+  const initialHouse = profile || !sortingHat ? savedHouse : NEW_HOUSE;
+  const [house, setHouse] = useState(initialHouse);
+  const relinked = !!sortingHat && house !== savedHouse;
   const [name, setName] = useState(profile?.name ?? '');
+  const houseName = house === NEW_HOUSE ? name.trim() : sortingHat?.houses.find((h) => h.id === house)?.name ?? house;
   const { state: resources } = useResources();
   // Skill choices wait here until Save, keyed by skill id.
   const [skills, setSkills] = useState<Record<string, boolean>>({});
@@ -57,14 +64,14 @@ function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: Pr
     const skill = resources?.skills.find((s) => s.id === id);
     return skill && profile && skill.scope.profileIds.includes(profile.id) !== on ? [{ skill, on }] : [];
   });
-  const dirty = profile ? skillChanges.length > 0 || name !== profile.name || JSON.stringify(selection) !== JSON.stringify(initial) : !!(name || selection.anthropic.length || selection.openai.length);
+  const dirty = profile ? skillChanges.length > 0 || name !== profile.name || relinked || JSON.stringify(selection) !== JSON.stringify(initial) : !!(name || house !== initialHouse || selection.anthropic.length || selection.openai.length);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setTouched(true);
     if (!name.trim()) return focusFirstInvalid(e.currentTarget);
     const saved = await run(async () => {
-      const p = await client.call('profiles.save', profileSave(profile?.id, name, selection));
+      const p = await client.call('profiles.save', house === NEW_HOUSE ? { ...profileSave(undefined, name, selection), createHouse: true } : profileSave(profile?.id, name, selection, sortingHat ? house || null : undefined));
       for (const { skill, on } of skillChanges) await client.call('skills.setScope', { id: skill.id, scope: { ...skill.scope, profileIds: toggled(skill.scope.profileIds, p.id, on) } });
       return p;
     });
@@ -82,13 +89,21 @@ function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: Pr
           <Field label="Name" error={touched && !name.trim() && 'Enter a name for the profile.'}>
             {(p) => <input {...p} value={name} onChange={(e) => setName(e.target.value)} placeholder="personal, work…" autoFocus={!profile} required />}
           </Field>
-          {PROVIDERS.map((provider) => (
+          {sortingHat === null && <p className="note">{noSortingHatMessage}</p>}
+          {sortingHat?.problem && <p className="error" role="alert">{sortingHat.problem}</p>}
+          {sortingHat && !sortingHat.problem && (
+            <Field label="House on the Sorting Hat" hint={!house ? 'Threads of this profile can’t run until it links to a house.' : house === NEW_HOUSE ? 'Save to make this house on the Sorting Hat.' : relinked ? `Save to use the accounts of ${houseName}.` : undefined}>
+              {(p) => <MenuSelect id={p.id} label="House on the Sorting Hat" value={house} placeholder="Choose a house…" onChange={setHouse}
+                options={[...(profile ? [] : [{ value: NEW_HOUSE, label: `New house ${name.trim() || 'named like this profile'}` }]), ...(savedHouse && !sortingHat.houses.some((h) => h.id === savedHouse) ? [{ value: savedHouse, label: profile?.house?.name ?? savedHouse, detail: 'Not on the Sorting Hat' }] : []), ...sortingHat.houses.map((h) => ({ value: h.id, label: h.name }))]} />}
+            </Field>
+          )}
+          {sortingHat && house && !relinked && !sortingHat.problem && PROVIDERS.map((provider) => (
             <ProviderAccounts key={provider.id} provider={provider} accounts={accounts} selected={selection[provider.id]}
               inUseId={profile && accountInUse(profile.providers.find((p) => p.id === provider.id))?.id}
               onChange={(ids) => setSelection((s) => ({ ...s, [provider.id]: ids }))} />
           ))}
           {error && <p className="error">{error}</p>}
-          <small className="hint">Accounts are set up in Settings / Accounts. With several at a provider, accio uses the signed-in one whose weekly allowance resets soonest, skipping any with 5% or less left until that resets; higher accounts win ties.{profile && onOpenSecrets && <> <button type="button" className="link" onClick={() => onOpenSecrets(profile.id)}>Saved secrets</button></>}</small>
+          <small className="hint">{sortingHat && `Accounts are set up in Settings / Accounts. Choosing them here sets the accounts of ${houseName ? `the house ${houseName}` : 'its house'} on the Sorting Hat, for every app that uses it.`}{profile && onOpenSecrets && <> <button type="button" className="link" onClick={() => onOpenSecrets(profile.id)}>Saved secrets</button></>}</small>
         </div>
       </SettingsSection>
       {profile && (
@@ -99,10 +114,13 @@ function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: Pr
           </div>
         </SettingsSection>
       )}
-      <SettingsFooter remove={profile && { name: profile.name, run: remove, consequence: 'Its accounts stay; only the profile goes.' }} busy={busy} onCancel={onDone} saveLabel={profile ? 'Save' : 'Add profile'} saveDisabled={busy || !accounts || (!!profile && !dirty)} dirty={dirty && !busy} />
+      <SettingsFooter remove={profile && { name: profile.name, run: remove, consequence: 'Its house and accounts stay on the Sorting Hat; only the profile goes.' }} busy={busy} onCancel={onDone} saveLabel={profile ? 'Save' : 'Add profile'} saveDisabled={busy || !accounts || (!!profile && !dirty)} dirty={dirty && !busy} />
     </form>
   );
 }
+
+/** The house picker's value for "make a house of this profile's name"; never a house id. */
+const NEW_HOUSE = ' new';
 
 const PROVIDERS = [
   { id: 'anthropic', label: 'Anthropic · Claude accounts', account: 'Claude account' },
