@@ -8,6 +8,7 @@ import { measuredHarness } from '../harnesses/promptMeasurement.js';
 import { ACCIO_MCP_SERVER } from '../tools/tools.js';
 import { SUBAGENT_TIMEOUT_SEC } from './subagents.js';
 import type { Harness, HarnessImage, HarnessMessage, HarnessTurn } from './harness.js';
+import { resultErrors } from './transcript.js';
 import { secretMcpServer } from '../secrets/claudeTool.js';
 import { savedPurposeInstructions, SECRET_MCP_SERVER } from '../secrets/secrets.js';
 
@@ -36,8 +37,9 @@ export const claudeCode: Harness = measuredHarness('claudeCode', {
     try {
       for await (const message of q) {
         if (message.type === 'result') {
-          if (message.is_error || !('result' in message)) throw new Error('Title generation failed');
-          return message.result;
+          if (!message.is_error && 'result' in message) return message.result;
+          const result = 'result' in message ? message.result : '';
+          throw new Error(result || resultErrors('errors' in message ? message.errors : undefined) || 'Title generation failed');
         }
       }
       throw new Error('No generated title');
