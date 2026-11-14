@@ -11,6 +11,7 @@ import type { Fetch } from '../types.js';
 /**
  * Anthropic's token and usage endpoints: every code or refresh yields a new
  * numbered token (`token-1`, ...), and `usage` holds what each token's account reports.
+ * A sign-in with the code `ended` is one Anthropic has since ended: its token and refresh token are refused.
  */
 export function fakeAnthropicAuth() {
   let n = 0;
@@ -21,8 +22,11 @@ export function fakeAnthropicAuth() {
   const modelRequests: Headers[] = [];
   /** The refresh token of every refresh. */
   const refreshed: string[] = [];
+  /** Access and refresh tokens Anthropic refuses. */
+  const ended = new Set<string>();
   const fetch: Fetch = async (url, init) => {
     if (String(url) === 'https://api.anthropic.com/api/oauth/usage') {
+      if (ended.has(new Headers(init?.headers).get('authorization')!.slice('Bearer '.length))) return Response.json({ type: 'error' }, { status: 401 });
       return Response.json(usage[new Headers(init?.headers).get('authorization')!.slice('Bearer '.length)] ?? {});
     }
     if (String(url).startsWith('https://api.anthropic.com/v1/models')) {
@@ -37,10 +41,12 @@ export function fakeAnthropicAuth() {
     const body = JSON.parse(String(init?.body));
     if (body.refresh_token) refreshed.push(body.refresh_token);
     if (body.code === 'bad') return new Response(JSON.stringify({ error_description: 'Invalid code' }), { status: 400 });
+    if (ended.has(body.refresh_token)) return Response.json({ error: 'invalid_grant' }, { status: 400 });
     n++;
+    if (body.code === 'ended') { ended.add(`token-${n}`); ended.add(`refresh-${n}`); }
     return Response.json({ access_token: `token-${n}`, refresh_token: `refresh-${n}`, expires_in: 3600, account: { uuid: `claude-${n}`, email_address: `claude-${n}@example.com` } });
   };
-  return { fetch, usage, models, modelRequests, refreshed };
+  return { fetch, usage, models, modelRequests, refreshed, ended };
 }
 
 /**

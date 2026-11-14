@@ -219,6 +219,11 @@ Window = { id, kind: "session" | "weekly" | "monthly" | "other", label,
 Unknown values are `null`, never an invented zero. Houses that share an account
 share one allowance.
 
+`signInRequired` means the provider ended the account's sign-in, for example by
+refusing its refresh token; reading limits or forwarding a request finds it.
+Houses skip such an account until it is signed in again, and it is read again
+at most every five minutes in case the refusal passes.
+
 | Method and path | Body | Answer |
 | --- | --- | --- |
 | `GET /api/limits` | | `Limits[]`, the last known for every account |
