@@ -3,6 +3,11 @@ import type { TranscriptItem } from '@accio/protocol';
 import { shellCommandSummary } from '@accio/protocol';
 import type { HarnessMessage, HarnessEvent, ContentBlock, StreamEvent } from './harness.js';
 
+/** A Claude result's errors without its `[ede_diagnostic]` lines, which Claude Code itself never shows. */
+export function resultErrors(errors: readonly string[] | undefined): string {
+  return (errors ?? []).filter(line => !line.startsWith('[ede_diagnostic]')).join('\n');
+}
+
 type ToolItem = Extract<TranscriptItem, { kind: 'tool' }>;
 
 export type TranscriptChange =
@@ -92,7 +97,7 @@ export class TurnTranscript {
         const used = this.request.input + this.request.output;
         if (windowTokens && this.request.input) out.push(this.context(used, windowTokens));
         if (r.is_error || r.subtype !== 'success') {
-          const error = r.errors?.join('\n') || r.result || `Turn ended with ${r.subtype}`;
+          const error = resultErrors(r.errors) || r.result || `Turn ended with ${r.subtype}`;
           out.push({ type: 'item', item: { kind: 'notice', id: this.nextId('n'), turnId: this.turnId, tone: 'error', text: error } });
           out.push({ type: 'end', outcome: 'failed', error });
         } else {

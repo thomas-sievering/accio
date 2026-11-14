@@ -35,6 +35,17 @@ it('generates titles without tools, project settings or persisted sessions', asy
   expect(q.close).toHaveBeenCalled(); expect(q.return).toHaveBeenCalled();
 });
 
+it('fails generation with Claude’s error text, without diagnostic lines', async () => {
+  const generate = async (value: unknown) => {
+    const q = query(); q.next.mockResolvedValueOnce({ done: false, value }); queryMock.mockReturnValue(q);
+    return claudeCode.generateText!({ cwd: 'isolated', prompt: 'Name this', model: 'haiku', env: {}, signal: new AbortController().signal });
+  };
+  const diagnostic = '[ede_diagnostic] result_type=user last_content_type=n/a stop_reason=null';
+  await expect(generate({ type: 'result', subtype: 'success', is_error: true, result: 'Credit balance is too low' })).rejects.toThrow('Credit balance is too low');
+  await expect(generate({ type: 'result', subtype: 'error_during_execution', is_error: true, errors: ['401 from hub', diagnostic] })).rejects.toThrow(/^401 from hub$/);
+  await expect(generate({ type: 'result', subtype: 'error_during_execution', is_error: true, errors: [diagnostic] })).rejects.toThrow('Title generation failed');
+});
+
 it('streams steering into the same Claude query with immediate priority and closes the channel on result', async () => {
   const q = query(); queryMock.mockReturnValue(q);
   let send: ((text: string) => Promise<void>) | undefined;
