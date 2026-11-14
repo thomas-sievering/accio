@@ -12,19 +12,18 @@ describe('machines on the hub', () => {
   it('lists this machine as connected, with the harnesses it has', async () => {
     t = await startTestApp();
     const c = await t.connect();
-    const here = await c.call('machine.get', {});
-    const [machine, ...others] = await c.call('machines.list', {});
+    const [here, ...others] = await c.call('machines.list', {});
     expect(others).toEqual([]);
-    expect(machine).toMatchObject({ id: here.id, name: here.name, connected: true, thisMachine: true, profileFolders: {} });
-    expect(machine?.harnesses).toEqual([
+    expect(here).toMatchObject({ name: expect.any(String), connected: true, thisMachine: true, profileFolders: {} });
+    expect(here!.harnesses).toEqual([
       { harnessId: 'claudeCode', version: expect.stringMatching(/^\d+\.\d+/) },
       { harnessId: 'codex', version: expect.stringMatching(/^\d+\.\d+/) },
     ]);
 
     const harnesses = await c.call('harnesses.list', {});
     expect(harnesses).toMatchObject([
-      { id: 'claudeCode', name: 'Claude Code', providers: ['anthropic'], machines: [{ machineId: here.id, version: expect.any(String) }] },
-      { id: 'codex', name: 'Codex', providers: ['openai'], machines: [{ machineId: here.id, version: expect.any(String) }] },
+      { id: 'claudeCode', name: 'Claude Code', providers: ['anthropic'], machines: [{ machineId: here!.id, version: expect.any(String) }] },
+      { id: 'codex', name: 'Codex', providers: ['openai'], machines: [{ machineId: here!.id, version: expect.any(String) }] },
     ]);
   });
 
@@ -32,7 +31,7 @@ describe('machines on the hub', () => {
     t = await startTestApp();
     const a = await t.connect();
     const b = await t.connect();
-    const { id: machineId } = await a.call('machine.get', {});
+    const { id: machineId } = await a.thisMachine();
     await a.call('profiles.save', { name: 'Work' });
     const saved = await a.call('machines.setProfileFolders', { machineId, profileId: 'work', folders: ['S:\\hrc', 'S:\\hrc'] });
     expect(saved.profileFolders).toEqual({ work: ['S:\\hrc'] });
@@ -46,7 +45,7 @@ describe('machines on the hub', () => {
     await t.stop({ keepHome: true });
     t = await startTestApp({}, home);
     const c = await t.connect();
-    expect((await c.call('machine.get', {})).id).toBe(machineId);
+    expect((await c.thisMachine()).id).toBe(machineId);
     expect((await c.call('machines.list', {}))[0]?.profileFolders).toEqual({ work: ['S:\\hrc'] });
 
     await c.call('profiles.delete', { id: 'work' });
@@ -60,7 +59,7 @@ describe('machines on the hub', () => {
     };
     t = await startTestApp({ github: gh });
     const c = await t.connect();
-    const { id: machineId } = await c.call('machine.get', {});
+    const { id: machineId } = await c.thisMachine();
     await c.call('profiles.save', { name: 'Work' });
     expect((await c.call('machines.list', {}))[0]).toMatchObject({ githubAccounts: ['me', 'work_hrc'], profileGitHub: {} });
     const saved = await c.call('machines.setProfileGitHub', { machineId, profileId: 'work', login: 'work_hrc' });
@@ -73,7 +72,7 @@ describe('machines on the hub', () => {
   it('refuses folders for a machine or profile the hub does not know', async () => {
     t = await startTestApp();
     const c = await t.connect();
-    const { id: machineId } = await c.call('machine.get', {});
+    const { id: machineId } = await c.thisMachine();
     await expect(c.call('machines.setProfileFolders', { machineId, profileId: 'nope', folders: [] })).rejects.toThrow(/No profile/);
     await c.call('profiles.save', { name: 'Work' });
     await expect(c.call('machines.setProfileFolders', { machineId: 'other', profileId: 'work', folders: [] })).rejects.toThrow(
@@ -85,11 +84,11 @@ describe('machines on the hub', () => {
     t = await startTestApp();
     const a = await t.connect();
     const b = await t.connect();
-    const { id: machineId } = await a.call('machine.get', {});
+    const { id: machineId } = await a.thisMachine();
     const renamed = await a.call('machines.rename', { machineId, name: '  Work desktop  ' });
     expect(renamed).toMatchObject({ id: machineId, name: 'Work desktop', connected: true });
     await b.waitFor('machines.changed', (list) => list.some((m) => m.id === machineId && m.name === 'Work desktop'));
-    expect((await b.call('machine.get', {})).name).toBe('Work desktop');
+    expect((await b.thisMachine()).name).toBe('Work desktop');
 
     const laptop = { id: 'laptop', name: 'hostname', platform: 'linux', version: '0.1.0', harnesses: [] };
     await t.app.settings.machineConnected(laptop);
@@ -102,14 +101,14 @@ describe('machines on the hub', () => {
     await t.stop({ keepHome: true });
     t = await startTestApp({}, home);
     const c = await t.connect();
-    expect((await c.call('machine.get', {})).name).toBe('Work desktop');
+    expect((await c.thisMachine()).name).toBe('Work desktop');
     expect((await c.call('machines.list', {})).find((m) => m.id === laptop.id)).toMatchObject({ name: 'Travel laptop', connected: false });
   });
 
   it('rejects invalid names and unknown machines without changing the registry', async () => {
     t = await startTestApp();
     const c = await t.connect();
-    const { id: machineId } = await c.call('machine.get', {});
+    const { id: machineId } = await c.thisMachine();
     const before = await c.call('machines.list', {});
     for (const name of ['', '   ', 'x'.repeat(101)]) {
       await expect(c.call('machines.rename', { machineId, name })).rejects.toThrow(/Invalid params/);
@@ -121,7 +120,7 @@ describe('machines on the hub', () => {
   it('pushes hub machine connections and disconnections and keeps their folders separate', async () => {
     t = await startTestApp();
     const c = await t.connect();
-    const { id: hereId } = await c.call('machine.get', {});
+    const { id: hereId } = await c.thisMachine();
     await c.call('profiles.save', { name: 'Work' });
     await t.app.settings.machineConnected({ id: 'laptop', name: 'Laptop', platform: 'linux', version: '0.1.0', harnesses: [] });
     const connected = await c.waitFor('machines.changed', (list) => list.some((m) => m.id === 'laptop' && m.connected));

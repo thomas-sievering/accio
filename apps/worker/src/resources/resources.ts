@@ -81,10 +81,6 @@ export class ResourceManager {
       .on('skills.addSource', source => this.sourceOperation(source.id, async () => {
         const skills = await this.skills.fetch(source); await this.store.saveSource(source, skills); this.announce(); return source;
       }))
-      .on('skills.updateSource', ({ id }) => this.sourceOperation(id, async () => {
-        const source = this.state().sources.find(s => s.id === id); if (!source) throw new Error('No such skill source');
-        const skills = await this.skills.fetch(source); await this.store.saveSource(source, skills); this.announce(); return this.state().skills.filter(s => s.sourceId === id);
-      }))
       .on('skills.previewUpdate', ({ id }) => this.sourceOperation(id, async () => {
         const source = this.state().sources.find(s => s.id === id); if (!source) throw new Error('No such skill source');
         const skills = await this.skills.fetch(source); await this.store.stageSkills(id, skills); this.announce(); return skills;

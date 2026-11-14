@@ -57,7 +57,7 @@ describe('thread relay between machines', () => {
     const listed = await pc.client.waitFor('threads.changed', (threads) => remote(threads, thread.id)?.status === 'running', 10_000);
     const seen = remote(listed, thread.id)!;
     expect(seen.machine).toMatchObject({ online: true });
-    expect(seen.machine!.id).not.toBe((await pc.client.call('machine.get', {})).id);
+    expect(seen.machine!.id).not.toBe((await pc.client.thisMachine()).id);
     expect(remote(await mac.client.call('threads.list', {}), thread.id)?.machine).toBeUndefined();
 
     const snapshot = await pc.client.call('threads.observe', { threadId: thread.id });
@@ -174,7 +174,7 @@ describe('thread relay between machines', () => {
     const macCheckout = await checkout(mac, 'accio', 'git@github.com:me/accio.git', profile.id);
     const pcCheckout = await checkout(pc, 'accio-copy', 'https://github.com/me/accio', profile.id);
     const only = await checkout(pc, 'notes', 'https://github.com/me/notes', profile.id);
-    const macId = (await mac.client.call('machine.get', {})).id;
+    const macId = (await mac.client.thisMachine()).id;
 
     // The picker offers the MacBook for accio, which it has, and not for notes.
     const listed = await pc.client.waitFor('machines.changed', (all) => !!all.find((m) => m.id === macId)?.relay?.repos.length, 10_000);

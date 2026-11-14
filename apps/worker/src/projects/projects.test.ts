@@ -25,7 +25,7 @@ describe('projects slice', () => {
 
     await c.call('profiles.save', { name: 'Personal' });
     await c.call('profiles.save', { name: 'Work' });
-    const { id: machineId } = await c.call('machine.get', {});
+    const { id: machineId } = await c.thisMachine();
     await c.call('machines.setProfileFolders', { machineId, profileId: 'personal', folders: [repos] });
     await c.call('machines.setProfileFolders', { machineId, profileId: 'work', folders: [work] });
 
