@@ -27,4 +27,27 @@ describe('keepAlive', () => {
     expect(ws.readyState).toBe(WebSocket.OPEN);
     ws.terminate();
   });
+
+  async function serve(clientPongs: boolean) {
+    server = new WebSocketServer({ port: 0 });
+    await new Promise((resolve) => server!.once('listening', resolve));
+    const accepted = new Promise<WebSocket>((resolve) => server!.once('connection', (peer) => { keepAlive(peer, 40, { endOnWake: false }); resolve(peer); }));
+    const ws = new WebSocket(`ws://127.0.0.1:${(server.address() as { port: number }).port}`, { autoPong: clientPongs });
+    ws.on('error', () => {});
+    return { ws, peer: await accepted };
+  }
+
+  it('closes a hub socket whose machine stopped answering pings', async () => {
+    const { ws, peer } = await serve(false);
+    await new Promise((resolve) => peer.once('close', resolve));
+    expect(peer.readyState).toBe(WebSocket.CLOSED);
+    ws.terminate();
+  });
+
+  it('keeps a hub socket whose machine answers pings', async () => {
+    const { ws, peer } = await serve(true);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(peer.readyState).toBe(WebSocket.OPEN);
+    ws.terminate();
+  });
 });

@@ -8,7 +8,8 @@ import { StatusGlyphIcon } from './StatusMark';
 import { shortStatus, statusText, threadStatus } from './status';
 import { RowRename, useRenaming, useThreadMenu } from './ThreadMenu';
 import { snoozeThread } from './SnoozeNotice';
-import { awaitsMachine, wakeText } from './shelves';
+import { formatDayTime } from '../ui/dates';
+import { awaitsMachine } from './shelves';
 import { useThreads, type ThreadActions } from './threads';
 import { useThreadAvailability } from './useThreadAvailability';
 
@@ -122,7 +123,7 @@ function hoverActions(t: ThreadView, place: ThreadPlace, untilOnline: boolean): 
 }
 
 function meta(t: ThreadView, place: ThreadPlace, now: Date): string {
-  if (place === 'snoozed' && t.snoozedUntil) return wakeText(new Date(t.snoozedUntil), now);
+  if (place === 'snoozed' && t.snoozedUntil) return formatDayTime(new Date(t.snoozedUntil), now);
   if (place === 'settled' && t.settledAt) return timeAgo(t.settledAt, now);
   // A running thread shows how long it has run, including before a restart but not the downtime.
   if (t.status === 'running' && t.runningSince) return duration((t.ranMs ?? 0) + now.getTime() - Date.parse(t.runningSince));

@@ -1,5 +1,6 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { MAX_MANAGEMENT_BODY } from './bodies.js';
 import { SIGN_IN_TTL_MS } from './claudeOAuth.js';
 import { HatError } from './errors.js';
 import type { AccountSelection, SortingHat } from './sortingHat.js';
@@ -9,7 +10,6 @@ import { USAGE_DIMENSIONS, type UsageDimension, type UsageQuery } from './usage.
 /** Where the management API lives; everything else on the server is a model route. */
 export const API_PREFIX = '/api/';
 const PROVIDERS: ProviderId[] = ['anthropic', 'openai'];
-const MAX_BODY = 1024 * 1024;
 
 export type ManagementOptions = {
   /**
@@ -225,7 +225,7 @@ async function readJson(req: IncomingMessage): Promise<any> {
   let size = 0;
   for await (const chunk of req) {
     size += (chunk as Buffer).length;
-    if (size > MAX_BODY) throw new HatError('The request body is too large.');
+    if (size > MAX_MANAGEMENT_BODY) throw new HatError('The request body is too large.');
     chunks.push(chunk as Buffer);
   }
   if (!size) return {};

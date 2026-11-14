@@ -47,16 +47,26 @@ export function fakeAnthropicAuth() {
  * Anthropic's API: records each request, refuses tokens in `limited` with 429,
  * and otherwise streams a complete Messages reply that Claude Code accepts,
  * or answers it whole when the request has `"stream": false`. With `cutOff`
- * set, a stream stops after its first event.
+ * set, a stream stops after its first event. With `hold` set, any request gets
+ * a stream's first event and then nothing more until its caller hangs up; the
+ * URLs of requests hung up on are in `aborted`.
  */
 export async function fakeAnthropicApi() {
   const seen: { url: string; headers: IncomingHttpHeaders; body: string }[] = [];
   const limited = new Set<string>();
-  const control = { cutOff: false };
+  const aborted: string[] = [];
+  const control = { cutOff: false, hold: false };
   const server = createServer(async (req, res) => {
     let body = '';
     for await (const c of req) body += c;
     seen.push({ url: req.url ?? '', headers: req.headers, body });
+    if (control.hold) {
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      const reply = anthropicReply('claude-test', `msg_${seen.length}`, 'Held.');
+      res.write(reply.slice(0, reply.indexOf('\n\n') + 2));
+      res.once('close', () => { if (!res.writableFinished) aborted.push(req.url ?? ''); });
+      return;
+    }
     if (limited.has(req.headers.authorization?.slice('Bearer '.length) ?? '')) {
       res.writeHead(429, { 'content-type': 'application/json' }).end('{"type":"error","error":{"type":"rate_limit_error","message":"limited"}}');
       return;
@@ -81,6 +91,7 @@ export async function fakeAnthropicApi() {
     url: `http://127.0.0.1:${(server.address() as { port: number }).port}`,
     seen,
     limited,
+    aborted,
     control,
     close: () => new Promise<void>((r) => { server.close(() => r()); server.closeAllConnections(); }),
   };
@@ -103,15 +114,30 @@ export function anthropicReply(model: string, id: string, text: string) {
 
 /**
  * ChatGPT's Responses API (as Codex calls it): records each request and streams
- * a completed reply; compaction answers whole, with its usage.
+ * a completed reply; compaction answers whole, with its usage. With `hold`
+ * set, a stream sends its first event and then nothing more until the request
+ * is aborted; the URLs of aborted requests are in `aborted`.
  */
 export function fakeChatGPT() {
   const seen: { url: string; headers: Headers; body: string }[] = [];
   const limited = new Set<string>();
+  const aborted: string[] = [];
+  const control = { hold: false };
   const fetch: Fetch = async (url, init) => {
     const headers = new Headers(init?.headers);
     const body = new TextDecoder().decode(init?.body as Uint8Array);
     seen.push({ url: String(url), headers, body });
+    if (control.hold) {
+      const reply = responsesReply('Held.');
+      const signal = init?.signal;
+      const stream = new ReadableStream<Uint8Array>({
+        start(c) {
+          c.enqueue(new TextEncoder().encode(reply.slice(0, reply.indexOf('\n\n') + 2)));
+          signal?.addEventListener('abort', () => { aborted.push(String(url)); c.error(signal.reason); }, { once: true });
+        },
+      });
+      return new Response(stream, { headers: { 'content-type': 'text/event-stream' } });
+    }
     if (limited.has(headers.get('chatgpt-account-id') ?? '')) return Response.json({ error: { type: 'usage_limit_reached' } }, { status: 429 });
     if (String(url).endsWith('/responses/compact')) {
       return Response.json({ output: [{ type: 'compaction', encrypted_content: 'summary' }], usage: { input_tokens: 30, input_tokens_details: { cached_tokens: 20 }, output_tokens: 5, total_tokens: 35 } });
@@ -120,7 +146,7 @@ export function fakeChatGPT() {
     try { model = JSON.parse(body).model ?? model; } catch {}
     return new Response(responsesReply('Hello from the fake ChatGPT.', model), { headers: { 'content-type': 'text/event-stream' } });
   };
-  return { fetch, seen, limited };
+  return { fetch, seen, limited, aborted, control };
 }
 
 export function responsesReply(text: string, model = 'gpt-test') {

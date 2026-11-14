@@ -9,6 +9,7 @@ import { accessLabel, useSecretList, useSecretStore, type SecretStore } from './
 import { focusFirstInvalid } from '../resources/Field';
 import { safeError, valueInputProps, valueProblem } from './secretValue';
 import { MenuSelect } from '../ui/MenuSelect';
+import { formatDay } from '../ui/dates';
 
 /** Where Secrets settings is open: a profile's list, a new secret, or one secret's edit or replace form. */
 export type SecretsRoute = { profileId?: string; secretId?: string; replace?: boolean };
@@ -117,8 +118,8 @@ function SecretRow({ secret: s, access, canWrite, onEdit, onReplace }: { secret:
         <small>Purpose <code>{s.slot}</code></small>
         <span className="secret-facts">
           <span className="secret-tag">{access}</span>
-          <span>{s.lastUsedAt ? `Used ${shortDate(s.lastUsedAt)}` : 'Never used'}</span>
-          <span>Updated {shortDate(s.updatedAt)}</span>
+          <span>{s.lastUsedAt ? `Used ${formatDay(s.lastUsedAt)}` : 'Never used'}</span>
+          <span>Updated {formatDay(s.updatedAt)}</span>
         </span>
       </div>
       {!confirming && (
@@ -305,11 +306,4 @@ function SecretForm({ profile: initial, profiles, projects: allProjects, store, 
         saveLabel={busy ? 'Saving…' : creating ? 'Save secret' : replace ? 'Replace value' : 'Save'} dirty={dirty && !busy} />
     </div>
   );
-}
-
-function shortDate(iso: string): string {
-  const d = new Date(iso);
-  const today = new Date();
-  if (d.toDateString() === today.toDateString()) return 'today';
-  return d.toLocaleDateString([], d.getFullYear() === today.getFullYear() ? { month: 'short', day: 'numeric' } : { year: 'numeric', month: 'short', day: 'numeric' });
 }

@@ -14,7 +14,6 @@
   color: var(--ink);
   box-shadow: 0 12px 40px #0008;
   font-size: 13px;
-  -webkit-app-region: no-drag;
 }
 .issue-picker:popover-open { display: flex; flex-direction: column; animation: menu-in 0.1s ease-out backwards; }
 .issue-picker svg { flex: none; width: 13px; height: 13px; }

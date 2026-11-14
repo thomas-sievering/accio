@@ -1,24 +1,74 @@
 import type { EventName, Events, MethodName, ParamsOf, ResultOf, ServerEnvelope } from '@accio/protocol';
 
-export type ConnectionStatus = 'connecting' | 'open' | 'closed' | 'unauthorized';
+/** `unreachable`: the worker did not answer. `unauthorized`: it answered and refused the token. */
+export type ConnectionStatus = 'connecting' | 'open' | 'closed' | 'unreachable' | 'unauthorized';
 
-type Pending = { resolve: (v: unknown) => void; reject: (e: Error) => void };
+type Pending = { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> };
+
+/** The part of a browser WebSocket the client uses, so tests can drive a fake one. */
+export type SocketLike = {
+  readonly readyState: number;
+  onopen: ((e: unknown) => void) | null;
+  onmessage: ((e: { data: unknown }) => void) | null;
+  onclose: ((e: unknown) => void) | null;
+  send(data: string): void;
+  close(): void;
+};
+
+export type RpcClientOptions = {
+  socket?: (url: string) => SocketLike;
+  /** Asks the worker over HTTP why a connection never opened. */
+  probe?: (url: string) => Promise<'unreachable' | 'unauthorized'>;
+  callTimeoutMs?: number;
+};
+
+const OPEN = 1;
+const CALL_TIMEOUT_MS = 60_000;
+const RETRY_MIN_MS = 500;
+const RETRY_MAX_MS = 30_000;
+
+/** A plain GET to the socket path answers 401 when the token is wrong; no answer means the worker is down. */
+async function probeWorker(url: string): Promise<'unreachable' | 'unauthorized'> {
+  const http = new URL(url);
+  http.protocol = http.protocol === 'wss:' ? 'https:' : 'http:';
+  try {
+    const res = await fetch(http, { cache: 'no-store' });
+    return res.status === 401 ? 'unauthorized' : 'unreachable';
+  } catch {
+    return 'unreachable';
+  }
+}
+
+function envelope(raw: unknown): ServerEnvelope | undefined {
+  let msg: any;
+  try { msg = JSON.parse(String(raw)); } catch { return undefined; }
+  if (msg?.type === 'response' && typeof msg.id === 'number' && (msg.ok === true || typeof msg.error === 'string')) return msg;
+  if (msg?.type === 'event' && typeof msg.event === 'string') return msg;
+  return undefined;
+}
 
 /**
- * One WebSocket to one machine's server. Reconnects on its own; listeners
- * survive reconnects.
+ * One WebSocket to one machine's server. Reconnects on its own, backing off
+ * while it keeps failing; listeners survive reconnects.
  */
 export class RpcClient {
-  private ws?: WebSocket;
+  private ws?: SocketLike;
   private nextId = 1;
   private pending = new Map<number, Pending>();
   private eventListeners = new Map<string, Set<(data: unknown) => void>>();
   private statusListeners = new Set<(s: ConnectionStatus) => void>();
   private retry?: ReturnType<typeof setTimeout>;
+  private retryDelay = RETRY_MIN_MS;
   private closed = false;
+  private socket: (url: string) => SocketLike;
+  private probe: (url: string) => Promise<'unreachable' | 'unauthorized'>;
+  private callTimeoutMs: number;
   status: ConnectionStatus = 'connecting';
 
-  constructor(private url: string) {
+  constructor(private url: string, options: RpcClientOptions = {}) {
+    this.socket = options.socket ?? ((u) => new WebSocket(u) as unknown as SocketLike);
+    this.probe = options.probe ?? probeWorker;
+    this.callTimeoutMs = options.callTimeoutMs ?? CALL_TIMEOUT_MS;
     this.connect();
   }
   get hubId() { return new URL(this.url).searchParams.get('hub') ?? ''; }
@@ -33,28 +83,52 @@ export class RpcClient {
   }
 
   private setStatus(s: ConnectionStatus) {
+    if (this.status === s) return;
     this.status = s;
     for (const l of this.statusListeners) l(s);
   }
 
+  /** Keeps showing the last failure while retrying, so the notice does not flicker. */
   private connect() {
-    this.setStatus('connecting');
-    const ws = new WebSocket(this.url);
+    const ws = this.socket(this.url);
     this.ws = ws;
     let opened = false;
     ws.onopen = () => {
       opened = true;
+      this.retryDelay = RETRY_MIN_MS;
       this.setStatus('open');
     };
-    ws.onmessage = (e) => this.receive(JSON.parse(String(e.data)) as ServerEnvelope);
-    ws.onclose = () => {
-      for (const p of this.pending.values()) p.reject(new Error('Connection lost'));
-      this.pending.clear();
-      // A refused upgrade never opens; most likely a wrong token.
-      if (this.closed) return;
-      this.setStatus(opened ? 'closed' : 'unauthorized');
-      this.retry = setTimeout(() => this.connect(), opened ? 500 : 3000);
+    ws.onmessage = (e) => {
+      const msg = envelope(e.data);
+      if (msg) this.receive(msg);
+      else console.warn('Dropped a malformed message from the worker', e.data);
     };
+    ws.onclose = () => {
+      if (this.ws !== ws) return;
+      this.failPending('Connection lost');
+      if (this.closed) return;
+      if (opened) {
+        this.setStatus('closed');
+        this.scheduleRetry();
+        return;
+      }
+      void this.probe(this.url).then((reason) => {
+        if (this.closed || this.ws !== ws) return;
+        this.setStatus(reason);
+        this.scheduleRetry();
+      });
+    };
+  }
+
+  private scheduleRetry() {
+    const delay = this.retryDelay;
+    this.retryDelay = Math.min(delay * 2, RETRY_MAX_MS);
+    this.retry = setTimeout(() => this.connect(), delay);
+  }
+
+  private failPending(message: string) {
+    for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(new Error(message)); }
+    this.pending.clear();
   }
 
   private receive(msg: ServerEnvelope) {
@@ -62,6 +136,7 @@ export class RpcClient {
       const p = this.pending.get(msg.id);
       if (!p) return;
       this.pending.delete(msg.id);
+      clearTimeout(p.timer);
       if (msg.ok) p.resolve(msg.result);
       else p.reject(new Error(msg.error));
     } else {
@@ -71,10 +146,14 @@ export class RpcClient {
 
   call<M extends MethodName>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>> {
     const ws = this.ws;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return Promise.reject(new Error('Not connected'));
+    if (!ws || ws.readyState !== OPEN) return Promise.reject(new Error('Not connected'));
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject });
+      const timer = setTimeout(() => {
+        if (!this.pending.delete(id)) return;
+        reject(new Error('The worker did not answer in time'));
+      }, this.callTimeoutMs);
+      this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject, timer });
       ws.send(JSON.stringify({ id, method, params }));
     });
   }
@@ -94,6 +173,7 @@ export class RpcClient {
   close() {
     this.closed = true;
     clearTimeout(this.retry);
+    this.failPending('Connection closed');
     this.ws?.close();
   }
 }

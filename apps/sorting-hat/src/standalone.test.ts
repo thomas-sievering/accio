@@ -151,6 +151,46 @@ describe('the standalone Sorting Hat', () => {
     expect(await api('GET', 'hat-keys')).toEqual([expect.objectContaining({ id: personalKey.id, revokedAt: expect.any(String) })]);
   });
 
+  it('forwards large image-bearing requests unchanged and refuses bodies over the limit with 413', async () => {
+    const { api, hat, anthropic, chatgpt, codex, claudeAccount } = await start();
+    const mine = await claudeAccount('Mine');
+    const gpt = await api('POST', 'accounts', { name: 'My ChatGPT', providerId: 'openai' });
+    const device = await api('POST', `accounts/${gpt.id}/sign-in`, { flow: 'device' });
+    await codex.latest.complete('chatgpt-personal');
+    expect(await api('GET', `sign-ins/${device.signInId}`)).toMatchObject({ status: 'complete' });
+    const house = await api('POST', 'houses', { name: 'Personal', accounts: { anthropic: [mine.id], openai: [gpt.id] } });
+    const key = await api('POST', 'hat-keys', { houseId: house.id, name: 'pi' });
+    const post = (path: string, body: BodyInit) => fetch(`${hat.url}${path}`, {
+      method: 'POST', headers: { authorization: `Bearer ${key.secret}`, 'content-type': 'application/json' }, body, duplex: 'half',
+    } as RequestInit);
+    const MB = 1024 * 1024;
+    // A thread's request with a few screenshots, as base64 image blocks.
+    const image = { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'A'.repeat(5 * MB) } };
+    const withImages = JSON.stringify({ model: 'claude-test', messages: [{ role: 'user', content: [image, image, image, image, { type: 'text', text: 'What changed?' }] }] });
+    expect(withImages.length).toBeGreaterThan(20 * MB);
+    const res = await post('/v1/messages', withImages);
+    expect(res.status).toBe(200);
+    await res.text();
+    expect(anthropic.seen.at(-1)!.body).toBe(withImages);
+    const codexRes = await post('/openai/responses', withImages);
+    expect(codexRes.status).toBe(200);
+    await codexRes.text();
+    expect(chatgpt.seen.at(-1)!.body).toBe(withImages);
+
+    const tooLarge = '{"model":"claude-test","messages":"' + 'A'.repeat(33 * MB) + '"}';
+    /** The same body without a content-length, sent in parts as it is made. */
+    const streamed = () => new ReadableStream<Uint8Array>({
+      start(c) { const part = new TextEncoder().encode('A'.repeat(MB)); for (let i = 0; i < 33; i++) c.enqueue(part); c.close(); },
+    });
+    for (const [path, body] of [['/v1/messages', tooLarge], ['/openai/responses', tooLarge], ['/v1/messages', streamed()], ['/openai/responses', streamed()]] as const) {
+      const refused = await post(path, body);
+      expect(refused.status).toBe(413);
+      expect(await refused.json()).toEqual({ type: 'error', error: { type: 'request_too_large', message: expect.stringContaining('32 MB') } });
+    }
+    expect(anthropic.seen).toHaveLength(1);
+    expect(chatgpt.seen).toHaveLength(1);
+  });
+
   it('switches a house to its next account when the provider answers 429, leaving other houses alone', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     cleanup.push(async () => vi.useRealTimers());
@@ -237,6 +277,48 @@ describe('the standalone Sorting Hat', () => {
     await hat.close();
     const again = await start(dir);
     expect((await again.api('GET', 'usage?groupBy=provider,account,model')).rows).toEqual(expected);
+  });
+
+  it('aborts the provider request when the caller hangs up mid-stream, counting only what was streamed', async () => {
+    const { hat, api, anthropic, chatgpt, codex, claudeAccount } = await start();
+    const mine = await claudeAccount('Mine');
+    const gpt = await api('POST', 'accounts', { name: 'ChatGPT', providerId: 'openai' });
+    const device = await api('POST', `accounts/${gpt.id}/sign-in`, { flow: 'device' });
+    await codex.latest.complete('chatgpt-personal');
+    await api('GET', `sign-ins/${device.signInId}`);
+    const house = await api('POST', 'houses', { name: 'Personal', accounts: { anthropic: [mine.id], openai: [gpt.id] } });
+    const key = await api('POST', 'hat-keys', { houseId: house.id, name: 'pi' });
+    const errors = vi.spyOn(console, 'error');
+    cleanup.push(async () => errors.mockRestore());
+    anthropic.control.hold = true;
+    chatgpt.control.hold = true;
+
+    /** Starts a streamed request, reads its first chunk, then hangs up. */
+    const hangUp = async (path: string) => {
+      const caller = new AbortController();
+      const res = await fetch(`${hat.url}${path}`, { method: 'POST', signal: caller.signal,
+        headers: { authorization: `Bearer ${key.secret}`, 'content-type': 'application/json' }, body: '{"model":"claude-test","messages":[]}' });
+      const reader = res.body!.getReader();
+      expect((await reader.read()).done).toBe(false);
+      caller.abort();
+      await reader.read().catch(() => {});
+    };
+    // Messages, read for usage, and another path, not read: each is aborted at Anthropic.
+    await hangUp('/v1/messages?beta=true');
+    await vi.waitFor(() => expect(anthropic.aborted).toEqual(['/v1/messages?beta=true']));
+    await hangUp('/v1/complete');
+    await vi.waitFor(() => expect(anthropic.aborted).toEqual(['/v1/messages?beta=true', '/v1/complete']));
+    // ChatGPT keeps aborting as it did.
+    await hangUp('/openai/responses');
+    await vi.waitFor(() => expect(chatgpt.aborted).toEqual(['https://chatgpt.test/backend-api/codex/responses']));
+
+    // The aborted Claude message counts only its message_start: output 1, not the 8 it would have reached.
+    await vi.waitFor(async () => expect((await api('GET', 'usage')).totals.requests).toBe(2));
+    expect((await api('GET', 'usage?groupBy=provider')).rows).toEqual([
+      expect.objectContaining({ providerId: 'anthropic', requests: 1, inputTokens: 10, outputTokens: 1 }),
+      expect.objectContaining({ providerId: 'openai', requests: 1, inputTokens: 0, outputTokens: 0 }),
+    ]);
+    expect(errors).not.toHaveBeenCalled();
   });
 
   it('lists each house’s models in Anthropic’s and OpenAI’s shapes, cached per account', async () => {
