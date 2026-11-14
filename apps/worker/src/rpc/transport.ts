@@ -42,6 +42,12 @@ export type TransportOptions = {
 export async function startTransport(opts: TransportOptions) {
   const http = createServer((req, res) => {
     void (async () => {
+      // Lets the web client tell a refused token from a worker that is down; a browser cannot read a refused upgrade's status.
+      const url = new URL(req.url ?? '/', 'http://localhost');
+      if (req.method === 'GET' && url.pathname === '/ws') {
+        res.writeHead(tokenMatches(opts.token, url.searchParams.get('token')) ? 204 : 401, { 'cache-control': 'no-store' }).end();
+        return;
+      }
       if (opts.serveHttp && await opts.serveHttp(req, res)) return;
       await serveStatic(opts.webRoot, req, res);
     })().catch(() => {
