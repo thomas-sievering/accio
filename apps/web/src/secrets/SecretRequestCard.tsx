@@ -1,6 +1,7 @@
 import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import type { ParamsOf, SecretRequestItem } from '@accio/protocol';
 import { useClient } from '../app/connection';
+import { useAction } from '../app/useAction';
 import { Check, Key, MinusCircle } from '../app/icons';
 import { useSecretStore } from './secrets';
 import { safeError, valueInputProps, valueProblem } from './secretValue';
@@ -49,9 +50,11 @@ function PendingSecret({ threadId, item }: { threadId: string; item: SecretReque
   const saveUnavailable = canSave && store?.available === false;
   const [value, setValue] = useState('');
   const [chosen, setChosen] = useState('');
-  const [sending, setSending] = useState<Action>();
+  const { busy, error, run, clear } = useAction();
+  // Which answer the busy flag belongs to, so only its button says so.
+  const [answering, setAnswering] = useState<Action>();
+  const sending = busy ? answering : undefined;
   const [sent, setSent] = useState(false);
-  const [error, setError] = useState<string>();
   const inFlight = useRef(false);
   const tooLarge = valueProblem(value);
   const locked = !!sending || sent;
@@ -61,25 +64,24 @@ function PendingSecret({ threadId, item }: { threadId: string; item: SecretReque
   const answer = async (a: Answer) => {
     if (inFlight.current) return;
     inFlight.current = true;
-    setSending(a.type);
-    setError(undefined);
+    setAnswering(a.type);
     const typed = 'value' in a ? a.value : '';
-    try {
-      await client.call('secretRequests.answer', { threadId, requestId: item.requestId, answer: a });
+    await run(async () => {
+      try {
+        await client.call('secretRequests.answer', { threadId, requestId: item.requestId, answer: a });
+      } catch (err) {
+        inFlight.current = false;
+        throw new Error(safeError(err, typed, {
+          decline: 'Could not decline the request. Try again.',
+          existing: `Couldn't hand the saved secret to ${item.machineName}. Try again.`,
+          save: `Couldn't save and hand over the secret. Try again, or use it once.`,
+          once: `Couldn't hand the secret to ${item.machineName}. Nothing was saved; try again.`,
+        }[a.type]));
+      }
       // The server now updates this item; until it does, nothing can be sent again.
       setValue('');
       setSent(true);
-    } catch (err) {
-      inFlight.current = false;
-      setError(safeError(err, typed, {
-        decline: 'Could not decline the request. Try again.',
-        existing: `Couldn't hand the saved secret to ${item.machineName}. Try again.`,
-        save: `Couldn't save and hand over the secret. Try again, or use it once.`,
-        once: `Couldn't hand the secret to ${item.machineName}. Nothing was saved; try again.`,
-      }[a.type]));
-    } finally {
-      setSending(undefined);
-    }
+    });
   };
   const primary: Action = canSave && !saveUnavailable ? 'save' : 'once';
   const sendValue = (type: 'save' | 'once') => { if (canSend) void answer({ type, value }); };
@@ -139,7 +141,7 @@ function PendingSecret({ threadId, item }: { threadId: string; item: SecretReque
         readOnly={locked}
         aria-invalid={tooLarge ? true : undefined}
         aria-describedby={hintId}
-        onChange={(e) => { setValue(e.target.value); setError(undefined); }}
+        onChange={(e) => { setValue(e.target.value); clear(); }}
         onKeyDown={onKeyDown}
       />
       {(tooLarge || error) && <p className="secret-error" role="alert">{tooLarge ?? error}</p>}

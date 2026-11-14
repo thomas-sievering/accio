@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { mediaKind, type ThreadAsset } from '@accio/protocol';
 import { useClient } from '../app/connection';
+import { useAction } from '../app/useAction';
 import { assetUrl } from './assetUrl';
 import { ImageViewer } from './ImageViewer';
 import { useSavedAsset } from './useSavedAsset';
@@ -14,7 +15,7 @@ export function InlineMedia({ threadId, asset, source, mimeType, label }: Props)
   const kind = mediaKind(asset?.mimeType ?? mimeType ?? '');
   const name = label || asset?.name || (kind ? `${kind[0]!.toUpperCase()}${kind.slice(1)}` : 'Attachment');
   const [error, setError] = useState<string>();
-  const [actionError, setActionError] = useState<string>();
+  const { error: actionError, run } = useAction();
   const [viewer, setViewer] = useState(false);
   const [near, setNear] = useState(kind === 'image');
   const saved = useSavedAsset(threadId, asset?.id, near);
@@ -71,18 +72,15 @@ export function InlineMedia({ threadId, asset, source, mimeType, label }: Props)
   }, []);
   const healthy = saved.loaded;
 
-  const action = async (download: boolean) => {
-    setActionError(undefined);
-    try {
-      const target = asset ? (await assetUrl(client, threadId, asset.id, download)).url : source;
-      if (!target) return;
-      const link = document.createElement('a');
-      link.href = target;
-      if (download) link.download = asset?.name ?? '';
-      else { link.target = '_blank'; link.rel = 'noopener noreferrer'; }
-      link.click();
-    } catch (cause) { setActionError(cause instanceof Error ? cause.message : String(cause)); }
-  };
+  const action = (download: boolean) => run(async () => {
+    const target = asset ? (await assetUrl(client, threadId, asset.id, download)).url : source;
+    if (!target) return;
+    const link = document.createElement('a');
+    link.href = target;
+    if (download) link.download = asset?.name ?? '';
+    else { link.target = '_blank'; link.rel = 'noopener noreferrer'; }
+    link.click();
+  });
 
   return <span className={`inline-media ${kind ?? 'file'}`} ref={holder}>
     {kind === 'image' && url && <button className="media-image-open" aria-label={`Expand image: ${name}`} onClick={() => setViewer(true)}>

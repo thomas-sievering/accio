@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEv
 import { modelKey, type ModelSelection, type UsedUpLimit } from '@accio/protocol';
 import { useClient, useConnectionStatus } from '../app/connection';
 import { Check, ProviderLogo, Star } from '../app/icons';
+import { useAction } from '../app/useAction';
 import { EffortWord, effortSteps } from './EffortControl';
 import { useSteps, useWheelSteps } from './steps';
 import { prettyModelName } from './modelName';
@@ -28,8 +29,9 @@ export function ModelPicker({ profileId, value, onChange, disabled = false }: {
   const effortId = useId();
   const effortMenu = useRef<HTMLDivElement>(null);
   const [effortPosition, setEffortPosition] = useState<CSSProperties>({});
-  const { data, error, setError, update } = useModels(profileId);
-  const [busy, setBusy] = useState(false);
+  const { data, error: loadError, setError, update } = useModels(profileId);
+  const { busy, error: actionError, run, clear } = useAction();
+  const error = actionError ?? loadError;
   const [tab, setTab] = useState('favorites');
   const [position, setPosition] = useState<CSSProperties>({});
 
@@ -68,23 +70,16 @@ export function ModelPicker({ profileId, value, onChange, disabled = false }: {
   // Buttons stay enabled while a call runs so keyboard focus never drops out of the panel.
   const choose = async (model: ModelSelection) => {
     if (busy || disabled) return;
-    setBusy(true);
     setError(undefined);
     // Another model keeps the effort when it accepts it, so moving from Opus to Sonnet stays at high.
     const next = models.find((m) => m.harnessId === model.harnessId && m.id === model.modelId);
     const effort = value.effort && next?.efforts.some((e) => e.id === value.effort) ? value.effort : undefined;
-    try { await onChange(effort ? { ...model, effort } : model); panel.current?.hidePopover(); }
-    catch (err) { setError((err as Error).message); }
-    finally { setBusy(false); }
+    await run(async () => { await onChange(effort ? { ...model, effort } : model); panel.current?.hidePopover(); });
   };
   const favorite = async (model: ModelSelection, next: boolean) => {
     if (!profileId || busy) return;
-    setBusy(true);
     setError(undefined);
-    try {
-      update(await client.call('models.favorite', { profileId, model, favorite: next }));
-    } catch (err) { setError((err as Error).message); }
-    finally { setBusy(false); }
+    await run(async () => update(await client.call('models.favorite', { profileId, model, favorite: next })));
   };
   const switchTab = (step: number) => {
     const tabs = ['favorites', ...groups.map((g) => g.id)];
@@ -104,7 +99,7 @@ export function ModelPicker({ profileId, value, onChange, disabled = false }: {
 
   const effort = selected && selected.efforts.length > 0 ? effortSteps(selected, current.effort) : undefined;
   const stepper = useSteps(effort?.steps ?? [], effort?.index ?? -1,
-    (next) => onChange({ harnessId: current.harnessId, modelId: current.modelId, ...(next ? { effort: next } : {}) }), setError);
+    (next) => onChange({ harnessId: current.harnessId, modelId: current.modelId, ...(next ? { effort: next } : {}) }), (message) => { clear(); setError(message); });
   useWheelSteps(effortTrigger, stepper.step, !!effort);
   const shownEffort = effort?.steps[stepper.shown];
   const description = selected?.name ?? fallbackName;
