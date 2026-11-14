@@ -78,6 +78,48 @@ describe('standalone hub trust and network boundary', () => {
     await second.client.call('hub.revokeMachine', { machineId: 'first' });
     await second.client.call('profiles.delete', { id: profile.id }); expect(second.client.snapshot.profiles).toEqual([]);
   });
+  it('answers malformed input to any hub method as a client error naming the problem, leaving the hub as it was', async () => {
+    const { home, service, pair } = await fixture();
+    const first = await pair('first'); await pair('second');
+    const profile = await first.client.call('profiles.save', { name: 'Personal' });
+    await first.client.call('machine.references', { profiles: [profile.id] });
+    const files = async () => Promise.all(['trust.json', 'settings.json', 'resources.json', 'mcp-credentials.json', 'pairing.json'].map(file => readFile(join(home, 'hub', file), 'utf8').catch(() => '')));
+    const before = await files(); const state = JSON.stringify({ ...service.snapshot(), revision: 0 });
+    const rpc = async (method: string, params: unknown) => {
+      const response = await fetch(service.url + '/rpc', { method: 'POST', headers: { authorization: `Bearer ${first.token}`, 'content-type': 'application/json' }, body: JSON.stringify({ method, params }) });
+      return { status: response.status, error: (await response.json() as { error: string }).error };
+    };
+    const malformed: [string, unknown, string][] = [
+      ['machine.hello', { id: 'first', name: 'first', platform: 'test', version: 'test', harnesses: 'none' }, 'harnesses'],
+      ['machine.hello', { id: 'first', name: 'first', platform: 'test', version: 'test', harnesses: [], githubAccounts: ['not a login'] }, 'githubAccounts.0'],
+      ['machine.references', { profiles: [42] }, 'profiles.0'],
+      ['machine.modelKey', { profileId: { id: profile.id } }, 'profileId'],
+      ['hub.revokeMachine', { machineId: ['second'] }, 'machineId'],
+      ['resources.write', { method: 'dropTables', args: [] }, 'method'],
+      ['resources.write', { method: 'saveMcp', args: [{ id: 'bad id', name: 'Remote', transport: 'http' }] }, 'args.0.id'],
+      ['resources.write', { method: 'setSkillScope', args: ['library:review', { global: 'yes' }] }, 'args.1.global'],
+      ['resources.write', { method: 'stageSkills', args: ['library', [{ id: 'library:review' }]] }, 'args.1.0.sourceId'],
+      ['resources.write', { method: 'setToolStatus', args: [{ toolId: 'tool', machineId: 'first', status: 'broken' }] }, 'args.0.status'],
+      ['mcp.grant', { id: 'remote', profileId: 7 }, 'profileId'],
+      ['mcp.release', { token: null }, 'token'],
+      ['accounts.beginSignIn', { id: 'claude', redirectUri: 'not a url' }, 'Invalid browser callback'],
+      ['accounts.beginSignIn', { id: 'claude', redirectUri: 'https://attacker.example/callback' }, 'Invalid browser callback'],
+      ['accounts.callback', { signInId: 'sign-in', code: 5 }, 'code'],
+      ['profiles.save', { name: '' }, 'Name is required'],
+      ['secrets.resolve', { profileId: profile.id }, 'projectId'],
+      ['threads.snoozeUntilOnline', { threadId: 'thread', snooze: { machineId: 'first', until: 'tomorrow' } }, 'snooze.until'],
+    ];
+    for (const [method, params, problem] of malformed) {
+      const answer = await rpc(method, params);
+      expect(answer, `${method} ${JSON.stringify(params)}`).toEqual({ status: 400, error: expect.stringContaining('Invalid hub request parameters') });
+      expect(answer.error, method).toContain(problem);
+    }
+    expect(await rpc('hub.pairingCode', [])).toEqual({ status: 400, error: 'Invalid hub request' });
+    expect(await rpc('hub.unknown', {})).toEqual({ status: 400, error: 'Unknown hub method hub.unknown' });
+    expect(await files()).toEqual(before);
+    expect(JSON.stringify({ ...service.snapshot(), revision: 0 })).toBe(state);
+    expect(first.client.snapshot.machines.map((m: { id: string }) => m.id).sort()).toEqual(['first', 'second']);
+  });
   it('rejects network-path and absolute request targets', async () => {
     const { service } = await fixture();
     for (const path of ['//attacker.invalid/v1/messages', 'http://attacker.invalid/v1/messages']) {
@@ -122,7 +164,7 @@ describe('standalone hub trust and network boundary', () => {
     await one.setSkillProject('library:review', { projectKey: 'project-one', enabled: false });
     expect(one.state().skills[0]?.scope).toEqual({ ...scope, projectKeys: expect.arrayContaining(['existing', 'project-two']) });
     expect(one.state().skills[0]?.scope.projectKeys).not.toContain('project-one');
-    await expect(first.client.call('resources.write', { method: 'setSkillProject', args: ['library:review', { projectKey: 'project', enabled: 'yes' }] })).rejects.toThrow('Invalid project skill selection');
+    await expect(first.client.call('resources.write', { method: 'setSkillProject', args: ['library:review', { projectKey: 'project', enabled: 'yes' }] })).rejects.toThrow('Invalid hub request parameters (args.1.enabled:');
   });
   it('shares secret metadata, authorizes values by scope, and invalidates remote copies after rotation and revocation', async () => {
     const { home, service, pair } = await fixture();
