@@ -49,6 +49,14 @@ export async function linkSortingHat(app: { profiles: { client: { call(method: s
   await app.profiles.client.call('sortingHat.configure', { url: hat.url, adminToken: hat.adminToken, hubName: 'Local dev' });
 }
 
+/** Where Claude's page sends the browser after approval of the sign-in at `authorizeUrl`, with `code` and the given state. */
+export function claudeCallback(authorizeUrl: string, code: string, state = new URL(authorizeUrl).searchParams.get('state')!) {
+  const callback = new URL(new URL(authorizeUrl).searchParams.get('redirect_uri')!);
+  callback.hostname = '127.0.0.1';
+  callback.searchParams.set('code', code); callback.searchParams.set('state', state);
+  return callback;
+}
+
 /** The profile's Claude account, or null. */
 export function claudeAccount(profile: ProfileView): AccountView | null {
   return profile.providers.find((p) => p.id === 'anthropic')?.accounts[0] ?? null;
@@ -134,9 +142,23 @@ export class TestClient {
   async signedIn(name: string, opts: { claudeAccount?: string } = {}) {
     const profile = await this.profile(name);
     const account = claudeAccount(profile) ?? await this.call('accounts.save', { name: `${name} Claude` });
-    const { signInId } = await this.call('accounts.beginSignIn', { id: account.id });
-    await this.call('accounts.completeSignIn', { signInId, code: opts.claudeAccount ?? `claude-${profile.id}` });
+    await this.claudeSignIn(account.id, opts.claudeAccount ?? `claude-${profile.id}`);
     return this.call('profiles.save', { id: profile.id, name, accountIds: { anthropic: [account.id] } });
+  }
+
+  /** Signs a Claude account in as the browser does: Claude's page sends `code` to this machine's callback, then the sign-in reads complete. */
+  async claudeSignIn(accountId: string, code: string) {
+    const { signInId, url } = await this.call('accounts.beginSignIn', { id: accountId });
+    const response = await fetch(claudeCallback(url, code));
+    if (!response.ok) throw new Error(await response.text());
+    const status = await this.call('accounts.signInStatus', { signInId });
+    if (status.status !== 'complete') throw new Error('The Claude sign-in did not complete');
+    return status.account;
+  }
+
+  /** This machine, as the hub records it. */
+  async thisMachine() {
+    return (await this.call('machines.list', {})).find((m) => m.thisMachine)!;
   }
 
   /** The profile of this name, made with a house of its name on the Sorting Hat if new. */

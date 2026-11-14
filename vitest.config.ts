@@ -12,5 +12,5 @@ export default defineConfig({
   },
   // Several server tests create real git worktrees and take ~4s on Windows; vitest's 5s default
   // fails them whenever parallel agents load the machine.
-  test: { include: ['apps/*/src/**/*.test.ts', 'packages/*/src/**/*.test.ts'], testTimeout: 20_000 },
+  test: { include: ['apps/*/src/**/*.test.{ts,tsx}', 'packages/*/src/**/*.test.{ts,tsx}'], testTimeout: 20_000 },
 });

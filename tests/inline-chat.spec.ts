@@ -358,8 +358,7 @@ test('reading position stays put through updates and jump-to-latest restores fol
 test('Electron renderer supports the same tools, snapshots, viewer and media controls', async ({ baseURL }) => {
   test.setTimeout(60_000);
   const home = await mkdtemp(join(tmpdir(), 'accio-chat-electron-'));
-  const electron = require.resolve('electron', { paths: [resolve('apps/desktop')] });
-  const executablePath = require(electron) as string;
+  const executablePath = require('electron') as string;
   const environment = Object.fromEntries(Object.entries(process.env).filter(([key, value]) => key !== 'ELECTRON_RUN_AS_NODE' && value !== undefined));
   const desktop = await _electron.launch({ executablePath, args: [resolve('tests/electron-shell.cjs'), `--user-data-dir=${home}`], env: { ...environment, ACCIO_CHAT_TEST_URL: baseURL!, ACCIO_CHAT_TEST_DOWNLOADS: home } });
   try {

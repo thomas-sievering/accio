@@ -90,6 +90,24 @@ it('propagates a native process failure and closes the client', async () => {
   expect(fake.latest.closed).toBe(true);
 });
 
+it('fails the turn naming a Codex message whose fields no longer match', async () => {
+  home = await mkdtemp(join(tmpdir(), 'accio-mismatch-codex-'));
+  const fake = new FakeCodex(); fake.holdTurns = true;
+  const iterator = codexHarness(fake.factory).run({ cwd: home, prompt: 'wait', sessionId: null, env: {
+    CODEX_HOME: home, ACCIO_OPENAI_URL: 'http://127.0.0.1:1234/openai', ACCIO_OPENAI_KEY: 'profile-key',
+  }, signal: new AbortController().signal })[Symbol.asyncIterator]();
+  await iterator.next();
+  const pending = iterator.next();
+  const rejected = expect(pending).rejects.toThrow('Codex sent turn/completed in a form Accio does not recognize (turn.status).');
+  fake.latest.emit('turn/completed', { threadId: 'codex-session', turn: { id: 'codex-turn', state: 'completed' } });
+  await rejected;
+  expect(fake.latest.closed).toBe(true);
+  expect(() => codexEvents({ method: 'item/completed', params: { item: { type: 'fileChange', id: 'f', changes: { path: 'a' } } } }))
+    .toThrow('Codex sent item/completed in a form Accio does not recognize (item.changes).');
+  // Item types Accio does not show are not read further.
+  expect(codexEvents({ method: 'item/completed', params: { item: { type: 'reasoning', id: 'r', summary: 1 } } })).toEqual([]);
+});
+
 it('gives Codex accio tools on start and on resume, and keeps tool arguments structured', async () => {
   home = await mkdtemp(join(tmpdir(), 'accio-tools-codex-'));
   const tools = { url: 'http://127.0.0.1:1/mcp', authorization: 'Bearer t' };

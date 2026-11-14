@@ -51,7 +51,6 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
       }
     }
     for (const saved of connections.saved) if (!connections.workspaces.has(saved.id)) await connections.open(saved);
-    connections.global.on('machine.get', () => here);
     const transport = await startTransport({ ...opts, router: connections.router(null), routerFor: (id) => connections.router(id), serveHttp: (req, res) => connections.asset(req, res) });
     send = transport.broadcast;
     connections.listen(`http://${['0.0.0.0', '::', ''].includes(opts.host) ? '127.0.0.1' : opts.host.includes(':') ? `[${opts.host}]` : opts.host}:${transport.port}`);

@@ -1,4 +1,4 @@
-import { findMentionedThread, MENTION, threadHandle, type ThreadView, type TranscriptItem } from '@accio/protocol';
+import { findMentionedThread, MENTION, threadHandle, threadPlace, type ThreadView, type TranscriptItem } from '@accio/protocol';
 import { READ_THREAD_TOOL, readThreadPage } from './handoff.js';
 
 /** The threads a message mentions with @ that its thread may read: the same profile's, other than itself, in order of mention. */
@@ -14,9 +14,12 @@ export function mentionedThreads(text: string, threads: readonly ThreadView[], c
 
 /** Where the thread sits for the user, in the sidebar's words. */
 function placeOf(t: ThreadView, now: Date): string {
-  if (t.settledAt) return `settled ${t.settledAt.slice(0, 10)}`;
-  if (t.snoozedUntil && new Date(t.snoozedUntil) > now) return `snoozed until ${t.snoozedUntil.slice(0, 10)}`;
-  if (t.status === 'running') return 'working';
+  switch (threadPlace(t, now)) {
+    case 'settled': return `settled ${t.settledAt!.slice(0, 10)}`;
+    case 'snoozed': return `snoozed until ${t.snoozedUntil!.slice(0, 10)}`;
+    case 'working': return t.status === 'running' ? 'working' : 'working, delivery in progress';
+  }
+  if (t.needsSecret) return 'open, waiting for a secret';
   if (t.status === 'failed') return 'open, last turn failed';
   if (t.status === 'interrupted') return 'open, last turn interrupted';
   return 'open';

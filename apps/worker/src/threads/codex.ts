@@ -9,6 +9,7 @@ import { secretHttpTool } from '../secrets/httpTool.js';
 import { ACCIO_MCP_SERVER } from '../tools/tools.js';
 import { SUBAGENT_TIMEOUT_SEC } from './subagents.js';
 import { summarizeTool } from './transcript.js';
+import { CodexItems, CodexItemType, CodexMessageDelta, CodexRouting, CodexThreadResult, CodexTokenUsage, CodexTurnCompleted, CodexTurnResult, parseCodex } from './codexMessages.js';
 
 /** Codex runs on this machine. Only the profile's scoped proxy key reaches it. */
 export function codexHarness(factory: CodexFactory = startCodex): Harness {
@@ -115,11 +116,12 @@ export function codexHarness(factory: CodexFactory = startCodex): Harness {
           ].filter(Boolean).join('\n\n') };
         const dynamicTools = requestSecret && !sessionId ? { dynamicTools: [{ type: 'function', name: 'request_secret', description: SECRET_TOOL_DESCRIPTION,
           inputSchema: z.toJSONSchema(SecretToolInput), deferLoading: false }] } : {};
-        const result = await client.request(sessionId ? 'thread/resume' : 'thread/start', { ...params, ...dynamicTools, ...(sessionId ? { threadId: sessionId } : {}) });
+        const method = sessionId ? 'thread/resume' : 'thread/start';
+        const result = parseCodex(method, CodexThreadResult, await client.request(method, { ...params, ...dynamicTools, ...(sessionId ? { threadId: sessionId } : {}) }));
         threadId = result.thread.id;
         yield { type: 'harness_event', event: { kind: 'session', id: threadId! } };
         if (signal.aborted) return;
-        const turn = await client.request('turn/start', { threadId, input: codexInput(prompt, images), ...(model ? { model } : {}), ...(effort ? { effort } : {}) });
+        const turn = parseCodex('turn/start', CodexTurnResult, await client.request('turn/start', { threadId, input: codexInput(prompt, images), ...(model ? { model } : {}), ...(effort ? { effort } : {}) }));
         turnId = turn.turn.id;
         registerSteer?.(async (text, images) => {
           if (signal.aborted) throw new Error('This turn has stopped');
@@ -131,10 +133,11 @@ export function codexHarness(factory: CodexFactory = startCodex): Harness {
           if (forcedStop) return;
           if (failure) throw failure;
           for (const event of events.splice(0)) {
-            if (event.params.threadId && event.params.threadId !== threadId) continue;
-            if (event.params.turnId && event.params.turnId !== turnId) continue;
+            const route = parseCodex(event.method, CodexRouting, event.params ?? {});
+            if (route.threadId && route.threadId !== threadId) continue;
+            if (route.turnId && route.turnId !== turnId) continue;
             if (event.method === 'turn/completed') {
-              const completed = event.params.turn;
+              const completed = parseCodex(event.method, CodexTurnCompleted, event.params).turn;
               if (completed.id !== turnId) continue;
               registerSteer?.(undefined);
               if (completed.status === 'interrupted' && !signal.aborted) throw new Error('Codex interrupted the turn');
@@ -157,25 +160,44 @@ export function codexHarness(factory: CodexFactory = startCodex): Harness {
 
 /** Keep streamed assistant text and authoritative item completion in the same transcript item. */
 export function codexEvents({ method, params }: CodexNotification): HarnessEvent[] {
-  if (method === 'item/agentMessage/delta') return [{ kind: 'text', id: params.itemId, text: params.delta, append: true }];
+  if (method === 'item/agentMessage/delta') {
+    const { itemId, delta } = parseCodex(method, CodexMessageDelta, params);
+    return [{ kind: 'text', id: itemId, text: delta, append: true }];
+  }
   // GLOSSARY: Context window. Codex counts the latest request and its reply against the model's window.
   if (method === 'thread/tokenUsage/updated') {
-    const { last, modelContextWindow } = params.tokenUsage ?? {};
+    const { last, modelContextWindow } = parseCodex(method, CodexTokenUsage, params).tokenUsage ?? {};
     return typeof modelContextWindow === 'number' && modelContextWindow > 0 && typeof last?.totalTokens === 'number'
       ? [{ kind: 'context', usedTokens: last.totalTokens, windowTokens: modelContextWindow }] : [];
   }
   if (method !== 'item/started' && method !== 'item/completed') return [];
-  const item = params.item;
   const done = method === 'item/completed';
-  if (item.type === 'agentMessage' || item.type === 'plan') return done ? [{ kind: 'text', id: item.id, text: item.text }] : [];
-  const status = done ? (item.status === 'failed' || item.status === 'declined' || item.success === false || (item.exitCode != null && item.exitCode !== 0) ? 'error' : 'done') : 'running';
-  switch (item.type) {
-    case 'commandExecution': return [{ kind: 'tool', id: item.id, name: 'Shell', summary: item.command, input: { command: item.command, ...(item.cwd ? { cwd: item.cwd } : {}) }, status, output: item.aggregatedOutput ?? undefined }];
-    case 'fileChange': return [{ kind: 'tool', id: item.id, name: 'Edit', summary: item.changes.map((c: any) => c.path).join(', '), status,
-      ...(done ? { output: item.changes.map((c: any) => `${c.path}\n${c.diff ?? ''}`).join('\n') } : {}) }];
-    case 'mcpToolCall': return [{ kind: 'tool', id: item.id, name: `${item.server}/${item.tool}`, summary: summarizeTool(`${item.server}/${item.tool}`, item.arguments ?? {}), input: item.arguments ?? {}, status,
-      ...(done ? { output: JSON.stringify(item.error ?? item.result ?? '') } : {}) }];
-    case 'webSearch': return [{ kind: 'tool', id: item.id, name: 'Search', summary: item.query ?? '', status }];
+  const status = (item: { status?: string | null; success?: boolean | null; exitCode?: number | null }) =>
+    done ? (item.status === 'failed' || item.status === 'declined' || item.success === false || (item.exitCode != null && item.exitCode !== 0) ? 'error' : 'done') : 'running';
+  switch (parseCodex(method, CodexItemType, params).item.type) {
+    case 'agentMessage': case 'plan': {
+      const { item } = parseCodex(method, CodexItems.text, params);
+      return done ? [{ kind: 'text', id: item.id, text: item.text }] : [];
+    }
+    case 'commandExecution': {
+      const { item } = parseCodex(method, CodexItems.commandExecution, params);
+      return [{ kind: 'tool', id: item.id, name: 'Shell', summary: item.command, input: { command: item.command, ...(item.cwd ? { cwd: item.cwd } : {}) }, status: status(item), output: item.aggregatedOutput ?? undefined }];
+    }
+    case 'fileChange': {
+      const { item } = parseCodex(method, CodexItems.fileChange, params);
+      return [{ kind: 'tool', id: item.id, name: 'Edit', summary: item.changes.map(c => c.path).join(', '), status: status(item),
+        ...(done ? { output: item.changes.map(c => `${c.path}\n${c.diff ?? ''}`).join('\n') } : {}) }];
+    }
+    case 'mcpToolCall': {
+      const { item } = parseCodex(method, CodexItems.mcpToolCall, params);
+      const name = `${item.server}/${item.tool}`;
+      return [{ kind: 'tool', id: item.id, name, summary: summarizeTool(name, item.arguments ?? {}), input: item.arguments ?? {}, status: status(item),
+        ...(done ? { output: JSON.stringify(item.error ?? item.result ?? '') } : {}) }];
+    }
+    case 'webSearch': {
+      const { item } = parseCodex(method, CodexItems.webSearch, params);
+      return [{ kind: 'tool', id: item.id, name: 'Search', summary: item.query ?? '', status: status(item) }];
+    }
     default: return [];
   }
 }

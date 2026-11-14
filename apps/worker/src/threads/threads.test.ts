@@ -55,7 +55,7 @@ describe('threads slice', () => {
     const harness = new FakeHarness();
     const { t, c, checkout, folder } = await setup(harness);
     stop = t.stop;
-    const { id: machineId } = await c.call('machine.get', {});
+    const { id: machineId } = await c.thisMachine();
     const remote = { id: 'remote', name: 'Remote', platform: 'linux', version: '0.1.0', harnesses: [] };
     await t.app.settings.machineConnected(remote);
     await expect(c.call('threads.start', { checkoutId: checkout.id, text: 'hello', machineId: remote.id })).rejects.toThrow(/Update accio on Remote/);

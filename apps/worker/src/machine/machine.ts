@@ -91,7 +91,6 @@ export class Machines {
 
   register(router: Router) {
     router
-      .on('machine.get', async () => { await this.refresh(); return { ...this.here, name: this.settings.machine(this.here.id)?.name ?? this.here.name }; })
       .on('machines.list', async () => { await this.refresh(); return this.views(); })
       .on('machines.rename', async ({ machineId, name }) => {
         await this.refresh();

@@ -195,6 +195,15 @@ describe('TurnTranscript', () => {
     ]);
   });
 
+  it('hides Claude diagnostic lines from turn errors', () => {
+    const diagnostic = '[ede_diagnostic] result_type=user last_content_type=n/a stop_reason=null';
+    const fail = (errors: string[]) => new TurnTranscript('t1').accept({
+      type: 'result', subtype: 'error_during_execution', is_error: true, session_id: S, errors,
+    } as HarnessMessage).at(-1);
+    expect(fail([diagnostic])).toEqual({ type: 'end', outcome: 'failed', error: 'Turn ended with error_during_execution' });
+    expect(fail(['401 from hub', diagnostic, 'retry failed'])).toEqual({ type: 'end', outcome: 'failed', error: '401 from hub\nretry failed' });
+  });
+
   it('marks tools left running as errored when the turn stops early', () => {
     const t = new TurnTranscript('t1');
     t.accept({

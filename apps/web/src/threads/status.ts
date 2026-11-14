@@ -1,4 +1,4 @@
-import type { ThreadDelivery, ThreadView } from '@accio/protocol';
+import { deliveryPhase, deliveryWaitsOn, observedPhase, type DeliveryPhase, type ThreadDelivery, type ThreadView } from '@accio/protocol';
 import { ciSummary } from './DeliveryProgress';
 
 /**
@@ -14,27 +14,7 @@ export type StatusTone = 'working' | 'ready' | 'waiting' | 'attention' | 'unavai
 /** The mark beside the status: a spinner for running turns only, otherwise a static glyph or dot. */
 export type StatusGlyph = 'spinner' | 'dot' | 'pr' | 'merge' | 'ship' | 'push' | 'alert';
 
-export type DeliveryPhase =
-  /** Requested while the agent works; starts when the turn ends. */
-  | 'queued'
-  /** Requested, but the turn that would carry it was interrupted or failed. */
-  | 'paused'
-  /** The delivery agent turn is running. */
-  | 'shipping'
-  /** Published; the machine observes checks, review or merge without an agent. */
-  | 'waiting'
-  /** The host or remote has the change; verification on the target is pending. */
-  | 'integrated'
-  /** The PR was closed without merging. */
-  | 'closed'
-  /** Blocked and needs a person; `detail` says why. */
-  | 'attention'
-  /** Observation failed; the last known fact is kept in `detail`. */
-  | 'unavailable'
-  /** Verified on the target. */
-  | 'delivered'
-  /** Newer user work replaced this attempt; a fresh Ship is needed. */
-  | 'superseded';
+export type { DeliveryPhase };
 
 export type DeliveryStatus = {
   phase: DeliveryPhase;
@@ -94,7 +74,8 @@ export function deliveryStatus(t: ThreadView): DeliveryStatus | undefined {
   const revision = short(d.publishedRevision ?? d.pullRequest?.mergeRevision);
   const stopped = !!d.followUpsStoppedAt;
   const review = d.mode === 'review';
-  const superseded = (t.workVersion ?? 0) > (d.workVersion ?? t.workVersion ?? 0) && d.status !== 'queued' && d.status !== 'running';
+  const phase = deliveryPhase(t)!;
+  const superseded = phase === 'superseded';
   // Matches the server: after a PR or integration exists, cancelling only stops follow-ups.
   const published = !!(pr || d.integratedAt || d.publishedRevision);
   const prSuffix = pr ? ` · #${pr.number}` : '';
@@ -114,20 +95,20 @@ export function deliveryStatus(t: ThreadView): DeliveryStatus | undefined {
     return { ...base, phase: 'superseded', label: 'New work', tone: 'ready', glyph: 'ship', badge: 'New work', canShip: true,
       detail: pr && d.status !== 'delivered' && d.pullRequest?.state !== 'merged' ? `New work since PR #${pr.number}; Ship again to update it` : undefined };
   }
-  if (d.status === 'delivered') {
+  if (phase === 'delivered') {
     return pr
       ? { ...base, phase: 'delivered', label: `Merged into ${target}`, tone: 'delivered', glyph: 'merge', badge: `Merged #${pr.number}` }
       : { ...base, phase: 'delivered', label: `Shipped to ${target}`, tone: 'delivered', glyph: 'push', badge: target };
   }
-  if (d.status === 'queued') {
-    if (t.status === 'interrupted' || t.status === 'failed') {
-      const label = review ? 'Review paused' : 'Ship paused';
-      return { ...base, phase: 'paused', label, tone: 'interrupted', glyph: 'dot', badge: label, detail: 'Resume the thread to continue delivery' };
-    }
+  if (phase === 'paused') {
+    const label = review ? 'Review paused' : 'Ship paused';
+    return { ...base, phase: 'paused', label, tone: 'interrupted', glyph: 'dot', badge: label, detail: 'Resume the thread to continue delivery' };
+  }
+  if (phase === 'queued') {
     const label = review ? 'Prepares review when done' : 'Ships when done';
     return { ...base, phase: 'queued', label, tone: 'working', glyph: t.status === 'running' ? 'spinner' : 'ship', badge: 'Queued' };
   }
-  if (d.status === 'running') {
+  if (phase === 'shipping') {
     const label = review ? 'Preparing review' : 'Shipping';
     return { ...base, phase: 'shipping', label, tone: 'working', glyph: 'spinner', badge: review ? 'Preparing' : 'Shipping' };
   }
@@ -135,14 +116,15 @@ export function deliveryStatus(t: ThreadView): DeliveryStatus | undefined {
   // Published, ready or blocked: what the last observation established.
   const merged = d.pullRequest?.state === 'merged';
   let known: Pick<DeliveryStatus, 'phase' | 'label' | 'tone' | 'glyph' | 'badge' | 'detail' | 'ci'>;
-  if (d.pullRequest?.state === 'closed') {
+  const observed = observedPhase(d);
+  if (observed === 'closed') {
     known = { phase: 'closed', label: 'Closed without merging', tone: 'attention', glyph: 'pr', badge: `Closed #${pr!.number}`, detail: 'The PR was closed without merging. Ship again to publish this work.' };
-  } else if (d.status === 'blocked') {
-    // A real blocker wins over a known merge; the reason is the actionable part.
+  } else if (observed === 'attention') {
+    // The reason is the actionable part.
     known = { phase: 'attention', label: 'Needs attention', tone: 'attention', glyph: 'alert', badge: 'Needs attention',
       ci: d.ci?.checks.some(c => ['failure', 'error', 'cancelled', 'timed_out', 'action_required', 'startup_failure'].includes(c.status)) ? d.ci : undefined,
       detail: d.detail ?? (merged || d.integratedAt ? `Merged, but checks on ${target} need attention` : 'Delivery needs attention') };
-  } else if (merged || d.integratedAt) {
+  } else if (observed === 'integrated') {
     // Live CI replaces the generic label; the merge or push stays in the glyph, badge and detail.
     const progress = d.status === 'waiting' && d.waitingOn !== 'agent' ? ciSummary(d.ci) : undefined;
     known = pr
@@ -150,7 +132,7 @@ export function deliveryStatus(t: ThreadView): DeliveryStatus | undefined {
       : { phase: 'integrated', label: progress ?? `Pushed · checking ${target}`, tone: 'waiting', glyph: 'push', badge: target, detail: progress ? `Pushed · waiting for checks on ${target}` : `Waiting for checks on ${target}` };
     if (progress) known.ci = d.ci;
   } else {
-    const on = d.status === 'ready' ? 'merge' : d.waitingOn ?? 'checks';
+    const on = deliveryWaitsOn(d);
     const mergesItself = !review && d.policy === 'pull-request' && !stopped;
     const progress = d.status === 'waiting' && on === 'checks' ? ciSummary(d.ci) : undefined;
     known = {
@@ -162,8 +144,8 @@ export function deliveryStatus(t: ThreadView): DeliveryStatus | undefined {
   }
   if (stopped && known.phase === 'waiting') known = { ...known, detail: pr ? `Automatic fixes stopped · still tracking #${pr.number}` : 'Automatic fixes stopped' };
   const canShip = known.phase === 'attention' || known.phase === 'closed';
-  if (d.observationError) {
-    return { ...base, phase: 'unavailable', label: 'Status unavailable', tone: 'unavailable', glyph: pr ? 'pr' : 'alert', badge: 'Unavailable',
+  if (phase === 'unavailable') {
+    return { ...base, phase, label: 'Status unavailable', tone: 'unavailable', glyph: pr ? 'pr' : 'alert', badge: 'Unavailable',
       detail: `Last known: ${known.label}${prSuffix}`, canShip, canCheck: true };
   }
   return { ...base, ...known, canShip };

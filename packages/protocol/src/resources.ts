@@ -28,7 +28,6 @@ export const resourceMethods = {
   'tools.check': method<typeof ToolCheck, ToolStatus>(ToolCheck),
   'tools.repair': method<typeof ToolCheck, ToolStatus>(ToolCheck),
   'skills.addSource': method<typeof SkillSource, SkillSource>(SkillSource),
-  'skills.updateSource': method<typeof ResourceId, SkillEntry[]>(ResourceId),
   'skills.previewUpdate': method<typeof ResourceId, SkillEntry[]>(ResourceId),
   'skills.applyUpdate': method<typeof ApplySkills, SkillEntry[]>(ApplySkills),
   'skills.deleteSource': method<typeof ResourceId, null>(ResourceId),
