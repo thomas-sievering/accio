@@ -67,6 +67,8 @@ Preconditions: healthy instance. New thread, search and filter stay hidden until
 
 - **Context window and prompt cache:** run the `Claude cache usage` case in `tests/inline-chat.spec.ts` against the chat fixture server. Send `Cache usage fixture` from a new No project thread; require the `.context-meter` pill to read `1k / 200k` (the fixture's reported 200,000-token window), open it, require the meter with its compaction tick and `Compacts automatically at about 167,000 tokens.`, the limits row and `Prompt cache 80% read`, open that breakdown, and require 800 read, 100 written, 100 reported one-hour writes and 100 uncached tokens. Reload and reopen the breakdown with the same counts. The fixture substitutes the coding harness at the production boundary; this proves persistence and UI accounting, while live Anthropic cache hits remain unverified. Main-conversation request usage excludes subagents, title generation and older requests without usage reports.
 
+- **Markdown tables:** the `wide Markdown table` case in `tests/inline-chat.spec.ts` sends `Table fixture` and requires, at 1280 and 390 px, the wide table's `.table-scroll` to scroll while `.messages` never scrolls sideways, and the narrow table to keep its own width. Headless Chromium hides scrollbars; check the visible horizontal scrollbar with `--headed`.
+
 - Sending creates the thread; opening a draft alone does not persist a conversation.
 - Coding harnesses have full permissions. Keep all tool tasks inside the runner's disposable project; never test a prompt against the user's checkout.
 - Favourites may initially be empty while provider tabs contain models. Empty favourites is not an empty provider catalog.
