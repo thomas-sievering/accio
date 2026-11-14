@@ -231,11 +231,6 @@ export async function startHubService(opts: HubServiceOptions) {
         logins.set(result.signInId, { machineId, accountId: p.id, providerId: result.providerId, startedAt: Date.now() });
         return result;
       }
-      case 'accounts.completeSignIn': {
-        const pending = login(p.signInId, machineId);
-        pending.complete = await completeRemote(p.signInId, { code: p.code });
-        return pending.complete;
-      }
       case 'accounts.signInStatus': {
         const pending = login(p.signInId, machineId);
         if (pending.complete) return { status: 'complete', account: pending.complete };

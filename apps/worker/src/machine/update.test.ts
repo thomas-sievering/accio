@@ -107,7 +107,7 @@ describe('updating a machine’s Accio', () => {
     };
     const mac = await join_({ updates: { root: app, host: desktop, pnpm: fakePnpm() } });
     const pc = await join_({ updates: { root: undefined } });
-    const macId = (await mac.call('machine.get', {})).id;
+    const macId = (await mac.thisMachine()).id;
     await commit('two');
 
     await expect.poll(() => pc.call('update.status', { machineId: macId }).then((v) => v.state, () => 'waiting'), { timeout: 10_000 }).toBe('behind');

@@ -138,16 +138,18 @@ describe('account settings on a hub with a Sorting Hat of its own', () => {
     const profile = await laptop.call('profiles.save', { name: 'Personal', createHouse: true });
     expect(profile.house).toEqual({ id: 'personal', name: 'Personal' });
 
-    // Claude: the worker's browser callback, then the pasted code for a second account.
+    // Claude: the worker's browser callback, pending until it arrives.
     const first = await laptop.call('accounts.save', { name: 'First', providerId: 'anthropic' });
     const begun = await laptop.call<{ signInId: string; url: string }>('accounts.beginSignIn', { id: first.id, redirectUri: 'http://localhost:4567/callback' });
     const state = new URL(begun.url).searchParams.get('state');
     await laptop.call('accounts.callback', { signInId: begun.signInId, code: `code#${state}`, state });
     expect(await laptop.call('accounts.signInStatus', { signInId: begun.signInId })).toMatchObject({ status: 'complete', account: { id: first.id, signedIn: true } });
     const second = await laptop.call('accounts.save', { name: 'Second', providerId: 'anthropic' });
-    const pasted = await laptop.call<{ signInId: string; url: string }>('accounts.beginSignIn', { id: second.id });
-    await expect(laptop.call('accounts.signInStatus', { signInId: pasted.signInId })).resolves.toEqual({ status: 'pending' });
-    expect(await laptop.call('accounts.completeSignIn', { signInId: pasted.signInId, code: `pasted#${new URL(pasted.url).searchParams.get('state')}` })).toMatchObject({ signedIn: true });
+    const later = await laptop.call<{ signInId: string; url: string }>('accounts.beginSignIn', { id: second.id, redirectUri: 'http://localhost:4567/callback' });
+    await expect(laptop.call('accounts.signInStatus', { signInId: later.signInId })).resolves.toEqual({ status: 'pending' });
+    const laterState = new URL(later.url).searchParams.get('state');
+    await laptop.call('accounts.callback', { signInId: later.signInId, code: `later#${laterState}`, state: laterState });
+    expect(await laptop.call('accounts.signInStatus', { signInId: later.signInId })).toMatchObject({ status: 'complete', account: { id: second.id, signedIn: true } });
 
     // ChatGPT: browser approval finishes on the provider's side; the status tells.
     const gpt = await laptop.call('accounts.save', { name: 'GPT', providerId: 'openai' });
