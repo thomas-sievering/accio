@@ -1,4 +1,5 @@
 import type { ChangelogEntry, CommitView } from '@accio/protocol';
+import { formatDay } from '../ui/dates';
 
 /**
  * GLOSSARY: Changelog. One project's entries matching a search: every word must appear in
@@ -21,12 +22,8 @@ export function landedText(e: ChangelogEntry): string {
 
 /** "Today", "Yesterday", or a date such as "Mon 3 Nov": the day a change shipped. */
 export function shippedDay(iso: string, now: Date): string {
-  const day = new Date(iso);
-  if (day.toDateString() === now.toDateString()) return 'Today';
-  const yesterday = new Date(now);
-  yesterday.setDate(now.getDate() - 1);
-  if (day.toDateString() === yesterday.toDateString()) return 'Yesterday';
-  return day.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short', ...(day.getFullYear() === now.getFullYear() ? {} : { year: 'numeric' }) });
+  const day = formatDay(iso, now);
+  return day.charAt(0).toUpperCase() + day.slice(1);
 }
 
 /** Entries grouped by the day they shipped, keeping their newest-first order. */

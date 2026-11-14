@@ -1,6 +1,7 @@
-import { useId, useRef, useState } from 'react';
+import { useId, useRef } from 'react';
 import type { ProjectView } from '@accio/protocol';
 import { emitAppEvent } from '../app/appEvents';
+import { useAction } from '../app/useAction';
 import { focusMenuItem, onMenuKeyDown } from '../ui/menuKeys';
 
 /**
@@ -10,18 +11,13 @@ import { focusMenuItem, onMenuKeyDown } from '../ui/menuKeys';
 export function ProjectCrumbMenu({ project, path }: { project: ProjectView; path?: string }) {
   const id = useId();
   const menu = useRef<HTMLDivElement>(null);
-  const [error, setError] = useState<string>();
+  const { error, run, clear } = useAction();
   const canOpenFolder = !!path && window.accioDesktop?.serverOrigin === window.location.origin;
   const close = () => menu.current?.hidePopover();
-  const openFolder = async () => {
-    setError(undefined);
-    try {
-      await window.accioDesktop!.openFolder(path!);
-      close();
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  };
+  const openFolder = () => run(async () => {
+    await window.accioDesktop!.openFolder(path!);
+    close();
+  });
   const item = (label: string, run: () => void) => (
     <button type="button" className="menu-item" role="menuitem" onClick={run}><span className="menu-text">{label}</span></button>
   );
@@ -32,7 +28,7 @@ export function ProjectCrumbMenu({ project, path }: { project: ProjectView; path
     </button>
     <div id={id} ref={menu} className="menu project-crumb-menu" popover="auto" role="menu" aria-label={project.name}
       onKeyDown={onMenuKeyDown}
-      onToggle={(e) => { if (e.newState === 'open') { setError(undefined); focusMenuItem(menu.current); } }}>
+      onToggle={(e) => { if (e.newState === 'open') { clear(); focusMenuItem(menu.current); } }}>
       {item('Dashboard', () => { close(); emitAppEvent('project.dashboard', { id: project.id }); })}
       {canOpenFolder && item('Open in Explorer', () => void openFolder())}
       {item('Project settings', () => { close(); emitAppEvent('project.open', { id: project.id }); })}

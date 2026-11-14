@@ -39,6 +39,9 @@ export function beginSignIn(random: (n: number) => Buffer = randomBytes, redirec
 /** A sign-in that cannot start or finish; the message is safe to show. */
 export class SignInError extends HatError {}
 
+/** The provider no longer accepts an account's stored sign-in, such as a revoked or reused refresh token. */
+export class SignInEndedError extends SignInError {}
+
 /** How long any started sign-in stays open. */
 export const SIGN_IN_TTL_MS = 15 * 60 * 1000;
 
@@ -100,6 +103,8 @@ async function tokenRequest(fetchImpl: Fetch, body: Record<string, string>): Pro
       const j = JSON.parse(text) as { error_description?: string; error?: string | { message?: string } };
       detail = j.error_description ?? (typeof j.error === 'string' ? j.error : j.error?.message) ?? detail;
     } catch {}
+    // A refused refresh token means the sign-in is over; other failures may pass.
+    if (body.grant_type === 'refresh_token' && (res.status === 400 || res.status === 401)) throw new SignInEndedError('Claude ended this sign-in. Sign in again.');
     throw new SignInError(`Claude refused the sign-in (${res.status}): ${detail}`);
   }
   return JSON.parse(text) as TokenResponse;

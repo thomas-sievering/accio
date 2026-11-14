@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { CLAUDE_OAUTH, beginSignIn, exchangeCode, needsRefresh, readPastedCode, refreshAccount, type Fetch } from './claudeOAuth.js';
+import { CLAUDE_OAUTH, SignInEndedError, beginSignIn, exchangeCode, needsRefresh, readPastedCode, refreshAccount, type Fetch } from './claudeOAuth.js';
 
 const pending = beginSignIn();
 
@@ -74,6 +74,15 @@ describe('token exchange', () => {
   it('reports Claude’s reason when it refuses', async () => {
     const { f } = fakeTokenEndpoint(() => ({ status: 400, json: { error: 'invalid_grant', error_description: 'Code expired' } }));
     await expect(exchangeCode(f, pending, 'old')).rejects.toThrow(/Code expired/);
+  });
+
+  it('ends the sign-in when Claude refuses the refresh token, but not when it is down', async () => {
+    const old = { accessToken: 'at', refreshToken: 'rt', expiresAt: 0, email: null, claudeAccountId: null, organization: null };
+    const refused = fakeTokenEndpoint(() => ({ status: 400, json: { error: 'invalid_grant' } }));
+    await expect(refreshAccount(refused.f, old, 0)).rejects.toBeInstanceOf(SignInEndedError);
+    const down = fakeTokenEndpoint(() => ({ status: 503, json: {} }));
+    const error = await refreshAccount(down.f, old, 0).catch((e) => e);
+    expect(error).not.toBeInstanceOf(SignInEndedError);
   });
 
   it('refreshes five minutes before expiry', () => {

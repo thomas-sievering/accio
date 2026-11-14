@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
+import { MAX_MODEL_BODY, readBody } from './bodies.js';
 import { anthropicList, openaiList, openaiModel, type AnthropicModel } from './models.js';
 import type { CodexModel } from './openaiAuth.js';
 import type { UsageEntry } from './usage.js';
@@ -56,7 +57,7 @@ export type RequestHandler = (req: IncomingMessage, res: ServerResponse) => void
  * The Sorting Hat's front door for model requests. Claude Code calls it with a
  * hat key (ANTHROPIC_AUTH_TOKEN, or an API key header); it swaps that key for
  * the house's account in use's OAuth token and forwards to Anthropic. The caller
- * is the real Claude Code, so nothing else about the request changes (ADR 0007).
+ * is the real Claude Code, so nothing else about the request changes (ADR 0018).
  * Codex calls the /openai/ routes the same way.
  */
 export function forwardModelRequests({ accounts, upstream = ANTHROPIC_API, fetchImpl = fetch, openaiUpstream = 'https://chatgpt.com/backend-api/codex', openaiFetch = fetch }: ForwardingOptions): RequestHandler {
@@ -82,12 +83,15 @@ export function forwardModelRequests({ accounts, upstream = ANTHROPIC_API, fetch
     let access = await accounts.claudeAccess(house.id);
     if (!access) return sendError(res, 401, 'authentication_error', `House ${house.id} has no signed-in Claude account`);
 
-    const body = await readBody(req);
+    const body = await modelBody(req, res);
+    if (!body) return;
+    const signal = abortOnClose(res);
     const send = (accessToken: string) =>
       fetchImpl(new URL(req.url ?? '/', upstream), {
         method: req.method,
         headers: upstreamHeaders(req, accessToken),
         body: body.length ? new Uint8Array(body) : undefined,
+        signal,
       });
 
     let upstreamRes = await send(access.token);
@@ -142,9 +146,9 @@ export function forwardModelRequests({ accounts, upstream = ANTHROPIC_API, fetch
     const used = accounts.accountIdInUse(houseId, 'openai');
     let credentials = await accounts.openaiCredentials(houseId);
     if (!credentials) return sendError(res, 401, 'authentication_error', `House ${houseId} has no signed-in ChatGPT account`);
-    const body = await readBody(req);
-    const controller = new AbortController();
-    res.once('close', () => controller.abort());
+    const body = await modelBody(req, res);
+    if (!body) return;
+    const signal = abortOnClose(res);
     const send = (auth: NonNullable<typeof credentials>) => {
       const headers = new Headers();
       for (const [key, value] of Object.entries(req.headers)) {
@@ -154,7 +158,7 @@ export function forwardModelRequests({ accounts, upstream = ANTHROPIC_API, fetch
       headers.set('authorization', `Bearer ${auth.accessToken}`);
       headers.set('chatgpt-account-id', auth.chatgptAccountId);
       return openaiFetch(`${openaiUpstream}${path!.slice('/openai'.length)}`, {
-        method: 'POST', headers, body: new Uint8Array(body), signal: controller.signal,
+        method: 'POST', headers, body: new Uint8Array(body), signal,
       });
     };
     let response = await send(credentials);
@@ -172,6 +176,17 @@ export function forwardModelRequests({ accounts, upstream = ANTHROPIC_API, fetch
     relay(response, res, new Set(['set-cookie']), usageTap('openai', response.headers.get('content-type'), (reported) =>
       record({ at, providerId: 'openai', house, accountId, body, reported })));
   }
+}
+
+/**
+ * Aborts a provider request once its caller's connection closes, so a caller
+ * that hangs up, such as a stopped thread, stops it upstream: nothing more is
+ * generated or read. After a finished answer, the abort does nothing.
+ */
+function abortOnClose(res: ServerResponse): AbortSignal {
+  const controller = new AbortController();
+  res.once('close', () => controller.abort());
+  return controller.signal;
 }
 
 /**
@@ -268,10 +283,13 @@ function upstreamHeaders(req: Pick<IncomingMessage, 'headers'>, accessToken: str
   return h;
 }
 
-async function readBody(req: IncomingMessage): Promise<Buffer> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of req) chunks.push(chunk as Buffer);
-  return Buffer.concat(chunks);
+/** A model request's body, or null after answering 413 when it is too large to forward. */
+async function modelBody(req: IncomingMessage, res: ServerResponse): Promise<Buffer | null> {
+  const body = await readBody(req, MAX_MODEL_BODY);
+  if (body) return body;
+  res.writeHead(413, { 'content-type': 'application/json' });
+  res.end(JSON.stringify({ type: 'error', error: { type: 'request_too_large', message: `The request body is larger than the Sorting Hat forwards (${MAX_MODEL_BODY / 1024 / 1024} MB). Send fewer or smaller images or files.` } }));
+  return null;
 }
 
 export function sendError(res: ServerResponse, status: number, type: string, message: string) {

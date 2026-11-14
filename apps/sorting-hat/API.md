@@ -89,6 +89,10 @@ The model routes answer their own failures in Anthropic's error shape,
 `{"type":"error","error":{"type":"authentication_error","message":"..."}}`, so
 Claude Code and Codex show the message.
 
+Bodies have a size limit (`bodies.ts`): 1 MiB for the management API, which
+answers 400 above it, and 32 MiB for a model request, Anthropic's own limit for
+messages, which answers 413 `request_too_large` above it and forwards nothing.
+
 ## Management API
 
 Successful creates answer 201, deletes 204 with no body, everything else 200.
@@ -214,6 +218,11 @@ Window = { id, kind: "session" | "weekly" | "monthly" | "other", label,
 
 Unknown values are `null`, never an invented zero. Houses that share an account
 share one allowance.
+
+`signInRequired` means the provider ended the account's sign-in, for example by
+refusing its refresh token; reading limits or forwarding a request finds it.
+Houses skip such an account until it is signed in again, and it is read again
+at most every five minutes in case the refusal passes.
 
 | Method and path | Body | Answer |
 | --- | --- | --- |

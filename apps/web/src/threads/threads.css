@@ -517,9 +517,16 @@
   text-decoration-color: var(--dim);
   text-underline-offset: 3px;
 }
+.msg.assistant .table-scroll {
+  max-width: 100%;
+  margin: 0 0 10px;
+  overflow-x: auto;
+}
+.msg.assistant .table-scroll::-webkit-scrollbar {
+  height: 10px;
+}
 .msg.assistant table {
   border-collapse: collapse;
-  margin: 0 0 10px;
 }
 .msg.assistant th,
 .msg.assistant td {

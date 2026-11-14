@@ -119,6 +119,11 @@ test('the Sorting Hat dashboard signs accounts in, sets up a house and hands out
   const dialog = page.locator('dialog[open]');
   const account = (name: string) => page.getByRole('article', { name: `Account ${name}`, exact: true });
   const house = (name: string) => page.getByRole('article', { name: `House ${name}`, exact: true });
+  /** Runs an action from an account's or house's ⋯ menu. */
+  const fromMenu = async (scope: ReturnType<typeof account>, item: string) => {
+    await scope.getByRole('button', { name: /^Actions for / }).click();
+    await scope.getByRole('menuitem', { name: item, exact: true }).click();
+  };
 
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Accounts' })).toBeVisible();
@@ -137,13 +142,14 @@ test('the Sorting Hat dashboard signs accounts in, sets up a house and hands out
     await dialog.getByRole('textbox', { name: 'Code' }).fill(`pasted#${url.searchParams.get('state')}`);
     await button('Finish sign-in', dialog).click();
     await expect(dialog).toBeHidden();
-    await expect(account(name).getByText('Signed in', { exact: true })).toBeVisible();
+    await expect(account(name)).not.toHaveClass(/off/);
+    await expect(account(name).getByRole('button', { name: 'Sign in', exact: true })).toHaveCount(0);
   };
   await addClaude('Personal Claude');
   await addClaude('Work Claude');
 
   // A wrong code is refused in the dialog; cancelling leaves the account as it was.
-  await button('Sign in again', account('Work Claude')).click();
+  await fromMenu(account('Work Claude'), 'Sign in again');
   await dialog.getByRole('textbox', { name: 'Code' }).fill('bad#state');
   await button('Finish sign-in', dialog).click();
   await expect(dialog.getByRole('alert')).not.toBeEmpty();
@@ -157,11 +163,11 @@ test('the Sorting Hat dashboard signs accounts in, sets up a house and hands out
   await button('Sign in with a code', dialog).click();
   await expect(dialog.getByLabel('Device code')).toHaveText('TEST-1234');
   await expect(dialog).toBeHidden({ timeout: 10_000 });
-  await expect(account('Personal ChatGPT').getByText('Signed in', { exact: true })).toBeVisible();
+  await expect(account('Personal ChatGPT')).not.toHaveClass(/off/);
   await expect(account('Personal ChatGPT')).toContainText('chatgpt-personal@example.com');
 
   // Rename an account.
-  await button('Rename', account('Work Claude')).click();
+  await fromMenu(account('Work Claude'), 'Rename');
   await dialog.getByRole('textbox', { name: 'Name' }).fill('Work');
   await button('Rename', dialog).click();
   await expect(account('Work')).toBeVisible();
@@ -185,12 +191,31 @@ test('the Sorting Hat dashboard signs accounts in, sets up a house and hands out
   await button('Move Work up').click();
   await expect(claudeOrder.getByRole('listitem')).toHaveText([/Work.*In use/, /Personal Claude/]);
   await expect(house('Personal').getByRole('group', { name: 'ChatGPT accounts of Personal' }).getByRole('listitem')).toHaveText([/Personal ChatGPT.*In use/]);
-  await expect(account('Work')).toContainText('in use for Personal');
+  await expect(account('Work')).toContainText('Personal · in use');
 
   // Limits show on each account.
   await button('Refresh limits').click();
   await expect(account('Work').getByRole('meter', { name: '5-hour' })).toHaveAttribute('aria-valuenow', '42');
   await expect(account('Personal ChatGPT').getByRole('meter').first()).toHaveAttribute('aria-valuenow', '64');
+
+  // A sign-in Anthropic ended since: found by reading limits, and fixed by signing in again.
+  await button('Add Claude account').click();
+  await dialog.getByRole('textbox', { name: 'Account name' }).fill('Old Claude');
+  await button('Add and sign in', dialog).click();
+  const oldState = new URL((await dialog.getByRole('link', { name: 'Open Claude sign-in' }).getAttribute('href'))!).searchParams.get('state');
+  await dialog.getByRole('textbox', { name: 'Code' }).fill(`ended#${oldState}`);
+  await button('Finish sign-in', dialog).click();
+  await expect(dialog).toBeHidden();
+  await expect(account('Old Claude')).toContainText('Sign-in ended');
+  await shot(page, 'sorting-hat-accounts', page.locator('#accounts'));
+  await button('Sign in again', account('Old Claude')).click();
+  const newState = new URL((await dialog.getByRole('link', { name: 'Open Claude sign-in' }).getAttribute('href'))!).searchParams.get('state');
+  await dialog.getByRole('textbox', { name: 'Code' }).fill(`pasted#${newState}`);
+  await button('Finish sign-in', dialog).click();
+  await expect(account('Old Claude').getByRole('meter', { name: '5-hour' })).toHaveAttribute('aria-valuenow', '42');
+  await fromMenu(account('Old Claude'), 'Delete');
+  await button('Delete account', dialog).click();
+  await expect(account('Old Claude')).toHaveCount(0);
 
   // A hat key, shown once, with settings for the apps that use it.
   await button('New hat key', house('Personal')).click();
@@ -240,25 +265,25 @@ test('the Sorting Hat dashboard signs accounts in, sets up a house and hands out
   await button('Delete', oldRow).click();
   await button('Delete', dialog).click();
   await expect(house('Personal').getByText('No hat keys.')).toBeVisible();
-  await button('Rename', house('Personal')).click();
+  await fromMenu(house('Personal'), 'Rename');
   await dialog.getByRole('textbox', { name: 'Name' }).fill('Home');
   await button('Rename', dialog).click();
   await expect(house('Home')).toBeVisible();
   await button('Remove Personal Claude from Home').click();
   await expect(claudeOrder).toHaveCount(0);
   await expect(house('Home').getByRole('group', { name: 'Claude accounts of Home' }).getByRole('listitem')).toHaveText([/Work.*In use/]);
-  await button('Sign out', account('Personal Claude')).click();
+  await fromMenu(account('Personal Claude'), 'Sign out');
   await button('Sign out', dialog).click();
   await expect(account('Personal Claude').getByText('Signed out', { exact: true })).toBeVisible();
-  await button('Delete', account('Personal Claude')).click();
+  await fromMenu(account('Personal Claude'), 'Delete');
   await button('Delete account', dialog).click();
   await expect(account('Personal Claude')).toHaveCount(0);
   // An account still in a house cannot be deleted: the reason shows in the dialog.
-  await button('Delete', account('Work')).click();
+  await fromMenu(account('Work'), 'Delete');
   await button('Delete account', dialog).click();
   await expect(dialog.getByRole('alert')).toContainText('house');
   await button('Cancel', dialog).click();
-  await button('Delete', house('Home')).click();
+  await fromMenu(house('Home'), 'Delete');
   await button('Delete house', dialog).click();
   await expect(page.getByText('No houses yet.')).toBeVisible();
 

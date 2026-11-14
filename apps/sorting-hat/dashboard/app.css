@@ -60,6 +60,18 @@ button.link { border: 0; background: none; padding: 0; color: var(--accent); }
 .tag { display: inline-block; font-size: .75rem; padding: .05rem .5rem; border-radius: 999px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
 .tag.ok { background: var(--ok-soft); color: var(--ok); }
 .tag.off { background: var(--danger-soft); color: var(--danger); }
+.card.off > :not(.card-head), .card.off h3 { opacity: .65; }
+.card > button { justify-self: start; }
+.warn { color: var(--warn); }
+
+.menu-wrap { position: relative; flex: none; }
+button.dots { border-color: transparent; background: none; color: var(--muted); font-size: 1rem; line-height: 1; }
+button.dots:hover, button.dots[aria-expanded=true] { border-color: var(--line); color: var(--text); }
+.menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 2; min-width: 160px; padding: 4px; display: grid; background: var(--card); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / .18); }
+.menu[hidden] { display: none; }
+.menu button { border: 0; background: none; justify-content: flex-start; padding: .35rem .6rem; border-radius: 5px; }
+.menu button:hover, .menu button:focus-visible { background: var(--accent-soft); outline: none; }
+.menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; width: 100%; }
 .tag.plain { background: transparent; border: 1px solid var(--line); color: var(--muted); }
 
 .limits { display: grid; gap: .55rem; }

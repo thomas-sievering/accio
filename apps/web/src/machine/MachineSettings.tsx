@@ -13,6 +13,7 @@ import { useResources } from '../resources/resources';
 import { ToolStatusCard } from '../tools/ToolStatusCard';
 import { OnboardMachine } from './OnboardMachine';
 import { MachineUpdate, useMachineUpdate } from './MachineUpdate';
+import { formatDayTime } from '../ui/dates';
 
 /** The machines known to the hub, including those currently offline. */
 export function MachineSettings({ machineId, onOpen, onBack, onOpenThread }: { machineId?: string; onOpen: (id: string) => void; onBack: () => void; onOpenThread: (threadId: string) => void }) {
@@ -111,7 +112,7 @@ function MachineDetail({ machine, onBack, onOpenThread }: { machine: MachineView
         </SettingRow>
         <SettingRow title="Platform"><code>{machine.platform}</code></SettingRow>
         <MachineUpdate machine={machine} />
-        {!machine.connected && <SettingRow title="Last seen"><span>{new Date(machine.lastSeen).toLocaleString()}</span></SettingRow>}
+        {!machine.connected && <SettingRow title="Last seen"><span>{formatDayTime(machine.lastSeen)}</span></SettingRow>}
       </SettingsSection>
       <SettingsSection title="Installed harnesses">
         {machine.harnesses.length === 0 && <SettingRow title="No harnesses reported" />}

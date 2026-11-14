@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { emitAppEvent, useAppEvent } from '../app/appEvents';
 import type { ThreadView } from '@accio/protocol';
-import { awaitsMachine, nextMorning, wakeText } from './shelves';
+import { formatDayTime } from '../ui/dates';
+import { awaitsMachine, nextMorning } from './shelves';
 import { useThreads, type ThreadActions } from './threads';
 
 /** Snoozes a thread and tells the sidebar, which says when it will wake. */
@@ -25,7 +26,7 @@ export function SnoozeNotice() {
   return (
     <div className="snooze-notice" role="status">
       {note && when && <>
-        <span>{note.untilOnline ? `Snoozed until ${note.untilOnline} is back` : `Snoozed until ${wakeText(when, new Date())}`}</span>
+        <span>{note.untilOnline ? `Snoozed until ${note.untilOnline} is back` : `Snoozed until ${formatDayTime(when, new Date())}`}</span>
         <button onClick={() => { setNote(undefined); void act.reopen(note.threadId).catch((e: Error) => console.error(e.message)); }}>Undo</button>
       </>}
     </div>
