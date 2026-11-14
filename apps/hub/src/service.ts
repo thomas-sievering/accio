@@ -6,6 +6,7 @@ import { GitHubLogin, methods, noHouseMessage, noSortingHatMessage, ResourceScop
 import { SharedSettings, type MachineHello, type SharedSeed } from './sharedSettings.js';
 import { HubError } from './errors.js';
 import { HubTrust } from './trust.js';
+import { HUB_INTERVAL_MS, keepAlive } from './keepAlive.js';
 import { accountSelection, profileViews, saveSharedProfile } from './profile.js';
 import { SortingHatLink } from './sortingHatLink.js';
 import type { CodexModel, Fetch } from './sortingHatClient.js';
@@ -408,8 +409,7 @@ export async function startHubService(opts: HubServiceOptions) {
         const previous = relays.get(machineId);
         relays.set(machineId, ws);
         previous?.close(4000, 'Replaced by a newer connection');
-        (ws as any).alive = true;
-        ws.on('pong', () => { (ws as any).alive = true; });
+        keepAlive(ws, HUB_INTERVAL_MS, { endOnWake: false });
         ws.on('error', () => {});
         ws.on('message', (data, binary) => { if (!binary && relays.get(machineId) === ws) forward(machineId, String(data)); });
         ws.once('close', () => { if (relays.get(machineId) === ws) { relays.delete(machineId); relayPeers(); } });
@@ -420,34 +420,24 @@ export async function startHubService(opts: HubServiceOptions) {
     if (!machineId || req.url !== '/events') { socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n'); return; }
     sockets.handleUpgrade(req, socket, head, (ws) => {
       owners.set(ws, machineId);
-      (ws as any).alive = true;
-      ws.on('pong', () => { (ws as any).alive = true; });
+      keepAlive(ws, HUB_INTERVAL_MS, { endOnWake: false });
       ws.on('error', () => {});
       ws.once('close', () => { owners.delete(ws); if (![...owners.values()].includes(machineId)) void settings.machineDisconnected(machineId).catch(() => {}); });
       ws.send(JSON.stringify({ revision }));
     });
   });
-  const heartbeat = setInterval(() => {
-    for (const ws of relay.clients) {
-      if (!(ws as any).alive) { ws.terminate(); continue; }
-      (ws as any).alive = false; ws.ping();
-    }
-    for (const ws of sockets.clients) {
-      const owner = owners.get(ws);
-      if (!(ws as any).alive || !owner) { ws.terminate(); continue; }
-      (ws as any).alive = false; ws.ping();
-    }
-    // The Sorting Hat expires its own sign-ins.
+  // The Sorting Hat expires its own sign-ins.
+  const loginSweep = setInterval(() => {
     for (const [id, pending] of logins) if (Date.now() - pending.startedAt > SIGN_IN_TTL_MS) logins.delete(id);
   }, 25_000);
-  heartbeat.unref();
+  loginSweep.unref();
   await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(opts.port ?? 47322, opts.host ?? '127.0.0.1', resolve); });
   const address = server.address();
   const port = typeof address === 'object' && address ? address.port : opts.port!;
   const url = `http://${opts.host ?? '127.0.0.1'}:${port}`;
   mcp.setUrl(opts.publicUrl ?? url);
   return { sortingHatLink: link, settings, resources, secrets, trust, port, url, snapshot, createPairingCode: () => HubTrust.createCode(opts.home),
-    async close() { closing = true; clearInterval(heartbeat); for (const ws of sockets.clients) ws.terminate(); for (const ws of relay.clients) ws.terminate();
+    async close() { closing = true; clearInterval(loginSweep); for (const ws of sockets.clients) ws.terminate(); for (const ws of relay.clients) ws.terminate();
       // server.close() drops only the connections idle right now; a request finishing later would keep its socket open until the client's keep-alive timeout (~3s).
       const sweep = setInterval(() => server.closeIdleConnections(), 25);
       await new Promise<void>((resolve) => server.close(() => resolve())).finally(() => clearInterval(sweep)); sockets.close(); relay.close(); await queue; for (const grant of grants.values()) grant.release(); await link.close(); await secrets.close(); await resources.close(); await settings.close(); await trust.close(); } };
