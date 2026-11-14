@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, desktopCapturer, dialog, ipcMain, Menu, screen, shell, systemPreferences, type NativeImage } from 'electron';
+import { app, BrowserWindow, clipboard, desktopCapturer, dialog, ipcMain, Menu, screen, shell, systemPreferences, webContents, type NativeImage } from 'electron';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { dirname, isAbsolute, join } from 'node:path';
@@ -8,6 +8,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { previewUrl } from './openPreview.js';
 import { contextMenuTemplate } from './contextMenu.js';
+import { appMenuTemplate } from './appMenu.js';
 import type { DesktopMessage } from '@accio/worker/dist/machine/desktop.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -206,6 +207,7 @@ ipcMain.handle('accio:open-folder', async (event, path: unknown) => {
 if (process.platform === 'win32') app.setAppUserModelId(process.env.ACCIO_WINDOW_TITLE ? `accio.${process.env.ACCIO_WINDOW_TITLE}` : 'accio');
 
 app.whenReady().then(async () => {
+  Menu.setApplicationMenu(Menu.buildFromTemplate(appMenuTemplate(process.platform, () => webContents.getAllWebContents())));
   try {
     const ready = await startWorker();
     localServerOrigin = new URL(ready.url).origin;

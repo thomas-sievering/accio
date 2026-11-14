@@ -165,22 +165,3 @@ export function retryBlockedUntil(view: AccountLimitsView, now: number): number 
   const at = Math.max(view.retryAt ? Date.parse(view.retryAt) : 0, view.attemptedAt ? Date.parse(view.attemptedAt) + COOLDOWN_MS : 0);
   return at > now ? at : null;
 }
-
-/** "in 2 h 14 min", "in 3 days", "4 min ago". */
-export function relativeTime(at: number, now: number): string {
-  const future = at >= now;
-  const minutes = Math.round(Math.abs(at - now) / 60_000);
-  let text: string;
-  if (minutes < 1) return future ? 'in under a minute' : 'just now';
-  if (minutes < 60) text = `${minutes} min`;
-  else if (minutes < 48 * 60) {
-    const h = Math.floor(minutes / 60);
-    const m = minutes % 60;
-    text = m && h < 10 ? `${h} h ${m} min` : `${h} h`;
-  } else text = `${Math.round(minutes / 1440)} days`;
-  return future ? `in ${text}` : `${text} ago`;
-}
-
-const full = new Intl.DateTimeFormat(undefined, { dateStyle: 'full', timeStyle: 'short' });
-
-export const fullTime = (at: number) => full.format(new Date(at));

@@ -4,12 +4,13 @@ import { Hub } from '../app/icons';
 import { SettingRow, SettingsSection, StatusPill, useEscape } from '../app/Settings';
 import { useAction } from '../app/useAction';
 import { PairHubForm } from './PairHubForm';
+import { PairingCode, type Pairing } from './PairingCode';
 import { SortingHatSettings } from './SortingHatSettings';
 
 /** The saved hubs; "Add hub" opens the pairing form as its own page. Without a hub yet (first run) the form is the whole page. */
 export function HubSettings({ adding, onAdd, onBack }: { adding?: boolean; onAdd?: () => void; onBack?: () => void } = {}) {
   const { hubs, selectedId, select, root } = useHubs();
-  const [pairing, setPairing] = useState<{ code: string; expiresAt: number }>();
+  const [pairing, setPairing] = useState<Pairing>();
   const [copied, setCopied] = useState(false);
   useEffect(() => { if (!copied) return; const timer = setTimeout(() => setCopied(false), 2000); return () => clearTimeout(timer); }, [copied]);
   const [confirming, setConfirming] = useState<string>();
@@ -42,7 +43,7 @@ export function HubSettings({ adding, onAdd, onBack }: { adding?: boolean; onAdd
           void run(async () => { setPairing(await root.call('hubs.createPairingCode', { id: current.id })); setCopied(false); })
             .finally(() => requestAnimationFrame(() => { if (trigger.isConnected) trigger.focus(); }));
         }}>Generate pairing code</button>
-        {pairing && <p role="status"><code>{pairing.code}</code> · expires {new Date(pairing.expiresAt).toLocaleTimeString()} <button type="button" className="ghost pairing-copy" onClick={() => void run(async () => { setCopied(false); try { await navigator.clipboard.writeText(pairing.code); setCopied(true); } catch { throw new Error('Couldn’t copy. Select and copy the code manually, or allow clipboard access.'); } })}>{copied ? 'Copied' : 'Copy code'}</button></p>}
+        {pairing && <PairingCode pairing={pairing}><button type="button" className="ghost pairing-copy" onClick={() => void run(async () => { setCopied(false); try { await navigator.clipboard.writeText(pairing.code); setCopied(true); } catch { throw new Error('Couldn’t copy. Select and copy the code manually, or allow clipboard access.'); } })}>{copied ? 'Copied' : 'Copy code'}</button></PairingCode>}
       </div>
     </SettingsSection>}
     {error && <p className="error" role="alert">{error}</p>}
