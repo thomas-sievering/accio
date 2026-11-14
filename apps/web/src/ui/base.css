@@ -90,6 +90,11 @@ pre {
 .drag :is(button, input, label) {
   -webkit-app-region: no-drag;
 }
+/* Electron's drag regions ignore stacking, so anything in the top layer over the title bar must opt out. */
+dialog,
+[popover] {
+  -webkit-app-region: no-drag;
+}
 ::-webkit-scrollbar {
   width: 10px;
 }
