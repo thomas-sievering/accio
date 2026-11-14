@@ -17,6 +17,8 @@ function fakeAnthropicAuth() {
   let n = 0;
   const grants: string[] = [];
   const usage: Record<string, unknown> = {};
+  /** Refresh tokens Anthropic no longer accepts. */
+  const revoked = new Set<string>();
   const f: Fetch = async (url, init) => {
     if (String(url) === 'https://api.anthropic.com/api/oauth/usage') {
       return Response.json(usage[new Headers(init?.headers).get('authorization')!.slice('Bearer '.length)] ?? {});
@@ -25,6 +27,7 @@ function fakeAnthropicAuth() {
     const body = JSON.parse(String(init?.body));
     grants.push(body.grant_type);
     if (body.code === 'bad') return new Response(JSON.stringify({ error_description: 'Invalid code' }), { status: 400 });
+    if (revoked.has(body.refresh_token)) return new Response(JSON.stringify({ error: 'invalid_grant' }), { status: 400 });
     n++;
     return Response.json({
       access_token: `token-${n}`,
@@ -33,7 +36,7 @@ function fakeAnthropicAuth() {
       account: { uuid: body.code === 'job' ? 'claude-job' : 'claude-me', email_address: 'me@example.com' },
     });
   };
-  return { f, grants, usage };
+  return { f, grants, usage, revoked };
 }
 
 /** Anthropic's API, faked: records what arrives and streams a reply. */
@@ -303,6 +306,29 @@ describe('sorting hat', () => {
     // Once Sooner's 5-hour window resets, it is preferred again.
     vi.setSystemTime(Date.now() + 2 * 3_600_000);
     expect(hub.selectedAccount('personal')?.id).toBe(sooner.id);
+  });
+
+  it('moves a house past an account whose sign-in ended, and asks to sign it in again', async () => {
+    const { hub, auth, api, call } = await setup();
+    const ended = await hub.saveAccount('Ended');
+    const working = await hub.saveAccount('Working');
+    const key = await houseKey(hub, 'personal');
+    await hub.setHouseAccounts('personal', { anthropic: [ended.id, working.id] });
+    await hub.completeAccountSignIn(hub.beginAccountSignIn(ended.id).signInId, 'short'); // token-1, due for refresh
+    await hub.completeAccountSignIn(hub.beginAccountSignIn(working.id).signInId, 'good'); // token-2
+    auth.revoked.add('refresh-1');
+
+    const response = await call(key);
+    expect(response.status).toBe(200);
+    await response.text();
+    expect(api.seen.map((r) => r.headers.authorization)).toEqual(['Bearer token-2']);
+    expect(hub.selectedAccount('personal')?.id).toBe(working.id);
+    expect(hub.limitViews().find((l) => l.accountId === ended.id)?.problem).toEqual({ code: 'signInRequired', message: 'Claude ended this sign-in. Sign in again.' });
+
+    // Signing in again clears it, and the house may use the account again.
+    await hub.completeAccountSignIn(hub.beginAccountSignIn(ended.id).signInId, 'good');
+    expect(hub.limitViews().find((l) => l.accountId === ended.id)?.problem).toBeNull();
+    expect(hub.selectedAccount('personal')?.id).toBe(ended.id);
   });
 
   it('routes a profile to its first signed-in account per provider, in the order chosen', async () => {

@@ -104,11 +104,11 @@ _Avoid_: Model key, access key, API key, token, secret
 One login at a provider, such as a personal Anthropic account, held by the Sorting Hat. It has a custom name, is set up independently, and can belong to several houses. An account at Anthropic is called a Claude account; an account at OpenAI is called a ChatGPT account.
 
 **Account in use**:
-The account a house's next request uses at a provider, which the Sorting Hat chooses among its signed-in accounts there. It skips accounts with 5% or less left in any window until that window resets, and otherwise prefers the account whose weekly allowance resets soonest; the house's order breaks ties. It can change during a thread.
+The account a house's next request uses at a provider, which the Sorting Hat chooses among its signed-in accounts there. It skips accounts whose sign-in the provider has ended, and accounts with 5% or less left in any window until that window resets, and otherwise prefers the account whose weekly allowance resets soonest; the house's order breaks ties. It can change during a thread.
 _Avoid_: Login, sign-in (as a noun for the account), subscription, provider instance
 
 **Sign-in**:
-Signing an account in on the provider's page, from Accio or the Sorting Hat's dashboard. Claude and ChatGPT finish automatically after browser approval. Provider credentials stay on the Sorting Hat. Signing out clears its credentials while preserving its name and houses.
+Signing an account in on the provider's page, from Accio or the Sorting Hat's dashboard. Claude and ChatGPT finish automatically after browser approval. Provider credentials stay on the Sorting Hat. Signing out clears its credentials while preserving its name and houses. A provider can end a sign-in on its own, such as by refusing its refresh token; the account then needs signing in again.
 _Avoid_: Login (as a verb or action), auth, connect
 
 **Usage**:
