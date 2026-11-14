@@ -18,7 +18,7 @@ export function InlineMedia({ threadId, asset, source, mimeType, label }: Props)
   const [viewer, setViewer] = useState(false);
   const [near, setNear] = useState(kind === 'image');
   const saved = useSavedAsset(threadId, asset?.id, near);
-  const pending = saved.pending;
+  const { pending, retry: retrySaved, failed: failSaved } = saved;
   const [imageLoaded, setImageLoaded] = useState(false);
   const holder = useRef<HTMLSpanElement>(null);
   const image = useRef<HTMLImageElement>(null);
@@ -46,17 +46,17 @@ export function InlineMedia({ threadId, asset, source, mimeType, label }: Props)
     rememberPlayback();
     setError(undefined);
     setImageLoaded(false);
-    if (asset) saved.retry();
+    if (asset) retrySaved();
     else {
       const el = player.current;
       if (el) el.load();
       else if (image.current && source) image.current.src = source;
     }
-  }, [asset, source, rememberPlayback, saved.retry]);
+  }, [asset, source, rememberPlayback, retrySaved]);
   const failed = useCallback(() => {
-    if (asset) { rememberPlayback(); saved.failed(); }
+    if (asset) { rememberPlayback(); failSaved(); }
     else setError('Media could not be loaded or this format is not supported. You can download the file.');
-  }, [asset, rememberPlayback, saved.failed]);
+  }, [asset, rememberPlayback, failSaved]);
   const loaded = useCallback(() => {
     const el = player.current;
     const saved = playback.current;

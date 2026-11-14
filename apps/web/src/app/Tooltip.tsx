@@ -53,7 +53,7 @@ export function useTooltip(text: string, clippedSelector?: string) {
       window.removeEventListener('resize', hide);
       window.removeEventListener('scroll', scroll, true);
     };
-  }, [anchor, text]);
+  }, [anchor, text, hide]);
   return {
     props: {
       onFocus: (e: React.FocusEvent<HTMLElement>) => show(e.currentTarget),

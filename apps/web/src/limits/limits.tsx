@@ -92,8 +92,9 @@ export function LimitsProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const watched = useMemo(() => [...interest.keys()].sort(), [interest]);
-  const watchedKey = watched.join('\n');
+  // The list changes only when its ids do, so registering again does not restart the checks below.
+  const watchedKey = [...interest.keys()].sort().join('\n');
+  const watched = useMemo(() => watchedKey ? watchedKey.split('\n') : [], [watchedKey]);
   const loaded = views !== undefined;
   const idleKey = watched.filter((id) => views?.get(id)?.status === 'idle').join('\n');
 
@@ -116,14 +117,12 @@ export function LimitsProvider({ children }: { children: ReactNode }) {
       window.removeEventListener('focus', tick);
       document.removeEventListener('visibilitychange', onVisible);
     };
-    // watchedKey stands for watched.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loaded, status, watchedKey, idleKey, refresh]);
+  }, [loaded, status, watched, idleKey, refresh]);
 
   // Check again just after the next shown reset instead of assuming the allowance returned.
   // Keep the target until its timer fires; the display clock crossing the reset
   // must not cancel the two-second confirmation check.
-  const resetAt = useMemo(() => views ? nextReset(watched.map((id) => views.get(id)), Date.now()) : null, [views, watchedKey]);
+  const resetAt = useMemo(() => views ? nextReset(watched.map((id) => views.get(id)), Date.now()) : null, [views, watched]);
   useEffect(() => {
     if (resetAt === null || status !== 'open') return;
     const delay = Math.min(resetAt - Date.now() + 2_000, 2 ** 31 - 1);
@@ -133,8 +132,7 @@ export function LimitsProvider({ children }: { children: ReactNode }) {
       void refresh(watched.filter((id) => needsRefresh(latest.current?.get(id), at)));
     }, Math.max(delay, 0));
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resetAt, status, watchedKey, refresh]);
+  }, [resetAt, status, watched, refresh]);
 
   const retryLoad = useCallback(() => setAttempt((n) => n + 1), []);
   const value = useMemo<LimitsState>(() => ({ views, loadError, retryLoad, refreshError, refresh, watch, status, now }),

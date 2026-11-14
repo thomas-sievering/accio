@@ -14,7 +14,7 @@ export function MessageImages({ threadId, images }: { threadId: string; images: 
 function MessageImage({ threadId, image, index }: { threadId: string; image: ThreadAsset; index: number }) {
   const client = useClient();
   const saved = useSavedAsset(threadId, image.id);
-  const { url } = saved;
+  const { url, failed } = saved;
   const [viewing, setViewing] = useState(false);
   // A thread started here shows what was pasted until its own copy is ready to paint.
   const [preview, setPreview] = useState(() => sentImage(client, threadId, index));
@@ -29,9 +29,9 @@ function MessageImage({ threadId, image, index }: { threadId: string; image: Thr
       setReady(true);
       setPreview(undefined);
       releaseSentImage(client, threadId, index);
-    }, () => { if (active) saved.failed(); });
+    }, () => { if (active) failed(); });
     return () => { active = false; };
-  }, [client, url, ready, threadId, index, saved.failed]);
+  }, [client, url, ready, threadId, index, failed]);
 
   const open = async (download: boolean) => {
     const link = document.createElement('a');

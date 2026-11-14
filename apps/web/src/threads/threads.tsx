@@ -95,7 +95,8 @@ export function ThreadsProvider({ children }: { children: ReactNode }) {
         stop: (id) => client.call('threads.stop', { threadId: id }),
       },
     }),
-    // The setters are stable in behaviour; recreate only when data changes.
+    // setDraft, setSelected and setProjectScope are rebuilt each render, but they only close over
+    // keys derived from client, which is listed; recreate only when data changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [client, threads, placement, loadError, retryLoad, selectedId, draft, navigation, now, projects, projectScope, query, filter],
   );
@@ -109,6 +110,7 @@ export function ThreadsProvider({ children }: { children: ReactNode }) {
 function usePlacement(threads: ThreadView[] | undefined, now: Date) {
   const [observe] = useState(createPlacementTracker);
   const [expired, setExpired] = useState(0);
+  // now and expired are not read: they re-observe the threads as time passes and holds run out.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const placement = useMemo(() => observe(threads ?? [], Date.now()), [observe, threads, now, expired]);
   useEffect(() => {

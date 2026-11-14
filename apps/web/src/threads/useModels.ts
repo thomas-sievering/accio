@@ -5,6 +5,11 @@ import { useClient, useConnectionStatus } from '../app/connection';
 
 /** Each profile's model list as last loaded, shared by every picker and mention menu. */
 const lastModels = new WeakMap<RpcClient, Map<string, ModelsState>>();
+function modelsOf(client: RpcClient) {
+  let models = lastModels.get(client);
+  if (!models) { models = new Map(); lastModels.set(client, models); }
+  return models;
+}
 
 /**
  * The profile's models, kept fresh while connected. A remounted user (a draft becoming
@@ -13,8 +18,7 @@ const lastModels = new WeakMap<RpcClient, Map<string, ModelsState>>();
 export function useModels(profileId: string | undefined) {
   const client = useClient();
   const status = useConnectionStatus();
-  let cache = lastModels.get(client);
-  if (!cache) { cache = new Map(); lastModels.set(client, cache); }
+  const cache = modelsOf(client);
   const [loaded, setLoaded] = useState<{ client: RpcClient; profileId: string; state: ModelsState }>();
   const [error, setError] = useState<string>();
 
@@ -25,7 +29,7 @@ export function useModels(profileId: string | undefined) {
     const refresh = () => {
       const request = ++revision;
       void client.call('models.list', { profileId }).then((state) => {
-        if (active && request === revision) cache.set(profileId, state);
+        if (active && request === revision) modelsOf(client).set(profileId, state);
         if (active && request === revision) { setLoaded({ client, profileId, state }); setError(undefined); }
       }, (err: Error) => { if (active && request === revision) setError(err.message); });
     };

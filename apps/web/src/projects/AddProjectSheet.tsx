@@ -50,7 +50,8 @@ export function AddProjectForm({ onAdded, onCancel }: { onAdded?: () => void; on
       live = false;
       clearTimeout(timer);
     };
-    // Only the path triggers a lookup.
+    // Only the path triggers a lookup: the profile filter and list only seed the suggestion,
+    // and changing them must not reset what was picked. run and clear are stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path, client]);
 

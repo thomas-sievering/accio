@@ -19,7 +19,7 @@ export function SkillsPanel({ context, composer }: { context: SkillContext; comp
   const [inheritedOpen, setInheritedOpen] = useState(false);
   const [announce, setAnnounce] = useState('');
   const inheritedId = useId();
-  const skills = value?.skills ?? [];
+  const skills = useMemo(() => value?.skills ?? [], [value]);
   const own = useMemo(() => skills.filter(isProjectSkill).sort(byName), [skills]);
   const inherited = useMemo(() => skills.filter(isInherited).sort(byName), [skills]);
   const addable = useMemo(() => skills.filter(isAddable).sort(byName), [skills]);

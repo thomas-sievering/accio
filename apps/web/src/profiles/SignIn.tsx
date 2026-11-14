@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { AccountView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { useAction } from '../app/useAction';
@@ -10,7 +10,7 @@ export function SignIn({ account }: { account: AccountView }) {
   const [statusError, setStatusError] = useState<string>();
   const { busy, error, run } = useAction();
   const provider = account.providerId === 'openai' ? 'ChatGPT' : 'Claude';
-  const remember = (value?: { signInId: string; url: string }) => { setPending(value); if (value) sessionStorage.setItem(key, JSON.stringify(value)); else sessionStorage.removeItem(key); };
+  const remember = useCallback((value?: { signInId: string; url: string }) => { setPending(value); if (value) sessionStorage.setItem(key, JSON.stringify(value)); else sessionStorage.removeItem(key); }, [key]);
   useEffect(() => {
     if (!pending) return;
     let active = true; let timer: ReturnType<typeof setTimeout>;
@@ -23,7 +23,7 @@ export function SignIn({ account }: { account: AccountView }) {
     };
     timer = setTimeout(check, 500);
     return () => { active = false; clearTimeout(timer); };
-  }, [client, pending]);
+  }, [client, pending, remember]);
   const start = () => {
     // Reserve the browser tab during the click; starting a provider can outlive user activation.
     const popup = window.accioDesktop ? null : window.open('about:blank', '_blank');

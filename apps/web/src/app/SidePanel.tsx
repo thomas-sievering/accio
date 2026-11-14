@@ -86,7 +86,9 @@ export function SidePanel({ overlay = false }: { overlay?: boolean }) {
     };
     document.addEventListener('keydown', wrapFocus);
     return () => document.removeEventListener('keydown', wrapFocus);
-  }, [overlay]); // The active tab is focused only when entering the overlay.
+    // The active tab is focused only when entering the overlay, not when switching tabs inside it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [overlay]);
   const select = (next: Tab, focus = false) => {
     setTab(next);
     localStorage.setItem(TAB_KEY, next);
