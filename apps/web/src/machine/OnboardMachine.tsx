@@ -2,13 +2,14 @@ import { useEffect, useState } from 'react';
 import { useHubs } from '../app/connection';
 import { SettingsSection } from '../app/Settings';
 import { useAction } from '../app/useAction';
+import { PairingCode, type Pairing } from '../hub/PairingCode';
 import { Field } from '../resources/Field';
 
 /** Pair a worker using the selected hub's existing one-use device grant. */
 export function OnboardMachine({ onClose }: { onClose: () => void }) {
   const { hubs, selectedId, root } = useHubs();
   const hub = hubs.find((h) => h.id === selectedId);
-  const [pairing, setPairing] = useState<{ code: string; expiresAt: number }>();
+  const [pairing, setPairing] = useState<Pairing>();
   const [now, setNow] = useState(Date.now);
   const [copied, setCopied] = useState<string>();
   const { busy, error, run } = useAction();
@@ -56,7 +57,7 @@ Use the repository's current setup instructions. Reuse an existing installation 
         {pairing && <button type="button" className="ghost" disabled={busy || expired} onClick={() => copy('code', pairing.code)}>{copied === 'code' ? 'Copied' : 'Copy code'}</button>}
       </div>
       {pairing && <>
-        <p role="status">{expired ? 'Code expired. Generate a new one.' : <><code>{pairing.code}</code> · expires at {new Date(pairing.expiresAt).toLocaleTimeString()}</>}</p>
+        <PairingCode pairing={pairing} expired={expired} />
         {!localAddress && <details>
           <summary>Set up with a coding agent</summary>
           <Field label="Setup prompt">{(p) => <textarea {...p} readOnly rows={8} value={expired ? 'Code expired. Generate a new one.' : prompt} />}</Field>

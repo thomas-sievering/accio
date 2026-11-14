@@ -151,6 +151,46 @@ describe('the standalone Sorting Hat', () => {
     expect(await api('GET', 'hat-keys')).toEqual([expect.objectContaining({ id: personalKey.id, revokedAt: expect.any(String) })]);
   });
 
+  it('forwards large image-bearing requests unchanged and refuses bodies over the limit with 413', async () => {
+    const { api, hat, anthropic, chatgpt, codex, claudeAccount } = await start();
+    const mine = await claudeAccount('Mine');
+    const gpt = await api('POST', 'accounts', { name: 'My ChatGPT', providerId: 'openai' });
+    const device = await api('POST', `accounts/${gpt.id}/sign-in`, { flow: 'device' });
+    await codex.latest.complete('chatgpt-personal');
+    expect(await api('GET', `sign-ins/${device.signInId}`)).toMatchObject({ status: 'complete' });
+    const house = await api('POST', 'houses', { name: 'Personal', accounts: { anthropic: [mine.id], openai: [gpt.id] } });
+    const key = await api('POST', 'hat-keys', { houseId: house.id, name: 'pi' });
+    const post = (path: string, body: BodyInit) => fetch(`${hat.url}${path}`, {
+      method: 'POST', headers: { authorization: `Bearer ${key.secret}`, 'content-type': 'application/json' }, body, duplex: 'half',
+    } as RequestInit);
+    const MB = 1024 * 1024;
+    // A thread's request with a few screenshots, as base64 image blocks.
+    const image = { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'A'.repeat(5 * MB) } };
+    const withImages = JSON.stringify({ model: 'claude-test', messages: [{ role: 'user', content: [image, image, image, image, { type: 'text', text: 'What changed?' }] }] });
+    expect(withImages.length).toBeGreaterThan(20 * MB);
+    const res = await post('/v1/messages', withImages);
+    expect(res.status).toBe(200);
+    await res.text();
+    expect(anthropic.seen.at(-1)!.body).toBe(withImages);
+    const codexRes = await post('/openai/responses', withImages);
+    expect(codexRes.status).toBe(200);
+    await codexRes.text();
+    expect(chatgpt.seen.at(-1)!.body).toBe(withImages);
+
+    const tooLarge = '{"model":"claude-test","messages":"' + 'A'.repeat(33 * MB) + '"}';
+    /** The same body without a content-length, sent in parts as it is made. */
+    const streamed = () => new ReadableStream<Uint8Array>({
+      start(c) { const part = new TextEncoder().encode('A'.repeat(MB)); for (let i = 0; i < 33; i++) c.enqueue(part); c.close(); },
+    });
+    for (const [path, body] of [['/v1/messages', tooLarge], ['/openai/responses', tooLarge], ['/v1/messages', streamed()], ['/openai/responses', streamed()]] as const) {
+      const refused = await post(path, body);
+      expect(refused.status).toBe(413);
+      expect(await refused.json()).toEqual({ type: 'error', error: { type: 'request_too_large', message: expect.stringContaining('32 MB') } });
+    }
+    expect(anthropic.seen).toHaveLength(1);
+    expect(chatgpt.seen).toHaveLength(1);
+  });
+
   it('switches a house to its next account when the provider answers 429, leaving other houses alone', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     cleanup.push(async () => vi.useRealTimers());

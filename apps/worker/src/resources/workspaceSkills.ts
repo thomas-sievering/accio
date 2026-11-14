@@ -2,7 +2,7 @@ import { constants } from 'node:fs';
 import { lstat, open, readdir, readFile, realpath } from 'node:fs/promises';
 import { basename, join, relative, resolve, sep } from 'node:path';
 import type { LoadedSkill, WorkspaceSkill } from '@accio/protocol';
-import { inside } from '../paths.js';
+import { inside, pathKey } from '../paths.js';
 
 const MAX_CONTENT = 1_000_000;
 
@@ -84,8 +84,6 @@ export async function saveRepositorySkill(cwd: string, skill: WorkspaceSkill, co
     await handle.writeFile(content, 'utf8');
   } finally { await handle.close(); }
 }
-
-const pathKey = (path: string) => process.platform === 'win32' ? path.toLowerCase() : path;
 
 /** Conservative evidence: successful native invocation, Read, or a simple shell read.
  * Shell mentions, compound scripts, searches and failed calls do not establish loading.

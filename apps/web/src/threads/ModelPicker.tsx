@@ -6,6 +6,7 @@ import { EffortWord, effortSteps } from './EffortControl';
 import { useSteps, useWheelSteps } from './steps';
 import { prettyModelName } from './modelName';
 import { useModels } from './useModels';
+import { formatDayTime } from '../ui/dates';
 
 /**
  * GLOSSARY: Effort. One chip for what a thread runs: the model and a muted effort word.
@@ -208,7 +209,7 @@ export function PrettyName({ name }: { name: string }) {
 
 /** "Fable's weekly limit is used up · resets Thu 13:00" */
 function usedUpText(limit: UsedUpLimit) {
-  const at = limit.resetsAt && new Date(limit.resetsAt).toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+  const at = limit.resetsAt && formatDayTime(limit.resetsAt);
   return `${limit.label} is used up${at ? ` · resets ${at}` : ''}`;
 }
 
