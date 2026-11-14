@@ -54,7 +54,7 @@ async function reviewProject(checks = 'SUCCESS') {
   const p = await project(harness);
   await git(p.source, 'config', `url.${p.origin.replaceAll('\\', '/')}.insteadOf`, 'https://github.com/test/fixture.git');
   await git(p.source, 'remote', 'set-url', 'origin', 'https://github.com/test/fixture.git');
-  const host = { state: 'OPEN', mergeRevision: '', checks, base: 'main', unavailable: false, head: '' };
+  const host = { state: 'OPEN', mergeRevision: '', checks, base: 'main', unavailable: false, malformed: false, head: '' };
   const reads: string[][] = [];
   const hosting = async (_cwd: string, args: string[]) => {
     reads.push(args);
@@ -62,7 +62,7 @@ async function reviewProject(checks = 'SUCCESS') {
     if (args[0] === 'pr') {
       const pr = { number: 123, url: 'https://github.com/test/fixture/pull/123', state: host.state,
         headRefOid: host.head || head, baseRefName: host.base, isDraft: false, reviewDecision: '',
-        statusCheckRollup: [{ conclusion: 'SUCCESS' }],
+        statusCheckRollup: host.malformed ? 'SUCCESS' : [{ conclusion: 'SUCCESS' }],
         mergeCommit: host.mergeRevision ? { oid: host.mergeRevision } : null,
         mergedAt: host.state === 'MERGED' ? new Date().toISOString() : null };
       return args[1] === 'view' ? pr : [pr];
@@ -288,6 +288,18 @@ it('keeps review-only tracking past its agent budget and restart, then settles a
   await next.call('threads.checkDelivery', { threadId: thread.id });
   const receipts = (await next.call('threads.transcript', { threadId: thread.id })).filter(item => item.kind === 'notice' && item.id.endsWith(':completed'));
   expect(receipts).toHaveLength(0);
+});
+
+it('names the gh command whose output no longer matches on the thread, and retries it', async () => {
+  const { client, thread, host, harness } = await reviewProject();
+  host.malformed = true;
+  await client.call('threads.checkDelivery', { threadId: thread.id });
+  expect((await view(client, thread.id)).delivery).toMatchObject({ status: 'ready', observationFailures: 1,
+    observationError: 'gh pr view returned output Accio does not recognize (statusCheckRollup). Update the GitHub CLI if it is old; observation will retry.' });
+  host.malformed = false;
+  await client.call('threads.checkDelivery', { threadId: thread.id });
+  expect((await view(client, thread.id)).delivery).toMatchObject({ status: 'ready', observationFailures: 0 });
+  expect(harness.runs).toHaveLength(2);
 });
 
 it('saves the PR before preparation checks finish and resumes preparation without another model turn', async () => {
