@@ -507,3 +507,32 @@ test('reconnecting preserves a renewed video source and playback position', asyn
   await expect(video).toHaveAttribute('src', renewed!);
   expect(await video.evaluate((el: HTMLVideoElement) => Math.abs(el.currentTime - 1.2))).toBeLessThan(0.15);
 });
+
+test('a wide Markdown table scrolls inside its message while narrow tables keep their width', async ({ page, baseURL }, testInfo) => {
+  await page.goto(`${baseURL}/#token=${token}`);
+  await page.locator('.sidebar').getByRole('button', { name: 'New thread', exact: true }).click();
+  await page.getByRole('option', { name: 'No project', exact: true }).click();
+  if (await page.getByRole('combobox', { name: 'Search profiles' }).isVisible()) await page.getByRole('option', { name: 'Personal', exact: true }).click();
+  await page.locator('.composer textarea').fill('Table fixture');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  const tables = page.locator('.msg.assistant .table-scroll');
+  await expect(tables).toHaveCount(2);
+  const narrowWidths: number[] = [];
+  for (const [name, size] of [['desktop', { width: 1280, height: 800 }], ['phone', { width: 390, height: 844 }]] as const) {
+    await page.setViewportSize(size);
+    const measure = (index: number) => tables.nth(index).evaluate((scroller) => {
+      const messages = scroller.closest('.messages')!;
+      const table = scroller.querySelector('table')!;
+      return { scrolls: scroller.scrollWidth > scroller.clientWidth, transcriptScrolls: messages.scrollWidth > messages.clientWidth, tableWidth: table.offsetWidth };
+    });
+    await page.screenshot({ path: testInfo.outputPath(`table-${name}.png`) });
+    const wide = await measure(0);
+    expect(wide.scrolls, name).toBe(true);
+    expect(wide.transcriptScrolls, name).toBe(false);
+    const narrow = await measure(1);
+    expect(narrow.scrolls, name).toBe(false);
+    narrowWidths.push(narrow.tableWidth);
+  }
+  // Narrow tables keep their own width rather than stretching to the message.
+  expect(narrowWidths[0]).toBe(narrowWidths[1]);
+});
