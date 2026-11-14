@@ -175,6 +175,9 @@ importers:
       '@types/ws':
         specifier: ^8.18.2
         version: 8.18.2
+      electron:
+        specifier: ^45.2.1
+        version: 45.2.1
       playwright:
         specifier: ^1.64.1
         version: 1.64.1
