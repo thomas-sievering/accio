@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { newChatDraft } from './chat.js';
 
 const token = 'isolated-chat-test-token';
 const log = Array.from({ length: 200 }, (_, i) => `line ${i + 1}: GET /api/items 500`).join('\n');
@@ -15,9 +16,7 @@ async function pasteText(page: Page, text: string, inline = false): Promise<bool
 
 test('a long paste folds into Pasted text, reaches the model whole and shows folded in the thread', async ({ page, baseURL }, testInfo) => {
   await page.goto(`${baseURL}/#token=${token}`);
-  await page.locator('.sidebar').getByRole('button', { name: 'New thread', exact: true }).click();
-  await page.getByRole('option', { name: 'No project', exact: true }).click();
-  if (await page.getByRole('combobox', { name: 'Search profiles' }).isVisible()) await page.getByRole('option', { name: 'Personal', exact: true }).click();
+  await newChatDraft(page);
   const textarea = page.locator('.composer textarea');
   const chip = page.locator('.composer-paste');
 
@@ -83,9 +82,7 @@ test('the starting transcript already folds pasted text', async ({ page, baseURL
     });
   });
   await page.goto(`${baseURL}/#token=${token}`);
-  await page.locator('.sidebar').getByRole('button', { name: 'New thread', exact: true }).click();
-  await page.getByRole('option', { name: 'No project', exact: true }).click();
-  if (await page.getByRole('combobox', { name: 'Search profiles' }).isVisible()) await page.getByRole('option', { name: 'Personal', exact: true }).click();
+  await newChatDraft(page);
   await pasteText(page, log);
   await page.locator('.composer textarea').fill('What failed?');
   await page.getByRole('button', { name: 'Send', exact: true }).click();

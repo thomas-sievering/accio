@@ -1,11 +1,10 @@
 import { expect, test } from '@playwright/test';
 import { pick } from './menu-select';
+import { newChatDraft } from './chat.js';
 
 test('automatic naming, inline and sidebar rename, regeneration and settings preview persist', async ({ page, baseURL }, testInfo) => {
   await page.goto(`${baseURL}/#token=isolated-chat-test-token`);
-  await page.locator('.sidebar').getByRole('button', { name: 'New thread', exact: true }).click();
-  await page.getByRole('option', { name: 'No project', exact: true }).click();
-  if (await page.getByRole('combobox', { name: 'Search profiles' }).isVisible()) await page.getByRole('option', { name: 'Personal', exact: true }).click();
+  await newChatDraft(page);
   await page.locator('.composer textarea').fill('Naming fixture: fix the login redirect after sign-in');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   const title = page.getByRole('button', { name: 'Rename thread: Fix login redirects', exact: true });

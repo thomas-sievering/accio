@@ -3,13 +3,13 @@ import { execFile } from 'node:child_process';
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
+import { addLocalProject, controls, createFirstProfile } from './steps.mjs';
 
 const git = (cwd, ...args) => promisify(execFile)('git', ['-c', 'user.name=verify', '-c', 'user.email=verify@example.invalid', ...args], { cwd, windowsHide: true });
 
 /** Tools, MCP servers and skills settings, plus project/profile/machine integration. */
 export default async function journey({ page, runDir, home, fixture, action, capture }) {
-  const button = (name) => page.getByRole('button', { name, exact: true });
-  const nav = (name) => page.locator('.sidebar nav').getByRole('button', { name, exact: true });
+  const { button, section: nav } = controls(page);
   const textbox = (name) => page.getByRole('textbox', { name, exact: true });
   // MenuSelect: a button and a menu that share one label.
   const pick = async (label, option) => {
@@ -19,19 +19,8 @@ export default async function journey({ page, runDir, home, fixture, action, cap
   const resources = () => readFile(join(home, 'hub/resources.json'), 'utf8').then(JSON.parse);
   const log = [];
 
-  await action('profiles/first-run: create Verify personal', async () => {
-    await button('Continue').click();
-    await page.getByPlaceholder('personal, work…').fill('Verify personal');
-    await button('Continue').click();
-    await page.getByText('Choose an account for Verify personal', { exact: true }).waitFor();
-  });
-  await action('projects/toolbar: add the disposable folder', async () => {
-    await button('Add project').click();
-    await textbox('Folder').fill(fixture);
-    await page.getByRole('dialog').getByText(/no git remote; this folder is its own project/).waitFor();
-    await button('Add').click();
-    await page.getByRole('dialog').waitFor({ state: 'hidden' });
-  });
+  await action('profiles/first-run: create Verify personal', () => createFirstProfile(page));
+  await action('projects/toolbar: add the disposable folder', () => addLocalProject(page, fixture));
   const project = JSON.parse(await readFile(join(home, 'projects.json'), 'utf8')).projects[0];
   const key = project.repoKey ?? `local:${project.id}`;
 

@@ -8,6 +8,7 @@ import { fork } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { addLocalProject, controls, createFirstProfile } from './steps.mjs';
 
 export default async function ({ page, context, home, fixture, action, capture }) {
   const adminToken = `hat-admin-${randomBytes(16).toString('hex')}`;
@@ -29,8 +30,7 @@ export default async function ({ page, context, home, fixture, action, capture }
     // Sign-in is faked only at the provider boundary: its consent page and token exchange.
     await context.route('https://**/*', (route) => route.fulfill({ status: 200, body: 'Scripted provider consent.' }));
 
-    const button = (name) => page.getByRole('button', { name, exact: true });
-    const section = (name) => page.locator('.sidebar nav').getByRole('button', { name, exact: true });
+    const { button, section } = controls(page);
     const main = page.getByRole('main');
     const card = page.locator('.settings-section').filter({ has: page.getByRole('heading', { name: 'Sorting Hat', exact: true }) });
     const hubs = async () => {
@@ -49,12 +49,7 @@ export default async function ({ page, context, home, fixture, action, capture }
       await page.getByRole('menu', { name: menu, exact: true }).waitFor({ state: 'hidden' });
     };
 
-    await action('profiles/first-run: create Verify personal', async () => {
-      await button('Continue').click();
-      await page.getByPlaceholder('personal, work…').fill('Verify personal');
-      await button('Continue').click();
-      await page.getByText('Choose an account for Verify personal', { exact: true }).waitFor();
-    });
+    await action('profiles/first-run: create Verify personal', () => createFirstProfile(page));
     await action('sorting-hat/settings: a wrong admin token is refused', async () => {
       await button('Settings').click();
       await hubs();
@@ -106,11 +101,7 @@ export default async function ({ page, context, home, fixture, action, capture }
     });
     await action('sorting-hat/threads: a draft for an unlinked profile shows why it can’t run', async () => {
       await button('Back').click();
-      await button('Add project').click();
-      await page.getByRole('textbox', { name: 'Folder', exact: true }).fill(fixture);
-      await page.getByRole('dialog').getByText(/no git remote; this folder is its own project/).waitFor();
-      await button('Add').click();
-      await page.getByRole('dialog').waitFor({ state: 'hidden' });
+      await addLocalProject(page, fixture);
       await page.getByRole('status').getByText(/isn’t linked to a house on the Sorting Hat, so this thread can’t run yet\./).waitFor();
       await page.locator('.composer textarea').fill('hello');
       assert(await button('Send').isDisabled(), 'Send stays disabled');

@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { FakeCodex } from '../testing/fakeCodex.js';
 import { FakeHarness, SESSION, replyWith, toolCall } from '../testing/fakeHarness.js';
-import { claudeAccount, startTestApp, type TestClient } from '../testing/testApp.js';
-import type { HarnessTurn } from './harness.js';
+import { callAccioTools as mcp, startTestApp, type TestClient } from '../testing/testApp.js';
 
 const opus = { harnessId: 'claudeCode', modelId: 'opus' };
 const codex = { harnessId: 'codex', modelId: 'test-codex' };
@@ -10,18 +9,7 @@ const CODEX_SESSION = 'codex-thread';
 
 /** A Personal profile signed in to both Claude and ChatGPT. */
 async function bothProviders(c: TestClient, fake: FakeCodex) {
-  const profile = await c.signedIn('Personal');
-  const account = await c.call('accounts.save', { name: 'Personal ChatGPT', providerId: 'openai' });
-  const login = await c.call('accounts.beginSignIn', { id: account.id });
-  await fake.latest.complete('Personal');
-  await c.call('accounts.signInStatus', { signInId: login.signInId });
-  return c.call('profiles.save', { id: profile.id, name: 'Personal', accountIds: { anthropic: [claudeAccount(profile)!.id], openai: [account.id] } });
-}
-
-async function mcp(run: HarnessTurn, method: string, params?: unknown) {
-  const response = await fetch(run.tools!.url, { method: 'POST', headers: { 'content-type': 'application/json', authorization: run.tools!.authorization },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) });
-  return (await response.json() as { result: any }).result;
+  return c.withChatGpt(await c.signedIn('Personal'), fake);
 }
 
 const idle =(c: TestClient, threadId: string) => c.waitFor('threads.changed', (ts) => ts.some((t) => t.id === threadId && t.status === 'idle'));

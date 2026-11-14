@@ -3,13 +3,14 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
-import { closeWhenOrphaned } from './fixtureLifetime.js';
+import { onShutdown } from './fixtureLifetime.js';
 import { startApp } from '../apps/worker/src/app.js';
 import { FakeHarness, SESSION, replyWith, toolCall } from '../apps/worker/src/testing/fakeHarness.js';
 import { fakeClaudeFetch, linkSortingHat, startTestSortingHat, TestClient } from '../apps/worker/src/testing/testApp.js';
 import type { HarnessMessage } from '../apps/worker/src/threads/harness.js';
 import { DeliveryGit, DeliveryPending } from '../apps/worker/src/threads/delivery.js';
 import { git } from '../apps/worker/src/git.js';
+import { BROWSER_AUTHOR, cloneRepo, initRepo, initRepoWithOrigin } from '../apps/worker/src/testing/gitRepo.js';
 import { PROJECT_APP_TIMING } from '../apps/worker/src/projects/projectApps.js';
 import { lineCount, pastesIn, reactionsIn, typedText } from '../packages/protocol/src/pastes.js';
 import { reactionInfo } from '../packages/protocol/src/reactions.js';
@@ -328,33 +329,14 @@ const client = await TestClient.open(`ws://127.0.0.1:${app.port}/ws?token=${toke
 await client.signedIn('Personal');
 const deliveryFolder = join(home, 'delivery-project');
 const deliveryOrigin = join(home, 'delivery-origin.git');
-await mkdir(deliveryFolder);
-await git(deliveryFolder, 'init', '--quiet', '-b', 'main');
-await git(deliveryFolder, 'config', 'user.name', 'Accio Browser Test');
-await git(deliveryFolder, 'config', 'user.email', 'browser@example.test');
-await git(deliveryFolder, 'config', 'core.autocrlf', 'false');
-await writeFile(join(deliveryFolder, 'preview.cjs'), `require('http').createServer((req,res)=>res.end('Accio delivery preview')).listen(Number(process.env.PORT),'127.0.0.1');`);
-await git(deliveryFolder, 'add', '.');
-await git(deliveryFolder, 'commit', '--quiet', '-m', 'preview fixture');
-await git(home, 'init', '--quiet', '--bare', '-b', 'main', deliveryOrigin);
-await git(deliveryFolder, 'remote', 'add', 'origin', deliveryOrigin);
-await git(deliveryFolder, 'push', '--quiet', '-u', 'origin', 'main');
-await git(deliveryFolder, 'remote', 'set-head', 'origin', '-a');
+await initRepoWithOrigin(deliveryFolder, deliveryOrigin, {
+  'preview.cjs': `require('http').createServer((req,res)=>res.end('Accio delivery preview')).listen(Number(process.env.PORT),'127.0.0.1');`,
+}, { author: BROWSER_AUTHOR, message: 'preview fixture' });
 const deliveryCheckout = await client.call('checkouts.add', { path: deliveryFolder, profileId: 'personal' });
 await client.call('projects.setDelivery', { projectId: deliveryCheckout.projectId, deliveryPolicy: 'direct', previewCommand: 'node preview.cjs' });
 const reviewFolder = join(home, 'review-project');
 const reviewOrigin = join(home, 'review-origin.git');
-await mkdir(reviewFolder);
-await git(reviewFolder, 'init', '--quiet', '-b', 'main');
-await git(reviewFolder, 'config', 'user.name', 'Accio Browser Test');
-await git(reviewFolder, 'config', 'user.email', 'browser@example.test');
-await writeFile(join(reviewFolder, 'seed.txt'), 'review base\n');
-await git(reviewFolder, 'add', '.');
-await git(reviewFolder, 'commit', '--quiet', '-m', 'review base');
-await git(home, 'init', '--quiet', '--bare', '-b', 'main', reviewOrigin);
-await git(reviewFolder, 'remote', 'add', 'origin', reviewOrigin);
-await git(reviewFolder, 'push', '--quiet', '-u', 'origin', 'main');
-await git(reviewFolder, 'remote', 'set-head', 'origin', '-a');
+await initRepoWithOrigin(reviewFolder, reviewOrigin, { 'seed.txt': 'review base\n' }, { author: BROWSER_AUTHOR, message: 'review base' });
 await git(reviewFolder, 'config', `url.${reviewOrigin.replaceAll('\\', '/')}.insteadOf`, 'https://github.com/test/accio-review.git');
 await git(reviewFolder, 'remote', 'set-url', 'origin', 'https://github.com/test/accio-review.git');
 await client.call('checkouts.add', { path: reviewFolder, profileId: 'personal' });
@@ -370,19 +352,7 @@ for (const [folder, files] of [
     '.scratch/relay-reconnect/issues/02-chip.md': '# Show a reconnecting state on the machine chip\n\nBlocked by: 01\n',
     '.scratch/issue-picker/issues/01-detect.md': '# Detect the project issue tracker\n\nStatus: ready-for-agent\n',
   }],
-] as const) {
-  await mkdir(folder);
-  await git(folder, 'init', '--quiet', '-b', 'main');
-  await git(folder, 'config', 'user.name', 'Accio Browser Test');
-  await git(folder, 'config', 'user.email', 'browser@example.test');
-  await git(folder, 'config', 'core.autocrlf', 'false');
-  for (const [path, content] of Object.entries(files)) {
-    await mkdir(join(folder, path, '..'), { recursive: true });
-    await writeFile(join(folder, path), content);
-  }
-  await git(folder, 'add', '.');
-  await git(folder, 'commit', '--quiet', '-m', 'issues fixture');
-}
+] as const) await initRepo(folder, files, { author: BROWSER_AUTHOR, message: 'issues fixture' });
 await git(home, 'clone', '--quiet', '--bare', issuesFolder, issuesOrigin);
 await git(issuesFolder, 'remote', 'add', 'origin', 'https://github.com/test/accio-issues.git');
 await git(issuesFolder, 'config', `url.${issuesOrigin.replaceAll('\\', '/')}.insteadOf`, 'https://github.com/test/accio-issues.git');
@@ -400,17 +370,13 @@ await writeFile(fixtureMetadata, JSON.stringify({ deliveryFolder, deliveryOrigin
 const ciOrigin = join(home, 'ci-origin.git');
 const ciFolder = join(home, 'ci-progress-project');
 await git(home, 'clone', '--quiet', '--bare', deliveryFolder, ciOrigin);
-await git(home, 'clone', '--quiet', ciOrigin, ciFolder);
-await git(ciFolder, 'config', 'user.name', 'Accio Browser Test');
-await git(ciFolder, 'config', 'user.email', 'browser@example.test');
+await cloneRepo(ciOrigin, ciFolder, BROWSER_AUTHOR);
 await client.call('checkouts.add', { path: ciFolder, profileId: 'personal' });
 // Scripted ship: a project with a test command, so Ship runs without a delivery turn.
 const scriptedOrigin = join(home, 'scripted-origin.git');
 const scriptedFolder = join(home, 'scripted-project');
 await git(home, 'clone', '--quiet', '--bare', deliveryFolder, scriptedOrigin);
-await git(home, 'clone', '--quiet', scriptedOrigin, scriptedFolder);
-await git(scriptedFolder, 'config', 'user.name', 'Accio Browser Test');
-await git(scriptedFolder, 'config', 'user.email', 'browser@example.test');
+await cloneRepo(scriptedOrigin, scriptedFolder, BROWSER_AUTHOR);
 await writeFile(join(scriptedFolder, 'check.cjs'), 'setTimeout(() => process.exit(0), 1500);\n');
 await git(scriptedFolder, 'add', '.');
 await git(scriptedFolder, 'commit', '--quiet', '-m', 'test command');
@@ -427,19 +393,7 @@ for (const [folder, files] of [
     'lib-review/SKILL.md': skillFile('lib-review', 'Review a change before shipping', 'Review instructions.'),
     'lib-docs/SKILL.md': skillFile('lib-docs', 'Keep documentation current', 'Docs instructions.'),
   }],
-] as const) {
-  await mkdir(folder);
-  await git(folder, 'init', '--quiet', '-b', 'main');
-  await git(folder, 'config', 'user.name', 'Accio Browser Test');
-  await git(folder, 'config', 'user.email', 'browser@example.test');
-  await git(folder, 'config', 'core.autocrlf', 'false');
-  for (const [path, content] of Object.entries(files)) {
-    await mkdir(join(folder, path, '..'), { recursive: true });
-    await writeFile(join(folder, path), content);
-  }
-  await git(folder, 'add', '.');
-  await git(folder, 'commit', '--quiet', '-m', 'skills fixture');
-}
+] as const) await initRepo(folder, files, { author: BROWSER_AUTHOR, message: 'skills fixture' });
 const skillsCheckout = await client.call('checkouts.add', { path: skillsFolder, profileId: 'personal' });
 await client.call('skills.addSource', { id: 'library', name: 'Library', url: skillsLibrary, ref: 'HEAD' });
 const docs = (await client.call('resources.get', {})).skills.find((skill) => skill.name === 'lib-docs')!;
@@ -457,18 +411,10 @@ await client.call('mcp.save', { id: 'docs-search', name: 'docs-search', transpor
 await client.call('mcp.save', { id: 'local-db', name: 'local-db', transport: 'stdio', command: 'db-mcp', args: ['--readonly'], auth: 'none' });
 console.log(`Chat fixture ready: http://127.0.0.1:${app.port}`);
 process.send?.({ type: 'ready' });
-let closing = false;
-const close = async () => {
-  if (closing) return;
-  closing = true;
+onShutdown('Chat', async () => {
   client.close();
   await app.close();
   await hat.close();
   await rm(fixtureMetadata, { force: true });
   await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
-  process.exit();
-};
-process.on('SIGINT', () => void close());
-process.on('SIGTERM', () => void close());
-process.on('message', message => { if ((message as { type?: string })?.type === 'shutdown') void close(); });
-closeWhenOrphaned('Chat', () => void close());
+});

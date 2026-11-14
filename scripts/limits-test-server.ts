@@ -2,7 +2,7 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
-import { closeWhenOrphaned } from './fixtureLifetime.js';
+import { onShutdown } from './fixtureLifetime.js';
 import { startApp } from '../apps/worker/src/app.js';
 import { fakeClaudeFetch, linkSortingHat, startTestSortingHat } from '../apps/worker/src/testing/testApp.js';
 import { FakeCodex } from '../apps/worker/src/testing/fakeCodex.js';
@@ -52,17 +52,9 @@ const app = await startApp({ home, host: '127.0.0.1', port: Number(process.env.A
 await linkSortingHat(app, hat);
 console.log(`Limits fixture ready: http://127.0.0.1:${app.port}`);
 process.send?.({ type: 'ready' });
-let closing = false;
-const close = async () => {
-  if (closing) return;
-  closing = true;
+onShutdown('Limits', async () => {
   await app.close();
   await hat.close();
   if (dirname(home) !== resolve(tmpdir()) || !basename(home).startsWith('accio-limits-browser-')) throw new Error('Unexpected fixture home');
   await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
-  process.exit();
-};
-process.on('SIGINT', () => { void close(); });
-process.on('SIGTERM', () => { void close(); });
-process.on('message', message => { if ((message as { type?: string })?.type === 'shutdown') void close(); });
-closeWhenOrphaned('Limits', () => void close());
+});

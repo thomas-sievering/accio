@@ -1,12 +1,11 @@
 import { expect, test } from '@playwright/test';
+import { newChatDraft } from './chat.js';
 
 const token = 'isolated-chat-test-token';
 
 test('typing @ offers models, machines and threads, typing after it lists matches, and the sent message shows a chip', async ({ page, baseURL }, testInfo) => {
   await page.goto(`${baseURL}/#token=${token}`);
-  await page.locator('.sidebar').getByRole('button', { name: 'New thread', exact: true }).click();
-  await page.getByRole('option', { name: 'No project', exact: true }).click();
-  if (await page.getByRole('combobox', { name: 'Search profiles' }).isVisible()) await page.getByRole('option', { name: 'Personal', exact: true }).click();
+  await newChatDraft(page);
   const input = page.locator('.composer textarea');
   const menu = page.getByRole('listbox', { name: 'Mention a model, machine or thread' });
 
@@ -57,9 +56,7 @@ test('typing @ offers models, machines and threads, typing after it lists matche
 
 test('typing @ lists the online machines too, and a sent machine mention shows a chip', async ({ page, baseURL }, testInfo) => {
   await page.goto(`${baseURL}/#token=${token}`);
-  await page.locator('.sidebar').getByRole('button', { name: 'New thread', exact: true }).click();
-  await page.getByRole('option', { name: 'No project', exact: true }).click();
-  if (await page.getByRole('combobox', { name: 'Search profiles' }).isVisible()) await page.getByRole('option', { name: 'Personal', exact: true }).click();
+  await newChatDraft(page);
   const input = page.locator('.composer textarea');
   const menu = page.getByRole('listbox', { name: 'Mention a model, machine or thread' });
 
@@ -82,9 +79,7 @@ test('typing @ lists the online machines too, and a sent machine mention shows a
 test('typing @ lists recent threads under Threads, and a mentioned thread shows as a chip with its title', async ({ page, baseURL }, testInfo) => {
   await page.goto(`${baseURL}/#token=${token}`);
   const newThread = async () => {
-    await page.locator('.sidebar').getByRole('button', { name: 'New thread', exact: true }).click();
-    await page.getByRole('option', { name: 'No project', exact: true }).click();
-    if (await page.getByRole('combobox', { name: 'Search profiles' }).isVisible()) await page.getByRole('option', { name: 'Personal', exact: true }).click();
+    await newChatDraft(page);
   };
   await newThread();
   const input = page.locator('.composer textarea');

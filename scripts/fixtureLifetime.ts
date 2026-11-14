@@ -16,3 +16,21 @@ export function closeWhenOrphaned(name: string, close: () => void) {
     console.log(`${name} fixture is standalone (pid ${process.pid}); it stops itself after ${minutes} min or on Ctrl+C.`);
   }
 }
+
+/**
+ * Runs `close` once when the fixture is told to stop, then exits: on Ctrl+C or SIGTERM,
+ * on a `shutdown` message from tests/servers.ts, or once orphaned (closeWhenOrphaned).
+ */
+export function onShutdown(name: string, close: () => Promise<void>) {
+  let closing = false;
+  const stop = async () => {
+    if (closing) return;
+    closing = true;
+    await close();
+    process.exit();
+  };
+  process.on('SIGINT', () => void stop());
+  process.on('SIGTERM', () => void stop());
+  process.on('message', (message) => { if ((message as { type?: string })?.type === 'shutdown') void stop(); });
+  closeWhenOrphaned(name, () => void stop());
+}

@@ -1,16 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { threadHandle } from '@accio/protocol';
 import { FakeHarness, replyWith } from '../testing/fakeHarness.js';
-import { startTestApp, type TestClient } from '../testing/testApp.js';
-import type { HarnessTurn } from './harness.js';
+import { callAccioTools as mcp, startTestApp, type TestClient } from '../testing/testApp.js';
 
 const opus = { harnessId: 'claudeCode', modelId: 'opus' };
-
-async function mcp(run: HarnessTurn, method: string, params?: unknown) {
-  const response = await fetch(run.tools!.url, { method: 'POST', headers: { 'content-type': 'application/json', authorization: run.tools!.authorization },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) });
-  return (await response.json() as { result: any }).result;
-}
 
 const idle = (c: TestClient, threadId: string) => c.waitFor('threads.changed', (ts) => ts.some((t) => t.id === threadId && t.status === 'idle'));
 

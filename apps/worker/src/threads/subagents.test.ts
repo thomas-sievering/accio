@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { TranscriptItem } from '@accio/protocol';
 import { FakeHarness, SESSION, gate, replyWith } from '../testing/fakeHarness.js';
 import { FakeCodex } from '../testing/fakeCodex.js';
-import { claudeAccount, startTestApp, type TestClient } from '../testing/testApp.js';
+import { startTestApp, type TestClient } from '../testing/testApp.js';
 import { codexEvents } from './codex.js';
 import type { HarnessMessage, HarnessTurn } from './harness.js';
 
@@ -70,8 +70,7 @@ it('runs a sub-agent from the agent tool, shows its latest step on the row, and 
   });
   const t = await startTestApp({ harness });
   stop = t.stop;
-  const c = await t.connect();
-  await c.signedIn('HRC');
+  const c = await t.signedIn('HRC');
   const thread = await c.call('threads.start', { profileId: 'hrc', text: 'How many files?' });
 
   await stepShown.opened;
@@ -105,8 +104,7 @@ it('fails the call when the sub-agent fails, and leaves the thread working', asy
   });
   const t = await startTestApp({ harness });
   stop = t.stop;
-  const c = await t.connect();
-  await c.signedIn('HRC');
+  const c = await t.signedIn('HRC');
   const thread = await c.call('threads.start', { profileId: 'hrc', text: 'How many files?' });
   await settled(c, thread.id);
   const items = await c.call('threads.transcript', { threadId: thread.id });
@@ -138,8 +136,7 @@ it('finds the row of a Codex call, whose MCP items carry the task as arguments',
   });
   const t = await startTestApp({ harness });
   stop = t.stop;
-  const c = await t.connect();
-  await c.signedIn('HRC');
+  const c = await t.signedIn('HRC');
   const thread = await c.call('threads.start', { profileId: 'hrc', text: 'How many files?' });
   await stepShown.opened;
   await expect.poll(() => agentRow(c, thread.id)).toMatchObject({ status: 'running', summary: 'Count the files', step: { name: 'Shell', summary: 'ls' } });
@@ -164,12 +161,7 @@ describe('a sub-agent on a model the user mentioned', () => {
     const t = await startTestApp({ harness: claude, codexHarness: codex, codexFactory: fake.factory });
     stop = t.stop;
     const c = await t.connect();
-    const profile = await c.signedIn('Personal');
-    const account = await c.call('accounts.save', { name: 'Personal ChatGPT', providerId: 'openai' });
-    const login = await c.call('accounts.beginSignIn', { id: account.id });
-    await fake.latest.complete('Personal');
-    await c.call('accounts.signInStatus', { signInId: login.signInId });
-    await c.call('profiles.save', { id: profile.id, name: 'Personal', accountIds: { anthropic: [claudeAccount(profile)!.id], openai: [account.id] } });
+    const profile = await c.withChatGpt(await c.signedIn('Personal'), fake);
     const thread = await c.call('threads.start', { profileId: profile.id, model: { harnessId: 'claudeCode', modelId: 'opus', effort: 'high' }, text: 'Count them' });
     await settled(c, thread.id);
     return { claude, codex, row: await agentRow(c, thread.id) };

@@ -37,8 +37,7 @@ async function offered(input: (cwd: string) => unknown) {
   });
   const t = await startTestApp({ harness });
   stop = t.stop;
-  const c = await t.connect();
-  await c.signedIn('HRC');
+  const c = await t.signedIn('HRC');
   const thread = await c.call('threads.start', { profileId: 'hrc', text: 'Try two empty states' });
   await settled(c, thread.id);
   const items = await c.call('threads.transcript', { threadId: thread.id });
@@ -106,8 +105,7 @@ it('shows a call with invalid arguments as a failed tool', async () => {
   });
   const t = await startTestApp({ harness });
   stop = t.stop;
-  const c = await t.connect();
-  await c.signedIn('HRC');
+  const c = await t.signedIn('HRC');
   const thread = await c.call('threads.start', { profileId: 'hrc', text: 'Try' });
   await settled(c, thread.id);
   const items = await c.call('threads.transcript', { threadId: thread.id });
@@ -130,8 +128,7 @@ it('gives each turn its own access to accio tools, which ends with the turn', as
   });
   const t = await startTestApp({ harness });
   stop = t.stop;
-  const c = await t.connect();
-  await c.signedIn('HRC');
+  const c = await t.signedIn('HRC');
   const thread = await c.call('threads.start', { profileId: 'hrc', text: 'Which tools?' });
   await settled(c, thread.id);
   expect(seen.during).toBe(200);

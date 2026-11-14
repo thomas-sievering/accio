@@ -6,13 +6,11 @@ import { FakeHarness, gate } from '../testing/fakeHarness.js';
 import { startTestApp } from '../testing/testApp.js';
 
 let t: Awaited<ReturnType<typeof startTestApp>>;
-let requestId = 0;
-const rpc = (method: string, params: unknown) => t.app.router.handle({ id: ++requestId, method, params });
 afterEach(async () => { vi.restoreAllMocks(); await t?.stop(); });
 
 it('protects the profile while a new thread has not yet been stored', async () => {
   t = await startTestApp({ harness: new FakeHarness() });
-  await (await t.connect()).signedIn('Personal');
+  await t.signedIn('Personal');
   const entered = gate();
   const held = gate();
   const access = t.app.profiles.hubAccess.bind(t.app.profiles);
@@ -21,18 +19,17 @@ it('protects the profile while a new thread has not yet been stored', async () =
     await held.opened;
     return access(id);
   });
-  const starting = rpc('threads.start', { profileId: 'personal', text: 'hello' });
+  const starting = t.rpc('threads.start', { profileId: 'personal', text: 'hello' });
   try {
     await entered.opened;
-    expect(await rpc('profiles.delete', { id: 'personal' })).toMatchObject({ ok: false });
+    expect(await t.rpc('profiles.delete', { id: 'personal' })).toMatchObject({ ok: false });
   } finally { held.release(); }
   expect(await starting).toMatchObject({ ok: true });
 });
 
 it('rejects new profile references once deletion has begun', async () => {
   t = await startTestApp({ harness: new FakeHarness() });
-  const c = await t.connect();
-  await c.signedIn('Personal');
+  const c = await t.signedIn('Personal');
   await c.call('profiles.save', { name: 'Other' });
   const path = join(t.home, 'repo');
   await mkdir(path);
@@ -45,12 +42,12 @@ it('rejects new profile references once deletion has begun', async () => {
     if (method === 'profiles.delete') { entered.release(); await held.opened; }
     return call(method, params);
   });
-  const deleting = rpc('profiles.delete', { id: 'personal' });
+  const deleting = t.rpc('profiles.delete', { id: 'personal' });
   try {
     await entered.opened;
-    expect(await rpc('threads.start', { profileId: 'personal', text: 'too late' })).toMatchObject({ ok: false });
-    expect(await rpc('checkouts.add', { path: join(t.home, 'other'), profileId: 'personal' })).toMatchObject({ ok: false });
-    expect(await rpc('projects.setProfile', { projectId: checkout.projectId, profileId: 'personal' })).toMatchObject({ ok: false });
+    expect(await t.rpc('threads.start', { profileId: 'personal', text: 'too late' })).toMatchObject({ ok: false });
+    expect(await t.rpc('checkouts.add', { path: join(t.home, 'other'), profileId: 'personal' })).toMatchObject({ ok: false });
+    expect(await t.rpc('projects.setProfile', { projectId: checkout.projectId, profileId: 'personal' })).toMatchObject({ ok: false });
   } finally { held.release(); }
   expect(await deleting).toMatchObject({ ok: true });
   expect((await c.call('projects.get', {})).projects[0]?.profileId).toBe('other');
@@ -63,8 +60,8 @@ it('protects a profile during asynchronous folder inspection', async () => {
   await c.call('profiles.save', { name: 'Personal' });
   const path = join(t.home, 'repo');
   await mkdir(path);
-  const adding = rpc('checkouts.add', { path, profileId: 'personal' });
-  expect(await rpc('profiles.delete', { id: 'personal' })).toMatchObject({ ok: false });
+  const adding = t.rpc('checkouts.add', { path, profileId: 'personal' });
+  expect(await t.rpc('profiles.delete', { id: 'personal' })).toMatchObject({ ok: false });
   expect(await adding).toMatchObject({ ok: true });
   expect((await c.call('profiles.list', {}))[0]?.id).toBe('personal');
 });
@@ -81,12 +78,12 @@ it('drains all accepted profile changes before shutdown and refuses later change
     }
     return write.call(this, value);
   });
-  const first = rpc('profiles.save', { name: 'First' });
-  const second = rpc('profiles.save', { name: 'Second' });
+  const first = t.rpc('profiles.save', { name: 'First' });
+  const second = t.rpc('profiles.save', { name: 'Second' });
   await entered.opened;
   const closing = t.app.close();
   try {
-    expect(await rpc('profiles.save', { name: 'Too late' })).toMatchObject({ ok: false });
+    expect(await t.rpc('profiles.save', { name: 'Too late' })).toMatchObject({ ok: false });
   } finally { held.release(); }
   expect(await first).toMatchObject({ ok: true });
   expect(await second).toMatchObject({ ok: true });

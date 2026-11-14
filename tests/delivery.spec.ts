@@ -1,21 +1,17 @@
-import { expect, test, _electron } from '@playwright/test';
-import { createRequire } from 'node:module';
+import { expect, test } from '@playwright/test';
 import { execFile } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { readFile, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
-import { TestClient } from '../apps/worker/src/testing/testApp.js';
+import { git } from '../apps/worker/src/git.js';
+import { BROWSER_AUTHOR, cloneRepo } from '../apps/worker/src/testing/gitRepo.js';
+import { chatClient, chatFixture, startProjectThread, withElectron } from './chat.js';
 
 test('new thread starts at the latest remote default branch while its source checkout stays stale', async ({ page, baseURL }, info) => {
-  const exec = promisify(execFile);
-  const git = async (cwd: string, ...args: string[]) => (await exec('git', ['-C', cwd, ...args], { windowsHide: true })).stdout.trim();
-  const { deliveryFolder, deliveryOrigin } = JSON.parse(await readFile(resolve('out', `chat-test-${new URL(baseURL!).port}.json`), 'utf8'));
+  const { deliveryFolder, deliveryOrigin } = await chatFixture(baseURL!);
   const sourceRevision = await git(deliveryFolder, 'rev-parse', 'HEAD');
   const writer = join(dirname(deliveryFolder), 'fresh-base-writer');
-  await git(dirname(deliveryFolder), 'clone', '--quiet', deliveryOrigin, writer);
-  await git(writer, 'config', 'user.name', 'Accio Browser Test');
-  await git(writer, 'config', 'user.email', 'browser@example.test');
+  await cloneRepo(deliveryOrigin, writer, BROWSER_AUTHOR);
   await writeFile(join(writer, 'remote-base.txt'), 'Fresh remote base\n');
   await git(writer, 'add', '.');
   await git(writer, 'commit', '--quiet', '-m', 'advance remote before thread creation');
@@ -23,14 +19,10 @@ test('new thread starts at the latest remote default branch while its source che
   const remoteRevision = await git(writer, 'rev-parse', 'HEAD');
   expect(await git(deliveryFolder, 'rev-parse', 'origin/main')).toBe(sourceRevision);
 
-  await page.goto(`${baseURL}/#token=isolated-chat-test-token`);
-  await page.getByRole('button', { name: 'New thread', exact: true }).first().click();
-  await page.getByRole('option', { name: /delivery-project/ }).click();
-  await page.locator('.composer textarea').fill('Delivery follow-up');
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await startProjectThread(page, baseURL!, /delivery-project/, 'Delivery follow-up');
   await expect(page.getByText('Fresh workspace ready.', { exact: true })).toBeVisible();
 
-  const client = await TestClient.open(`${baseURL!.replace('http:', 'ws:')}/ws?token=isolated-chat-test-token`);
+  const client = await chatClient(baseURL!);
   try {
     const thread = (await client.call('threads.list', {})).find(entry => entry.workspace?.sourcePath === deliveryFolder && entry.workspace.startRevision === remoteRevision);
     expect(thread).toBeDefined();
@@ -46,8 +38,8 @@ test('new thread starts at the latest remote default branch while its source che
 test('an unavailable origin keeps the new-thread draft and reports the fetch failure', async ({ page, baseURL }) => {
   const exec = promisify(execFile);
   const git = async (...args: string[]) => exec('git', args, { windowsHide: true });
-  const { deliveryFolder, deliveryOrigin } = JSON.parse(await readFile(resolve('out', `chat-test-${new URL(baseURL!).port}.json`), 'utf8'));
-  const client = await TestClient.open(`${baseURL!.replace('http:', 'ws:')}/ws?token=isolated-chat-test-token`);
+  const { deliveryFolder, deliveryOrigin } = await chatFixture(baseURL!);
+  const client = await chatClient(baseURL!);
   const before = (await client.call('threads.list', {})).map(thread => thread.id).sort();
   try {
     await git('-C', deliveryFolder, 'remote', 'set-url', 'origin', join(dirname(deliveryFolder), 'unavailable.git'));
@@ -67,11 +59,7 @@ test('an unavailable origin keeps the new-thread draft and reports the fetch fai
 });
 
 test('CI wait shows current job and step, refreshes, survives reload and clears on delivery', async ({ page, baseURL }, testInfo) => {
-  await page.goto(`${baseURL}/#token=isolated-chat-test-token`);
-  await page.getByRole('button', { name: 'New thread', exact: true }).first().click();
-  await page.getByRole('option', { name: /ci-progress-project/ }).click();
-  await page.locator('.composer textarea').fill('Build CI progress fixture');
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await startProjectThread(page, baseURL!, /ci-progress-project/, 'Build CI progress fixture');
   await expect(page.getByText('CI fixture ready.', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Ship', exact: true }).click();
   const status = page.locator('.delivery-row [role="status"]');
@@ -118,11 +106,7 @@ test('CI wait shows current job and step, refreshes, survives reload and clears 
 });
 
 test('stopped automatic fixes show the failed check and explain why the agent stays idle', async ({ page, baseURL }, testInfo) => {
-  await page.goto(`${baseURL}/#token=isolated-chat-test-token`);
-  await page.getByRole('button', { name: 'New thread', exact: true }).first().click();
-  await page.getByRole('option', { name: /ci-progress-project/ }).click();
-  await page.locator('.composer textarea').fill('Build CI failure fixture');
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await startProjectThread(page, baseURL!, /ci-progress-project/, 'Build CI failure fixture');
   await expect(page.getByText('CI fixture ready.', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Ship', exact: true }).click();
   const actions = page.locator('.delivery-actions');
@@ -144,11 +128,7 @@ test('stopped automatic fixes show the failed check and explain why the agent st
 });
 
 test('a conversation with no changes stops Ship without waiting for checks', async ({ page, baseURL }, testInfo) => {
-  await page.goto(`${baseURL}/#token=isolated-chat-test-token`);
-  await page.getByRole('button', { name: 'New thread', exact: true }).first().click();
-  await page.getByRole('option', { name: /delivery-project/ }).click();
-  await page.locator('.composer textarea').fill('Delivery follow-up');
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await startProjectThread(page, baseURL!, /delivery-project/, 'Delivery follow-up');
   await expect(page.getByText('Fresh workspace ready.', { exact: true })).toBeVisible();
   // Ship is offered from the start, so Ship when done can be queued before any edit.
   await expect(page.getByRole('button', { name: 'Ship', exact: true })).toBeVisible();
@@ -163,11 +143,7 @@ test('a conversation with no changes stops Ship without waiting for checks', asy
 });
 
 test('a project with a test command ships without a delivery turn', async ({ page, baseURL }, testInfo) => {
-  await page.goto(`${baseURL}/#token=isolated-chat-test-token`);
-  await page.getByRole('button', { name: 'New thread', exact: true }).first().click();
-  await page.getByRole('option', { name: /scripted-project/ }).click();
-  await page.locator('.composer textarea').fill('Build scripted fixture');
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await startProjectThread(page, baseURL!, /scripted-project/, 'Build scripted fixture');
   await expect(page.getByText('Scripted feature implemented.', { exact: true })).toBeVisible();
   const actions = page.locator('.delivery-actions');
   await page.getByRole('button', { name: 'Ship', exact: true }).click();
@@ -183,11 +159,7 @@ test('a project with a test command ships without a delivery turn', async ({ pag
 });
 
 test('Ship menu, queued cancellation, owned preview, delivery, Archive and follow-up work through the real UI', async ({ page, baseURL }, testInfo) => {
-  await page.goto(`${baseURL}/#token=isolated-chat-test-token`);
-  await page.getByRole('button', { name: 'New thread', exact: true }).first().click();
-  await page.getByRole('option', { name: /delivery-project/ }).click();
-  await page.locator('.composer textarea').fill('Build delivery fixture');
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await startProjectThread(page, baseURL!, /delivery-project/, 'Build delivery fixture');
   await expect(page.getByText('Feature implemented. Running checks…', { exact: true })).toBeVisible();
   // The sidebar repeats the delivery status, so composer assertions stay inside the delivery row.
   const actions = page.locator('.delivery-actions');
@@ -254,13 +226,7 @@ test('Ship menu, queued cancellation, owned preview, delivery, Archive and follo
 
 test('Electron Open app uses the native bridge and archives its real owned preview', async ({ baseURL }) => {
   test.setTimeout(60_000);
-  const require = createRequire(import.meta.url);
-  const home = await mkdtemp(join(tmpdir(), 'accio-delivery-electron-'));
-  const executablePath = require(require.resolve('electron', { paths: [resolve('apps/desktop')] })) as string;
-  const environment = Object.fromEntries(Object.entries(process.env).filter(([key, value]) => key !== 'ELECTRON_RUN_AS_NODE' && value !== undefined));
-  const desktop = await _electron.launch({ executablePath, args: [resolve('tests/electron-shell.cjs'), `--user-data-dir=${home}`], env: { ...environment, ACCIO_CHAT_TEST_URL: baseURL!, ACCIO_CHAT_TEST_DOWNLOADS: home } });
-  try {
-    const page = await desktop.firstWindow();
+  await withElectron(baseURL!, 'accio-delivery-electron-', async (desktop, page) => {
     await page.getByRole('button', { name: 'New thread', exact: true }).first().click();
     await page.getByRole('option', { name: /delivery-project/ }).click();
     await page.locator('.composer textarea').fill('Build delivery fixture');
@@ -275,9 +241,5 @@ test('Electron Open app uses the native bridge and archives its real owned previ
     await page.getByRole('button', { name: 'Archive', exact: true }).click();
     await expect(page.getByText('Archived · history kept', { exact: true })).toBeVisible();
     await expect(fetch(url)).rejects.toThrow();
-  } finally {
-    await desktop.close();
-    if (!resolve(home).startsWith(join(tmpdir(), 'accio-delivery-electron-'))) throw new Error('Unexpected test home');
-    await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
-  }
+  });
 });

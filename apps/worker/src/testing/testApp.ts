@@ -6,6 +6,8 @@ import type { AccountView, EventName, Events, MethodName, ParamsOf, ProfileView,
 import type { CodexFactory } from '@accio/codex';
 import { startStandalone } from '../../../sorting-hat/src/standalone.js';
 import { startApp, type AppDeps } from '../app.js';
+import type { HarnessTurn } from '../threads/harness.js';
+import type { FakeCodex } from './fakeCodex.js';
 
 // The local hub seals the Sorting Hat's admin token with this key, as a headless hub would.
 process.env.ACCIO_SECRET_KEY ??= Buffer.alloc(32, 9).toString('base64');
@@ -49,6 +51,13 @@ export async function linkSortingHat(app: { profiles: { client: { call(method: s
   await app.profiles.client.call('sortingHat.configure', { url: hat.url, adminToken: hat.adminToken, hubName: 'Local dev' });
 }
 
+/** Calls accio's tools (its MCP server) as the turn's harness would, and returns the JSON-RPC result. */
+export async function callAccioTools(run: HarnessTurn, method: string, params?: unknown) {
+  const response = await fetch(run.tools!.url, { method: 'POST', headers: { 'content-type': 'application/json', authorization: run.tools!.authorization },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) });
+  return (await response.json() as { result: any }).result;
+}
+
 /** The profile's Claude account, or null. */
 export function claudeAccount(profile: ProfileView): AccountView | null {
   return profile.providers.find((p) => p.id === 'anthropic')?.accounts[0] ?? null;
@@ -73,6 +82,7 @@ export async function startTestApp(deps: Partial<AppDeps> & TestHatDeps = {}, ex
     await linkSortingHat(app, hat);
   } catch (error) { await hat.close(); throw error; }
   const clients: TestClient[] = [];
+  let requestId = 0;
   return {
     home,
     app,
@@ -82,6 +92,16 @@ export async function startTestApp(deps: Partial<AppDeps> & TestHatDeps = {}, ex
       const c = await TestClient.open(`ws://127.0.0.1:${app.port}/ws?token=${token}`);
       clients.push(c);
       return c;
+    },
+    /** A connected client whose profile `name` is signed in to Claude. */
+    async signedIn(name: string) {
+      const c = await this.connect();
+      await c.signedIn(name);
+      return c;
+    },
+    /** Calls the app's RPC router directly, without a client. */
+    rpc(method: string, params: unknown) {
+      return app.router.handle({ id: ++requestId, method, params });
     },
     async stop({ keepHome = false } = {}) {
       for (const c of clients) c.close();
@@ -137,6 +157,15 @@ export class TestClient {
     const { signInId } = await this.call('accounts.beginSignIn', { id: account.id });
     await this.call('accounts.completeSignIn', { signInId, code: opts.claudeAccount ?? `claude-${profile.id}` });
     return this.call('profiles.save', { id: profile.id, name, accountIds: { anthropic: [account.id] } });
+  }
+
+  /** Adds a ChatGPT account, signed in through the fake Codex, beside the profile's Claude account. */
+  async withChatGpt(profile: ProfileView, codex: FakeCodex) {
+    const account = await this.call('accounts.save', { name: `${profile.name} ChatGPT`, providerId: 'openai' });
+    const login = await this.call('accounts.beginSignIn', { id: account.id });
+    await codex.latest.complete(profile.name);
+    await this.call('accounts.signInStatus', { signInId: login.signInId });
+    return this.call('profiles.save', { id: profile.id, name: profile.name, accountIds: { anthropic: [claudeAccount(profile)!.id], openai: [account.id] } });
   }
 
   /** The profile of this name, made with a house of its name on the Sorting Hat if new. */

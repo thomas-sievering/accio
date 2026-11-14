@@ -38,8 +38,7 @@ describe('threads slice', () => {
     const harness = new FakeHarness();
     const t = await startTestApp({ harness });
     stop = t.stop;
-    const c = await t.connect();
-    await c.signedIn('HRC');
+    const c = await t.signedIn('HRC');
     const thread = await c.call('threads.start', { profileId: 'hrc', text: 'Help me plan' });
     await settled(c, thread.id);
     expect(thread).toMatchObject({ checkoutId: '', projectId: '', profileId: 'hrc' });

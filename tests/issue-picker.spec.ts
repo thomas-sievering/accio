@@ -1,7 +1,8 @@
 import { readFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { TestClient } from '../apps/worker/src/testing/testApp.js';
+import { chatFixture } from './chat.js';
 
 const token = 'isolated-chat-test-token';
 
@@ -23,7 +24,7 @@ async function newestThread(baseURL: string | undefined, text: string) {
 }
 
 test('a GitHub issue picked in a new thread is named in the first message and assigned once it starts', async ({ page, baseURL }, info) => {
-  const { issuesClaimFile } = JSON.parse(await readFile(resolve('out', `chat-test-${new URL(baseURL!).port}.json`), 'utf8'));
+  const { issuesClaimFile } = await chatFixture(baseURL!);
   await page.setViewportSize({ width: 1100, height: 760 });
   await draftIn(page, baseURL, /issues-project/);
   const trigger = page.getByRole('button', { name: 'Pick an issue', exact: true });

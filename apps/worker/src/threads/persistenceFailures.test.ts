@@ -6,8 +6,6 @@ import { FakeHarness, gate, replyWith } from '../testing/fakeHarness.js';
 import { startTestApp } from '../testing/testApp.js';
 
 let t: Awaited<ReturnType<typeof startTestApp>>;
-let requestId = 0;
-const rpc = (method: string, params: unknown) => t.app.router.handle({ id: ++requestId, method, params });
 afterEach(async () => { vi.restoreAllMocks(); await t?.stop(); });
 
 it('releases a completed turn after its final transcript write fails and permits recovery', async () => {
@@ -19,8 +17,7 @@ it('releases a completed turn after its final transcript write fails and permits
     }
   });
   t = await startTestApp({ harness });
-  const c = await t.connect();
-  await c.signedIn('Personal');
+  const c = await t.signedIn('Personal');
   const thread = await c.call('threads.start', { profileId: 'personal', text: 'hello' });
   const path = join(t.home, 'transcripts', `${thread.id}.json`);
   try {
@@ -52,8 +49,7 @@ it('releases a completed turn after its final transcript write fails and permits
 
 it('discards shared cold reads when a thread is deleted and never flushes them back to disk', async () => {
   t = await startTestApp({ harness: new FakeHarness() });
-  const c = await t.connect();
-  await c.signedIn('Personal');
+  const c = await t.signedIn('Personal');
   const thread = await c.call('threads.start', { profileId: 'personal', text: 'hello' });
   await c.waitFor('threads.changed', (threads) => threads.some((item) => item.id === thread.id && item.status === 'idle'));
   const home = t.home;
@@ -73,12 +69,12 @@ it('discards shared cold reads when a thread is deleted and never flushes them b
     }
     return value;
   });
-  const observation = rpc('threads.observe', { threadId: thread.id });
-  const legacyRead = rpc('threads.transcript', { threadId: thread.id });
+  const observation = t.rpc('threads.observe', { threadId: thread.id });
+  const legacyRead = t.rpc('threads.transcript', { threadId: thread.id });
   await entered.opened;
-  const deleting = rpc('threads.delete', { threadId: thread.id });
+  const deleting = t.rpc('threads.delete', { threadId: thread.id });
   try {
-    expect(await rpc('threads.list', {})).toMatchObject({ ok: true, result: [] });
+    expect(await t.rpc('threads.list', {})).toMatchObject({ ok: true, result: [] });
   } finally { held.release(); }
   expect(await observation).toMatchObject({ ok: false, error: 'No such thread' });
   expect(await legacyRead).toMatchObject({ ok: false, error: 'No such thread' });

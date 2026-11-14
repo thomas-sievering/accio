@@ -1,4 +1,4 @@
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { JsonFile } from '@accio/persistence';
@@ -6,6 +6,7 @@ import { FakeHarness, gate, replyWith } from '../testing/fakeHarness.js';
 import { startTestApp, type TestClient } from '../testing/testApp.js';
 import { DeliveryGit, DeliveryUnavailable, type DeliveryObservation } from './delivery.js';
 import { git } from '../git.js';
+import { initRepoWithOrigin } from '../testing/gitRepo.js';
 import type { GhRunner } from '../github/accounts.js';
 import type { ThreadView } from '@accio/protocol';
 
@@ -24,17 +25,7 @@ async function project(harness: FakeHarness, github?: GhRunner) {
   await client.signedIn('Personal');
   const source = join(app.home, 'source');
   const origin = join(app.home, 'origin.git');
-  await mkdir(source);
-  await git(source, 'init', '--quiet', '-b', 'main');
-  await git(source, 'config', 'user.name', 'Accio Test');
-  await git(source, 'config', 'user.email', 'accio@example.test');
-  await writeFile(join(source, 'seed'), 'base\n');
-  await git(source, 'add', '.');
-  await git(source, 'commit', '--quiet', '-m', 'base');
-  await git(app.home, 'init', '--quiet', '--bare', '-b', 'main', origin);
-  await git(source, 'remote', 'add', 'origin', origin);
-  await git(source, 'push', '--quiet', '-u', 'origin', 'main');
-  await git(source, 'remote', 'set-head', 'origin', '-a');
+  await initRepoWithOrigin(source, origin, { seed: 'base\n' });
   const checkout = await client.call('checkouts.add', { path: source, profileId: 'personal' });
   return { client, source, origin, checkout };
 }

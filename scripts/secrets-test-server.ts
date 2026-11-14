@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { closeWhenOrphaned } from './fixtureLifetime.js';
+import { onShutdown } from './fixtureLifetime.js';
 import { startApp } from '../apps/worker/src/app.js';
 import { FakeHarness, replyWith } from '../apps/worker/src/testing/fakeHarness.js';
 import { linkSortingHat, startTestSortingHat, TestClient } from '../apps/worker/src/testing/testApp.js';
@@ -32,9 +32,7 @@ const checkout = await client.call('checkouts.add', { profileId: personal.id, pa
 await client.call('threads.start', { checkoutId: checkout.id, text: 'request secret' });
 console.log(`Secrets fixture ready: http://127.0.0.1:${app.port}`);
 process.send?.({ type: 'ready' });
-let closing = false;
-const close = async () => {
-  if (closing) return; closing = true;
+onShutdown('Secrets', async () => {
   client.close(); await app.close(); await hat.close();
   for (const directory of ['transcripts', 'thread-details']) {
     for (const file of await readdir(join(home, directory), { recursive: true }).catch(() => [])) {
@@ -47,8 +45,4 @@ const close = async () => {
   await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
   const evidence = resolve('out/secrets-ui'); await mkdir(evidence, { recursive: true });
   await writeFile(join(evidence, 'cleanup.json'), JSON.stringify({ cleanup: true, privateMarkersAbsentFromThreadData: true, deliveriesRemoved: true, dummyDeliveries: markers.size }, null, 2));
-  process.exit();
-};
-process.on('SIGINT', () => void close()); process.on('SIGTERM', () => void close());
-process.on('message', message => { if ((message as { type?: string })?.type === 'shutdown') void close(); });
-closeWhenOrphaned('Secrets', () => void close());
+});
