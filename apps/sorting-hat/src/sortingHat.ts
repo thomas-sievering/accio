@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypt
 import { join } from 'node:path';
 import {
   SIGN_IN_TTL_MS,
+  SignInEndedError,
   SignInError,
   beginSignIn,
   exchangeCode,
@@ -306,7 +307,10 @@ export class SortingHat implements Forwarding {
       const id = this.accountIdInUse(houseId, 'openai');
       const account = this.accounts.find((a) => a.id === id)?.openai;
       if (!account) return null;
-      const credentials = await this.openai.credentials(account, force);
+      let credentials;
+      try { credentials = await this.endsSignIn(id!, this.openai.credentials(account, force)); }
+      // An ended sign-in moves the house to its next account.
+      catch (error) { if (error instanceof SignInEndedError) continue; throw error; }
       // A sign-out or account switch during refresh must not unlock the previous account.
       if (this.accountIdInUse(houseId, 'openai') === id && this.accounts.find((a) => a.id === id)?.openai === account) return { accountId: id!, accessToken: credentials.accessToken, chatgptAccountId: credentials.accountId };
     }
@@ -332,13 +336,18 @@ export class SortingHat implements Forwarding {
   /** The house's Claude account in use and its token. */
   async claudeAccess(houseId: string, force = false): Promise<{ accountId: string; token: string } | null> {
     this.requireHouse(houseId);
-    const accountId = this.accountIdInUse(houseId, 'anthropic');
-    if (!accountId) return null;
-    await this.accountAccessToken(accountId, force);
-    // Preserve the house's routing if its accounts changed while the token refreshed.
-    const currentId = this.accountIdInUse(houseId, 'anthropic');
-    const token = this.accounts.find((a) => a.id === currentId)?.account?.accessToken;
-    return currentId && token ? { accountId: currentId, token } : null;
+    // An ended sign-in moves the house to its next account, once.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const accountId = this.accountIdInUse(houseId, 'anthropic');
+      if (!accountId) return null;
+      try { await this.accountAccessToken(accountId, force); }
+      catch (error) { if (error instanceof SignInEndedError) continue; throw error; }
+      // Preserve the house's routing if its accounts changed while the token refreshed.
+      const currentId = this.accountIdInUse(houseId, 'anthropic');
+      const token = this.accounts.find((a) => a.id === currentId)?.account?.accessToken;
+      return currentId && token ? { accountId: currentId, token } : null;
+    }
+    return null;
   }
 
   private async accountAccessToken(accountId: string, force = false): Promise<string | null> {
@@ -360,8 +369,16 @@ export class SortingHat implements Forwarding {
         () => this.refreshing.delete(accountId!),
       );
     }
-    await pending;
+    await this.endsSignIn(accountId, pending);
     return this.accounts.find((a) => a.id === accountId)?.account?.accessToken ?? null;
+  }
+
+  /** Marks the account when the provider refused its sign-in, so the dashboard asks to sign in again and houses skip it. */
+  private async endsSignIn<T>(accountId: string, work: Promise<T>): Promise<T> {
+    try { return await work; } catch (error) {
+      if (error instanceof SignInEndedError) this.limits.markSignInRequired(accountId, error.message);
+      throw error;
+    }
   }
 
   /** Every account's last known limits. */
@@ -375,6 +392,13 @@ export class SortingHat implements Forwarding {
   }
 
   private async readAccountLimits(id: string, signal: AbortSignal) {
+    try { return await this.readAccountLimitsOnce(id, signal); } catch (error) {
+      if (error instanceof SignInEndedError) throw new LimitsReadError('signInRequired', error.message);
+      throw error;
+    }
+  }
+
+  private async readAccountLimitsOnce(id: string, signal: AbortSignal) {
     const account = this.requireAccount(id);
     if (account.providerId === 'openai') {
       if (!account.openai) throw new LimitsReadError('signInRequired', 'Sign in to this ChatGPT account to read its limits.');
@@ -392,7 +416,7 @@ export class SortingHat implements Forwarding {
     if (response.status === 401) { await response.body?.cancel(); response = await send(true); }
     if (!response.ok) {
       await response.body?.cancel();
-      if (response.status === 401 || response.status === 403) throw new LimitsReadError('signInRequired', 'Sign in to this Claude account again to read its limits.');
+      if (response.status === 401 || response.status === 403) throw new LimitsReadError('signInRequired', 'Claude ended this sign-in. Sign in again.');
       if (response.status === 429) throw new LimitsReadError('rateLimited', 'Anthropic is limiting usage checks. Try again later.', retryAfterMs(response.headers.get('retry-after')));
       throw new LimitsReadError('unavailable', 'Anthropic could not provide this account’s limits. Try again.', retryAfterMs(response.headers.get('retry-after')));
     }
@@ -496,7 +520,9 @@ export class SortingHat implements Forwarding {
 
   /** The signed-in account chosen for the house's next request at this provider (see chooseAccount). */
   accountIdInUse(houseId: string, providerId: ProviderId, now = Date.now()) {
-    return chooseAccount(this.signedInIds(houseId, providerId).map((id) => ({ id, snapshot: this.limits.snapshot(id) })), now);
+    // An account whose sign-in ended is skipped; noteRequest keeps checking it.
+    const usable = this.signedInIds(houseId, providerId).filter((id) => !this.limits.signInRequired(id));
+    return chooseAccount(usable.map((id) => ({ id, snapshot: this.limits.snapshot(id) })), now);
   }
 
   /**

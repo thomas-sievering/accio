@@ -42,6 +42,19 @@ export class AccountLimits {
     return this.entries.get(id)?.view.snapshot ?? null;
   }
 
+  /** True when the provider refused the account's sign-in; signing in again clears it (invalidate). */
+  signInRequired(id: string) {
+    return this.entries.get(id)?.view.problem?.code === 'signInRequired';
+  }
+
+  /** A model request found the account's sign-in ended. Limits reads keep checking it now and then. */
+  markSignInRequired(id: string, message: string) {
+    const account = this.accounts().find((a) => a.id === id);
+    if (!account?.signedIn) return;
+    const entry = this.entry(account);
+    entry.view = { ...entry.view, status: 'error', problem: { code: 'signInRequired', message }, retryAt: new Date(this.now() + FRESH_MS).toISOString() };
+  }
+
   /** Called only when credential ownership changes, not on ordinary token refresh. */
   invalidate(id: string) {
     this.entries.get(id)?.controller?.abort();
@@ -111,7 +124,9 @@ export class AccountLimits {
         const base = limited ? 60_000 : 30_000;
         const told = error instanceof LimitsReadError ? error.retryAfterMs : undefined;
         const delay = told ?? Math.min(15 * 60_000, base * 2 ** Math.min(entry.failures - 1, 5));
-        entry.view = { ...entry.view, status: 'error', problem, retryAt: new Date(this.now() + Math.max(limited ? base : COOLDOWN_MS, delay)).toISOString() };
+        // An ended sign-in only comes back by signing in again: check it no more often than fresh limits.
+        const least = limited ? base : problem.code === 'signInRequired' ? FRESH_MS : COOLDOWN_MS;
+        entry.view = { ...entry.view, status: 'error', problem, retryAt: new Date(this.now() + Math.max(least, delay)).toISOString() };
       } finally {
         if (this.current(id, entry)) { entry.pending = undefined; entry.controller = undefined; }
       }

@@ -34,6 +34,10 @@ const components: Components = {
     if (!href) return <span title="This link is not supported.">{children}</span>;
     return <a href={href} title={title} target={href.startsWith('#') ? undefined : '_blank'} rel="noopener noreferrer">{children}</a>;
   },
+  // A wide table scrolls inside the message instead of widening the transcript.
+  table: function MarkdownTable({ children }) {
+    return <div className="table-scroll"><table>{children}</table></div>;
+  },
 };
 
 export function AssistantMarkdown({ threadId, text, media, preparing = false }: { threadId: string; text: string; media?: MediaBinding[]; preparing?: boolean }): ReactNode {

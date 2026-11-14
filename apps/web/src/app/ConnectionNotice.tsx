@@ -1,6 +1,6 @@
 import { useConnectionStatus } from './connection';
 
-const labels = { connecting: 'Connecting…', closed: 'Disconnected', unauthorized: 'Not authorised' } as const;
+const labels = { connecting: 'Connecting…', closed: 'Disconnected', unreachable: 'Worker unreachable', unauthorized: 'Not authorised' } as const;
 
 /** Says nothing while the link is up; names the problem when it is not. */
 export function ConnectionNotice() {

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { startCodex, type CodexClient, type CodexFactory } from './codex.js';
-import { SIGN_IN_TTL_MS, SignInError } from './claudeOAuth.js';
+import { SIGN_IN_TTL_MS, SignInEndedError, SignInError } from './claudeOAuth.js';
 import { LimitsReadError } from './limits.js';
 import { IMAGE_TYPES } from './types.js';
 
@@ -31,6 +31,8 @@ async function listModels(client: CodexClient): Promise<CodexModel[]> {
 export type OpenAIAccount = { credentialId: string; email: string | null; planType: string | null; models: CodexModel[] };
 type OpenAICredentials = { accessToken: string; accountId: string };
 type Pending = { client: CodexClient; credentialId: string; loginId?: string; success?: boolean; error?: string; authUrl?: string; callbackUsed?: boolean; timer: ReturnType<typeof setTimeout> };
+
+const ENDED = 'ChatGPT ended this sign-in. Sign in again.';
 
 /** ChatGPT sign-in, refresh, models and limits. This class never starts a Codex thread or turn. */
 export class OpenAIAuth {
@@ -160,7 +162,7 @@ export class OpenAIAuth {
     try {
       signal.throwIfAborted();
       const result = await client.request('account/read', { refreshToken: false });
-      if (result.account?.type !== 'chatgpt') throw new LimitsReadError('signInRequired', 'Sign in to this ChatGPT account again to read its limits.');
+      if (result.account?.type !== 'chatgpt') throw new LimitsReadError('signInRequired', ENDED);
       signal.throwIfAborted();
       return await client.request('account/rateLimits/read', null);
     } finally {
@@ -177,7 +179,14 @@ export class OpenAIAuth {
     const dir = this.directory(account.credentialId);
     const client = await this.factory({ home: dir, cwd: dir });
     try {
-      await client.request('account/read', { refreshToken: true });
+      let result;
+      try { result = await client.request('account/read', { refreshToken: true }); }
+      catch (error) {
+        // Codex asks to sign in again when ChatGPT refuses its refresh token (expired, reused or revoked).
+        if (/refresh token|sign in again|log ?in again|log out/i.test((error as Error).message)) throw new SignInEndedError(ENDED);
+        throw error;
+      }
+      if (result.account?.type !== 'chatgpt') throw new SignInEndedError(ENDED);
       return await this.readCredentials(account.credentialId);
     } finally { await client.close(); }
   }

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, desktopCapturer, dialog, ipcMain, screen, shell, systemPreferences, type NativeImage } from 'electron';
+import { app, BrowserWindow, clipboard, desktopCapturer, dialog, ipcMain, Menu, screen, shell, systemPreferences, webContents, type NativeImage } from 'electron';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { dirname, isAbsolute, join } from 'node:path';
@@ -7,6 +7,8 @@ import { WorkerProcess, type Ready } from './workerProcess.js';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { previewUrl } from './openPreview.js';
+import { contextMenuTemplate } from './contextMenu.js';
+import { appMenuTemplate } from './appMenu.js';
 import type { DesktopMessage } from '@accio/worker/dist/machine/desktop.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -135,6 +137,20 @@ function rememberWindowState(win: BrowserWindow) {
   win.on('close', () => { clearTimeout(timer); save(); });
 }
 
+/** Native right-click menu. Parts of the page with their own menu (thread rows) cancel `contextmenu`, so this doesn't fire there. */
+function installContextMenu(win: BrowserWindow) {
+  const contents = win.webContents;
+  contents.on('context-menu', (_event, params) => {
+    const template = contextMenuTemplate(params, {
+      replaceMisspelling: (word) => contents.replaceMisspelling(word),
+      addToDictionary: (word) => contents.session.addWordToSpellCheckerDictionary(word),
+      copyText: (text) => clipboard.writeText(text),
+      copyImageAt: (x, y) => contents.copyImageAt(x, y),
+    });
+    if (template.length > 0) Menu.buildFromTemplate(template).popup({ window: win });
+  });
+}
+
 async function createWindow(ready: Ready) {
   const state = savedWindowState();
   const win = new BrowserWindow({
@@ -159,6 +175,7 @@ async function createWindow(ready: Ready) {
     void shell.openExternal(url);
     return { action: 'deny' };
   });
+  installContextMenu(win);
   const base = process.env.ACCIO_DEV_URL ?? ready.url;
   await win.loadURL(`${base}/#token=${encodeURIComponent(ready.token)}`);
 }
@@ -190,6 +207,7 @@ ipcMain.handle('accio:open-folder', async (event, path: unknown) => {
 if (process.platform === 'win32') app.setAppUserModelId(process.env.ACCIO_WINDOW_TITLE ? `accio.${process.env.ACCIO_WINDOW_TITLE}` : 'accio');
 
 app.whenReady().then(async () => {
+  Menu.setApplicationMenu(Menu.buildFromTemplate(appMenuTemplate(process.platform, () => webContents.getAllWebContents())));
   try {
     const ready = await startWorker();
     localServerOrigin = new URL(ready.url).origin;

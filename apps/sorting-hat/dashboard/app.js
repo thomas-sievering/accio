@@ -27,7 +27,24 @@ async function load() {
   const [accounts, houses, hatKeys, limits] = await Promise.all([api('GET', 'accounts'), api('GET', 'houses'), api('GET', 'hat-keys'), api('GET', 'limits')]);
   Object.assign(state, { accounts, houses, hatKeys, limits });
   render();
+  readLimits();
   await usage.then(showUsage);
+}
+
+/**
+ * Reads every signed-in account's limits in the background, which also finds
+ * sign-ins that ended. The Sorting Hat answers from its cache while it is fresh.
+ */
+let readingLimits = false;
+async function readLimits() {
+  if (readingLimits) return;
+  readingLimits = true;
+  try {
+    const limits = await api('POST', 'limits/refresh', {});
+    if (JSON.stringify(limits) === JSON.stringify(state.limits)) return;
+    state.limits = limits;
+    if (!openMenu && !dialog.open) render();
+  } catch {} finally { readingLimits = false; }
 }
 
 /** Runs an action from the page; failures show in the toast. */
@@ -92,40 +109,86 @@ function renderAccounts() {
   list.replaceChildren(...state.accounts.map(accountCard));
 }
 
+/** The account's limits, and whether the provider refused its sign-in. */
+const limitsOf = (account) => state.limits.find((l) => l.accountId === account.id);
+const signInEnded = (account) => account.signedIn && limitsOf(account)?.problem?.code === 'signInRequired';
+
 function accountCard(account) {
   const houses = state.houses.filter((house) => house.accounts[account.providerId].includes(account.id));
-  const inUseBy = houses.filter((house) => house.inUse[account.providerId] === account.id);
+  const ended = signInEnded(account);
   const who = [account.email, account.organization].filter(Boolean).join(' · ');
-  return h('article', { class: 'card', 'aria-label': `Account ${account.name}` },
+  // One visible button, and only when the account needs one; everything else is in its menu.
+  const status = !account.signedIn
+    ? [h('p', { class: 'muted small' }, 'Signed out'), button('Sign in', () => signIn(account))]
+    : ended
+      ? [h('p', { class: 'warn small' }, 'Sign-in ended'), button('Sign in again', () => signIn(account), { class: 'primary' })]
+      : [limitsView(account)];
+  return h('article', { class: `card${account.signedIn ? '' : ' off'}`, 'aria-label': `Account ${account.name}` },
     h('div', { class: 'card-head' },
       h('div', {},
         h('h3', {}, account.name),
-        h('p', { class: 'muted small' }, `${PROVIDERS[account.providerId]} account`, who ? ` · ${who}` : ''),
+        h('p', { class: 'muted small' }, PROVIDERS[account.providerId], who ? ` · ${who}` : ''),
       ),
-      account.signedIn ? h('span', { class: 'tag ok' }, 'Signed in') : h('span', { class: 'tag off' }, 'Signed out'),
+      menu(`Actions for ${account.name}`, [
+        { label: 'Rename', run: () => askName({ title: 'Rename account', value: account.name, submit: 'Rename', run: (name) => api('PATCH', `accounts/${enc(account.id)}`, { name }) }) },
+        account.signedIn && !ended && { label: 'Sign in again', run: () => signIn(account) },
+        account.signedIn && { label: 'Sign out', run: () => confirmAction({
+          title: `Sign ${account.name} out?`, message: 'Its credentials are cleared. Its name and houses stay, so you can sign it in again.',
+          confirm: 'Sign out', run: () => api('POST', `accounts/${enc(account.id)}/sign-out`),
+        }) },
+        { label: 'Delete', danger: true, run: () => confirmAction({
+          title: `Delete ${account.name}?`, message: houses.length ? `Remove it from ${houses.map((x) => x.name).join(', ')} first.` : 'Its credentials and limits are removed from the Sorting Hat.',
+          confirm: 'Delete account', danger: true, run: () => api('DELETE', `accounts/${enc(account.id)}`),
+        }) },
+      ]),
     ),
-    limitsView(account),
-    h('p', { class: 'muted small' },
-      houses.length ? `In ${houses.map((x) => x.name).join(', ')}` : 'In no house',
-      inUseBy.length ? ` · in use for ${inUseBy.map((x) => x.name).join(', ')}` : ''),
-    h('div', { class: 'actions' },
-      button(account.signedIn ? 'Sign in again' : 'Sign in', () => signIn(account), { class: account.signedIn ? '' : 'primary' }),
-      account.signedIn && button('Sign out', () => confirmAction({
-        title: `Sign ${account.name} out?`, message: 'Its credentials are cleared. Its name and houses stay, so you can sign it in again.',
-        confirm: 'Sign out', run: () => api('POST', `accounts/${enc(account.id)}/sign-out`),
-      })),
-      button('Rename', () => askName({ title: 'Rename account', value: account.name, submit: 'Rename', run: (name) => api('PATCH', `accounts/${enc(account.id)}`, { name }) })),
-      button('Delete', () => confirmAction({
-        title: `Delete ${account.name}?`, message: houses.length ? `Remove it from ${houses.map((x) => x.name).join(', ')} first.` : 'Its credentials and limits are removed from the Sorting Hat.',
-        confirm: 'Delete account', danger: true, run: () => api('DELETE', `accounts/${enc(account.id)}`),
-      }), { class: 'danger' }),
-    ),
+    status,
+    houses.length > 0 && h('p', { class: 'muted small' },
+      houses.map((x) => x.inUse[account.providerId] === account.id ? `${x.name} · in use` : x.name).join(', ')),
   );
 }
 
+let openMenu;
+/** A ⋯ button with a menu of actions; a separator goes before the dangerous ones. */
+function menu(label, items) {
+  const list = items.filter(Boolean);
+  const toggle = button('⋯', () => (openMenu === wrap ? closeMenu() : show()), { class: 'icon dots', 'aria-label': label, 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
+  const panel = h('div', { class: 'menu', role: 'menu', 'aria-label': label, hidden: true },
+    list.map((item, i) => [
+      item.danger && i > 0 && h('hr', {}),
+      h('button', { type: 'button', role: 'menuitem', class: item.danger ? 'danger' : '', onclick: () => { closeMenu(); item.run(); } }, item.label),
+    ]));
+  const wrap = h('div', { class: 'menu-wrap' }, toggle, panel);
+  const show = () => {
+    closeMenu();
+    openMenu = wrap; panel.hidden = false; toggle.setAttribute('aria-expanded', 'true');
+    panel.querySelector('button')?.focus();
+  };
+  panel.addEventListener('keydown', (event) => {
+    const buttons = [...panel.querySelectorAll('button')];
+    const at = buttons.indexOf(document.activeElement);
+    if (event.key === 'Escape') { closeMenu(); toggle.focus(); }
+    else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      buttons[(at + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length]?.focus();
+    }
+  });
+  return wrap;
+}
+
+function closeMenu() {
+  if (!openMenu) return;
+  openMenu.querySelector('.menu').hidden = true;
+  openMenu.querySelector('[aria-haspopup]').setAttribute('aria-expanded', 'false');
+  openMenu = undefined;
+}
+document.addEventListener('click', (event) => { if (openMenu && !openMenu.contains(event.target)) closeMenu(); });
+document.addEventListener('focusin', (event) => { if (openMenu && !openMenu.contains(event.target)) closeMenu(); });
+
 function limitsView(account) {
-  const limits = state.limits.find((l) => l.accountId === account.id);
+  const limits = limitsOf(account);
   if (!account.signedIn) return h('p', { class: 'muted small' }, 'Sign in to see its limits.');
+  if (signInEnded(account)) return h('p', { class: 'warn small' }, 'Sign-in ended');
   if (!limits) return h('p', { class: 'muted small' }, 'No limits read yet.');
   const windows = limits.snapshot?.windows ?? [];
   const note = limits.problem?.message ?? (limits.status === 'unsupported' ? 'This provider does not report limits.' : limits.status === 'refreshing' ? 'Reading limits…' : !windows.length ? 'No limits read yet.' : null);
@@ -159,13 +222,13 @@ function houseCard(house) {
   return h('article', { class: 'card', 'aria-label': `House ${house.name}` },
     h('div', { class: 'card-head' },
       h('div', {}, h('h3', {}, house.name), h('p', { class: 'muted small mono' }, house.id)),
-      h('div', { class: 'actions' },
-        button('Rename', () => askName({ title: 'Rename house', value: house.name, submit: 'Rename', run: (name) => api('PATCH', `houses/${enc(house.id)}`, { name }) })),
-        button('Delete', () => confirmAction({
+      menu(`Actions for ${house.name}`, [
+        { label: 'Rename', run: () => askName({ title: 'Rename house', value: house.name, submit: 'Rename', run: (name) => api('PATCH', `houses/${enc(house.id)}`, { name }) }) },
+        { label: 'Delete', danger: true, run: () => confirmAction({
           title: `Delete ${house.name}?`, message: `Its ${keys.length === 1 ? 'hat key is' : `${keys.length} hat keys are`} deleted too, and apps using ${keys.length === 1 ? 'it' : 'them'} stop working. The accounts stay.`,
           confirm: 'Delete house', danger: true, run: () => api('DELETE', `houses/${enc(house.id)}`),
-        }), { class: 'danger' }),
-      ),
+        }) },
+      ]),
     ),
     h('div', { class: 'providers' }, Object.keys(PROVIDERS).map((provider) => providerOrder(house, provider))),
     hatKeysView(house, keys),
@@ -190,6 +253,7 @@ function providerOrder(house, provider) {
         h('span', { class: 'name' }, name),
         house.inUse[provider] === id && h('span', { class: 'tag ok' }, 'In use'),
         account && !account.signedIn && h('span', { class: 'tag off' }, 'Signed out'),
+        account && signInEnded(account) && h('span', { class: 'tag off' }, 'Sign-in ended'),
         button('↑', () => move(i, -1), { class: 'icon', 'aria-label': `Move ${name} up`, disabled: i === 0 }),
         button('↓', () => move(i, 1), { class: 'icon', 'aria-label': `Move ${name} down`, disabled: i === ids.length - 1 }),
         button('×', () => setOrder(ids.filter((x) => x !== id)), { class: 'icon', 'aria-label': `Remove ${name} from ${house.name}` }),
@@ -759,5 +823,5 @@ fetch('/dashboard/session', { credentials: 'same-origin' }).then((r) => r.json()
 }).catch(() => {});
 
 load().catch((e) => toast(e.message));
-// Keep the account in use, limits and usage current while the page is open, but never under an open dialog.
-setInterval(() => { if (!dialog.open && document.visibilityState === 'visible') load().catch(() => {}); }, 30_000);
+// Keep the account in use, limits and usage current while the page is open, but never under an open dialog or menu.
+setInterval(() => { if (!dialog.open && !openMenu && document.visibilityState === 'visible') load().catch(() => {}); }, 30_000);
