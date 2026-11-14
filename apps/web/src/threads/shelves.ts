@@ -1,5 +1,4 @@
-import type { ThreadView } from '@accio/protocol';
-import { deliveryStatus } from './status';
+import { deliveryPhase, threadPlace, type ThreadPlace, type ThreadView } from '@accio/protocol';
 
 /**
  * Where a thread sits in the sidebar. The open list is the inbox: threads that
@@ -16,41 +15,6 @@ export type ThreadShelves = {
   settled: ThreadView[];
 };
 
-export type ShelfPlace = 'open' | 'working' | 'snoozed' | 'settled';
-
-function isSnoozed(t: ThreadView, now: Date): boolean {
-  return t.snoozedUntil !== null && new Date(t.snoozedUntil) > now;
-}
-
-/**
- * A delivery that GitHub or the agent is carrying, so there is nothing for you to do:
- * checks running, a PR that merges itself, or verification on the target. A PR that waits
- * for a person's review or a manual merge comes back to you.
- */
-export function deliveryInProgress(t: ThreadView): boolean {
-  const d = t.delivery;
-  const phase = deliveryStatus(t)?.phase;
-  if (!d || !phase) return false;
-  if (phase === 'queued' || phase === 'shipping' || phase === 'integrated') return true;
-  if (phase !== 'waiting') return false;
-  const on = d.status === 'ready' ? 'merge' : d.waitingOn ?? 'checks';
-  if (on === 'review') return false;
-  if (on === 'merge') return d.mode === 'ship' && d.policy === 'pull-request' && !d.followUpsStoppedAt;
-  return true;
-}
-
-/**
- * Settled wins over snoozed, snoozed over working; a snooze that has passed puts the thread
- * back in the open list. A running turn waiting for a secret needs you, so it is open.
- */
-export function placeOf(t: ThreadView, now: Date): ShelfPlace {
-  if (t.settledAt) return 'settled';
-  if (isSnoozed(t, now)) return 'snoozed';
-  if (t.needsSecret) return 'open';
-  if (t.status === 'running' || deliveryInProgress(t)) return 'working';
-  return 'open';
-}
-
 /**
  * How long a thread that stopped working stays on Working: a goal, queued message or
  * delivery follow-up can start the next turn moments after one ends (T3 Code waits as long).
@@ -59,7 +23,7 @@ export const WORKING_GRACE_MS = 2_000;
 
 /** Placement as one client observed it over time, so the list can hold and order returns. */
 export type Placement = {
-  place: (t: ThreadView) => ShelfPlace;
+  place: (t: ThreadView) => ThreadPlace;
   /** When this client saw the thread come back to the open list, in ms. */
   returnedAt: (id: string) => number | undefined;
   /** The next moment a held thread leaves Working, if any. */
@@ -69,7 +33,7 @@ export type Placement = {
 /** Only a plain finish is held; a failure, interruption or delivery problem comes back at once. */
 function quietlyDone(t: ThreadView): boolean {
   if (t.status !== 'idle' || t.needsSecret) return false;
-  const phase = deliveryStatus(t)?.phase;
+  const phase = deliveryPhase(t);
   return phase !== 'attention' && phase !== 'closed' && phase !== 'unavailable';
 }
 
@@ -79,16 +43,16 @@ function quietlyDone(t: ThreadView): boolean {
  * Working, Snoozed or Settled counts as returned then. The first observation records no returns.
  */
 export function createPlacementTracker() {
-  const states = new Map<string, { place: ShelfPlace; deadline: number | null }>();
+  const states = new Map<string, { place: ThreadPlace; deadline: number | null }>();
   const returns = new Map<string, number>();
   return function observe(threads: readonly ThreadView[], at: number): Placement {
     const now = new Date(at);
-    const places = new Map<string, ShelfPlace>();
+    const places = new Map<string, ThreadPlace>();
     const present = new Set<string>();
     let nextDeadline: number | undefined;
     for (const t of threads) {
       present.add(t.id);
-      const actual = placeOf(t, now);
+      const actual = threadPlace(t, now);
       const previous = states.get(t.id);
       const deadline = actual === 'open' && previous?.place === 'working' && quietlyDone(t) ? (previous.deadline ?? at + WORKING_GRACE_MS) : null;
       const held = deadline !== null && deadline > at;
@@ -100,13 +64,13 @@ export function createPlacementTracker() {
     }
     for (const id of states.keys()) if (!present.has(id)) { states.delete(id); returns.delete(id); }
     const seen = new Map(returns);
-    return { place: (t) => places.get(t.id) ?? placeOf(t, now), returnedAt: (id) => seen.get(id), nextDeadline };
+    return { place: (t) => places.get(t.id) ?? threadPlace(t, now), returnedAt: (id) => seen.get(id), nextDeadline };
   };
 }
 
 export function shelveThreads(threads: ThreadView[], now: Date, placement?: Placement): ThreadShelves {
   const shelves: ThreadShelves = { open: [], working: [], snoozed: [], settled: [] };
-  for (const t of threads) shelves[placement?.place(t) ?? placeOf(t, now)].push(t);
+  for (const t of threads) shelves[placement?.place(t) ?? threadPlace(t, now)].push(t);
   const returned = (t: ThreadView) => Math.max(Date.parse(t.updatedAt), placement?.returnedAt(t.id) ?? 0);
   shelves.open.sort((a, b) => returned(b) - returned(a));
   shelves.working.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));

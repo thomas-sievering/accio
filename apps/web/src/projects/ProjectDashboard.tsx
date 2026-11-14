@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ChangelogEntry, ProjectAppView, ProjectChangelog, ProjectView } from '@accio/protocol';
+import { threadPlace, type ChangelogEntry, type ProjectAppView, type ProjectChangelog, type ProjectView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { emitAppEvent } from '../app/appEvents';
 import { ChevronDown, Close, Play, Refresh, Settings, StopSquare } from '../app/icons';
@@ -8,7 +8,6 @@ import { useLive } from '../app/useLive';
 import { relativeTime } from '../limits/limitsModel';
 import { ThreadMenuProvider } from '../threads/ThreadMenu';
 import { ThreadRow } from '../threads/ThreadRow';
-import { placeOf } from '../threads/shelves';
 import { useThreads } from '../threads/threads';
 import { ProjectMark } from './ProjectMark';
 import { ProfileLabel } from '../profiles/ProfileLabel';
@@ -162,7 +161,7 @@ function Threads({ project }: { project: ProjectView }) {
   return (
     <>
       {GROUPS.map(({ place, label }) => {
-        const rows = active.filter((t) => placeOf(t, now) === place);
+        const rows = active.filter((t) => threadPlace(t, now) === place);
         return rows.length > 0 && (
           <section key={place} className="dashboard-section" aria-label={label}>
             <h3 className="dashboard-heading">{label} <span className="dashboard-count">{rows.length}</span></h3>

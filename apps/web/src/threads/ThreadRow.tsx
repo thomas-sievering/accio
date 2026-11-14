@@ -1,4 +1,4 @@
-import type { ThreadView } from '@accio/protocol';
+import type { ThreadPlace, ThreadView } from '@accio/protocol';
 import { useTooltip } from '../app/Tooltip';
 import { Check, Clock, StopSquare, Undo } from '../app/icons';
 import { ProjectMark } from '../projects/ProjectMark';
@@ -8,7 +8,7 @@ import { StatusGlyphIcon } from './StatusMark';
 import { shortStatus, statusText, threadStatus } from './status';
 import { RowRename, useRenaming, useThreadMenu } from './ThreadMenu';
 import { snoozeThread } from './SnoozeNotice';
-import { awaitsMachine, wakeText, type ShelfPlace } from './shelves';
+import { awaitsMachine, wakeText } from './shelves';
 import { useThreads, type ThreadActions } from './threads';
 import { useThreadAvailability } from './useThreadAvailability';
 
@@ -16,7 +16,7 @@ import { useThreadAvailability } from './useThreadAvailability';
  * Compact rows keep project identity and activity secondary to the title.
  * Hover shows the actions that fit the thread; right-click shows them all.
  */
-export function ThreadRow({ thread: t, place, withinProject = false }: { thread: ThreadView; place: ShelfPlace; withinProject?: boolean }) {
+export function ThreadRow({ thread: t, place, withinProject = false }: { thread: ThreadView; place: ThreadPlace; withinProject?: boolean }) {
   const { selectedId, select, now, act } = useThreads();
   const { state } = useProjects();
   const project = state?.projects.find((p) => p.id === t.projectId)?.name ?? t.projectName;
@@ -110,7 +110,7 @@ type HoverAction = { label: string; title: string; icon: React.ReactNode; run: k
  * While another machine's thread can't be read, it can't be settled either: it offers only
  * Snooze until that machine is back.
  */
-function hoverActions(t: ThreadView, place: ShelfPlace, untilOnline: boolean): HoverAction[] {
+function hoverActions(t: ThreadView, place: ThreadPlace, untilOnline: boolean): HoverAction[] {
   if (place === 'snoozed') return [{ label: 'Wake', title: 'Wake now', icon: <Undo />, run: 'reopen', whileOffline: untilOnline }];
   if (place === 'settled') return [{ label: 'Reopen', title: 'Reopen', icon: <Undo />, run: 'reopen' }];
   if (t.status === 'running') return [{ label: 'Stop', title: 'Stop this turn', icon: <StopSquare />, run: 'stop' }];
@@ -121,7 +121,7 @@ function hoverActions(t: ThreadView, place: ShelfPlace, untilOnline: boolean): H
   ];
 }
 
-function meta(t: ThreadView, place: ShelfPlace, now: Date): string {
+function meta(t: ThreadView, place: ThreadPlace, now: Date): string {
   if (place === 'snoozed' && t.snoozedUntil) return wakeText(new Date(t.snoozedUntil), now);
   if (place === 'settled' && t.settledAt) return timeAgo(t.settledAt, now);
   // A running thread shows how long it has run, including before a restart but not the downtime.

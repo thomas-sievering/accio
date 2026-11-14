@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ChoicePick, TranscriptItem } from '@accio/protocol';
+import { optionLetter, type ChoicePick, type TranscriptItem } from '@accio/protocol';
 import { ACCIO_MCP_SERVER, accioTool } from '../tools/tools.js';
 
 /**
@@ -41,11 +41,6 @@ export function isChoiceTool(name: string): boolean {
 export function parseChoice(input: unknown): ChoiceInput | undefined {
   const parsed = ChoiceInput.safeParse(input);
   return parsed.success ? parsed.data : undefined;
-}
-
-/** A, B, C… */
-export function optionLetter(index: number): string {
-  return String.fromCharCode(65 + index);
 }
 
 /** What the harness reads for a message that picks an option: the pick on one line, then your text. Undefined when the option doesn't exist. */
