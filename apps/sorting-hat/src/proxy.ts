@@ -83,11 +83,13 @@ export function forwardModelRequests({ accounts, upstream = ANTHROPIC_API, fetch
     if (!access) return sendError(res, 401, 'authentication_error', `House ${house.id} has no signed-in Claude account`);
 
     const body = await readBody(req);
+    const signal = abortOnClose(res);
     const send = (accessToken: string) =>
       fetchImpl(new URL(req.url ?? '/', upstream), {
         method: req.method,
         headers: upstreamHeaders(req, accessToken),
         body: body.length ? new Uint8Array(body) : undefined,
+        signal,
       });
 
     let upstreamRes = await send(access.token);
@@ -143,8 +145,7 @@ export function forwardModelRequests({ accounts, upstream = ANTHROPIC_API, fetch
     let credentials = await accounts.openaiCredentials(houseId);
     if (!credentials) return sendError(res, 401, 'authentication_error', `House ${houseId} has no signed-in ChatGPT account`);
     const body = await readBody(req);
-    const controller = new AbortController();
-    res.once('close', () => controller.abort());
+    const signal = abortOnClose(res);
     const send = (auth: NonNullable<typeof credentials>) => {
       const headers = new Headers();
       for (const [key, value] of Object.entries(req.headers)) {
@@ -154,7 +155,7 @@ export function forwardModelRequests({ accounts, upstream = ANTHROPIC_API, fetch
       headers.set('authorization', `Bearer ${auth.accessToken}`);
       headers.set('chatgpt-account-id', auth.chatgptAccountId);
       return openaiFetch(`${openaiUpstream}${path!.slice('/openai'.length)}`, {
-        method: 'POST', headers, body: new Uint8Array(body), signal: controller.signal,
+        method: 'POST', headers, body: new Uint8Array(body), signal,
       });
     };
     let response = await send(credentials);
@@ -172,6 +173,17 @@ export function forwardModelRequests({ accounts, upstream = ANTHROPIC_API, fetch
     relay(response, res, new Set(['set-cookie']), usageTap('openai', response.headers.get('content-type'), (reported) =>
       record({ at, providerId: 'openai', house, accountId, body, reported })));
   }
+}
+
+/**
+ * Aborts a provider request once its caller's connection closes, so a caller
+ * that hangs up, such as a stopped thread, stops it upstream: nothing more is
+ * generated or read. After a finished answer, the abort does nothing.
+ */
+function abortOnClose(res: ServerResponse): AbortSignal {
+  const controller = new AbortController();
+  res.once('close', () => controller.abort());
+  return controller.signal;
 }
 
 /**

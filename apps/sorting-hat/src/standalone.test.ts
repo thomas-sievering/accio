@@ -239,6 +239,48 @@ describe('the standalone Sorting Hat', () => {
     expect((await again.api('GET', 'usage?groupBy=provider,account,model')).rows).toEqual(expected);
   });
 
+  it('aborts the provider request when the caller hangs up mid-stream, counting only what was streamed', async () => {
+    const { hat, api, anthropic, chatgpt, codex, claudeAccount } = await start();
+    const mine = await claudeAccount('Mine');
+    const gpt = await api('POST', 'accounts', { name: 'ChatGPT', providerId: 'openai' });
+    const device = await api('POST', `accounts/${gpt.id}/sign-in`, { flow: 'device' });
+    await codex.latest.complete('chatgpt-personal');
+    await api('GET', `sign-ins/${device.signInId}`);
+    const house = await api('POST', 'houses', { name: 'Personal', accounts: { anthropic: [mine.id], openai: [gpt.id] } });
+    const key = await api('POST', 'hat-keys', { houseId: house.id, name: 'pi' });
+    const errors = vi.spyOn(console, 'error');
+    cleanup.push(async () => errors.mockRestore());
+    anthropic.control.hold = true;
+    chatgpt.control.hold = true;
+
+    /** Starts a streamed request, reads its first chunk, then hangs up. */
+    const hangUp = async (path: string) => {
+      const caller = new AbortController();
+      const res = await fetch(`${hat.url}${path}`, { method: 'POST', signal: caller.signal,
+        headers: { authorization: `Bearer ${key.secret}`, 'content-type': 'application/json' }, body: '{"model":"claude-test","messages":[]}' });
+      const reader = res.body!.getReader();
+      expect((await reader.read()).done).toBe(false);
+      caller.abort();
+      await reader.read().catch(() => {});
+    };
+    // Messages, read for usage, and another path, not read: each is aborted at Anthropic.
+    await hangUp('/v1/messages?beta=true');
+    await vi.waitFor(() => expect(anthropic.aborted).toEqual(['/v1/messages?beta=true']));
+    await hangUp('/v1/complete');
+    await vi.waitFor(() => expect(anthropic.aborted).toEqual(['/v1/messages?beta=true', '/v1/complete']));
+    // ChatGPT keeps aborting as it did.
+    await hangUp('/openai/responses');
+    await vi.waitFor(() => expect(chatgpt.aborted).toEqual(['https://chatgpt.test/backend-api/codex/responses']));
+
+    // The aborted Claude message counts only its message_start: output 1, not the 8 it would have reached.
+    await vi.waitFor(async () => expect((await api('GET', 'usage')).totals.requests).toBe(2));
+    expect((await api('GET', 'usage?groupBy=provider')).rows).toEqual([
+      expect.objectContaining({ providerId: 'anthropic', requests: 1, inputTokens: 10, outputTokens: 1 }),
+      expect.objectContaining({ providerId: 'openai', requests: 1, inputTokens: 0, outputTokens: 0 }),
+    ]);
+    expect(errors).not.toHaveBeenCalled();
+  });
+
   it('lists each house’s models in Anthropic’s and OpenAI’s shapes, cached per account', async () => {
     const { hat, api, auth, codex, claudeAccount } = await start();
     const mine = await claudeAccount('Mine');
