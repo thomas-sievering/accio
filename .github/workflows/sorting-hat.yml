@@ -5,6 +5,10 @@ on:
     branches: [main]
     paths:
       - apps/sorting-hat/**
+      # The Sorting Hat carries copies of these packages; copies.test.ts compares them.
+      - packages/codex/**
+      - packages/persistence/**
+      - packages/protocol/**
       - package.json
       - pnpm-lock.yaml
       - pnpm-workspace.yaml
@@ -16,6 +20,10 @@ on:
   pull_request:
     paths:
       - apps/sorting-hat/**
+      # The Sorting Hat carries copies of these packages; copies.test.ts compares them.
+      - packages/codex/**
+      - packages/persistence/**
+      - packages/protocol/**
       - package.json
       - pnpm-lock.yaml
       - pnpm-workspace.yaml
