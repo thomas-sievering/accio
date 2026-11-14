@@ -20,7 +20,7 @@ export type LimitsProblem = {
   message: string;
 };
 
-/** One hub-owned account snapshot, shared by every profile selecting that account. */
+/** One Sorting Hat account's limits, as the hub relays them, shared by every profile selecting that account. */
 export type AccountLimitsView = {
   accountId: string;
   providerId: ProviderId;
