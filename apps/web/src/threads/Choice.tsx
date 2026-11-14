@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
-import type { ChoiceOption, ChoicePick, TranscriptItem } from '@accio/protocol';
+import { optionLetter, type ChoiceOption, type ChoicePick, type TranscriptItem } from '@accio/protocol';
 import { Check, Chevron, Close } from '../app/icons';
 import { useSavedAsset } from './useSavedAsset';
 
@@ -7,11 +7,6 @@ type ChoiceItem = Extract<TranscriptItem, { kind: 'choice' }>;
 
 /** The option picked for the next message, held by the thread pane and shown in its composer. */
 export const PendingPick = createContext<{ pick?: ChoicePick; setPick: (pick?: ChoicePick) => void; enabled: boolean }>({ setPick: () => {}, enabled: false });
-
-/** A, B, C… as the harness reads them. */
-function optionLetter(index: number): string {
-  return String.fromCharCode(65 + index);
-}
 
 /** Rows stay even: 4 options make a 2×2 grid, 5 or 6 make rows of 3. */
 function choiceColumns(count: number): number {
