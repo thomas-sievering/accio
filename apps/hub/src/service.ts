@@ -57,6 +57,55 @@ const secretCalls = {
   'secrets.bind': z.object({ id: SecretId, scope: SecretScope }),
   'secrets.used': z.object({ id: SecretId, version: z.number().int().positive(), scope: SecretScope }),
 };
+const ShortId = z.string().min(1).max(512);
+const SkillEntry = z.object({ id: z.string(), sourceId: z.string(), name: z.string(), description: z.string(), path: z.string(), revision: z.string(), scope: ResourceScope });
+const Skills = z.array(SkillEntry).min(1).max(10_000);
+const write = <M extends typeof RESOURCE_WRITES[number], A extends [z.ZodType, ...z.ZodType[]]>(method: M, ...args: A) => z.object({ method: z.literal(method), args: z.tuple(args) });
+/** One entry per mutation in RESOURCE_WRITES, with its arguments in order. */
+const ResourceWrite = z.discriminatedUnion('method', [
+  write('saveTool', methods['tools.save'].params),
+  write('deleteTool', ShortId),
+  write('saveSource', methods['skills.addSource'].params, Skills),
+  write('stageSkills', ShortId, Skills),
+  write('applySkills', ShortId, ShortId),
+  write('deleteSource', ShortId),
+  write('setSkillScope', ShortId, ResourceScope),
+  write('setSkillProject', ShortId, z.object({ projectKey: ShortId, enabled: z.boolean() })),
+  write('saveMcp', methods['mcp.save'].params),
+  write('deleteMcp', ShortId),
+  write('setCredential', ShortId, z.object({ accessToken: z.string(), refreshToken: z.string().optional(), expiresAt: z.number().optional(), tokenEndpoint: z.string().optional(), clientId: z.string().optional(), clientSecret: z.string().optional() })),
+  write('setToolStatus', z.object({ toolId: ShortId, machineId: z.string(), status: z.enum(['pending', 'installing', 'ready', 'error']), version: z.string().optional(), detail: z.string().optional(),
+    checkedAt: z.string().optional(), repairThreadId: z.string().optional(), repairError: z.string().optional() })),
+]);
+/** A machine's local browser callback, the only redirect address a sign-in may name. */
+function isBrowserCallback(value: string) {
+  if (!URL.canParse(value)) return false;
+  const u = new URL(value);
+  return u.protocol === 'http:' && u.hostname === 'localhost' && u.pathname === '/callback' && !!u.port && !u.search && !u.hash && !u.username && !u.password;
+}
+/** Methods only paired machines call, or call with more than the client protocol lists. */
+const machineCalls = {
+  'machine.hello': z.object({
+    id: z.string().min(1).max(128), name: z.string().min(1).max(256), platform: z.string().min(1).max(64), version: z.string().min(1).max(128),
+    harnesses: z.array(z.object({ harnessId: z.string().min(1).max(64), version: z.string().max(128).nullable() })).max(100),
+    githubAccounts: z.array(GitHubLogin).max(100).optional(),
+  }),
+  'machine.references': z.object({ profiles: z.array(z.string()).max(10_000) }),
+  'machine.modelKey': z.object({ profileId: z.string().min(1).max(160) }),
+  'hub.pairingCode': z.object({}),
+  'hub.revokeMachine': z.object({ machineId: z.string().min(1).max(128) }),
+  'resources.write': ResourceWrite,
+  'mcp.grant': z.object({ id: ShortId, profileId: z.string().min(1).max(160), projectKey: ShortId.optional() }),
+  'mcp.release': z.object({ token: ShortId }),
+  'accounts.beginSignIn': z.object({ id: z.string(), redirectUri: z.string().max(512).refine(isBrowserCallback, 'Invalid browser callback').optional() }),
+  'accounts.callback': z.object({ signInId: ShortId, code: z.string().min(1).max(16_384), state: z.string().max(1024).optional() }),
+};
+/** Names the first problem, such as `profiles.0: Invalid input: expected string, received number`. */
+function invalid(error: z.ZodError) {
+  const issue = error.issues[0];
+  const where = issue?.path.length ? `${issue.path.join('.')}: ` : '';
+  return new HubError(`Invalid hub request parameters${issue ? ` (${where}${issue.message})` : ''}`);
+}
 type Login = { machineId: string; accountId: string; providerId: ProviderId; startedAt: number; complete?: AccountView };
 /** How long a machine may finish a sign-in it started; the Sorting Hat expires its own too. */
 const SIGN_IN_TTL_MS = 15 * 60_000;
@@ -140,22 +189,20 @@ export async function startHubService(opts: HubServiceOptions) {
     return pending;
   }
   async function execute(machineId: string, method: string, raw: any): Promise<unknown> {
-    const schema = (methods as Record<string, any>)[method]?.params ?? (secretCalls as Record<string, z.ZodType>)[method] ?? (settingCalls as Record<string, z.ZodType>)[method];
-    const parsed = schema?.safeParse(raw);
-    if (parsed && !parsed.success) throw new HubError('Invalid hub request parameters');
-    const p = parsed ? parsed.data : raw;
+    const schema: z.ZodType | undefined = (machineCalls as Record<string, z.ZodType>)[method] ?? (methods as Record<string, any>)[method]?.params ?? (secretCalls as Record<string, z.ZodType>)[method] ?? (settingCalls as Record<string, z.ZodType>)[method];
+    if (!schema) throw new HubError(`Unknown hub method ${method}`);
+    const parsed = schema.safeParse(raw);
+    if (!parsed.success) throw invalid(parsed.error);
+    const p = parsed.data as any;
     switch (method) {
       case 'machine.hello': {
         const hello = p as MachineHello;
-        if (hello.id !== machineId || !hello.name || !hello.platform || !hello.version || !Array.isArray(hello.harnesses) || (hello.githubAccounts !== undefined && !(Array.isArray(hello.githubAccounts) && hello.githubAccounts.every((l) => GitHubLogin.safeParse(l).success))) || JSON.stringify(hello).length > 16_384) throw new HubError('Invalid machine identity');
+        if (hello.id !== machineId || JSON.stringify(hello).length > 16_384) throw new HubError('Invalid machine identity');
         await settings.machineConnected(hello); return null;
       }
-      case 'machine.references': {
-        if (!Array.isArray(p.profiles) || p.profiles.length > 10_000 || p.profiles.some((id: unknown) => typeof id !== 'string')) throw new HubError('Invalid profile references');
-        await trust.references(machineId, p.profiles); return null;
-      }
+      case 'machine.references': await trust.references(machineId, p.profiles); return null;
       case 'machine.modelKey': {
-        const profile = typeof p.profileId === 'string' ? settings.profiles().find((profile) => profile.id === p.profileId) : undefined;
+        const profile = settings.profiles().find((profile) => profile.id === p.profileId);
         if (!profile) throw new HubError('No such profile');
         if (!link.configured) throw new HubError(noSortingHatMessage);
         // GLOSSARY: Hat key. One per profile and machine, with the address threads reach the Sorting Hat at.
@@ -165,7 +212,6 @@ export async function startHubService(opts: HubServiceOptions) {
       }
       case 'hub.pairingCode': return HubTrust.createCode(opts.home);
       case 'hub.revokeMachine': {
-        if (typeof p.machineId !== 'string') throw new HubError('Invalid machine');
         await trust.revoke(p.machineId);
         await link.forgetMachine(p.machineId);
         for (const [token, grant] of grants) if (grant.machineId === p.machineId) { grant.release(); grants.delete(token); }
@@ -187,31 +233,18 @@ export async function startHubService(opts: HubServiceOptions) {
       case 'secrets.bind': await secrets.bind(p.id, p.scope); return null;
       case 'secrets.used': await secrets.used(p.id, p.version, p.scope); return null;
       case 'resources.write': {
-        if (!RESOURCE_WRITES.includes(p.method) || !Array.isArray(p.args) || p.args.length > 2) throw new HubError('Invalid resource mutation');
-        const args = [...p.args];
-        const definitionSchema = { saveTool: methods['tools.save'].params, saveMcp: methods['mcp.save'].params, saveSource: methods['skills.addSource'].params }[p.method as 'saveTool' | 'saveMcp' | 'saveSource'];
-        if (definitionSchema) args[0] = definitionSchema.parse(args[0]);
-        else if (p.method !== 'setToolStatus' && (typeof args[0] !== 'string' || !args[0] || args[0].length > 512)) throw new HubError('Invalid resource identity');
-        if (p.method === 'saveSource' || p.method === 'stageSkills') {
-          if (!Array.isArray(args[1]) || !args[1].length || args[1].length > 10_000) throw new HubError('Invalid skills');
-          for (const skill of args[1]) {
-            if (!skill || ['id', 'sourceId', 'name', 'description', 'path', 'revision'].some(key => typeof skill[key] !== 'string')) throw new HubError('Invalid skill');
-            skill.scope = ResourceScope.parse(skill.scope);
-          }
-        }
-        if (p.method === 'setSkillScope') args[1] = ResourceScope.parse(args[1]);
-        if (p.method === 'setSkillProject' && (!args[1] || typeof args[1].projectKey !== 'string' || !args[1].projectKey || args[1].projectKey.length > 512 || typeof args[1].enabled !== 'boolean')) throw new HubError('Invalid project skill selection');
-        if (p.method === 'setToolStatus' && (!args[0] || args[0].machineId !== machineId || typeof args[0].toolId !== 'string' || !['pending', 'installing', 'ready', 'error'].includes(args[0].status))) throw new HubError('Invalid machine tool status');
-        if (p.method === 'setCredential' && (!resources.state().mcps.some(value => value.id === args[0] && value.auth === 'bearer') || typeof args[1]?.accessToken !== 'string')) throw new HubError('Select a bearer-authenticated MCP server');
-        if (p.method === 'deleteMcp') await mcp.signOut(args[0]);
-        await (resources[p.method as typeof RESOURCE_WRITES[number]] as (...values: any[]) => Promise<void>).apply(resources, args);
+        const { method: write, args } = p as z.output<typeof ResourceWrite>;
+        if (write === 'setToolStatus' && args[0].machineId !== machineId) throw new HubError('Invalid machine tool status');
+        if (write === 'setCredential' && !resources.state().mcps.some(value => value.id === args[0] && value.auth === 'bearer')) throw new HubError('Select a bearer-authenticated MCP server');
+        if (write === 'deleteMcp') await mcp.signOut(args[0]);
+        await (resources[write] as (...values: any[]) => Promise<void>).apply(resources, args);
         return null;
       }
       case 'mcp.beginSignIn': return mcp.beginSignIn(p.id).catch(error => { throw new HubError(error.message); });
       case 'mcp.completeSignIn': await mcp.completeSignIn(p.callbackUrl, p.id).catch(error => { throw new HubError(error.message); }); return null;
       case 'mcp.signOut': await mcp.signOut(p.id); return null;
       case 'mcp.grant': {
-        if (typeof p.id !== 'string' || typeof p.profileId !== 'string' || !settings.profiles().some(profile => profile.id === p.profileId)) throw new HubError('Invalid MCP grant');
+        if (!settings.profiles().some(profile => profile.id === p.profileId)) throw new HubError('Invalid MCP grant');
         const grant = mcp.grant(p.id, p.profileId, p.projectKey); grants.set(grant.token, { machineId, release: grant.release }); return { token: grant.token };
       }
       case 'mcp.release': {
@@ -222,12 +255,7 @@ export async function startHubService(opts: HubServiceOptions) {
       case 'accounts.delete': await link.deleteAccount(p.id); return null;
       case 'accounts.signOut': return link.write((c) => c.signOut(p.id));
       case 'accounts.beginSignIn': {
-        const redirectUri = raw.redirectUri;
-        if (redirectUri !== undefined) {
-          const u = new URL(redirectUri);
-          if (u.protocol !== 'http:' || u.hostname !== 'localhost' || u.pathname !== '/callback' || !u.port || u.search || u.hash || u.username || u.password) throw new HubError('Invalid browser callback');
-        }
-        const result = await link.write((c) => c.beginSignIn(p.id, redirectUri));
+        const result = await link.write((c) => c.beginSignIn(p.id, p.redirectUri));
         logins.set(result.signInId, { machineId, accountId: p.id, providerId: result.providerId, startedAt: Date.now() });
         return result;
       }
