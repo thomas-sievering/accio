@@ -1,5 +1,6 @@
 import type { AccountLimitsView, AccountView, LimitWindow, LimitsSnapshot } from '@accio/protocol';
-import { useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
+import { useAction } from '../app/useAction';
 import { ProviderLogo, Refresh, Settings } from '../app/icons';
 import { useLimits } from './limits';
 import {
@@ -157,13 +158,10 @@ function LimitsSkeleton() {
   );
 }
 
+/** A failed refresh shows through the hub's refresh error and the account's own status. */
 function useRetry(accountId: string, refresh: (ids: string[], force?: boolean) => Promise<void>) {
-  const [busy, setBusy] = useState(false);
-  const retry = () => {
-    if (busy) return;
-    setBusy(true);
-    void refresh([accountId], true).finally(() => setBusy(false));
-  };
+  const { busy, run } = useAction();
+  const retry = () => { if (!busy) void run(() => refresh([accountId], true)); };
   return { busy, retry };
 }
 

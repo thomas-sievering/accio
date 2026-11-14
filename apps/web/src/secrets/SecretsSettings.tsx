@@ -163,8 +163,7 @@ function SecretForm({ profile: initial, profiles, projects: allProjects, store, 
   const [wide, setWide] = useState(secret?.profileWide ?? false);
   const [chosen, setChosen] = useState<string[]>(secret?.projectIds ?? []);
   const [value, setValue] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
+  const { busy, error, run, clear } = useAction();
   const creating = !secret;
   const dirty = !!value || name !== (secret?.name ?? '') || slot !== (secret?.slot ?? '') || wide !== (secret?.profileWide ?? false) || JSON.stringify(chosen) !== JSON.stringify(secret?.projectIds ?? []) || profileId !== initial.id;
   const writesValue = creating || !!replace;
@@ -189,39 +188,35 @@ function SecretForm({ profile: initial, profiles, projects: allProjects, store, 
     if (!ready) return;
     setTried(true);
     if (problem) return focusFirstInvalid(form.current);
-    setBusy(true);
-    setError(undefined);
     const typed = value;
-    try {
-      await client.call('secrets.save', {
-        id: secret?.id,
-        profileId: profile.id,
-        name: editsMetadata ? name.trim() : secret!.name,
-        slot: editsMetadata ? slot : secret!.slot,
-        projectIds: editsMetadata ? (wide ? [] : chosen) : secret!.projectIds,
-        profileWide: editsMetadata ? wide : secret!.profileWide,
-        ...(writesValue ? { value: typed } : {}),
-      });
+    await run(async () => {
+      try {
+        await client.call('secrets.save', {
+          id: secret?.id,
+          profileId: profile.id,
+          name: editsMetadata ? name.trim() : secret!.name,
+          slot: editsMetadata ? slot : secret!.slot,
+          projectIds: editsMetadata ? (wide ? [] : chosen) : secret!.projectIds,
+          profileWide: editsMetadata ? wide : secret!.profileWide,
+          ...(writesValue ? { value: typed } : {}),
+        });
+      } catch (err) {
+        throw new Error(safeError(err, typed, 'Could not save the secret. Nothing changed; try again.'));
+      }
       setValue('');
       onDone(profile.id);
-    } catch (err) {
-      setError(safeError(err, typed, 'Could not save the secret. Nothing changed; try again.'));
-    } finally {
-      setBusy(false);
-    }
+    });
   };
   const removeSecret = async () => {
     if (!secret) return;
-    setBusy(true);
-    setError(undefined);
-    try {
-      await client.call('secrets.delete', { id: secret.id });
+    await run(async () => {
+      try {
+        await client.call('secrets.delete', { id: secret.id });
+      } catch (err) {
+        throw new Error('Could not delete: ' + (err as Error).message);
+      }
       onDone();
-    } catch (err) {
-      setError('Could not delete: ' + (err as Error).message);
-    } finally {
-      setBusy(false);
-    }
+    });
   };
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const t = e.target as HTMLElement;
@@ -286,7 +281,7 @@ function SecretForm({ profile: initial, profiles, projects: allProjects, store, 
             <label className="field" htmlFor={valueId}>
               <span>{replace ? 'New value' : 'Value'}</span>
               <input id={valueId} className="secret-input" {...valueInputProps} placeholder="Paste secret" value={value} readOnly={busy}
-                aria-invalid={tooLarge || (tried && problems.value) ? true : undefined} autoFocus={!!replace} onChange={(e) => { setValue(e.target.value); setError(undefined); }} />
+                aria-invalid={tooLarge || (tried && problems.value) ? true : undefined} autoFocus={!!replace} onChange={(e) => { setValue(e.target.value); clear(); }} />
               {tooLarge || (tried && problems.value) ? <small className="error">{tooLarge ?? problems.value}</small>
                 : <small className="hint">{replace
                   ? 'Replaces the stored value. Threads get the new one from their next request; the old value is not shown.'
