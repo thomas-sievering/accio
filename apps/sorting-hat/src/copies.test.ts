@@ -180,7 +180,7 @@ export async function codexInstall(): Promise<{ harnessId: 'codex'; version: str
     intended: [
       {
         reason: 'Limits are shared by houses in the Sorting Hat, not by profiles.',
-        from: block`/** One hub-owned account snapshot, shared by every profile selecting that account. */`,
+        from: block`/** One Sorting Hat account's limits, as the hub relays them, shared by every profile selecting that account. */`,
         to: block`/** GLOSSARY: Limits. One account's snapshot, shared by every house that has the account. */`,
       },
     ],
