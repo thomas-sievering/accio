@@ -4,6 +4,7 @@ import { useClient } from '../app/connection';
 import { Check, Key, MinusCircle } from '../app/icons';
 import { useSecretStore } from './secrets';
 import { safeError, valueInputProps, valueProblem } from './secretValue';
+import { formatDay } from '../ui/dates';
 
 type Answer = ParamsOf<'secretRequests.answer'>['answer'];
 type Action = Answer['type'];
@@ -110,7 +111,7 @@ function PendingSecret({ threadId, item }: { threadId: string; item: SecretReque
           {item.candidates.map((c) => (
             <label key={c.id} className="check">
               <input type="radio" name={`${item.id}:saved`} value={c.id} checked={chosen === c.id} onChange={() => setChosen(c.id)} />
-              <span>{c.name}<small>{c.profileWide ? `All ${item.profileName} projects` : `Saved ${new Date(c.updatedAt).toLocaleDateString()}`}</small></span>
+              <span>{c.name}<small>{c.profileWide ? `All ${item.profileName} projects` : `Saved ${formatDay(c.updatedAt)}`}</small></span>
             </label>
           ))}
           <div className="secret-saved-foot">

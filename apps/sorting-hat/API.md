@@ -89,6 +89,10 @@ The model routes answer their own failures in Anthropic's error shape,
 `{"type":"error","error":{"type":"authentication_error","message":"..."}}`, so
 Claude Code and Codex show the message.
 
+Bodies have a size limit (`bodies.ts`): 1 MiB for the management API, which
+answers 400 above it, and 32 MiB for a model request, Anthropic's own limit for
+messages, which answers 413 `request_too_large` above it and forwards nothing.
+
 ## Management API
 
 Successful creates answer 201, deletes 204 with no body, everything else 200.

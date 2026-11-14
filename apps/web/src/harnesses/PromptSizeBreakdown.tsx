@@ -1,4 +1,5 @@
 import type { PromptMeasurement } from '@accio/protocol';
+import { formatDayTime } from '../ui/dates';
 
 export function promptTotals(measurement: PromptMeasurement) {
   return [measurement.harness, measurement.accio, measurement.additional, measurement.context ?? { characters: 0, estimatedTokens: 0 }, measurement.tools].reduce((total, part) => ({
@@ -24,6 +25,6 @@ export function PromptSizeBreakdown({ measurement }: { measurement: PromptMeasur
       </tbody>
     </table>
     <p className="note">Tokens are rough estimates: one per four characters, not provider counts. Characters count instruction text, recognized project/environment context and serialized tool definitions. Conversation, images and unrecognized context formats are excluded.</p>
-    <p className="note">{measurement.model && <>Model: {measurement.model}. </>}Measured {new Date(measurement.at).toLocaleString()}.</p>
+    <p className="note">{measurement.model && <>Model: {measurement.model}. </>}Measured {formatDayTime(measurement.at)}.</p>
   </>;
 }
