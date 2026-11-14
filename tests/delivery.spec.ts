@@ -256,7 +256,7 @@ test('Electron Open app uses the native bridge and archives its real owned previ
   test.setTimeout(60_000);
   const require = createRequire(import.meta.url);
   const home = await mkdtemp(join(tmpdir(), 'accio-delivery-electron-'));
-  const executablePath = require(require.resolve('electron', { paths: [resolve('apps/desktop')] })) as string;
+  const executablePath = require('electron') as string;
   const environment = Object.fromEntries(Object.entries(process.env).filter(([key, value]) => key !== 'ELECTRON_RUN_AS_NODE' && value !== undefined));
   const desktop = await _electron.launch({ executablePath, args: [resolve('tests/electron-shell.cjs'), `--user-data-dir=${home}`], env: { ...environment, ACCIO_CHAT_TEST_URL: baseURL!, ACCIO_CHAT_TEST_DOWNLOADS: home } });
   try {
