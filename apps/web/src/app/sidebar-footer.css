@@ -40,6 +40,7 @@
   background: var(--dim);
 }
 .connection-notice.status-closed .dot,
+.connection-notice.status-unreachable .dot,
 .connection-notice.status-unauthorized .dot {
   background: var(--red);
 }
