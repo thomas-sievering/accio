@@ -27,8 +27,8 @@ pnpm hub            # standalone hub (port 47322; ACCIO_HOME, ACCIO_HUB_PORT ove
 pnpm hub:pair       # issue a fresh first-device or recovery pairing code
 pnpm test           # vitest
 pnpm typecheck
-pnpm test:e2e       # build, then every Playwright suite (chat, limits, secrets, relay)
-pnpm test:chat      # ...or one suite: test:chat, test:limits, test:secrets
+pnpm test:e2e       # build, then every Playwright suite (chat, limits, secrets, sortinghat, relay)
+pnpm test:chat      # ...or one suite: test:chat, test:limits, test:secrets, test:sortinghat
 pnpm verify         # build, drive the real UI in isolation, retain proof in out/verify
 ```
 
@@ -91,7 +91,7 @@ verification suites.
 ## State
 
 - Machine: `~/.accio` (`ACCIO_HOME` overrides). Remote hubs' projects, threads and media live under `hubs/<hub-id>`; hub credentials are server-only in `hub-connections.json`.
-- Standalone hub: `~/.accio-hub`. Its `hub` directory holds account credentials, Codex homes, shared settings, secrets and device trust; keep it private and back it up as one unit. See [deploy/hub/README.md](deploy/hub/README.md) for Docker, Cloudflare Tunnel and automatic updates.
+- Standalone hub: `~/.accio-hub`. Its `hub` directory holds shared settings, secrets, device trust and the Sorting Hat's admin token; provider accounts live in the Sorting Hat (ADR 0018). Keep it private and back it up as one unit. See [deploy/hub/README.md](deploy/hub/README.md) for Docker, Cloudflare Tunnel and automatic updates.
 - Sorting Hat: `~/.sorting-hat` when run on its own; on the home server `/data/configs/sorting-hat`, holding every account's refresh tokens. See [deploy/sorting-hat/README.md](deploy/sorting-hat/README.md) for Docker, Cloudflare Access, automatic updates and backups.
 - Dev hub: `%LOCALAPPDATA%/accio-dev` on Windows (`ACCIO_DEV_HUB_HOME`, `ACCIO_DEV_HUB_PORT` override). Pair it once as Local dev and switch in the sidebar.
 
@@ -102,7 +102,7 @@ Code is grouped by domain, one vertical slice each.
 - `packages/protocol`: client–server messages (zod).
 - `packages/codex`: pinned Codex executable and stdio app-server client.
 - `packages/persistence`: atomic JSON files and owner-only private files.
-- `apps/hub`: hub service: pairing, relay, shared settings, profiles and resources; hands threads hat keys for a Sorting Hat of its own, or runs one in-process for accounts.
+- `apps/hub`: hub service: pairing, relay, shared settings, profiles and resources; links to a Sorting Hat, which holds the accounts, and hands threads its hat keys and address.
 - `apps/sorting-hat`: the Sorting Hat (ADR 0018): accounts, sign-in, token refresh, limits, houses, hat keys, the account in use and model request forwarding. Imports nothing from Accio's packages. It also runs on its own with a management API; see [its README](apps/sorting-hat/README.md) and [API](apps/sorting-hat/API.md).
 - `apps/worker`: worker implementation: threads, harnesses, delivery and accio tools; also serves the web client and manages local hub connections.
 - `apps/web`: React client.

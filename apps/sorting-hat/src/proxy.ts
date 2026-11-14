@@ -56,7 +56,7 @@ export type RequestHandler = (req: IncomingMessage, res: ServerResponse) => void
  * The Sorting Hat's front door for model requests. Claude Code calls it with a
  * hat key (ANTHROPIC_AUTH_TOKEN, or an API key header); it swaps that key for
  * the house's account in use's OAuth token and forwards to Anthropic. The caller
- * is the real Claude Code, so nothing else about the request changes (ADR 0007).
+ * is the real Claude Code, so nothing else about the request changes (ADR 0018).
  * Codex calls the /openai/ routes the same way.
  */
 export function forwardModelRequests({ accounts, upstream = ANTHROPIC_API, fetchImpl = fetch, openaiUpstream = 'https://chatgpt.com/backend-api/codex', openaiFetch = fetch }: ForwardingOptions): RequestHandler {

@@ -52,4 +52,4 @@ Each slice is usable on the PC and the MacBook on their own, and each is verifie
 - **Cross prompt** means driving a thread on another machine and starting new threads there. One thread working across several machines is out of scope.
 - **Offline machines.** The viewing worker caches each machine's last thread list and shows those threads greyed and read-only, marked as offline. Transcripts open only while the owning machine is connected; they are never cached elsewhere.
 - **Sidebar.** One list, with Inbox and Working as now. Remote threads carry a small machine label, and the sidebar can filter by machine.
-- **Rollout.** Additive. Machines report a `relay` capability in `machine.hello`, and the hub protocol stays at 1. A machine without it simply doesn't appear as a relay target.
+- **Rollout.** Additive. Machines report a `relay` capability in `machine.hello`, and the hub protocol stayed at 1 (it is now 2, since the hub dropped accounts under ADR 0018). A machine without it simply doesn't appear as a relay target.
