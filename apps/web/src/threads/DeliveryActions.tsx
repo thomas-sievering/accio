@@ -7,7 +7,7 @@ import { useAction } from '../app/useAction';
 import { StatusGlyphIcon } from './StatusMark';
 import { checkedAgo, deliveryStatus, statusText } from './status';
 import { useThreads } from './threads';
-import { wakeText } from './shelves';
+import { formatDayTime } from '../ui/dates';
 import { useThreadAvailability } from './useThreadAvailability';
 
 /** Delivery intent stays on the server, including when this view is closed or disconnected. */
@@ -141,7 +141,7 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
         {status?.canCancel && status.phase !== 'queued' && <button className="delivery-pill" disabled={!!unavailable || busy} onClick={() => call('threads.cancelDelivery')}><Close />Cancel delivery</button>}
       </>}
       {settled && !hasChip && <span className="delivery-settled">Settled</span>}
-      {snoozedUntil && <span className="delivery-settled">Snoozed until {untilOnline ? `${thread.machine!.name} is back` : wakeText(snoozedUntil, now)}</span>}
+      {snoozedUntil && <span className="delivery-settled">Snoozed until {untilOnline ? `${thread.machine!.name} is back` : formatDayTime(snoozedUntil, now)}</span>}
       {settled && <button className="delivery-pill" disabled={!!unavailable || busy} onClick={() => call('threads.reopen')}><Undo />Reopen</button>}
       {snoozedUntil && <button className="delivery-pill" disabled={(!!unavailable && !untilOnline) || busy}
         onClick={() => call('threads.reopen')}><Undo />Wake now</button>}

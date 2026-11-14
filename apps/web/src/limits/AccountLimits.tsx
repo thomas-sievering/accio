@@ -2,8 +2,9 @@ import type { AccountLimitsView, AccountView, LimitWindow, LimitsSnapshot } from
 import { useState, type ReactNode } from 'react';
 import { ProviderLogo, Refresh, Settings } from '../app/icons';
 import { useLimits } from './limits';
+import { formatDayTime, formatRelative } from '../ui/dates';
 import {
-  allowancePace, blockingWindow, formatRemaining, fullTime, level, relativeTime, remainingPercent, resetDue, retryBlockedUntil, splitWindows,
+  allowancePace, blockingWindow, formatRemaining, level, remainingPercent, resetDue, retryBlockedUntil, splitWindows,
 } from './limitsModel';
 
 type Named = { id: string; name: string };
@@ -37,7 +38,7 @@ export function AccountLimits({ account, onSignIn }: {
   const snapshot = view.snapshot;
   const blockedUntil = retryBlockedUntil(view, now);
   const retryAction = disconnected ? undefined : blockedUntil
-    ? { label: `Retry ${relativeTime(blockedUntil, now)}`, run: retry, disabled: true }
+    ? { label: `Retry ${formatRelative(blockedUntil, now)}`, run: retry, disabled: true }
     : { label: busy || view.status === 'refreshing' ? 'Retrying…' : 'Retry', run: retry, disabled: busy || view.status === 'refreshing' };
   const signInAgain = view.problem?.code === 'signInRequired';
   const problem = view.status === 'error' && view.problem
@@ -70,7 +71,7 @@ function SnapshotMeters({ snapshot, refreshing, now }: { snapshot: LimitsSnapsho
     {blocking && (
       <p className="limits-message warn">
         <b>{blocking.label} limit reached.</b>{' '}
-        {blocking.resetsAt ? <>It resets {relativeTime(Date.parse(blocking.resetsAt), now)}; </> : 'Its reset time wasn’t reported; '}
+        {blocking.resetsAt ? <>It resets {formatRelative(Date.parse(blocking.resetsAt), now)}; </> : 'Its reset time wasn’t reported; '}
         shorter windows are shown as reported but may not be usable until then.
       </p>
     )}
@@ -86,14 +87,14 @@ function Meter({ window: w, refreshing, now, scope }: { window: LimitWindow; ref
   const remaining = remainingPercent(w);
   const pace = allowancePace(w, now);
   const paceState = pace ? pace.minutesAhead > 0 ? 'ahead' : pace.minutesAhead < 0 ? 'behind' : 'even' : null;
-  const paceText = pace && (pace.minutesAhead === 0 ? 'On pace' : `${relativeTime(Math.abs(pace.minutesAhead) * 60_000, 0).slice(3)} ${pace.minutesAhead > 0 ? 'ahead of pace' : 'behind pace'}`);
+  const paceText = pace && (pace.minutesAhead === 0 ? 'On pace' : `${formatRelative(Math.abs(pace.minutesAhead) * 60_000, 0).slice(3)} ${pace.minutesAhead > 0 ? 'ahead of pace' : 'behind pace'}`);
   const paceDescription = pace && `${formatRemaining(remaining!)} allowance left; ${Math.round(pace.timeRemainingPercent)}% of the window's time left. Compared with even use until reset, based on reported usage. The marker shows time remaining.`;
   const state = level(w);
   const passed = resetDue(w, now);
   const reset = w.resetsAt ? Date.parse(w.resetsAt) : null;
   const resetText = passed
     ? refreshing ? 'Reset time passed · checking…' : 'Reset time passed · awaiting confirmation'
-    : reset !== null ? `Resets ${relativeTime(reset, now)}` : 'Reset time not reported';
+    : reset !== null ? `Resets ${formatRelative(reset, now)}` : 'Reset time not reported';
   const value = remaining === null ? 'Unknown' : state === 'empty' ? 'Used up' : `${formatRemaining(remaining)} left`;
   const name = scope ? `${capitalize(scope)} ${w.label.toLowerCase()}` : w.label;
   return (
@@ -101,7 +102,7 @@ function Meter({ window: w, refreshing, now, scope }: { window: LimitWindow; ref
       <div className="limit-name">
         <b>{name}</b>
         <small className="limit-meta">
-          <span title={reset !== null ? fullTime(reset) : undefined}>{resetText}</span>
+          <span title={reset !== null ? formatDayTime(reset, now) : undefined}>{resetText}</span>
           {pace && <span className={`limit-pace ${paceState}`} title={paceDescription || undefined}>{paceText}</span>}
         </small>
       </div>
@@ -122,14 +123,14 @@ function Freshness({ view, snapshot, lastKnown, now, onRefresh, busy }: {
   const observed = Date.parse(snapshot.observedAt);
   const refreshing = view.status === 'refreshing' || busy;
   return (
-    <footer className="limits-freshness" title={`Updated ${fullTime(observed)}`}>
+    <footer className="limits-freshness" title={`Updated ${formatDayTime(observed, now)}`}>
       <span>
         {/* Only state changes are announced, not the ticking age. */}
         <span role="status" className="limits-freshness-state">
           {lastKnown && <span className="limits-tag warn">Last known</span>}
           {refreshing && 'Updating…'}
         </span>
-        {!refreshing && <span>Updated <time dateTime={snapshot.observedAt}>{relativeTime(observed, now)}</time></span>}
+        {!refreshing && <span>Updated <time dateTime={snapshot.observedAt}>{formatRelative(observed, now)}</time></span>}
       </span>
       {onRefresh && !refreshing && (
         <button type="button" className="limits-refresh" onClick={onRefresh} title="Refresh this account’s limits" aria-label="Refresh this account’s limits">

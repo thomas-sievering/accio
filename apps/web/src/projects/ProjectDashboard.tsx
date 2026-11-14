@@ -5,7 +5,7 @@ import { emitAppEvent } from '../app/appEvents';
 import { ChevronDown, Close, Play, Refresh, Settings, StopSquare } from '../app/icons';
 import { useAction } from '../app/useAction';
 import { useLive } from '../app/useLive';
-import { relativeTime } from '../limits/limitsModel';
+import { formatDayTime, formatRelative } from '../ui/dates';
 import { ThreadMenuProvider } from '../threads/ThreadMenu';
 import { ThreadRow } from '../threads/ThreadRow';
 import { placeOf } from '../threads/shelves';
@@ -96,7 +96,7 @@ function AppControls({ project, app }: { project: ProjectView; app: ProjectAppVi
         <span className={`app-dot ${status}`} aria-hidden="true" />
         <span className="app-status">{STATUS[status]}</span>
         {!project.startCommand && <span className="dim app-hint">{setup ? 'An agent is setting up the app' : 'Run this project’s app from main'}</span>}
-        {shown && commit && <span className="app-commit" title={`${commit.subject}\n${commit.author} · ${new Date(commit.at).toLocaleString()}`}>
+        {shown && commit && <span className="app-commit" title={`${commit.subject}\n${commit.author} · ${formatDayTime(commit.at)}`}>
           <code>{commit.sha.slice(0, 7)}</code> <span className="dim">{commit.subject}</span>
         </span>}
         <span className="spacer" />
@@ -237,7 +237,7 @@ function Shipped({ project, entries, running }: { project: ProjectView; entries:
                 {entry?.note && <span className="changelog-note">{entry.note.summary}</span>}
               </span>
               {c.sha === running && <span className="changelog-running">running</span>}
-              <span className="dim" title={`${c.author} · ${new Date(c.at).toLocaleString()}`}>{relativeTime(Date.parse(c.at), now)}</span>
+              <span className="dim" title={`${c.author} · ${formatDayTime(c.at, now)}`}>{formatRelative(c.at, now)}</span>
             </>;
             return (
               <li key={c.sha} className={`${c.sha === running ? 'running' : ''}${open ? ' expanded' : ''}`}>

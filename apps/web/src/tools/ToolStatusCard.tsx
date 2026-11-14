@@ -3,6 +3,7 @@ import { useClient } from '../app/connection';
 import { useAction } from '../app/useAction';
 import { useThreads } from '../threads/threads';
 import { Chevron } from '../app/icons';
+import { formatDayTime } from '../ui/dates';
 
 export type Readiness = { label: 'Ready' | 'Installing' | 'Needs attention' | 'Offline' | 'Pending'; tone: 'ok' | 'busy' | 'bad' | 'idle' };
 
@@ -15,7 +16,7 @@ export function readiness(machine: MachineView | undefined, status: ToolStatus |
   return { label: 'Pending', tone: 'idle' };
 }
 
-const when = (iso?: string) => (iso ? new Date(iso).toLocaleString() : undefined);
+const when = (iso?: string) => (iso ? formatDayTime(iso) : undefined);
 const firstLine = (text?: string) => text?.trim().split(/\r?\n/).find(Boolean);
 
 /**
