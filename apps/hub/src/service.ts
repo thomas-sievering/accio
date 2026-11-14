@@ -42,6 +42,12 @@ export type HubServiceOptions = {
   mcpFetch?: Fetch; publicUrl?: string; secretKey?: string;
   /** GLOSSARY: Accio version. What this hub runs, shown to clients. */
   version?: string;
+  /**
+   * Header a trusted forwarding proxy sets to the real client address, such as `cf-connecting-ip`
+   * behind a Cloudflare Tunnel. Pairing is limited per that address; unset, per socket address,
+   * because a client could send any header itself. A list takes its last entry, the one the proxy added.
+   */
+  clientAddressHeader?: string;
 };
 const SecretId = z.string().min(1).max(160);
 const SecretScope = z.object({ profileId: SecretId, projectId: SecretId.nullable(), slot: SecretSlot });
@@ -316,6 +322,12 @@ export async function startHubService(opts: HubServiceOptions) {
     const safe = error instanceof HubError || error instanceof SecretStoreError;
     json(res, safe ? 400 : 500, { error: safe ? error.message : 'Hub request failed. Check the hub service.' });
   }); });
+  const forwardedHeader = opts.clientAddressHeader?.trim().toLowerCase() || undefined;
+  function clientAddress(req: IncomingMessage) {
+    const forwarded = forwardedHeader && req.headers[forwardedHeader];
+    const value = (Array.isArray(forwarded) ? forwarded.at(-1) : forwarded)?.split(',').at(-1)?.trim();
+    return value || (req.socket.remoteAddress ?? 'unknown');
+  }
   async function handle(req: IncomingMessage, res: ServerResponse) {
     const target = new URL(req.url ?? '/', 'http://localhost');
     if (!req.url?.startsWith('/') || target.origin !== 'http://localhost') return json(res, 404, { error: 'Unknown hub endpoint' });
@@ -327,7 +339,7 @@ export async function startHubService(opts: HubServiceOptions) {
     }
     if (path === '/healthz' && req.method === 'GET') return json(res, closing ? 503 : 200, { hubId: trust.id, protocol: HUB_PROTOCOL, ready: !closing });
     if (path === '/pair' && req.method === 'POST') {
-      const address = req.socket.remoteAddress ?? 'unknown';
+      const address = clientAddress(req);
       if (pairingAttempts.size > 1000) for (const [key, v] of pairingAttempts) if (v.until < Date.now()) pairingAttempts.delete(key);
       const counter = pairingAttempts.get(address);
       if (counter && counter.until > Date.now() && counter.count >= 10) return json(res, 429, { error: 'Too many pairing attempts. Try again in a minute.' });

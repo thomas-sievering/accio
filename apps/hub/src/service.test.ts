@@ -42,6 +42,19 @@ describe('standalone hub trust and network boundary', () => {
     expect(stored).not.toContain(code);
     expect(JSON.stringify(client.snapshot)).not.toContain(token);
   });
+  it('limits pairing per forwarded client address only when the hub trusts that header', async () => {
+    async function statuses(clientAddressHeader: string | undefined, client: string) {
+      const home = await mkdtemp(join(tmpdir(), 'accio-hub-pairing-'));
+      cleanup.push(() => rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
+      const service = await startHubService({ home, port: 0, clientAddressHeader });
+      cleanup.push(() => service.close());
+      const attempt = (from: string) => fetch(service.url + '/pair', { method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': from }, body: JSON.stringify({ machineId: 'm', code: 'WRONG' }) }).then((r) => r.status);
+      for (let i = 0; i < 10; i++) expect(await attempt('203.0.113.1')).toBe(400);
+      return [await attempt('203.0.113.1'), await attempt(client)];
+    }
+    expect(await statuses('CF-Connecting-IP', '203.0.113.2')).toEqual([429, 400]);
+    expect(await statuses(undefined, '203.0.113.2')).toEqual([429, 429]);
+  });
   it('rejects expired pairing codes and a changed hub identity', async () => {
     const { home, service, pair } = await fixture();
     const { code } = await service.createPairingCode();
