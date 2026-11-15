@@ -98,4 +98,20 @@ describe('the Space section of a thread in a space', () => {
     expect(sub!.resourceInstructions).toContain('# Space: hrc');
     expect(sub!.resourceInstructions).toBe(parent!.resourceInstructions);
   });
+
+  it('lists a checkout that is still there when an earlier one of the same project was deleted', async () => {
+    root = await mkdtemp(join(tmpdir(), 'accio-space-'));
+    const harness = new FakeHarness();
+    t = await startTestApp({ harness });
+    const c = await t.signedIn('Personal');
+    const mcp = await localProject(c, join(root, 'hrc_mcp'));
+    const gone = join(root, 'hrc_api'), kept = join(root, 'hrc_api-2');
+    await checkout(c, gone, 'github.com/me/hrc_api');
+    await checkout(c, kept, 'github.com/me/hrc_api', 'feature/login');
+    await rm(gone, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+    await c.call('spaces.save', { name: 'hrc', projectKeys: [`local:${mcp.projectId}`, 'github.com/me/hrc_api'] });
+    const thread = await c.call('threads.start', { checkoutId: mcp.id, text: 'hello' });
+    await idle(c, thread.id);
+    expect(harness.runs[0]!.resourceInstructions).toContain(`- hrc_api: ${kept} (branch feature/login)`);
+  });
 });

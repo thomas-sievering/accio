@@ -40,9 +40,13 @@ export class SpaceContext {
     const { projects, checkouts } = this.deps.projects();
     const project = projects.find((p) => projectKey(p) === key);
     const name = project?.name ?? nameOfKey(key);
-    const path = project && checkouts.find((c) => c.projectId === project.id)?.path;
+    // The first of the project's checkouts still on disk here, in the order they were added.
+    let path: string | undefined;
+    for (const c of project ? checkouts.filter((c) => c.projectId === project.id) : []) {
+      if (await stat(c.path).then((s) => s.isDirectory(), () => false)) { path = c.path; break; }
+    }
     // #195 clones a missing sibling and says when it can't be had on this machine.
-    if (!path || !await stat(path).then((s) => s.isDirectory(), () => false)) return { name, place: 'not on this machine yet' };
+    if (!path) return { name, place: 'not on this machine yet' };
     const branch = await currentBranch(path);
     return { name, place: branch ? `${path} (${branch})` : path };
   }
