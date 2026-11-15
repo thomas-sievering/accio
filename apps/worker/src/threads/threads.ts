@@ -49,6 +49,7 @@ import { registerThreadSkills } from './threadSkills.js';
 import { ThreadNaming } from './naming.js';
 import { changeHarness, readThreadPage } from './handoff.js';
 import { Issues } from '../issues/issues.js';
+import type { SpaceContext } from '../spaces/spaceContext.js';
 
 /** Threads on this machine, their transcripts, and the turns running in them. */
 export class Threads {
@@ -60,6 +61,8 @@ export class Threads {
   onRepairFinished?: (toolId: string) => void;
   /** GLOSSARY: Thread mention. Every thread this machine knows, other machines' included; set once the relay is up. */
   knownThreads?: () => readonly ThreadView[];
+  /** GLOSSARY: Space. What each turn of a thread in a space is told about it; none until it is set. */
+  spaceContext?: SpaceContext;
   /** The hub's built-in tool overrides; accio's defaults apply until it is set. */
   toolOverrides?: () => BuiltinToolOverrides;
   readonly assets: ThreadAssets;
@@ -109,7 +112,7 @@ export class Threads {
     }, deliveryHosting);
     this.turns = new Turns(this.state, { profiles, projects, models, machines, harnesses, secrets: this.secrets, content: this.content, deliveries: this.deliveries, tools,
       images: { claim: (threadId, ids) => this.uploads.claim(threadId, ids, this.assets), file: (threadId, asset) => this.assets.harnessFile(threadId, asset) },
-      resources: () => this.resources, toolsOff: (harnessId) => builtinToolsOff(harnessId, this.toolOverrides?.()[harnessId]), onWorkFinished: id => this.naming.refine(id), onRepairFinished: (toolId) => this.onRepairFinished?.(toolId), knownThreads: () => this.knownThreads?.() ?? this.views() });
+      resources: () => this.resources, spaceContext: () => this.spaceContext, toolsOff: (harnessId) => builtinToolsOff(harnessId, this.toolOverrides?.()[harnessId]), onWorkFinished: id => this.naming.refine(id), onRepairFinished: (toolId) => this.onRepairFinished?.(toolId), knownThreads: () => this.knownThreads?.() ?? this.views() });
     tools?.add(agentTool((threadId, input, { signal, progress }) => this.turns.startSubagent(threadId, input, signal, progress)));
     projects.onRemoveThreads((id) => this.deleteThreads(this.state.list.filter((t) => t.checkoutId === id)));
     projects.onCheckInUse((checkoutId) => this.countUsing((t) => t.checkoutId === checkoutId));
