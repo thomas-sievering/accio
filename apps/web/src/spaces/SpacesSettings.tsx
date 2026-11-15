@@ -9,6 +9,7 @@ import { Field, focusFirstInvalid } from '../resources/Field';
 import { useProfiles } from '../profiles/profiles';
 import { useProjects } from '../projects/projects';
 import { MenuSelect } from '../ui/MenuSelect';
+import { NewHomeSheet } from './NewHomeSheet';
 import { useSpaces } from './spaces';
 
 /** GLOSSARY: Space. Every space of the hub, each opening its editor as a detail page ('new' adds one) or its space view. */
@@ -41,6 +42,8 @@ function projectName(projects: ProjectView[], key: string) {
 }
 
 const NO_HOME = '';
+/** The picker's "New home…" entry, which opens its dialog instead of choosing a project. */
+const NEW_HOME = '\u0000new';
 
 function SpaceForm({ space, onDone }: { space?: Space; onDone: () => void }) {
   const client = useClient();
@@ -51,6 +54,7 @@ function SpaceForm({ space, onDone }: { space?: Space; onDone: () => void }) {
   const [keys, setKeys] = useState<string[]>(space?.projectKeys ?? []);
   const [home, setHome] = useState(space?.homeProjectKey ?? NO_HOME);
   const [touched, setTouched] = useState(false);
+  const [creatingHome, setCreatingHome] = useState(false);
   const { busy, error, run } = useAction();
   const projects = [...(state?.projects ?? [])].sort((a, b) => a.name.localeCompare(b.name));
   const here = new Set(projects.map(projectKey));
@@ -75,7 +79,7 @@ function SpaceForm({ space, onDone }: { space?: Space; onDone: () => void }) {
     if (space && (await run(async () => (await client.call('spaces.delete', { id: space.id }), true)))) onDone();
   };
   const profileName = (id: string) => profiles.find((p) => p.id === id)?.name;
-  return (
+  return (<>
     <form onSubmit={submit} noValidate>
       <SettingsSection>
         <div className="setting-form">
@@ -110,8 +114,9 @@ function SpaceForm({ space, onDone }: { space?: Space; onDone: () => void }) {
             ))}
           </div>
           <Field label="Home project" hint="Holds what applies to the whole space, such as its glossary, decisions and notes about each project.">
-            {(p) => <MenuSelect id={p.id} label="Home project" value={home} onChange={setHome} disabled={!keys.length}
-              options={[{ value: NO_HOME, label: 'No home' }, ...keys.map((key) => ({ value: key, label: projectName(projects, key) }))]} />}
+            {(p) => <MenuSelect id={p.id} label="Home project" value={home} onChange={(value) => value === NEW_HOME ? setCreatingHome(true) : setHome(value)}
+              options={[{ value: NO_HOME, label: 'No home' }, ...keys.map((key) => ({ value: key, label: projectName(projects, key) })),
+                { value: NEW_HOME, label: 'New home…', detail: 'A new project from the home template' }]} />}
           </Field>
           {error && <p className="error" role="alert">{error}</p>}
         </div>
@@ -119,5 +124,6 @@ function SpaceForm({ space, onDone }: { space?: Space; onDone: () => void }) {
       <SettingsFooter remove={space && { name: space.name, run: remove, consequence: 'Its projects, checkouts and threads stay as they are; only the grouping goes.' }}
         busy={busy} onCancel={onDone} saveLabel={space ? 'Save' : 'Add space'} saveDisabled={busy || (!!space && !dirty)} dirty={dirty && !busy} />
     </form>
-  );
+    {creatingHome && <NewHomeSheet space={{ ...(space ? { id: space.id } : {}), name, projectKeys: keys }} onClose={() => setCreatingHome(false)} />}
+  </>);
 }

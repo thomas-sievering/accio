@@ -15,7 +15,8 @@ import { readThreadTool } from '../threads/handoff.js';
 import { readMentionedThread } from '../threads/threadMentions.js';
 import { startThreadTool } from '../threads/startThread.js';
 import { Projects } from '../projects/projects.js';
-import { Spaces } from '../spaces/spaces.js';
+import { Spaces, refused } from '../spaces/spaces.js';
+import { NewHomes } from '../spaces/newHome.js';
 import { SpaceContext } from '../spaces/spaceContext.js';
 import { SiblingThreads } from '../spaces/siblingThreads.js';
 import { MissingCheckouts } from '../spaces/missingCheckouts.js';
@@ -164,6 +165,19 @@ export class HubConnections {
     const stopUpdates = updates?.onChange((view) => { relay.emit('update.changed', view); this.send('update.changed', view, record.id); });
     const secrets = remoteSecrets(client);
     const threads = refs.threads = new Threads(record.home, profiles, projects, this.runners, broadcast, models, machines, secrets, tools, this.deliveryHosting); await threads.load(); threads.register(router);
+    // GLOSSARY: Home. "New home…" in Settings → Spaces; a user action, not an accio tool.
+    new NewHomes({
+      spaces: () => spaces.list(),
+      saveSpace: (space) => refused(() => settings.saveSpace(space)),
+      projects: () => projects.state(),
+      addFolder: (path, profileId) => projects.addFolder(path, profileId),
+      requireProfile: (profileId) => { profiles.require(profileId); },
+      profileFolder: (profileId) => machines.profileFoldersHere().find((p) => p.id === profileId)?.folders[0],
+      canStartThreads: (profileId) => models.list(profileId).models.length > 0,
+      githubLogin: (profileId) => settings.machine(this.here.id)?.profileGitHub?.[profileId],
+      gh: (profileId, cwd, args) => machines.github.run(profileId, cwd, args),
+      start: (params) => threads.start(params),
+    }).register(router);
     // GLOSSARY: Relay. Other machines' threads join this list; calls about them go to their machine.
     await relay.load();
     router.on('threads.list', () => relay.merged());

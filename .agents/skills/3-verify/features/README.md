@@ -25,7 +25,7 @@ Record feature IDs and entry points in `actions.json`. Pair the action trace wit
 - [Sorting Hat](sorting-hat.md): linking a hub to a Sorting Hat of its own, accounts, houses and limits through it, the unlinked-profile and unreachable notices and the admin token’s boundary.
 - [Limits](limits.md): sidebar/composer/account-settings entries, profile scope, shared accounts, refresh, reset confirmation and connection states.
 - [Projects](projects.md): add folders through onboarding or toolbar, inspect duplicates, remote grouping, settings and removal.
-- [Spaces](spaces.md): Settings → Spaces, adding, renaming and deleting spaces, their projects and their home; the space view from the project-name menu or `Open`.
+- [Spaces](spaces.md): Settings → Spaces, adding, renaming and deleting spaces, their projects and their home, creating a new home from the template; the space view from the project-name menu or `Open`.
 - [Project dashboard](project-dashboard.md): Dashboard in the thread header's project menu: the project's threads by state, recently shipped commits, the Issues fold with its dependency graph, Changelog and Settled.
 - [Built-in tools](harness-tools.md): per-harness tool switches under Settings → Harnesses, hub-wide, with reset.
 - [System prompt](system-prompt.md): read-only Settings page with each harness's delivery and the shared sections.

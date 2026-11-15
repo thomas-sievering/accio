@@ -1,4 +1,7 @@
 import { test, expect } from '@playwright/test';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { CHAT_TOKEN, chatClient } from './chat.js';
 import { pick } from './menu-select.js';
 
@@ -52,5 +55,63 @@ test('creates a space in Settings, adds projects and marks its home', async ({ p
     await expect.poll(() => client.call('spaces.list', {})).toEqual([]);
   } finally {
     client.close();
+  }
+});
+
+// GLOSSARY: Home. "New home…" creates the home from Accio's template and opens its first thread.
+test('creates a new home from the Home project picker and opens its first thread', async ({ page, baseURL }, info) => {
+  test.setTimeout(60_000);
+  const client = await chatClient(baseURL!);
+  const root = await mkdtemp(join(tmpdir(), 'accio-new-home-'));
+  const { id: machineId, profileFolders } = await client.thisMachine();
+  const personal = (await client.call('profiles.list', {})).find((p) => p.name === 'Personal')!;
+  try {
+    for (const space of await client.call('spaces.list', {})) await client.call('spaces.delete', { id: space.id });
+    // The home goes in the profile's folder on this machine: a disposable one here.
+    await client.call('machines.setProfileFolders', { machineId, profileId: personal.id, folders: [root] });
+    await page.goto(`${baseURL}/#token=${CHAT_TOKEN}`);
+    const button = (name: string) => page.getByRole('button', { name, exact: true });
+    await button('Settings').click();
+    await page.locator('.sidebar nav').getByRole('button', { name: 'Spaces', exact: true }).click();
+    await page.getByRole('button', { name: /^Add space/ }).click();
+    await page.getByRole('textbox', { name: 'Name', exact: true }).fill('agents');
+    await page.getByRole('group', { name: 'Projects', exact: true }).getByRole('checkbox', { name: /^delivery-project/ }).check();
+    await pick(page, 'Home project', 'New home…');
+
+    const dialog = page.getByRole('dialog', { name: 'New home' });
+    const name = dialog.getByRole('textbox', { name: 'Name', exact: true });
+    await expect(name).toHaveValue('agents-home');
+    await expect(dialog.getByRole('button', { name: 'Profile', exact: true })).toHaveText('Personal');
+    await expect(dialog.getByRole('button', { name: 'Create as', exact: true })).toHaveText('Local folder');
+    await expect(dialog).toContainText(`Created in ${join(root, 'agents-home')}`);
+    await name.fill('agents home');
+    await dialog.getByRole('button', { name: 'Create home', exact: true }).click();
+    await expect(dialog).toContainText("Use letters, digits, '.', '-' or '_'");
+    await name.fill('agents-home');
+    await pick(page, 'Create as', 'New GitHub repo');
+    await expect(dialog).toContainText('A private repo');
+    await pick(page, 'Create as', 'Local folder');
+    await expect(page.getByRole('menu', { name: 'Create as' })).toBeHidden();
+    await dialog.screenshot({ path: info.outputPath('new-home.png') });
+    await dialog.getByRole('button', { name: 'Create home', exact: true }).click();
+
+    // The home's first thread opens, in the new project.
+    await expect(page.locator('.thread-project-link', { hasText: 'agents-home' })).toBeVisible({ timeout: 20_000 });
+    const [space] = await client.call('spaces.list', {});
+    const home = (await client.call('projects.get', {})).projects.find((p) => p.name === 'agents-home')!;
+    expect(space).toMatchObject({ name: 'agents', homeProjectKey: `local:${home.id}` });
+    expect(space!.projectKeys).toHaveLength(2);
+    expect(await readFile(join(root, 'agents-home', 'AGENTS.md'), 'utf8')).toContain('### delivery-project');
+    const thread = (await client.call('threads.list', {})).find((t) => t.projectId === home.id)!;
+    expect(thread).toBeTruthy();
+    await page.screenshot({ path: info.outputPath('new-home-thread.png') });
+    await expect.poll(async () => (await client.call('threads.list', {})).find((t) => t.id === thread.id)?.status, { timeout: 20_000 }).toBe('idle');
+  } finally {
+    for (const space of await client.call('spaces.list', {}).catch(() => [])) await client.call('spaces.delete', { id: space.id }).catch(() => {});
+    const { checkouts } = await client.call('projects.get', {}).catch(() => ({ checkouts: [] as { id: string; path: string }[] }));
+    for (const c of checkouts.filter((c) => c.path.startsWith(root))) await client.call('checkouts.remove', { id: c.id, deleteThreads: true }).catch(() => {});
+    await client.call('machines.setProfileFolders', { machineId, profileId: personal.id, folders: profileFolders[personal.id] ?? [] }).catch(() => {});
+    client.close();
+    await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }).catch(() => {});
   }
 });
