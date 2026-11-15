@@ -195,6 +195,10 @@ button.changelog-commit:hover { background: var(--hover, var(--active)); }
 .issue-reader-body :is(th, td) { padding: 3px 7px; border: 1px solid var(--line-2); }
 .issue-reader-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .issue-reader-actions:empty { display: none; }
-.issue-reader-action { padding: 4px 11px; border: 1px solid var(--line-2); border-radius: 7px; color: var(--ink); font-size: 12.5px; text-decoration: none; }
-.issue-reader-action:hover { background: var(--raised-2); }
+.issue-reader-action { padding: 4px 11px; border: 1px solid var(--line-2); border-radius: 7px; background: transparent; color: var(--ink); font: inherit; font-size: 12.5px; text-decoration: none; cursor: pointer; }
+.issue-reader-action:hover:not(:disabled) { background: var(--raised-2); }
+.issue-reader-action.primary { border-color: transparent; background: var(--ink); color: var(--bg); }
+.issue-reader-action.primary:hover:not(:disabled) { background: var(--ink-strong); }
+.issue-reader-action:disabled { opacity: 0.5; cursor: default; }
+.issue-reader-actions .issue-reader-note { flex-basis: 100%; font-size: 12.5px; }
 .issue-reader-sheet { gap: 12px; }
