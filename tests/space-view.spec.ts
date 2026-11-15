@@ -16,8 +16,8 @@ test('the space view opens from the project menu and Settings, lists its project
     const elsewhere = 'github.com/acme/elsewhere';
     const space = await client.call('spaces.save', { name: 'hrc', projectKeys: [projectKey(delivery), projectKey(review), elsewhere], homeProjectKey: projectKey(review) });
 
-    await startProjectThread(page, baseURL!, /delivery-project/, 'Delivery follow-up');
-    await expect(page.getByText('Fresh workspace ready.', { exact: true })).toBeVisible();
+    await startProjectThread(page, baseURL!, /delivery-project/, 'Queued hrc follow-up');
+    await expect(page.getByText('Finished: Queued hrc follow-up', { exact: true })).toBeVisible();
 
     // The project-name menu offers the space next to Dashboard.
     const crumb = page.locator('.thread-project-link', { hasText: 'delivery-project' });
@@ -35,7 +35,7 @@ test('the space view opens from the project menu and Settings, lists its project
     const deliveryRow = others.getByRole('article', { name: 'delivery-project' });
     await expect(deliveryRow).toContainText('Personal');
     await expect(deliveryRow.locator('.space-checkout')).not.toHaveText('Not on this machine');
-    await expect(deliveryRow.locator('.row-title', { hasText: 'Delivery follow-up' })).toBeVisible();
+    await expect(deliveryRow.locator('.row-title', { hasText: 'Queued hrc follow-up' })).toBeVisible();
     await expect(deliveryRow.getByRole('button', { name: 'New thread in delivery-project' })).toBeEnabled();
     const missing = others.getByRole('article', { name: elsewhere });
     await expect(missing).toContainText('Not on this machine');
