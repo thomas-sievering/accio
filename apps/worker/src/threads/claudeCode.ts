@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { query, type Query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
@@ -7,10 +8,43 @@ import { systemPromptText } from '../harnesses/systemPrompt.js';
 import { measuredHarness } from '../harnesses/promptMeasurement.js';
 import { ACCIO_MCP_SERVER } from '../tools/tools.js';
 import { SUBAGENT_TIMEOUT_SEC } from './subagents.js';
-import type { Harness, HarnessImage, HarnessMessage, HarnessTurn } from './harness.js';
+import type { Harness, HarnessImage, HarnessMessage, HarnessSkill, HarnessTurn } from './harness.js';
+import { cleanExecutionEnv } from './harnessEnv.js';
 import { resultErrors } from './transcript.js';
 import { secretMcpServer } from '../secrets/claudeTool.js';
 import { savedPurposeInstructions, SECRET_MCP_SERVER } from '../secrets/secrets.js';
+
+/** No model request is ever answered here: the skill listing must not reach a provider. */
+const NOWHERE = 'http://127.0.0.1:9';
+const LIST_SKILLS_TIMEOUT_MS = 30_000;
+
+/**
+ * GLOSSARY: Harness skill. Claude Code names its skills only in a session's init message,
+ * which it sends before any model request. A session with no repository, settings, tools
+ * or account, in a throwaway config folder, lists exactly the skills it ships with; it is
+ * closed on init. Asked once per worker, as they change only with Claude Code itself.
+ */
+async function listShippedSkills(): Promise<HarnessSkill[]> {
+  const folder = await mkdtemp(join(tmpdir(), 'accio-claude-skills-'));
+  const abortController = new AbortController();
+  const timer = setTimeout(() => abortController.abort(), LIST_SKILLS_TIMEOUT_MS);
+  const q = query({ prompt: 'List your skills.', options: {
+    cwd: folder, abortController, settingSources: [], tools: [], mcpServers: {}, strictMcpConfig: true, persistSession: false, maxTurns: 1,
+    env: { ...cleanExecutionEnv(process.env), CLAUDE_CONFIG_DIR: join(folder, 'config'), ANTHROPIC_BASE_URL: NOWHERE, ANTHROPIC_AUTH_TOKEN: 'none' },
+  } });
+  try {
+    for await (const message of q) {
+      if (message.type !== 'system' || message.subtype !== 'init') continue;
+      const commands = await q.initializationResult().then(result => result.commands, () => []);
+      return message.skills.map(name => ({ name, description: commands.find(command => command.name === name)?.description ?? '' }));
+    }
+    throw new Error('Claude Code did not list its skills');
+  } finally {
+    clearTimeout(timer); q.close(); await q.return(undefined);
+    await rm(folder, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }).catch(() => {});
+  }
+}
+let shipped: Promise<HarnessSkill[]> | undefined;
 
 /** How long a stopped turn gets to wind down gracefully before its process is killed. */
 const HARD_STOP_AFTER_MS = 3000;
@@ -22,6 +56,10 @@ const HARD_STOP_AFTER_MS = 3000;
  * the checkout's own .claude folder and CLAUDE.md.
  */
 export const claudeCode: Harness = measuredHarness('claudeCode', {
+  skills() {
+    shipped ??= listShippedSkills().catch((error: unknown) => { shipped = undefined; throw error; });
+    return shipped;
+  },
   async generateText({ cwd, prompt, model, effort, env, signal }) {
     const abortController = new AbortController();
     const abort = () => abortController.abort();

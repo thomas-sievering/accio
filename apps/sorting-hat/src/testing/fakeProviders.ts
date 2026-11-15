@@ -149,7 +149,13 @@ export function fakeChatGPT() {
       return Response.json({ output: [{ type: 'compaction', encrypted_content: 'summary' }], usage: { input_tokens: 30, input_tokens_details: { cached_tokens: 20 }, output_tokens: 5, total_tokens: 35 } });
     }
     let model = 'gpt-test';
-    try { model = JSON.parse(body).model ?? model; } catch {}
+    let request: { model?: string; tools?: { type?: string }[]; input?: { content?: { type: string; text?: string }[] }[] } = {};
+    try { request = JSON.parse(body); model = request.model ?? model; } catch {}
+    if (request.tools?.some((t) => t.type === 'image_generation')) {
+      const prompt = request.input?.[0]?.content?.find((c) => c.type === 'input_text')?.text ?? '';
+      // A prompt of "refuse" gets a text answer and no image, as ChatGPT gives for a prompt it won't draw.
+      return new Response(prompt === 'refuse' ? responsesReply('I can’t make that image.', model) : imageGenerationReply(prompt, model), { headers: { 'content-type': 'text/event-stream' } });
+    }
     return new Response(responsesReply('Hello from the fake ChatGPT.', model), { headers: { 'content-type': 'text/event-stream' } });
   };
   return { fetch, seen, limited, aborted, control };
@@ -163,6 +169,24 @@ export function responsesReply(text: string, model = 'gpt-test') {
     { type: 'response.output_text.delta', output_index: 0, content_index: 0, item_id: 'msg_1', delta: text },
     { type: 'response.output_item.done', output_index: 0, item: message },
     { type: 'response.completed', response: { id: 'resp_1', model, status: 'completed', output: [message], usage: { input_tokens: 10, output_tokens: 8, total_tokens: 18, input_tokens_details: { cached_tokens: 4 }, output_tokens_details: { reasoning_tokens: 0 } } } },
+  ];
+  return events.map((e) => `event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join('');
+}
+
+/** The bytes of every fake image: a PNG signature, enough for a test to tell it apart. */
+export const FAKE_IMAGE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+
+/** A Responses stream in which the image tool made one image, with the image tool's usage apart. */
+export function imageGenerationReply(prompt: string, model = 'gpt-test') {
+  const item = { id: 'ig_1', type: 'image_generation_call', status: 'completed', action: 'generate', background: 'opaque', output_format: 'png', quality: 'low',
+    revised_prompt: prompt, size: '1024x1024', result: FAKE_IMAGE.toString('base64') };
+  const events = [
+    { type: 'response.created', response: { id: 'resp_1', status: 'in_progress', output: [] } },
+    { type: 'response.output_item.added', output_index: 0, item: { ...item, status: 'in_progress', result: undefined } },
+    { type: 'response.output_item.done', output_index: 0, item },
+    { type: 'response.completed', response: { id: 'resp_1', model, status: 'completed', output: [item],
+      usage: { input_tokens: 20, output_tokens: 3, total_tokens: 23, input_tokens_details: { cached_tokens: 0 } },
+      tool_usage: { image_gen: { input_tokens: 7, output_tokens: 300, total_tokens: 307, input_tokens_details: { text_tokens: 7, image_tokens: 0 } } } } },
   ];
   return events.map((e) => `event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join('');
 }

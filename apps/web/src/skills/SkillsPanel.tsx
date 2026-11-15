@@ -6,16 +6,17 @@ import { Chevron, Plus, Refresh } from '../app/icons';
 import { useAction } from '../app/useAction';
 import { useProjects } from '../projects/projects';
 import { shortRevision } from '../resources/resources';
-import { byName, isAddable, isInherited, isProjectSkill, originLabel, skillReference, useWorkspaceSkills } from './workspaceSkills';
+import { byName, harnessName, isAddable, isHarnessSkill, isInherited, isOverridden, isProjectSkill, LEVEL_NAMES, originLabel, skillReference, useWorkspaceSkills } from './workspaceSkills';
 
-type SectionKey = 'project' | 'profile' | 'global';
+type SectionKey = 'project' | 'profile' | 'global' | 'harness' | 'overridden';
 /** Which sections are open, kept while the app runs so switching threads doesn't fold them again. */
 const openSections = new Set<SectionKey>();
 
 /**
  * The skills the open thread (or draft) gets on its next turn, one folded
  * section per skill level, narrowest first: the project's own (repository files
- * plus library skills it turned on), then the profile's, then everywhere's.
+ * plus library skills it turned on), then the profile's, then everywhere's; then the
+ * skills its harness ships with, and last those a narrower level overrides (ADR 0020).
  * Changes apply from the next turn.
  */
 export function SkillsPanel({ context, composer }: { context: SkillContext; composer: string }) {
@@ -28,6 +29,9 @@ export function SkillsPanel({ context, composer }: { context: SkillContext; comp
   const profile = useMemo(() => skills.filter((s) => isInherited(s) && s.enabledBy === 'profile').sort(byName), [skills]);
   const everywhere = useMemo(() => skills.filter((s) => isInherited(s) && s.enabledBy === 'global').sort(byName), [skills]);
   const addable = useMemo(() => skills.filter(isAddable).sort(byName), [skills]);
+  const shipped = useMemo(() => skills.filter(isHarnessSkill).sort(byName), [skills]);
+  const overridden = useMemo(() => skills.filter(isOverridden).sort(byName), [skills]);
+  const harness = value?.harnessId ? harnessName(value.harnessId) : undefined;
   const project = value?.projectId ? projects?.projects.find((p) => p.id === value.projectId) : undefined;
   const row = { context, composer, onChanged: reload, onAnnounce: setAnnounce };
   const toggle = (key: SectionKey, next = !open.has(key)) => {
@@ -71,6 +75,12 @@ export function SkillsPanel({ context, composer }: { context: SkillContext; comp
       {everywhere.length > 0 && <SkillsSection title="Everywhere" skills={everywhere} {...fold('global')} where="Turned on for every profile and project; change these in Settings → Skills.">
         {everywhere.map((s) => <SkillItem key={s.id} skill={s} {...row} />)}
       </SkillsSection>}
+      {harness && shipped.length > 0 && <SkillsSection title={harness} skills={shipped} {...fold('harness')} where={`Ships with ${harness}.`}>
+        {shipped.map((s) => <SkillItem key={s.id} skill={s} {...row} harness={harness} />)}
+      </SkillsSection>}
+      {overridden.length > 0 && <SkillsSection title="Overridden" skills={overridden} {...fold('overridden')} where="Turned on, but a narrower level has a skill of the same name, which this thread gets instead.">
+        {overridden.map((s) => <SkillItem key={s.id} skill={s} {...row} />)}
+      </SkillsSection>}
     </div>
   );
 }
@@ -103,25 +113,28 @@ function SkillsSection({ title, skills, open, onToggle, threadId, where, head, e
   );
 }
 
-type RowProps = { skill: WorkspaceSkill; context: SkillContext; composer: string; onChanged: () => void; onAnnounce: (text: string) => void };
+type RowProps = { skill: WorkspaceSkill; context: SkillContext; composer: string; onChanged: () => void; onAnnounce: (text: string) => void; harness?: string };
 
-function SkillItem({ skill, context, composer, onChanged, onAnnounce }: RowProps) {
+function SkillItem({ skill, context, composer, onChanged, onAnnounce, harness }: RowProps) {
   const client = useClient();
   const [open, setOpen] = useState(false);
   const bodyId = useId();
   const disable = useAction();
   const own = skill.origin === 'library' && skill.enabledBy === 'project';
   const threadId = context.threadId;
+  const winner = skill.overriddenBy && LEVEL_NAMES[skill.overriddenBy];
 
   return (
-    <li className={`skill-item${open ? ' open' : ''}`}>
+    <li className={`skill-item${open ? ' open' : ''}${winner ? ' overridden' : ''}`}>
       <div className="skill-line">
         <button type="button" className="skill-toggle" aria-expanded={open} aria-controls={bodyId} onClick={() => setOpen(!open)}>
           <span className="skill-name">{skill.name}</span>
-          <span className="skill-origin">{originLabel(skill)}</span>
+          {/* An overridden row's tag says where it stands, and a harness skill's section names its harness; the name keeps the room. */}
+          {!winner && !harness && <span className="skill-origin">{originLabel(skill)}</span>}
         </button>
         {skill.conflict && <span className="tag bad" title={skill.conflict}>Conflict</span>}
-        {threadId && skill.loaded && (
+        {winner && <span className="tag" title={`Turned on: ${originLabel(skill)}. ${winner} has a skill named ${skill.name}, which this thread gets instead.`}>Overridden by {winner}</span>}
+        {threadId && skill.loaded && !winner && (
           <button type="button" className="tag ok skill-loaded" title="Seen reading or invoking it this thread (no mark doesn’t mean unused). Show it in the transcript."
             aria-label={`${skill.name}: loaded this thread. Show in transcript`}
             onClick={() => emitAppEvent('transcript.reveal', { threadId, itemId: skill.loaded!.itemId })}>
@@ -135,11 +148,13 @@ function SkillItem({ skill, context, composer, onChanged, onAnnounce }: RowProps
         {skill.conflict && <p className="warn" role="note">{skill.conflict}</p>}
         <dl className="skill-facts">
           <dt>Source</dt>
-          <dd>{skill.origin === 'repository' ? 'This repository' : skill.sourceName ?? 'Library'}{skill.revision && <> · <code title={skill.revision}>{shortRevision(skill.revision)}</code></>}</dd>
-          <dt>Path</dt>
-          <dd><code className="skill-path" title={skill.path}>{skill.path}</code></dd>
+          <dd>{skill.origin === 'repository' ? 'This repository' : skill.origin === 'harness' ? `Ships with ${harness ?? 'the harness'}` : skill.sourceName ?? 'Library'}{skill.revision && <> · <code title={skill.revision}>{shortRevision(skill.revision)}</code></>}</dd>
+          {skill.path && <><dt>Path</dt>
+          <dd><code className="skill-path" title={skill.path}>{skill.path}</code></dd></>}
         </dl>
-        <Instructions skill={skill} context={context} onAnnounce={onAnnounce} />
+        {skill.origin === 'harness' && !skill.path
+          ? <p className="note">{harness ?? 'The harness'} doesn’t share this skill’s instructions. It is always on.</p>
+          : <Instructions skill={skill} context={context} onAnnounce={onAnnounce} />}
         <div className="skill-actions">
           <button type="button" className="ghost" onClick={() => emitAppEvent('composer.insert', { target: composer, text: skillReference(skill) })}>Reference in message</button>
           {own && (
