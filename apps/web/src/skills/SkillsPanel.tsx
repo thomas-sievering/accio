@@ -129,8 +129,8 @@ function SkillItem({ skill, context, composer, onChanged, onAnnounce, harness }:
       <div className="skill-line">
         <button type="button" className="skill-toggle" aria-expanded={open} aria-controls={bodyId} onClick={() => setOpen(!open)}>
           <span className="skill-name">{skill.name}</span>
-          {/* An overridden row's tag says where it stands; the name keeps the room. */}
-          {!winner && <span className="skill-origin">{originLabel(skill)}</span>}
+          {/* An overridden row's tag says where it stands, and a harness skill's section names its harness; the name keeps the room. */}
+          {!winner && !harness && <span className="skill-origin">{originLabel(skill)}</span>}
         </button>
         {skill.conflict && <span className="tag bad" title={skill.conflict}>Conflict</span>}
         {winner && <span className="tag" title={`Turned on: ${originLabel(skill)}. ${winner} has a skill named ${skill.name}, which this thread gets instead.`}>Overridden by {winner}</span>}

@@ -33,15 +33,23 @@ export class ResourceManager {
    * then each library skill at the narrowest level that turns it on, resolved by ADR 0020.
    */
   async workspaceSkills(profileId?: string, projectId?: string, cwd?: string): Promise<WorkspaceSkill[]> {
-    const state = this.state();
+    return this.levelSkills(this.state(), profileId, projectId, cwd);
+  }
+  /** One state for the whole resolution. Only skills a thread gets need their files here, so a wider source that is overridden can't block a turn. */
+  private async levelSkills(state: ResourcesState, profileId?: string, projectId?: string, cwd?: string): Promise<WorkspaceSkill[]> {
     const project = this.projects.state().projects.find(p => p.id === projectId);
     const context = { profileId, projectKey: project ? projectKey(project) : undefined };
-    const library: WorkspaceSkill[] = await Promise.all(state.skills.map(async skill => {
+    const library: WorkspaceSkill[] = state.skills.map(skill => {
       const enabledBy = enabledLevel(skill.scope, context);
-      const local = enabledBy ? await this.localSkill(skill) : skill;
-      return { id: skill.id, name: skill.name, description: skill.description, path: join(local.path, 'SKILL.md'), origin: 'library' as const, enabled: enabledBy !== null, enabledBy, sourceName: state.sources.find(source => source.id === skill.sourceId)?.name, revision: skill.revision };
+      return { id: skill.id, name: skill.name, description: skill.description, path: join(skill.path, 'SKILL.md'), origin: 'library' as const, enabled: enabledBy !== null, enabledBy, sourceName: state.sources.find(source => source.id === skill.sourceId)?.name, revision: skill.revision };
+    });
+    const skills = resolveLevels([...(cwd ? await repositorySkills(cwd) : []), ...library]);
+    const entries = new Map(state.skills.map(entry => [entry.id, entry]));
+    await Promise.all(skills.map(async skill => {
+      const entry = skill.origin === 'library' && skill.enabled && !skill.overriddenBy ? entries.get(skill.id) : undefined;
+      if (entry) skill.path = join((await this.localSkill(entry)).path, 'SKILL.md');
     }));
-    return resolveLevels([...(cwd ? await repositorySkills(cwd) : []), ...library]);
+    return skills;
   }
   async skillContent(id: string) {
     const skill = this.state().skills.find(skill => skill.id === id);
@@ -139,10 +147,10 @@ export class ResourceManager {
     if (options.repair) return { env: this.tools.env(state.tools, env), instructions: '', mcps: {}, snapshot: { tools: [], skills: [], mcps: [] }, release: () => {} };
     await this.requireToolsReady();
     // ADR 0020: the turn gets each name's winner; overridden skills stay out, a clash refuses the turn.
-    const catalog = (await this.workspaceSkills(profileId, projectId, options.cwd)).filter(skill => skill.enabled && !skill.overriddenBy);
+    const catalog = (await this.levelSkills(state, profileId, projectId, options.cwd)).filter(skill => skill.enabled && !skill.overriddenBy);
     const clash = catalog.find(skill => skill.conflict);
     if (clash) throw new Error(clash.conflict);
-    const skills = catalog.filter(skill => skill.origin === 'library').map(skill => state.skills.find(entry => entry.id === skill.id)!);
+    const skills = state.skills.filter(entry => catalog.some(skill => skill.origin === 'library' && skill.id === entry.id));
     for (const skill of skills) await this.skills.validate(await this.localSkill(skill));
     const instructions = catalog.length ? `Skills enabled for this turn:\n${catalog.map(s => `- ${s.name}: ${s.description}\n  Read ${s.path} when relevant.${'revision' in s ? ` Source revision: ${s.revision}` : ''}`).join('\n')}\nRead a skill's SKILL.md before using it. Resolve its relative references against its own folder.` : '';
     const releases: (() => void)[] = [];

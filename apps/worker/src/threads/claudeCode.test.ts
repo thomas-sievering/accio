@@ -1,6 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { access } from 'node:fs/promises';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { claudeCode } from './claudeCode.js';
 
@@ -219,16 +217,16 @@ it.each([
   expect(q.getContextUsage).toHaveBeenCalledWith({ detail: 'summary' });
 });
 
-it('learns the skills Claude Code ships with from a turn, without the repository’s own', async () => {
-  const cwd = await mkdtemp(join(tmpdir(), 'accio-claude-skills-'));
-  try {
-    await mkdir(join(cwd, '.claude', 'skills', 'notes'), { recursive: true });
-    await writeFile(join(cwd, '.claude', 'skills', 'notes', 'SKILL.md'), '---\nname: notes\n---\n');
-    const q = Object.assign(query(), { initializationResult: vi.fn(async () => ({ commands: [{ name: 'simplify', description: 'Review the changed code' }, { name: 'compact', description: 'Free up context' }] })) });
-    q.next.mockResolvedValueOnce({ done: false, value: { type: 'system', subtype: 'init', session_id: 's', skills: ['simplify', 'notes'] } })
-      .mockResolvedValueOnce({ done: false, value: { type: 'result', subtype: 'success', is_error: false, session_id: 's' } });
-    queryMock.mockReturnValue(q);
-    for await (const _ of claudeCode.run({ cwd, prompt: 'hello', sessionId: null, env: {}, signal: new AbortController().signal })) { /* drain */ }
-    expect(await claudeCode.skills!({ cwd, env: {} })).toEqual([{ name: 'simplify', description: 'Review the changed code' }]);
-  } finally { await rm(cwd, { recursive: true, force: true }); }
+it('lists the skills Claude Code ships with once, from a session that can reach no provider, repository or profile', async () => {
+  const q = Object.assign(query(), { initializationResult: vi.fn(async () => ({ commands: [{ name: 'simplify', description: 'Review the changed code' }, { name: 'compact', description: 'Free up context' }] })) });
+  q.next.mockResolvedValueOnce({ done: false, value: { type: 'system', subtype: 'init', session_id: 's', skills: ['simplify', 'debug'] } });
+  queryMock.mockReturnValue(q);
+  expect(await claudeCode.skills!({ env: {} })).toEqual([{ name: 'simplify', description: 'Review the changed code' }, { name: 'debug', description: '' }]);
+  const { options } = queryMock.mock.calls[0]![0];
+  expect(options).toMatchObject({ settingSources: [], tools: [], mcpServers: {}, strictMcpConfig: true, persistSession: false, env: { ANTHROPIC_BASE_URL: 'http://127.0.0.1:9' } });
+  expect(options.env.CLAUDE_CONFIG_DIR.startsWith(options.cwd)).toBe(true);
+  expect(q.close).toHaveBeenCalled();
+  await expect(access(options.cwd)).rejects.toThrow();
+  expect(await claudeCode.skills!({ env: {} })).toHaveLength(2);
+  expect(queryMock).toHaveBeenCalledTimes(1);
 });
