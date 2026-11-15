@@ -109,8 +109,8 @@ function SpaceForm({ space, onDone }: { space?: Space; onDone: () => void }) {
               </label>
             ))}
           </div>
-          <Field label="Home" hint="The project that holds what applies to the whole space, such as its glossary, decisions and notes about each project.">
-            {(p) => <MenuSelect id={p.id} label="Home" value={home} onChange={setHome} disabled={!keys.length}
+          <Field label="Home project" hint="Holds what applies to the whole space, such as its glossary, decisions and notes about each project.">
+            {(p) => <MenuSelect id={p.id} label="Home project" value={home} onChange={setHome} disabled={!keys.length}
               options={[{ value: NO_HOME, label: 'No home' }, ...keys.map((key) => ({ value: key, label: projectName(projects, key) }))]} />}
           </Field>
           {error && <p className="error" role="alert">{error}</p>}
