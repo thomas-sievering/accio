@@ -230,6 +230,10 @@ describe('thread relay between machines', () => {
           answers.push(result.content[0].text);
         }
       }
+      if (run.tools && run.prompt === 'start wiki') {
+        const result = await callAccioTools(run, 'tools/call', { name: 'start_thread', arguments: { message: 'Write the wiki', project: 'wiki' } });
+        answers.push(result.content[0].text);
+      }
       yield* replyWith('done');
     });
     const { mac, pc } = await machines(new FakeHarness(), pcHarness);
@@ -263,5 +267,16 @@ describe('thread relay between machines', () => {
     expect(answers[1]).toContain(` in notes on ${macName}. It runs on its own`);
     const childId = answers[1]!.match(/\(([^)]+)\)/)![1]!;
     await expect.poll(async () => remote(await mac.client.call('threads.list', {}), childId), { timeout: 10_000 }).toMatchObject({ checkoutId: notes.id, profileId: work.id });
+
+    // wiki is only on the MacBook, which goes offline: its last list here can't say wiki's profile now.
+    await checkout(mac, 'wiki', 'https://github.com/me/wiki', work.id);
+    await pc.client.waitFor('machines.changed', (all) => !!all.find((m) => m.id === macView.id)?.relay?.repos.includes('github.com/me/wiki'), 10_000);
+    await mac.app.stop();
+    await pc.client.waitFor('machines.changed', (all) => !all.find((m) => m.id === macView.id)?.relay, 10_000);
+    const [space] = await pc.client.call('spaces.list', {});
+    await pc.client.call('spaces.save', { id: space!.id, name: 'accio', projectKeys: [...space!.projectKeys, 'github.com/me/wiki'] });
+    const wikiCaller = await pc.client.call('threads.start', { checkoutId: pcCheckout.id, text: 'start wiki' });
+    await pc.client.waitFor('threads.changed', (list) => list.some((t) => t.id === wikiCaller.id && t.status === 'idle'), 30_000);
+    expect(answers[2]).toBe("wiki is not available on this machine: no machine that has it is online, so its profile isn't known.");
   }, 60_000);
 });

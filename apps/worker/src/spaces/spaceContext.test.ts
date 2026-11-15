@@ -45,7 +45,7 @@ describe('the Space section of a thread in a space', () => {
     const instructions = harness.runs[0]!.resourceInstructions!;
     expect(instructions).toContain('# Space: hrc');
     expect(instructions).toContain(`- hrc_api: ${api} (branch feature/login)`);
-    expect(instructions).toContain("- hrc_web: not available on this machine (no paired machine has it, so its profile isn't known)");
+    expect(instructions).toContain("- hrc_web: not available on this machine (no machine that has it is online, so its profile isn't known)");
     expect(instructions).toContain('- local:elsewhere: not available on this machine (it has no remote to clone it from)');
     expect(instructions).not.toContain('hrc_mcp');
   });
@@ -274,6 +274,6 @@ describe('the home part of the Space section', () => {
     const [space] = await c.call('spaces.list', {});
     await c.call('spaces.save', { id: space!.id, name: 'hrc', projectKeys: [...space!.projectKeys, 'github.com/me/hrc_wiki'], homeProjectKey: 'github.com/me/hrc_wiki' });
     await turn(c, mcp.id);
-    expect(harness.runs[1]!.resourceInstructions).toContain("The space's home, hrc_wiki, is not available on this machine (no paired machine has it, so its profile isn't known), so its space-wide instructions are missing from this turn.");
+    expect(harness.runs[1]!.resourceInstructions).toContain("The space's home, hrc_wiki, is not available on this machine (no machine that has it is online, so its profile isn't known), so its space-wide instructions are missing from this turn.");
   });
 });

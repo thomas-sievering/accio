@@ -19,9 +19,9 @@ const RETRY_AFTER_MS = 10 * 60_000;
 
 /**
  * GLOSSARY: Checkout, Space. This machine's checkout of a project of a space, by its key, cloned here
- * when there is none on disk: under the project's profile as this machine or another one records it,
+ * when there is none on disk: under the project's profile as this machine or another one online records it,
  * from the URL a machine with a checkout fetches from. A project without a remote, or that no machine
- * has recorded, so its profile isn't known, can't be had here.
+ * online has, so its profile isn't known, can't be had here.
  */
 export class MissingCheckouts {
   private cloning = new Map<string, Promise<CheckoutView>>();
@@ -55,7 +55,7 @@ export class MissingCheckouts {
     const source = this.deps.source(key);
     // Each machine records a project's profile itself: this one's record wins.
     const profileId = project?.profileId ?? source?.profileId;
-    if (!profileId) return { unavailable: "no paired machine has it, so its profile isn't known" };
+    if (!profileId) return { unavailable: "no machine that has it is online, so its profile isn't known" };
     const clone = (async () => this.deps.clone(key, source ? await source.url() : httpsUrlOf(key), profileId))()
       .then((checkout) => { this.failed.delete(key); return checkout; }, (error: Error) => {
         this.failed.set(key, { reason: lowerFirst(error.message.replace(/\.$/, '')), at: Date.now() });

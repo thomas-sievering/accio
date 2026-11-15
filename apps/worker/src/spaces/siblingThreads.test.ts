@@ -139,6 +139,6 @@ describe('start_thread in another project of the space', () => {
 
     const caller = await c.call('threads.start', { checkoutId: mcp.id, text: 'start it' });
     expect(await startedBy(c, caller)).toEqual([]);
-    expect(answers[0]).toEqual({ isError: true, text: "hrc_web is not available on this machine: no paired machine has it, so its profile isn't known." });
+    expect(answers[0]).toEqual({ isError: true, text: "hrc_web is not available on this machine: no machine that has it is online, so its profile isn't known." });
   });
 });

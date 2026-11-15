@@ -124,16 +124,16 @@ export class Relay {
   }
 
   /**
-   * GLOSSARY: Checkout. How this machine can clone a repository another machine has recorded: that
-   * machine's profile for the project, preferring one on the relay with a checkout, and the URL that
-   * checkout fetches from. Without one to ask, the URL is an https address from the key. Undefined
-   * when no other machine has recorded the repository, even one offline whose threads are still listed.
+   * GLOSSARY: Checkout. How this machine can clone a repository another machine on the relay has:
+   * that machine's profile for the project, preferring one with a checkout, and the URL that checkout
+   * fetches from. Without one to ask, the URL is an https address from the key. Undefined when no
+   * machine on the relay has the repository: an offline one's last list can't say its profile now.
    */
   cloneSource(repoKey: string): { profileId: string; url: () => Promise<string> } | undefined {
     const holders = [...this.remote].flatMap(([machineId, snapshot]) => {
-      const project = this.deps.machineName(machineId) && snapshot.projects.find((p) => p.repoKey === repoKey);
+      const project = this.online.has(machineId) && this.deps.machineName(machineId) && snapshot.projects.find((p) => p.repoKey === repoKey);
       if (!project) return [];
-      return [{ machineId, project, asked: this.online.has(machineId) && !!snapshot.checkouts?.some((c) => c.projectId === project.id) }];
+      return [{ machineId, project, asked: !!snapshot.checkouts?.some((c) => c.projectId === project.id) }];
     });
     const asked = holders.filter((h) => h.asked);
     const first = asked[0] ?? holders[0];
