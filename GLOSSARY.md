@@ -45,7 +45,7 @@ A PNG of a machine's Accio desktop window, which a thread takes through the app_
 _Avoid_: Capture (as a noun), snapshot
 
 **Shared settings**:
-Everything the hub stores and hands to every paired machine, so that you change it once from any client: the profiles with their houses on the Sorting Hat, which project belongs to which profile, the harnesses, skill sources, MCP servers, and each machine's profile folders. A few of them apply to one machine only, such as its profile folders, but they are still stored on the hub. A client keeps only its own look and feel, such as the theme.
+Everything the hub stores and hands to every paired machine, so that you change it once from any client: the profiles with their houses on the Sorting Hat, which project belongs to which profile, the spaces, the harnesses, skill sources, MCP servers, and each machine's profile folders. A few of them apply to one machine only, such as its profile folders, but they are still stored on the hub. A client keeps only its own look and feel, such as the theme.
 _Avoid_: Config, fleet, machine settings (for settings stored on the hub)
 
 ## Profiles
@@ -124,6 +124,14 @@ _Avoid_: Quota, usage, rate limit (in UI text)
 **Project**:
 A repository, recognised across machines by its git remote URL. It belongs to exactly one profile, which can change only while the project has no threads.
 _Avoid_: Workspace, repo (in UI text)
+
+**Space**:
+A named group of projects that share context, such as "hrc" or "Copilot Studio agents". A project is in at most one space, or in none. A space is not tied to a profile, so its projects may belong to different profiles. A space can have a home, which holds what applies to the whole space. Its projects can read and change each other, and each project ships its own changes.
+_Avoid_: Workspace, home, group
+
+**Home**:
+The project in a space that holds what applies to the whole space, such as its glossary, decisions and notes about each project. It is an ordinary project in every other way: threads start in it and ship changes to it. A space has at most one home.
+_Avoid_: Home repo (in UI text), space repo
 
 **Checkout**:
 One machine's copy of a project's repository. A folder without a git remote is a project with a single checkout. Starting a thread on a machine without one clones the repository there and adds it, reusing a clone already in place.

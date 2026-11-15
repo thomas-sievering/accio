@@ -29,6 +29,8 @@ export type HubSnapshot = {
   /** Absent in snapshots cached before built-in tool switches existed. */
   harnessTools?: Record<string, Record<string, boolean>>;
   threadNaming?: ReturnType<SharedSettings['threadNaming']>;
+  /** GLOSSARY: Space. Absent from hubs before spaces. */
+  spaces?: ReturnType<SharedSettings['spaces']>;
   /** GLOSSARY: Snooze. Absent from hubs before snoozes until a machine is back. */
   offlineSnoozes?: ReturnType<SharedSettings['offlineSnoozes']>;
   models: Record<string, CodexModel[]>;
@@ -174,7 +176,7 @@ export async function startHubService(opts: HubServiceOptions) {
     const remote = link.view();
     return { hubId: trust.id, protocol: HUB_PROTOCOL, revision, epoch, ...(opts.version ? { version: opts.version } : {}), profiles: profileViews(profiles, link), accounts: link.accountViews(), machines: settings.machines(),
       favorites: Object.fromEntries(profiles.map((p) => [p.id, settings.modelFavorites(p.id)])), harnessTools: settings.harnessTools(),
-      threadNaming: settings.threadNaming(), offlineSnoozes: settings.offlineSnoozes(),
+      threadNaming: settings.threadNaming(), spaces: settings.spaces(), offlineSnoozes: settings.offlineSnoozes(),
       models: Object.fromEntries(profiles.map((p) => [p.id, p.houseId ? link.codexModels(p.houseId) : []])), resources: resources.state(), limits: link.limitViews(), secrets: profiles.flatMap(p => secrets.list(p.id)),
       ...(remote ? { sortingHat: remote } : {}) };
   }
@@ -302,6 +304,9 @@ export async function startHubService(opts: HubServiceOptions) {
         try { await settings.setOfflineSnooze(p.threadId, p.snooze); } catch (error) { throw new HubError((error as Error).message); }
         return null;
       case 'threadNaming.save': await settings.setThreadNaming(p); return settings.threadNaming();
+      case 'spaces.list': return settings.spaces();
+      case 'spaces.save': return settings.saveSpace(p);
+      case 'spaces.delete': await settings.deleteSpace(p.id); return null;
       case 'sortingHat.get': return link.view() ?? null;
       case 'sortingHat.configure': await link.configure(p); await moveToLink(); return link.view();
       case 'sortingHat.disconnect': await link.disconnect(); return null;

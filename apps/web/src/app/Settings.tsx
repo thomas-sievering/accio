@@ -12,9 +12,11 @@ import { ToolsSettings } from '../tools/ToolsSettings';
 import { McpSettings } from '../mcp/McpSettings';
 import { SkillsSettings } from '../skills/SkillsSettings';
 import { ProjectsSettings } from '../projects/ProjectsSettings';
+import { SpacesSettings } from '../spaces/SpacesSettings';
+import { useSpaces } from '../spaces/spaces';
 import { useProjects } from '../projects/projects';
 import { useResources } from '../resources/resources';
-import { ArrowLeft, BookOpen, Chevron, Folder, IdCard, Key, Layers, Limits, Monitor, Plug, Plus, ScrollText, Users, Wrench } from './icons';
+import { ArrowLeft, BookOpen, Chevron, Folder, IdCard, Key, Layers, Limits, Monitor, Plug, Plus, ScrollText, Spaces, Users, Wrench } from './icons';
 import { useClient } from './connection';
 import { useLive } from './useLive';
 import { SidebarResizer } from './Resizer';
@@ -22,7 +24,8 @@ import { HubSelector } from '../hub/HubSelector';
 
 /** Where Settings is open. `profileId` opens one profile ('new' to add one). */
 export type SettingsRoute = { section: 'profiles'; profileId?: string } | { section: 'accounts'; accountId?: string } | ({ section: 'secrets' } & SecretsRoute) | { section: 'hub'; hubId?: string } | { section: 'harnesses'; harnessId?: string } | { section: 'systemPrompt' } | { section: 'machines'; machineId?: string }
-  | { section: 'naming' } | { section: 'tools'; toolId?: string } | { section: 'mcps'; mcpId?: string } | { section: 'skills'; sourceId?: string } | { section: 'projects'; projectId?: string; /** Save and Cancel return to the project dashboard. */ fromDashboard?: boolean };
+  | { section: 'naming' } | { section: 'tools'; toolId?: string } | { section: 'mcps'; mcpId?: string } | { section: 'skills'; sourceId?: string } | { section: 'projects'; projectId?: string; /** Save and Cancel return to the project dashboard. */ fromDashboard?: boolean }
+  | { section: 'spaces'; /** 'new' adds one. */ spaceId?: string };
 type Section = SettingsRoute['section'];
 
 /**
@@ -48,6 +51,7 @@ const GROUPS: { label: string; items: { id: Exclude<Section, 'hub'> | 'limits'; 
   ] },
   { label: 'Projects and machines', items: [
     { id: 'projects', label: 'Projects', icon: <Folder /> },
+    { id: 'spaces', label: 'Spaces', icon: <Spaces /> },
     { id: 'machines', label: 'Machines', icon: <Monitor /> },
   ] },
 ];
@@ -82,8 +86,10 @@ export function Settings({ route, onRoute, onClose, onOpenThread, onOpenLimits }
   const machineLabel = route.section === 'machines' && route.machineId ? machines?.find((m) => m.id === route.machineId)?.name : undefined;
   const hubLabel = route.section === 'hub' && route.hubId ? 'Add hub' : undefined;
   const projectLabel = route.section === 'projects' && route.projectId ? projectState?.projects.find((p) => p.id === route.projectId)?.name : undefined;
+  const { spaces } = useSpaces();
+  const spaceLabel = route.section === 'spaces' && route.spaceId ? route.spaceId === 'new' ? 'New space' : spaces?.find((s) => s.id === route.spaceId)?.name : undefined;
   const harnessLabel = route.section === 'harnesses' && route.harnessId ? 'Built-in tools' : undefined;
-  const detailLabel = projectLabel || profileLabel || accountLabel || secretLabel || resourceLabel || machineLabel || hubLabel || harnessLabel;
+  const detailLabel = projectLabel || spaceLabel || profileLabel || accountLabel || secretLabel || resourceLabel || machineLabel || hubLabel || harnessLabel;
   const previousDetail = useRef<string | undefined>(undefined);
   const root = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -100,7 +106,7 @@ export function Settings({ route, onRoute, onClose, onOpenThread, onOpenLimits }
     return () => cancelAnimationFrame(frame);
   }, [route, detailLabel]);
 
-  const inDetail = !!((route.section === 'harnesses' && route.harnessId) || profileId || accountId || toolId || mcpId || sourceId || (route.section === 'secrets' && route.secretId) || (route.section === 'machines' && route.machineId) || (route.section === 'hub' && route.hubId) || (route.section === 'projects' && route.projectId));
+  const inDetail = !!((route.section === 'harnesses' && route.harnessId) || profileId || accountId || toolId || mcpId || sourceId || (route.section === 'secrets' && route.secretId) || (route.section === 'machines' && route.machineId) || (route.section === 'hub' && route.hubId) || (route.section === 'projects' && route.projectId) || (route.section === 'spaces' && route.spaceId));
   // Escape goes up one level and leaves Settings only from a top-level page; an open inline confirmation takes it first (useEscape).
   const leave = useRef<(go: () => void) => boolean>(undefined);
   /** Every way out of a page (section, breadcrumb, Back, Escape) goes through the page's unsaved-edit check. */
@@ -196,6 +202,7 @@ export function Settings({ route, onRoute, onClose, onOpenThread, onOpenLimits }
             {route.section === 'mcps' && <McpSettings key={mcpId ?? ''} mcpId={mcpId} onOpen={(id) => onRoute({ section: 'mcps', mcpId: id })} onBack={() => onRoute({ section: 'mcps' })} />}
             {route.section === 'skills' && <SkillsSettings key={sourceId ?? ''} sourceId={sourceId} onOpen={(id) => onRoute({ section: 'skills', sourceId: id })} onBack={() => onRoute({ section: 'skills' })} />}
             {route.section === 'projects' && <ProjectsSettings projectId={route.projectId} onOpen={(projectId) => projectId === undefined && route.fromDashboard ? onClose() : onRoute({ section: 'projects', projectId })} onRoute={navigate} />}
+            {route.section === 'spaces' && <SpacesSettings spaceId={route.spaceId} onOpen={(spaceId) => onRoute({ section: 'spaces', spaceId })} onBack={() => onRoute({ section: 'spaces' })} />}
             {route.section === 'machines' && <MachineSettings machineId={route.machineId} onOpen={(machineId) => onRoute({ section: 'machines', machineId })} onBack={() => onRoute({ section: 'machines' })} onOpenThread={onOpenThread} />}
           </div>
         </div>

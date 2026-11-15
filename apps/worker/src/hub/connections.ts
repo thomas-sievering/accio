@@ -16,6 +16,7 @@ import { readThreadTool } from '../threads/handoff.js';
 import { readMentionedThread } from '../threads/threadMentions.js';
 import { startThreadTool } from '../threads/startThread.js';
 import { Projects } from '../projects/projects.js';
+import { Spaces } from '../spaces/spaces.js';
 import { ProjectApps } from '../projects/projectApps.js';
 import { Threads } from '../threads/threads.js';
 import type { Harness } from '../threads/harness.js';
@@ -34,7 +35,7 @@ import type { Updates } from '../machine/update.js';
 import { findMachine, machineTools } from '../machine/machineTools.js';
 
 export type SavedHub = { id: string; name: string; url: string; token: string; home: string; local: boolean; managed?: boolean; snapshot?: HubSnapshot };
-export type HubWorkspace = { client: HubClient; router: Router; relay: Relay; profiles: Profiles; machines: Machines; models: Models; projects: Projects; threads: Threads; tools: AccioTools; resources: ResourceManager; secrets: SecretsAccess; home: string; initialize(origin: string): void; close(): Promise<void> };
+export type HubWorkspace = { client: HubClient; router: Router; relay: Relay; profiles: Profiles; machines: Machines; models: Models; projects: Projects; spaces: Spaces; threads: Threads; tools: AccioTools; resources: ResourceManager; secrets: SecretsAccess; home: string; initialize(origin: string): void; close(): Promise<void> };
 
 /** One local workspace per hub: identical profile IDs cannot alias local work or configuration. */
 export class HubConnections {
@@ -105,6 +106,7 @@ export class HubConnections {
     profiles.register(router); machines.register(router); models.register(router, broadcast);
     const projects = refs.projects = new Projects(record.home, profiles, machines, broadcast); await projects.load(); projects.register(router);
     const projectApps = new ProjectApps(record.home, projects, broadcast); projectApps.register(router);
+    const spaces = new Spaces(settings, broadcast); spaces.register(router);
     const tools = new AccioTools([offerChoice, finishGoalTool((id, outcome, summary) => threads.finishGoal(id, outcome, summary), (id) => threads.goalActive(id)),
       deliveryStepTool((id, step, note) => threads.reportDeliveryStep(id, step, note), (id) => threads.deliveryRunning(id)),
       shippedNoteTool((id, note) => threads.recordShippedNote(id, note), (id) => threads.deliveryRunning(id)),
@@ -170,7 +172,7 @@ export class HubConnections {
     const continueAfterRestart = () => {
       if (initialized && !this.closing) void threads.continueAfterRestart().catch(error => console.error('[threads] startup recovery failed', error));
     };
-    workspace = { client, router, relay, profiles, machines, models, projects, threads, tools, resources, secrets, home: record.home,
+    workspace = { client, router, relay, profiles, machines, models, projects, spaces, threads, tools, resources, secrets, home: record.home,
       initialize: origin => { if (!initialized) relay.start(record.url, record.token); if (!initialized) void projectApps.load().catch(error => console.error('[project apps] startup failed', error)); tools.listen(record.id === this.defaultId ? origin : `${origin}/hubs/${record.id}`); initialized = true; continueAfterRestart(); if (client.status === 'connected') reconciliation = resources.reconcile().catch(error => console.error('[resources] startup check failed', error)); },
       close: async () => { stopUpdates?.(); await relay.close(); await projectApps.close(); await threads.close(); await secrets.close(); await resources.close(); await reconciliation; await profiles.close(); await projects.close(); await client.close(); } };
     this.workspaces.set(record.id, workspace);

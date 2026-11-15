@@ -305,6 +305,16 @@ export const Folder = () => (
   </svg>
 );
 
+// IconMCP: layout-grid
+export const Spaces = () => (
+  <svg {...base}>
+    <rect x="2.25" y="2.25" width="4.5" height="4.5" rx="1.25" />
+    <rect x="9.25" y="2.25" width="4.5" height="4.5" rx="1.25" />
+    <rect x="2.25" y="9.25" width="4.5" height="4.5" rx="1.25" />
+    <rect x="9.25" y="9.25" width="4.5" height="4.5" rx="1.25" />
+  </svg>
+);
+
 // IconMCP: star
 export const Star = ({ filled = false }: { filled?: boolean }) => (
   <svg {...base} width={14} height={14} fill={filled ? 'currentColor' : 'none'}>

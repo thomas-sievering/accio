@@ -86,13 +86,17 @@ export class HubClient {
   async close() { this.stopped = true; clearTimeout(this.retry); this.ws?.terminate(); }
 }
 
-export type SettingsAccess = Pick<SharedSettings, 'threadNaming' | 'setThreadNaming' | 'profiles' | 'machines' | 'machine' | 'modelFavorites' | 'setModelFavorite' | 'harnessTools' | 'setHarnessTools' | 'offlineSnoozes' | 'setOfflineSnooze' | 'onMachinesChanged' | 'machineConnected' | 'machineDisconnected' | 'renameMachine' | 'setProfileFolders' | 'setProfileGitHub'> & { refresh?: () => Promise<void> };
+export type SettingsAccess = Pick<SharedSettings, 'threadNaming' | 'setThreadNaming' | 'spaces' | 'saveSpace' | 'deleteSpace' | 'profiles' | 'machines' | 'machine' | 'modelFavorites' | 'setModelFavorite' | 'harnessTools' | 'setHarnessTools' | 'offlineSnoozes' | 'setOfflineSnooze' | 'onMachinesChanged' | 'machineConnected' | 'machineDisconnected' | 'renameMachine' | 'setProfileFolders' | 'setProfileGitHub'> & { refresh?: () => Promise<void> };
 
 /** Synchronous read views with writes committed by the hub over the connection. */
 export function remoteSettings(client: HubClient): SettingsAccess {
   return {
     threadNaming: () => structuredClone(client.snapshot?.threadNaming ?? DEFAULT_THREAD_NAMING),
     setThreadNaming: async (settings) => { await client.call('threadNaming.save', settings); },
+    // Older hubs don't know spaces yet.
+    spaces: () => structuredClone(client.snapshot?.spaces ?? []),
+    saveSpace: (space) => client.call('spaces.save', space),
+    deleteSpace: async (id) => { await client.call('spaces.delete', { id }); },
     refresh: () => client.refresh(true),
     profiles: () => client.snapshot?.profiles.map(({ id, name }) => ({ id, name })) ?? [],
     machines: () => client.snapshot?.machines ?? [],

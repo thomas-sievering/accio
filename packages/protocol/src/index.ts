@@ -8,6 +8,7 @@ import { profileMethods, type ProfileEvents } from './profiles.js';
 import { projectMethods, type ProjectEvents } from './projects.js';
 import { resourceMethods, type ResourceEvents } from './resources.js';
 import { secretMethods, type SecretEvents } from './secrets.js';
+import { spaceMethods, type SpaceEvents } from './spaces.js';
 import { threadMethods, type ThreadEvents } from './threads.js';
 import { updateMethods, type UpdateEvents } from './update.js';
 import { workspaceSkillMethods } from './workspaceSkills.js';
@@ -29,6 +30,7 @@ export * from './resources.js';
 export * from './rpc.js';
 export * from './secrets.js';
 export * from './shellCommand.js';
+export * from './spaces.js';
 export * from './threads.js';
 export * from './update.js';
 export * from './workspaceSkills.js';
@@ -45,6 +47,7 @@ export const methods = {
   ...projectMethods,
   ...threadMethods,
   ...secretMethods,
+  ...spaceMethods,
   ...updateMethods,
 };
 
@@ -54,7 +57,7 @@ export type ParamsOf<M extends MethodName> = z.input<Methods[M]['params']>;
 export type ResultOf<M extends MethodName> = Methods[M]['result'];
 
 /** Server-pushed events and their payloads. */
-export type Events = MachineEvents & ProfileEvents & LimitsEvents & ProjectEvents & ThreadEvents & ModelEvents & SecretEvents & ResourceEvents & HubEvents & UpdateEvents;
+export type Events = MachineEvents & ProfileEvents & LimitsEvents & ProjectEvents & ThreadEvents & ModelEvents & SecretEvents & ResourceEvents & HubEvents & UpdateEvents & SpaceEvents;
 export type EventName = keyof Events;
 
 export const DEFAULT_PORT = 47321;

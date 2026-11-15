@@ -30,6 +30,7 @@
 @import "./ui/with-icon.css";
 @import "./app/first-run.css";
 @import "./resources/resources.css";
+@import "./spaces/spaces.css";
 @import "./limits/limits.css";
 @import "./projects/dashboard.css";
 @import "./ui/motion.css";

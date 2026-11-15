@@ -1,6 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { JsonStore } from '@accio/persistence';
-import { DEFAULT_THREAD_NAMING, type ThreadNamingSettings, type HarnessInstall, type MachineInfo, type OfflineSnooze } from '@accio/protocol';
+import { DEFAULT_THREAD_NAMING, type ThreadNamingSettings, type HarnessInstall, type MachineInfo, type OfflineSnooze, type SaveSpace, type Space } from '@accio/protocol';
+import { HubError } from './errors.js';
 
 export type { HarnessInstall };
 
@@ -32,6 +34,8 @@ type Data = SharedSeed & {
   harnessTools?: Record<string, Record<string, boolean>>;
   /** GLOSSARY: Snooze. Thread id → snooze until its offline machine is back. */
   offlineSnoozes?: Record<string, OfflineSnooze>;
+  /** GLOSSARY: Space. Not tied to profiles, so deleting a profile leaves them as they are (ADR 0019). */
+  spaces?: Space[];
 };
 
 /** Far more than anyone snoozes; keeps one store from growing without bound. */
@@ -65,6 +69,44 @@ export class SharedSettings {
 
   async setThreadNaming(threadNaming: ThreadNamingSettings) {
     await this.change(() => this.commit({ ...this.data, threadNaming }));
+  }
+
+  spaces(): Space[] { return structuredClone(this.data.spaces ?? []); }
+
+  /**
+   * GLOSSARY: Space. Adds a space, or replaces one whole. Every save keeps the rules: a name,
+   * each project in at most one space, and a home among the space's own projects.
+   * Removing the home's project from the space clears its home (GLOSSARY: Home).
+   */
+  async saveSpace(input: SaveSpace): Promise<Space> {
+    return this.change(async () => {
+      const spaces = this.data.spaces ?? [];
+      const before = input.id === undefined ? undefined : spaces.find((s) => s.id === input.id);
+      if (input.id !== undefined && !before) throw new HubError('This space no longer exists.');
+      const name = input.name.trim();
+      if (!name) throw new HubError('Enter a name for the space.');
+      const projectKeys = [...new Set(input.projectKeys.map((key) => key.trim()))];
+      for (const key of projectKeys) {
+        const other = spaces.find((s) => s.id !== input.id && s.projectKeys.includes(key));
+        if (other) throw new HubError(`${key} is already in the space ${other.name}. Remove it there first.`);
+      }
+      let home = input.homeProjectKey?.trim();
+      // Keeping the home while removing its project means the project left: the space goes on without a home.
+      if (home && !projectKeys.includes(home) && home === before?.homeProjectKey && before.projectKeys.includes(home)) home = undefined;
+      if (home && !projectKeys.includes(home)) throw new HubError('The home must be one of the space’s projects.');
+      const saved: Space = { id: before?.id ?? randomUUID(), name, projectKeys, ...(home ? { homeProjectKey: home } : {}) };
+      await this.commit({ ...this.data, spaces: before ? spaces.map((s) => (s.id === saved.id ? saved : s)) : [...spaces, saved] });
+      return structuredClone(saved);
+    });
+  }
+
+  /** Deletes only the grouping: projects, checkouts and threads stay as they are. */
+  async deleteSpace(id: string) {
+    return this.change(async () => {
+      const spaces = this.data.spaces ?? [];
+      if (!spaces.some((s) => s.id === id)) throw new HubError('This space no longer exists.');
+      await this.commit({ ...this.data, spaces: spaces.filter((s) => s.id !== id) });
+    });
   }
 
   /** Connected clients observe the same machine registry and folder settings. */
