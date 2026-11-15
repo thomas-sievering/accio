@@ -116,3 +116,32 @@ button.changelog-commit:hover { background: var(--hover, var(--active)); }
   white-space: nowrap;
 }
 .row-inline-state.tone-working { color: var(--dim); }
+/* Issues: open issues in dependency order, a git-log style graph in the gutter. */
+.issues-page { display: flex; flex-direction: column; gap: 6px; }
+.issues-bar { display: flex; align-items: center; gap: 10px; padding: 4px 10px 2px; }
+.issues-filter {
+  max-width: 60%;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  background: var(--raised);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+}
+.issues-source { margin-left: auto; overflow: hidden; color: var(--dim); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.issues-graph { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.issues-row { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 10px; font-size: 13px; }
+.issues-gutter { flex: none; overflow: visible; }
+.issues-gutter path { fill: none; stroke: var(--line-2); stroke-width: 1.5; }
+.issues-gutter circle { fill: var(--green); stroke: var(--bg, var(--raised)); stroke-width: 2; }
+.issues-gutter circle.blocked { fill: var(--amber); }
+.issues-gutter circle.claimed { fill: var(--dim); }
+.issues-label { flex: none; min-width: 32px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.issues-title { flex: 1; min-width: 0; overflow: hidden; color: var(--ink); text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
+a.issues-title:hover { text-decoration: underline; }
+.issues-row.blocked .issues-title { color: var(--muted); }
+.issues-waits { flex: none; max-width: 30%; overflow: hidden; color: var(--amber); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.issue-pill.issues-state.ready { border-color: color-mix(in oklch, var(--green) 35%, transparent); color: var(--green); }
+.issue-pill.issues-state.blocked { border-color: color-mix(in oklch, var(--amber) 35%, transparent); color: var(--amber); }

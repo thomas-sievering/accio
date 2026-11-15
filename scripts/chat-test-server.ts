@@ -27,9 +27,9 @@ const issuesFolder = join(home, 'issues-project');
 const issuesClaimFile = join(home, 'issue-claims.json');
 const fixtureIssues = [
   { number: 208, title: 'Retry the relay handshake after the hub restarts', labels: [{ name: 'ready-for-agent' }], assignees: [], blockedBy: { nodes: [] }, parent: null },
-  { number: 205, title: 'Snoozed threads lose their goal on restart', labels: [{ name: 'ready-for-agent' }, { name: 'bug' }], assignees: [], blockedBy: { nodes: [] }, parent: null },
+  { number: 205, title: 'Snoozed threads lose their goal on restart', labels: [{ name: 'ready-for-agent' }, { name: 'bug' }], assignees: [], blockedBy: { nodes: [] }, parent: { number: 190, title: 'Threads survive restarts' } },
   { number: 201, title: 'Limits indicator flickers when switching profiles', labels: [{ name: 'needs-triage' }], assignees: [], blockedBy: { nodes: [] }, parent: null },
-  { number: 194, title: 'Settle threads once their delivery merges', labels: [], assignees: [], blockedBy: { nodes: [{ number: 205, state: 'OPEN' }] }, parent: null },
+  { number: 194, title: 'Settle threads once their delivery merges', labels: [], assignees: [], blockedBy: { nodes: [{ number: 205, state: 'OPEN' }] }, parent: { number: 190, title: 'Threads survive restarts' } },
 ];
 const fixtureGh = async (args: string[], options?: { cwd?: string }) => {
   if (!options?.cwd?.startsWith(issuesFolder)) throw new Error('gh is not available in this fixture');

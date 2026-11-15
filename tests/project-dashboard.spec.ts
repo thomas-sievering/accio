@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -86,6 +86,69 @@ test('all settled project threads remain reachable beyond the first page', async
     await expect(page.locator('.msg.user')).toContainText('Settled history');
   } finally {
     if (checkoutId) await client.call('checkouts.remove', { id: checkoutId, deleteThreads: true }).catch(() => {});
+    client.close();
+    await rm(folder, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+  }
+});
+
+/** Opens the project dashboard from the header of the thread just started with `text`, once its first message shows. */
+async function openDashboard(page: Page, text: string, project: string) {
+  await expect(page.locator('.msg.user', { hasText: text })).toBeVisible();
+  await expect(async () => {
+    await page.locator('.thread-project-link', { hasText: project }).click();
+    await page.getByRole('menuitem', { name: 'Dashboard', exact: true }).click({ timeout: 2_000 });
+    await expect(page.getByRole('heading', { name: project })).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 20_000 });
+}
+
+test('the Issues fold lists open issues in dependency order with a graph, narrowed by parent or feature', async ({ page, baseURL }, info) => {
+  test.setTimeout(60_000);
+  await chatFixture(baseURL!);
+  await page.setViewportSize({ width: 1100, height: 760 });
+  await startProjectThread(page, baseURL!, /issues-project/, 'Look over the issues');
+  await openDashboard(page, 'Look over the issues', 'issues-project');
+  const fold = page.locator('.dashboard-fold').filter({ has: page.locator('summary', { hasText: 'Issues' }) });
+  await expect(fold).not.toHaveAttribute('open', '');
+  await fold.locator('summary').click();
+  const rows = fold.getByRole('list', { name: 'Open issues' }).locator('.issues-row');
+  // #194 waits on #205, so it follows it; the others keep the tracker's order.
+  await expect(rows.locator('.issues-label')).toHaveText(['#208', '#205', '#194', '#201']);
+  await expect(rows.nth(2)).toContainText('waits on #205');
+  await expect(rows.locator('.issues-state')).toHaveText(['Ready', 'Ready', 'Blocked', 'Ready']);
+  // One dot per issue; a line from #205 down to #194, none from the independent issues.
+  await expect(fold.locator('.issues-gutter circle')).toHaveCount(4);
+  await expect(rows.nth(0).locator('.issues-gutter path')).toHaveCount(0);
+  await expect(rows.nth(1).locator('.issues-gutter path')).toHaveCount(1);
+  await expect(rows.nth(2).locator('.issues-gutter path')).toHaveCount(1);
+  await page.screenshot({ path: info.outputPath('issues-fold.png') });
+
+  await fold.getByRole('combobox', { name: 'Parent issue' }).selectOption('#190 Threads survive restarts');
+  await expect(rows.locator('.issues-label')).toHaveText(['#205', '#194']);
+
+  // Local issue files: blockers by number within their feature folder.
+  await startProjectThread(page, baseURL!, /scratch-project/, 'Look over the local issues');
+  await openDashboard(page, 'Look over the local issues', 'scratch-project');
+  await fold.locator('summary').click();
+  await expect(fold.locator('.issues-source')).toHaveText('.scratch');
+  await fold.getByRole('combobox', { name: 'Feature folder' }).selectOption('relay-reconnect');
+  await expect(rows.locator('.issues-label')).toHaveText(['01', '02']);
+  await expect(rows.nth(1)).toContainText('waits on 01');
+  await expect(rows.locator('.issues-state')).toHaveText(['Ready', 'Blocked']);
+});
+
+test('the Issues fold says why it is empty when the project has no tracker', async ({ page, baseURL }) => {
+  test.setTimeout(60_000);
+  const folder = await mkdtemp(join(tmpdir(), 'accio-no-tracker-'));
+  const client = await chatClient(baseURL!);
+  const checkout = await client.call('checkouts.add', { path: folder, profileId: 'personal' });
+  try {
+    const name = folder.split(/[\\/]/).at(-1)!;
+    await startProjectThread(page, baseURL!, new RegExp(name), 'No tracker here');
+    await openDashboard(page, 'No tracker here', name);
+    await page.locator('.dashboard-fold > summary', { hasText: 'Issues' }).click();
+    await expect(page.getByText(/^No issue tracker\./)).toBeVisible();
+  } finally {
+    await client.call('checkouts.remove', { id: checkout.id, deleteThreads: true }).catch(() => {});
     client.close();
     await rm(folder, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
   }

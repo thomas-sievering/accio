@@ -13,6 +13,7 @@ import { ProjectMark } from './ProjectMark';
 import { ProfileLabel } from '../profiles/ProfileLabel';
 import { entryForCommit } from '../changelog/changelog';
 import { ProjectChangelog as ChangelogFold } from '../changelog/ProjectChangelog';
+import { ProjectIssues } from './ProjectIssues';
 
 const SETTLED_SHOWN = 10;
 const SHIPPED_SHOWN = 8;
@@ -20,7 +21,7 @@ const SHIPPED_SHOWN = 8;
 /**
  * GLOSSARY: Project dashboard. Opened from the project name in a thread's header:
  * its threads by state, then what recently landed on its default branch, then its
- * Changelog and settled threads, folded.
+ * open issues, Changelog and settled threads, folded.
  */
 export function ProjectDashboard({ project, onClose }: { project: ProjectView; onClose: () => void }) {
   const client = useClient();
@@ -47,6 +48,7 @@ export function ProjectDashboard({ project, onClose }: { project: ProjectView; o
           <ThreadMenuProvider>
             <Threads project={project} />
             <Shipped project={project} entries={entries} />
+            <ProjectIssues key={project.id} project={project} />
             <ChangelogFold projectId={project.id} entries={entries} />
             <Settled key={project.id} project={project} />
           </ThreadMenuProvider>
