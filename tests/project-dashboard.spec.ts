@@ -1,43 +1,26 @@
 import { expect, test } from '@playwright/test';
-import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
-import { promisify } from 'node:util';
-import { TestClient } from '../apps/worker/src/testing/testApp.js';
+import { dirname, join } from 'node:path';
+import { git } from '../apps/worker/src/git.js';
+import { BROWSER_AUTHOR, initRepoWithOrigin } from '../apps/worker/src/testing/gitRepo.js';
+import { chatClient, chatFixture, startProjectThread } from './chat.js';
 
-const exec = promisify(execFile);
-const git = async (cwd: string, ...args: string[]) => (await exec('git', ['-C', cwd, ...args], { windowsHide: true })).stdout.trim();
 const server = (version: string) => `require('http').createServer((q,s)=>s.end('${version}')).listen(Number(process.env.PORT),'127.0.0.1');\n`;
 
 test('the project dashboard starts the app from main, follows new commits, and lists threads, commits and logs', async ({ page, baseURL }, info) => {
   test.setTimeout(90_000);
-  const { deliveryFolder } = JSON.parse(await readFile(resolve('out', `chat-test-${new URL(baseURL!).port}.json`), 'utf8'));
+  const { deliveryFolder } = await chatFixture(baseURL!);
   const home = dirname(deliveryFolder);
   const folder = join(home, 'dashboard-project');
   const origin = join(home, 'dashboard-origin.git');
-  await mkdir(folder);
-  await git(folder, 'init', '--quiet', '-b', 'main');
-  await git(folder, 'config', 'user.name', 'Accio Browser Test');
-  await git(folder, 'config', 'user.email', 'browser@example.test');
-  await git(folder, 'config', 'core.autocrlf', 'false');
-  await writeFile(join(folder, 'server.cjs'), server('dashboard v1'));
-  await git(folder, 'add', '.');
-  await git(folder, 'commit', '--quiet', '-m', 'Serve v1');
-  await git(home, 'init', '--quiet', '--bare', '-b', 'main', origin);
-  await git(folder, 'remote', 'add', 'origin', origin);
-  await git(folder, 'push', '--quiet', '-u', 'origin', 'main');
-  await git(folder, 'remote', 'set-head', 'origin', '-a');
-  const client = await TestClient.open(`${baseURL!.replace('http:', 'ws:')}/ws?token=isolated-chat-test-token`);
+  await initRepoWithOrigin(folder, origin, { 'server.cjs': server('dashboard v1') }, { author: BROWSER_AUTHOR, message: 'Serve v1' });
+  const client = await chatClient(baseURL!);
   // Fixture: the folder is added like any project; everything under test goes through the UI.
   const checkout = await client.call('checkouts.add', { path: folder, profileId: 'personal' });
   const app = async () => (await client.call('projectApps.get', {})).find((a) => a.projectId === checkout.projectId);
   try {
-    await page.goto(`${baseURL}/#token=isolated-chat-test-token`);
-    await page.getByRole('button', { name: 'New thread', exact: true }).first().click();
-    await page.getByRole('option', { name: /dashboard-project/ }).click();
-    await page.locator('.composer textarea').fill('Delivery follow-up');
-    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await startProjectThread(page, baseURL!, /dashboard-project/, 'Delivery follow-up');
     await expect(page.getByText('Fresh workspace ready.', { exact: true })).toBeVisible();
 
     // The breadcrumb's project name opens the dashboard with the project's threads.
@@ -104,7 +87,7 @@ test('the project dashboard starts the app from main, follows new commits, and l
 test('all settled project threads remain reachable beyond the first page', async ({ page, baseURL }) => {
   test.setTimeout(60_000);
   const folder = await mkdtemp(join(tmpdir(), 'accio-settled-browser-'));
-  const client = await TestClient.open(`${baseURL!.replace('http:', 'ws:')}/ws?token=isolated-chat-test-token`);
+  const client = await chatClient(baseURL!);
   let checkoutId: string | undefined;
   try {
     const checkout = await client.call('checkouts.add', { path: folder, profileId: 'personal' });

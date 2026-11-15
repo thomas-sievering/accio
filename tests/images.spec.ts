@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { newChatDraft } from './chat.js';
 
 const token = 'isolated-chat-test-token';
 
@@ -17,9 +18,7 @@ async function pasteImage(page: Page) {
 
 test('a pasted image starts a thread, shows in the message and opens full size', async ({ page, baseURL }, testInfo) => {
   await page.goto(`${baseURL}/#token=${token}`);
-  await page.locator('.sidebar').getByRole('button', { name: 'New thread', exact: true }).click();
-  await page.getByRole('option', { name: 'No project', exact: true }).click();
-  if (await page.getByRole('combobox', { name: 'Search profiles' }).isVisible()) await page.getByRole('option', { name: 'Personal', exact: true }).click();
+  await newChatDraft(page);
   await pasteImage(page);
   const chip = page.locator('.composer-image');
   await expect(chip).toHaveCount(1);
@@ -107,9 +106,7 @@ test('saved message images recover failed grants, reconnects and repeated expiry
     });
   });
   await page.goto(`${baseURL}/#token=${token}`);
-  await page.locator('.sidebar').getByRole('button', { name: 'New thread', exact: true }).click();
-  await page.getByRole('option', { name: 'No project', exact: true }).click();
-  if (await page.getByRole('combobox', { name: 'Search profiles' }).isVisible()) await page.getByRole('option', { name: 'Personal', exact: true }).click();
+  await newChatDraft(page);
   await pasteImage(page);
   await expect(page.locator('.composer-image')).not.toHaveClass(/uploading/);
   await page.getByRole('button', { name: 'Send', exact: true }).click();

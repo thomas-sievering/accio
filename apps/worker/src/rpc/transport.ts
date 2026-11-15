@@ -75,8 +75,16 @@ export async function startTransport(opts: TransportOptions) {
         } catch {
           return;
         }
-        const router = opts.routerFor ? opts.routerFor(hubId) : opts.router;
-        const response = router ? await router.handle(raw) : { type: 'response', id: (raw as any)?.id, ok: false, error: 'This hub connection is no longer available.' };
+        const id = (raw as { id?: unknown } | null)?.id;
+        let response: unknown;
+        try {
+          const router = opts.routerFor ? opts.routerFor(hubId) : opts.router;
+          response = router ? await router.handle(raw) : { type: 'response', id, ok: false, error: 'This hub connection is no longer available.' };
+        } catch (error) {
+          // One failed message must not end the worker and every thread on it.
+          console.error('[rpc] message failed', error);
+          response = typeof id === 'number' ? { type: 'response', id, ok: false, error: 'Something went wrong on this machine. Try again.' } : undefined;
+        }
         if (response && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(response));
       });
     });

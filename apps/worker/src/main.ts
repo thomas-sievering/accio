@@ -4,6 +4,14 @@ import { fileURLToPath } from 'node:url';
 import { accioHome, loadWorkerConfig } from './config/workerConfig.js';
 import { startApp } from './app.js';
 
+// A stray rejection is logged and contained, so it does not end every thread on
+// this machine. A synchronous uncaught exception leaves state unknown: log, then exit.
+process.on('unhandledRejection', (reason) => { console.error('accio unhandled rejection', reason); });
+process.on('uncaughtException', (error) => {
+  console.error('accio uncaught exception', error);
+  process.exit(1);
+});
+
 const home = accioHome();
 const config = await loadWorkerConfig(home);
 const builtWeb = join(dirname(fileURLToPath(import.meta.url)), '../../web/dist');

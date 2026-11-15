@@ -2,7 +2,7 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
-import { closeWhenOrphaned } from './fixtureLifetime.js';
+import { onShutdown } from './fixtureLifetime.js';
 import { startStandalone } from '../apps/sorting-hat/src/standalone.js';
 import { FakeCodex, fakeAnthropicApi, fakeAnthropicAuth } from '../apps/sorting-hat/src/testing/fakeProviders.js';
 
@@ -48,17 +48,9 @@ const hat = await startStandalone({
 console.log(`Sorting Hat fixture ready: ${hat.url}`);
 process.send?.({ type: 'ready' });
 
-let closing = false;
-const close = async () => {
-  if (closing) return;
-  closing = true;
+onShutdown('Sorting Hat', async () => {
   await hat.close();
   await anthropic.close();
   if (dirname(dir) !== resolve(tmpdir()) || !basename(dir).startsWith('sorting-hat-browser-')) throw new Error('Unexpected fixture folder');
   await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
-  process.exit();
-};
-process.on('SIGINT', () => { void close(); });
-process.on('SIGTERM', () => { void close(); });
-process.on('message', (message) => { if ((message as { type?: string })?.type === 'shutdown') void close(); });
-closeWhenOrphaned('Sorting Hat', () => void close());
+});

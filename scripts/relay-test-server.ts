@@ -13,7 +13,7 @@ import { startApp } from '../apps/worker/src/app.js';
 import { FakeHarness, replyWith, toolCall } from '../apps/worker/src/testing/fakeHarness.js';
 import { startTestSortingHat, TestClient } from '../apps/worker/src/testing/testApp.js';
 import { git } from '../apps/worker/src/git.js';
-import { closeWhenOrphaned } from './fixtureLifetime.js';
+import { onShutdown } from './fixtureLifetime.js';
 
 process.env.ACCIO_SECRET_KEY = Buffer.alloc(32, 9).toString('base64');
 const root = await mkdtemp(join(tmpdir(), 'accio-relay-'));
@@ -66,18 +66,10 @@ await mac.client.call('threads.start', { checkoutId: macOnlyCheckout.id, text: '
 
 console.log(`Relay fixture ready: http://127.0.0.1:${pc.app.port}/#token=${token}`);
 process.send?.({ type: 'ready' });
-let closing = false;
-const close = async () => {
-  if (closing) return;
-  closing = true;
+onShutdown('Relay', async () => {
   mac.client.close(); pc.client.close();
   await pc.app.close(); await mac.app.close(); await hub.close(); await hat.close();
   await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
-  process.exit();
-};
-process.on('message', message => { if ((message as { type?: string })?.type === 'shutdown') void close(); });
-process.on('SIGINT', () => void close());
-process.on('SIGTERM', () => void close());
+});
 /** Stops the MacBook only, to see its threads go offline on the PC. */
 process.stdin.on('data', (data) => { if (String(data).trim() === 'mac off') void mac.app.close().then(() => console.log('MacBook stopped')); });
-closeWhenOrphaned('Relay', () => void close());

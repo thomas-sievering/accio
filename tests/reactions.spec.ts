@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { newChatDraft } from './chat.js';
 
 const token = 'isolated-chat-test-token';
 const question = 'Should I keep the existing cache?';
@@ -23,9 +24,7 @@ async function select(page: Page, selector: string, text: string) {
 
 test('reacting to selected assistant text adds chips that reach the model and show in the message', async ({ page, baseURL }, testInfo) => {
   await page.goto(`${baseURL}/#token=${token}`);
-  await page.locator('.sidebar').getByRole('button', { name: 'New thread', exact: true }).click();
-  await page.getByRole('option', { name: 'No project', exact: true }).click();
-  if (await page.getByRole('combobox', { name: 'Search profiles' }).isVisible()) await page.getByRole('option', { name: 'Personal', exact: true }).click();
+  await newChatDraft(page);
   const textarea = page.locator('.composer textarea');
   await textarea.fill('Ask me about the cache');
   await textarea.press('Enter');

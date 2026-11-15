@@ -1,20 +1,11 @@
 import { expect, test } from '@playwright/test';
 import { readFile, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import { TestClient } from '../apps/worker/src/testing/testApp.js';
-
-const exec = promisify(execFile);
-const git = async (cwd: string, ...args: string[]) => (await exec('git', ['-C', cwd, ...args], { windowsHide: true })).stdout.trim();
+import { git } from '../apps/worker/src/git.js';
+import { chatClient, chatFixture, startProjectThread } from './chat.js';
 
 test('review-only PR stays visible until an external merge, then settles without a transcript receipt and can be reopened', async ({ page, baseURL }, info) => {
   test.setTimeout(60_000);
-  await page.goto(`${baseURL}/#token=isolated-chat-test-token`);
-  await page.getByRole('button', { name: 'New thread', exact: true }).first().click();
-  await page.getByRole('option', { name: /review-project/ }).click();
-  await page.locator('.composer textarea').fill('Build review fixture');
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await startProjectThread(page, baseURL!, /review-project/, 'Build review fixture');
   await expect(page.getByText('Review feature implemented.', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Shipping options', exact: true }).click();
   await page.getByRole('menuitemradio', { name: /Prepare for review/ }).click();
@@ -33,11 +24,11 @@ test('review-only PR stays visible until an external merge, then settles without
   await page.locator('.row.active').screenshot({ path: info.outputPath('waiting-sidebar.png') });
   await actions.screenshot({ path: info.outputPath('waiting-delivery.png') });
 
-  const client = await TestClient.open(`${baseURL!.replace('http:', 'ws:')}/ws?token=isolated-chat-test-token`);
+  const client = await chatClient(baseURL!);
   try {
     const thread = (await client.call('threads.list', {})).find(t => t.title === 'Build review fixture')!;
     expect(thread.delivery).toMatchObject({ mode: 'review', status: 'ready', pullRequest: { state: 'open', number: 123 } });
-    const metadata = JSON.parse(await readFile(resolve('out', `chat-test-${new URL(baseURL!).port}.json`), 'utf8'));
+    const metadata = await chatFixture(baseURL!);
     const host = JSON.parse(await readFile(metadata.reviewHostFile, 'utf8'));
     // External-host fixture: squash into the real disposable target and delete the source branch.
     // No thread state is set by the test; the machine observer must discover the outcome.
@@ -84,11 +75,7 @@ test('review-only PR stays visible until an external merge, then settles without
 });
 
 test('stopping review follow-ups retains PR tracking and prevents later failed checks from restarting the agent', async ({ page, baseURL }, info) => {
-  await page.goto(`${baseURL}/#token=isolated-chat-test-token`);
-  await page.getByRole('button', { name: 'New thread', exact: true }).first().click();
-  await page.getByRole('option', { name: /review-project/ }).click();
-  await page.locator('.composer textarea').fill('Build review fixture');
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await startProjectThread(page, baseURL!, /review-project/, 'Build review fixture');
   await expect(page.getByText('Review feature implemented.', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Shipping options', exact: true }).click();
   await page.getByRole('menuitemradio', { name: /Prepare for review/ }).click();
@@ -98,7 +85,7 @@ test('stopping review follow-ups retains PR tracking and prevents later failed c
   await actions.getByRole('button', { name: 'Stop automatic fixes', exact: true }).click();
   await expect(actions).toContainText('Automatic fixes stopped · still tracking #123');
   await expect(actions.getByRole('link', { name: /#123/ })).toBeVisible();
-  const metadata = JSON.parse(await readFile(resolve('out', `chat-test-${new URL(baseURL!).port}.json`), 'utf8'));
+  const metadata = await chatFixture(baseURL!);
   const host = JSON.parse(await readFile(metadata.reviewHostFile, 'utf8'));
   await writeFile(metadata.reviewHostFile, JSON.stringify({ ...host, checks: 'FAILURE' }));
   await actions.getByRole('button', { name: 'Check now', exact: true }).click();
@@ -107,7 +94,7 @@ test('stopping review follow-ups retains PR tracking and prevents later failed c
   await expect(actions).toContainText('Automatic fixes are stopped.');
   await expect(page.getByRole('button', { name: 'Stop', exact: true })).toHaveCount(0);
   await actions.screenshot({ path: info.outputPath('follow-ups-stopped.png') });
-  const client = await TestClient.open(`${baseURL!.replace('http:', 'ws:')}/ws?token=isolated-chat-test-token`);
+  const client = await chatClient(baseURL!);
   try {
     const current = (await client.call('threads.list', {})).find(t => t.workspace?.branch === host.branch)!;
     expect(current).toMatchObject({ status: 'idle', settledAt: null, delivery: { followUpsStoppedAt: expect.any(String), keepOpen: true, pullRequest: { number: 123 } } });
