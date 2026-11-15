@@ -26,6 +26,12 @@ Preconditions: healthy instance with at least two projects (add them as in [Proj
 
 The chat fixture's spec `tests/spaces.spec.ts` covers these with `pnpm verify:ui spaces.spec.ts`.
 
+## Thread context
+
+Each turn of a thread in a space gets a `# Space: <name>` section in its per-turn instructions (sub-agents too). It lists the other projects with their checkout and branch here, or `not on this machine yet`. With a home, a `## Home: <name>` part gives the home's checkout and its AGENTS.md as space-wide context, read again every turn and cut at 16 KB with the file's path. A thread in the home gets no copy of its own AGENTS.md; a home with no checkout here is reported as not on this machine yet.
+
+The UI doesn't show this text. Check it with the fake-harness suite `npx vitest run apps/worker/src/spaces/spaceContext.test.ts`, which asserts on what each harness run received. In a real app, ask a thread in the space what its Space section says.
+
 ## Gotchas
 
 - `Cancel` on the editor leaves at once; only the sidebar, breadcrumb, Back and Escape ask `Discard changes?`.
