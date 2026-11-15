@@ -8,6 +8,7 @@ import type { ResourceManager } from '../resources/resources.js';
 import { observedSkillLoads } from '../resources/workspaceSkills.js';
 import { UserError } from '../rpc/router.js';
 import type { SecretRequests } from '../secrets/secrets.js';
+import type { SpaceContext } from '../spaces/spaceContext.js';
 import { now } from '../time.js';
 import type { AccioTools } from '../tools/tools.js';
 import { isChoiceTool, parseChoice, pickPrompt } from './choice.js';
@@ -44,6 +45,8 @@ export type TurnDeps = {
   deliveries: Deliveries;
   tools?: AccioTools;
   resources: () => ResourceManager | undefined;
+  /** GLOSSARY: Space. Read as each turn starts, so a change applies from the next turn. */
+  spaceContext: () => SpaceContext | undefined;
   /** GLOSSARY: Built-in tools. Read as each turn starts, so a change applies from the next turn. */
   toolsOff: (harnessId: string) => BuiltinTool[];
   onRepairFinished: (toolId: string) => void;
@@ -201,6 +204,8 @@ export class Turns {
       // GLOSSARY: GitHub account. The agent's gh commands act as the profile's account, like Accio's own reads.
       const env = { ...turnEnv(state.home, thread.profileId, thread.model.harnessId, access), ...await deps.machines.github.env(thread.profileId, cwd).catch(() => ({})) };
       resources = await deps.resources()?.prepare(thread.profileId, thread.projectId, env, { repair: !!thread.repairToolId, cwd });
+      const project = deps.projects.state().projects.find((p) => p.id === thread.projectId);
+      const space = project && await deps.spaceContext()?.section({ project, cwd });
       if (controller.signal.aborted || state.closing) throw new UserError('Turn interrupted before starting');
       if (!delivering) {
         if (!options.resume && !options.retry) thread = { ...thread, workVersion: (thread.workVersion ?? 0) + 1 };
@@ -220,7 +225,7 @@ export class Turns {
       const grant = deps.tools?.grant(thread.id);
       const turnResources = resources;
       this.liveInputs.set(thread.id, { turnId });
-      const instructions = [resources?.instructions, goalInstructions(next.goal)].filter(Boolean).join('\n\n') || undefined;
+      const instructions = [resources?.instructions, space, goalInstructions(next.goal)].filter(Boolean).join('\n\n') || undefined;
       const turn = this.run(next, turnId, { cwd, prompt, ...(files.length ? { images: files } : {}), env: resources?.env ?? env, signal: controller.signal, ...(grant ? { tools: grant.access } : {}), resourceInstructions: instructions, mcps: resources?.mcps }, delivering, resources?.skills).finally(() => { turnResources?.release(); grant?.revoke(); });
       resources = undefined;
       this.turns.add(turn);
