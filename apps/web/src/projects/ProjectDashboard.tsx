@@ -65,7 +65,7 @@ export function ProjectDashboard({ project, onClose }: { project: ProjectView; o
           </div>
         </div>
         {readingIssue && issues.checkoutId && issues.list && (
-          <IssueReader checkoutId={issues.checkoutId} list={issues.list} issue={readingIssue} narrow={narrow} onOpen={setReading} onClose={closeReader} />
+          <IssueReader projectId={project.id} checkoutId={issues.checkoutId} list={issues.list} issue={readingIssue} narrow={narrow} onOpen={setReading} onClose={closeReader} />
         )}
       </div>
     </>

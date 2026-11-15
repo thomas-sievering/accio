@@ -1,12 +1,13 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import Markdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { IssueList, IssueView } from '@accio/protocol';
+import { issueMessage, type IssueList, type IssueView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { Close } from '../app/icons';
 import { Sheet } from '../app/Sheet';
 import { useEscapeClose } from '../app/useEscapeClose';
 import { issueState } from '../threads/offerRows';
+import { useThreads } from '../threads/threads';
 import { ISSUE_STATE_LABEL, issueLinks } from './issueGraph';
 
 /**
@@ -14,8 +15,8 @@ import { ISSUE_STATE_LABEL, issueLinks } from './issueGraph';
  * triage label, Blocked by and Blocks (which move the reader), body and GitHub link.
  * A panel beside the dashboard in wide windows, a sheet over it in narrow ones.
  */
-export function IssueReader({ checkoutId, list, issue, narrow, onOpen, onClose }: {
-  checkoutId: string; list: IssueList; issue: IssueView; narrow: boolean;
+export function IssueReader({ projectId, checkoutId, list, issue, narrow, onOpen, onClose }: {
+  projectId: string; checkoutId: string; list: IssueList; issue: IssueView; narrow: boolean;
   onOpen: (ref: string) => void; onClose: () => void;
 }) {
   const panel = useRef<HTMLElement>(null);
@@ -31,21 +32,21 @@ export function IssueReader({ checkoutId, list, issue, narrow, onOpen, onClose }
     return (
       <Sheet title={`${issue.label} ${issue.title}`} onClose={onClose}>
         <div className="sheet-body issue-reader issue-reader-sheet">
-          <IssueDetails checkoutId={checkoutId} list={list} issue={issue} onOpen={onOpen} titled={false} />
+          <IssueDetails projectId={projectId} checkoutId={checkoutId} list={list} issue={issue} onOpen={onOpen} titled={false} />
         </div>
       </Sheet>
     );
   }
   return (
     <aside ref={panel} className="issue-reader issue-reader-panel" aria-label="Issue">
-      <IssueDetails checkoutId={checkoutId} list={list} issue={issue} onOpen={open} titled
+      <IssueDetails projectId={projectId} checkoutId={checkoutId} list={list} issue={issue} onOpen={open} titled
         close={<button type="button" className="side-icon issue-reader-close" title="Close (Esc)" aria-label="Close issue" onClick={onClose}><Close /></button>} />
     </aside>
   );
 }
 
-function IssueDetails({ checkoutId, list, issue, onOpen, titled, close }: {
-  checkoutId: string; list: IssueList; issue: IssueView; onOpen: (ref: string) => void; titled: boolean; close?: ReactNode;
+function IssueDetails({ projectId, checkoutId, list, issue, onOpen, titled, close }: {
+  projectId: string; checkoutId: string; list: IssueList; issue: IssueView; onOpen: (ref: string) => void; titled: boolean; close?: ReactNode;
 }) {
   const state = issueState(issue);
   const links = issueLinks(list, issue.ref);
@@ -67,11 +68,47 @@ function IssueDetails({ checkoutId, list, issue, onOpen, titled, close }: {
       </dl>
       <IssueBody key={issue.ref} checkoutId={checkoutId} issueRef={issue.ref} />
       <div className="issue-reader-actions">
-        {/* #209: Start a thread (ready issues) and Open thread (claimed ones) go first here. */}
+        <IssueThread key={issue.ref} projectId={projectId} checkoutId={checkoutId} issue={issue} />
         {issue.url && <a className="issue-reader-action" href={issue.url} target="_blank" rel="noopener noreferrer">View on GitHub ↗</a>}
       </div>
     </>
   );
+}
+
+/**
+ * GLOSSARY: Issue. Open thread when an open thread in the project works on the issue (a
+ * local claim lives in that thread's worktree, so the list may still say Ready); otherwise
+ * Start a thread, through the issue picker's start-and-claim path, while the issue is ready.
+ */
+function IssueThread({ projectId, checkoutId, issue }: { projectId: string; checkoutId: string; issue: IssueView }) {
+  const client = useClient();
+  const { threads, select } = useThreads();
+  const [starting, setStarting] = useState(false);
+  const [error, setError] = useState<string>();
+  const working = useMemo(() => (threads ?? [])
+    .filter((t) => t.issue === issue.ref && t.projectId === projectId && !t.settledAt)
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0], [threads, issue.ref, projectId]);
+  if (working) {
+    return <button type="button" className="issue-reader-action primary" title={working.title} onClick={() => select(working.id)}>Open thread</button>;
+  }
+  const state = issueState(issue);
+  const start = async () => {
+    setStarting(true);
+    setError(undefined);
+    try {
+      const thread = await client.call('threads.start', { checkoutId, text: issueMessage(issue, ''), issue: { ref: issue.ref, title: issue.title } });
+      select(thread.id);
+    } catch (err) {
+      setError((err as Error).message);
+      setStarting(false);
+    }
+  };
+  return <>
+    <button type="button" className="issue-reader-action primary" disabled={state !== 'ready' || starting}
+      title={state === 'blocked' ? `Waits on ${issue.blockedBy.join(', ')}` : state === 'claimed' ? 'Already claimed' : `Start a thread on ${issue.label}, claiming it`}
+      onClick={() => void start()}>{starting ? 'Starting…' : 'Start a thread'}</button>
+    {error && <p className="issue-reader-note error" role="alert">{error}</p>}
+  </>;
 }
 
 function IssueLink({ issue, onOpen }: { issue: IssueView; onOpen: (ref: string) => void }) {

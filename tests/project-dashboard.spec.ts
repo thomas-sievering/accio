@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { git } from '../apps/worker/src/git.js';
@@ -194,6 +194,80 @@ test('clicking an issue opens it in a reader whose Blocked by and Blocks links m
   await sheet.getByRole('button', { name: 'Close' }).click();
   await expect(sheet).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'scratch-project' })).toBeVisible();
+});
+
+test('the reader starts a thread on a ready issue, claimed like the picker, and opens the thread of a claimed one', async ({ page, baseURL }, info) => {
+  test.setTimeout(90_000);
+  const { deliveryFolder } = await chatFixture(baseURL!);
+  const home = dirname(deliveryFolder);
+  // Its own local tracker, so the threads started here leave the shared fixture's issues alone.
+  const folder = join(home, 'start-issue-project');
+  const ready = '.scratch/onboarding/issues/01-welcome.md';
+  const claimed = '.scratch/onboarding/issues/03-tour.md';
+  await initRepoWithOrigin(folder, join(home, 'start-issue-origin.git'), {
+    [ready]: '# Show a welcome card on first run\n\nStatus: ready-for-agent\n\nA card greets new users.\n',
+    '.scratch/onboarding/issues/02-dismiss.md': '# Remember a dismissed welcome card\n\nBlocked by: 01\n\nThe card stays dismissed.\n',
+    [claimed]: '# Offer a short tour\n\nStatus: claimed\n\nThree steps through the app.\n',
+  }, { author: BROWSER_AUTHOR, message: 'Track the onboarding issues' });
+  const client = await chatClient(baseURL!);
+  const checkout = await client.call('checkouts.add', { path: folder, profileId: 'personal' });
+  try {
+    // Fixture: a thread already works on 03, as one started from the picker would.
+    const touring = await client.call('threads.start', { checkoutId: checkout.id, text: `Work on ${claimed}: Offer a short tour`, issue: { ref: claimed, title: 'Offer a short tour' } });
+    await expect.poll(async () => (await client.call('threads.list', {})).find((t) => t.id === touring.id)?.status, { timeout: 20_000 }).toBe('idle');
+
+    await page.setViewportSize({ width: 1400, height: 800 });
+    await startProjectThread(page, baseURL!, /start-issue-project/, 'Plan the onboarding');
+    await openDashboard(page, 'Plan the onboarding', 'start-issue-project');
+    const fold = page.locator('.dashboard-fold').filter({ has: page.locator('summary', { hasText: 'Issues' }) });
+    await fold.locator('summary').click();
+    const rows = fold.getByRole('list', { name: 'Open issues' }).locator('.issues-row');
+    await expect(rows.locator('.issues-label')).toHaveText(['01', '02', '03']);
+    const reader = page.getByRole('complementary', { name: 'Issue' });
+    const start = reader.getByRole('button', { name: 'Start a thread', exact: true });
+
+    // A blocked issue can't be started.
+    await rows.filter({ hasText: 'Remember a dismissed' }).getByRole('button').click();
+    await expect(reader.locator('.issue-pill')).toHaveText('Blocked');
+    await expect(start).toBeDisabled();
+
+    // A claimed issue whose thread Accio knows opens it.
+    await rows.filter({ hasText: 'Offer a short tour' }).getByRole('button').click();
+    await expect(reader.locator('.issue-pill')).toHaveText('Claimed');
+    await expect(start).toHaveCount(0);
+    await reader.getByRole('button', { name: 'Open thread', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'start-issue-project' })).toHaveCount(0);
+    await expect(page.locator('.msg.user', { hasText: `Work on ${claimed}` })).toBeVisible();
+
+    // A ready issue starts a thread named from it and claimed in its worktree, as the picker does.
+    // A started thread is already open, so its header opens the dashboard straight away.
+    await page.locator('.thread-project-link', { hasText: 'start-issue-project' }).click();
+    await page.getByRole('menuitem', { name: 'Dashboard', exact: true }).click();
+    await fold.locator('summary').click();
+    await rows.filter({ hasText: 'Show a welcome card' }).getByRole('button').click();
+    await expect(reader.locator('.issue-pill')).toHaveText('Ready');
+    await page.screenshot({ path: info.outputPath('issue-reader-start.png') });
+    await start.click();
+    const text = `Work on ${ready}: Show a welcome card on first run`;
+    await expect(page.locator('.msg.user', { hasText: text })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'start-issue-project' })).toHaveCount(0);
+    let started: typeof touring | undefined;
+    await expect.poll(async () => (started = (await client.call('threads.list', {})).find((t) => t.issue === ready))?.workspace?.path, { timeout: 20_000 }).toBeTruthy();
+    expect(started!.title).toBe('Show a welcome card on first run');
+    await expect.poll(() => readFile(join(started!.workspace!.path, ready), 'utf8')).toContain('Status: claimed');
+
+    // The checkout's file still says ready; the reader now opens the thread instead of starting another.
+    await page.locator('.thread-project-link', { hasText: 'start-issue-project' }).click();
+    await page.getByRole('menuitem', { name: 'Dashboard', exact: true }).click();
+    await fold.locator('summary').click();
+    await rows.filter({ hasText: 'Show a welcome card' }).getByRole('button').click();
+    await expect(reader.getByRole('button', { name: 'Open thread', exact: true })).toBeVisible();
+    await expect(start).toHaveCount(0);
+    await page.screenshot({ path: info.outputPath('issue-reader-open-thread.png') });
+  } finally {
+    await client.call('checkouts.remove', { id: checkout.id, deleteThreads: true }).catch(() => {});
+    client.close();
+  }
 });
 
 test('a GitHub issue’s reader shows the body read through gh and links to GitHub', async ({ page, baseURL }) => {
