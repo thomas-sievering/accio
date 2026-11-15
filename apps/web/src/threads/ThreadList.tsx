@@ -5,12 +5,14 @@ import { DraftRow, draftTitle } from './DraftRow';
 import { useNewThreadDrafts } from './drafts';
 import { ThreadMenuProvider } from './ThreadMenu';
 import { ThreadRow } from './ThreadRow';
-import { ThreadShelves } from './ThreadShelves';
+import { ThreadShelves, useShelfView, visibleShelfRows } from './ThreadShelves';
+import { RowList, SlidingRow, SlidingRows } from './SlidingRows';
 import { useThreads } from './threads';
 
 /** The sidebar body, as in T3 Code: threads that came back to you in one list (not grouped by project), then the shelves. Right-click a thread for its menu. */
 export function ThreadList() {
   const { threads, shelves, query, projectScope, loadError, retryLoad } = useThreads();
+  const shelfView = useShelfView();
   const { visible, state } = useProjects();
   const { filter } = useProfiles();
   const client = useClient();
@@ -39,13 +41,16 @@ export function ThreadList() {
         </div>
       )}
       {!loadError && empty && <p className="side-empty">{empty}</p>}
-      <div className="rows">
-        {drafts.map((d) => <DraftRow key={d.key} draft={d} />)}
-        {shelves.open.map((t) => (
-          <ThreadRow key={t.id} thread={t} place="open" />
-        ))}
-      </div>
-      <ThreadShelves />
+      <SlidingRows filters={`${query.trim()}|${projectScope}|${filter}`} ready={!!threads}
+        visible={[...drafts.map((d) => [d.key, 'inbox'] as [string, string]), ...shelves.open.map((t) => [t.id, 'inbox'] as [string, string]), ...visibleShelfRows(shelves, shelfView)]}>
+        <RowList name="inbox">
+          {drafts.map((d) => <SlidingRow key={d.key} id={d.key}><DraftRow draft={d} /></SlidingRow>)}
+          {shelves.open.map((t) => (
+            <SlidingRow key={t.id} id={t.id}><ThreadRow thread={t} place="open" /></SlidingRow>
+          ))}
+        </RowList>
+        <ThreadShelves view={shelfView} />
+      </SlidingRows>
     </ThreadMenuProvider>
   );
 }

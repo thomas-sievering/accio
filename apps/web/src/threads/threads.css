@@ -1,6 +1,8 @@
 
 /* Flat thread rows: identity, title, then quiet activity marks. */
 .rows {
+  /* Rows leaving a list step out of the flow at their place while they fade (SlidingRows.tsx). */
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -318,8 +320,9 @@
 .shelf + .shelf {
   margin-top: 6px;
 }
-/* A shelf that appears (a first thread starting work) opens into place rather than popping in. */
-.shelf {
+/* A shelf that a status change creates (a first thread starting work) opens into place rather
+   than popping in. One that a search or scope brings back is simply there (ThreadShelves.tsx). */
+.shelf.arriving {
   interpolate-size: allow-keywords;
   animation: shelf-in 320ms var(--ease-settle);
 }
@@ -328,7 +331,7 @@
   to { overflow: clip; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .shelf { animation: none; }
+  .shelf.arriving { animation: none; }
 }
 .shelf-head {
   display: flex;
@@ -1117,4 +1120,13 @@ div.model-picker-empty b { color: var(--ink); font-weight: 500; }
   justify-content: center;
   gap: 8px;
   margin-block: 12px 6px;
+}
+
+/* A row crossing from one list to another (a finished turn leaving Working) passes over the rows
+   between; it rides above them on the sidebar's own colour, so their titles never show through. */
+.row-slot[data-travelling] {
+  position: relative;
+  z-index: 1;
+  border-radius: 8px;
+  background: var(--side);
 }
