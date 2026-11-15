@@ -11,7 +11,6 @@ import { registerHarnesses } from '../harnesses/harnesses.js';
 import { finishGoalTool } from '../goals/goal.js';
 import { deliveryStepTool } from '../threads/deliveryStep.js';
 import { shippedNoteTool } from '../threads/shippedNote.js';
-import { projectSettingsTool } from '../projects/projectSettings.js';
 import { readThreadTool } from '../threads/handoff.js';
 import { readMentionedThread } from '../threads/threadMentions.js';
 import { startThreadTool } from '../threads/startThread.js';
@@ -20,7 +19,7 @@ import { Spaces } from '../spaces/spaces.js';
 import { SpaceContext } from '../spaces/spaceContext.js';
 import { SiblingThreads } from '../spaces/siblingThreads.js';
 import { MissingCheckouts } from '../spaces/missingCheckouts.js';
-import { ProjectApps } from '../projects/projectApps.js';
+import { registerProjectChangelog } from '../projects/projectChangelog.js';
 import { Threads } from '../threads/threads.js';
 import type { Harness } from '../threads/harness.js';
 import { AccioTools } from '../tools/tools.js';
@@ -108,12 +107,11 @@ export class HubConnections {
     const models = new Models(profiles, settings, this.here.id, claudeModels);
     profiles.register(router); machines.register(router); models.register(router, broadcast);
     const projects = refs.projects = new Projects(record.home, profiles, machines, broadcast); await projects.load(); projects.register(router);
-    const projectApps = new ProjectApps(record.home, projects, broadcast); projectApps.register(router);
+    registerProjectChangelog(router, projects);
     const spaces = new Spaces(settings, broadcast); spaces.register(router);
     const tools = new AccioTools([offerChoice, finishGoalTool((id, outcome, summary) => threads.finishGoal(id, outcome, summary), (id) => threads.goalActive(id)),
       deliveryStepTool((id, step, note) => threads.reportDeliveryStep(id, step, note), (id) => threads.deliveryRunning(id)),
       shippedNoteTool((id, note) => threads.recordShippedNote(id, note), (id) => threads.deliveryRunning(id)),
-      projectSettingsTool((id, app) => threads.saveProjectSettings(id, app), (id) => threads.projectSetupRunning(id)),
       readThreadTool((id, handle, offset, limit) => handle
         ? readMentionedThread({ threads: () => relay.merged(), transcript: async (threadId) => {
           const response = await router.handle({ id: 0, method: 'threads.transcript', params: { threadId } });
@@ -181,8 +179,8 @@ export class HubConnections {
       if (initialized && !this.closing) void threads.continueAfterRestart().catch(error => console.error('[threads] startup recovery failed', error));
     };
     workspace = { client, router, relay, profiles, machines, models, projects, spaces, threads, tools, resources, secrets, home: record.home,
-      initialize: origin => { if (!initialized) relay.start(record.url, record.token); if (!initialized) void projectApps.load().catch(error => console.error('[project apps] startup failed', error)); tools.listen(record.id === this.defaultId ? origin : `${origin}/hubs/${record.id}`); initialized = true; continueAfterRestart(); if (client.status === 'connected') reconciliation = resources.reconcile().catch(error => console.error('[resources] startup check failed', error)); },
-      close: async () => { stopUpdates?.(); await relay.close(); await projectApps.close(); await threads.close(); await secrets.close(); await resources.close(); await reconciliation; await profiles.close(); await projects.close(); await client.close(); } };
+      initialize: origin => { if (!initialized) relay.start(record.url, record.token); tools.listen(record.id === this.defaultId ? origin : `${origin}/hubs/${record.id}`); initialized = true; continueAfterRestart(); if (client.status === 'connected') reconciliation = resources.reconcile().catch(error => console.error('[resources] startup check failed', error)); },
+      close: async () => { stopUpdates?.(); await relay.close(); await threads.close(); await secrets.close(); await resources.close(); await reconciliation; await profiles.close(); await projects.close(); await client.close(); } };
     this.workspaces.set(record.id, workspace);
     client.onChanged(() => { this.announce(); broadcast('resources.changed', resources.state()); relay.announce(); continueAfterRestart(); });
     if (client.status === 'connected') { await profiles.load(); await profiles.syncReferences(); }

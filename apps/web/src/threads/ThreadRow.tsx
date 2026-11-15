@@ -67,8 +67,11 @@ export function ThreadRow({ thread: t, place, withinProject = false }: { thread:
   const delivery = status.delivery;
   // Shelved rows say nothing of an idle turn; a delivery outcome stays visible.
   const showState = status.showLabel && (open || !!delivery);
-  // Inside one project's dashboard the project goes without saying: no mark, no name.
-  const oneLine = withinProject && !showState;
+  // Inside one project's dashboard the project goes without saying, and the group heading says
+  // Ready: one line, with a quiet state tag only when it adds something, such as Shipping · #201.
+  const oneLine = withinProject;
+  const plainReady = status.tone === 'ready' && !delivery;
+  const inlineState = withinProject && showState && !plainReady;
   const className = `row open${t.id === selectedId ? ' active' : ''}${place === 'settled' ? ' settled' : ''}${withinProject ? ' within-project' : ''}${oneLine ? ' one-line' : ''}${t.machine && !t.machine.online ? ' offline' : ''}`;
   const Main = renaming ? 'div' : 'button';
   return (
@@ -91,8 +94,11 @@ export function ThreadRow({ thread: t, place, withinProject = false }: { thread:
           </span>}
         </span>
         <span className="row-status">
+          {inlineState && <span className={`row-inline-state tone-${status.tone}`}>
+            {delivery ? shortStatus(status.label) : status.label}{delivery?.pullRequest && ` · #${delivery.pullRequest.number}`}
+          </span>}
           <span className="row-meta">{untilOnline && place === 'snoozed' ? 'offline' : meta(t, place, now)}</span>
-          {open && <span className={`row-mark tone-${status.tone}`} role="img" aria-label={statusLine}>
+          {open && !(withinProject && plainReady) && <span className={`row-mark tone-${status.tone}`} role="img" aria-label={statusLine}>
             <StatusGlyphIcon glyph={status.glyph} tone={status.tone} />
           </span>}
         </span>

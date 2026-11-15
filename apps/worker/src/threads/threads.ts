@@ -40,7 +40,6 @@ import type { DeliveryHosting } from './delivery.js';
 import { Deliveries } from './deliveries.js';
 import { reportDeliveryStep } from './deliveryStep.js';
 import { recordShippedNote } from './shippedNote.js';
-import { projectSetupPrompt } from '../projects/projectSettings.js';
 import { Changelog, changelogEntry } from './changelog.js';
 import { Previews } from './previews.js';
 import { ThreadState } from './state.js';
@@ -273,7 +272,6 @@ export class Threads {
     router
       .on('threads.list', () => state.views())
       .on('threads.start', input => this.start(input))
-      .on('threads.setUpProject', ({ projectId }) => this.setUpProject(projectId))
       .on('threads.issues', ({ checkoutId }) => {
         const checkout = this.projects.checkout(checkoutId);
         return this.issues.list(this.projects.projectOf(checkout).profileId, checkout.path);
@@ -429,30 +427,7 @@ export class Threads {
       });
   }
 
-  /** GLOSSARY: Project setup thread. Starts in the project's checkout on this machine. */
-  setUpProject(projectId: string) {
-    const { projects, checkouts } = this.projects.state();
-    const project = projects.find((p) => p.id === projectId);
-    if (!project) throw new UserError('No such project');
-    const checkout = checkouts.find((c) => c.projectId === projectId);
-    if (!checkout) throw new UserError('Add a checkout of this project on this machine first.');
-    return this.start({ checkoutId: checkout.id, text: projectSetupPrompt(project.name) }, { projectSetup: true });
-  }
-
-  /** The project_settings accio tool: only a Project setup thread's running turn may save. */
-  projectSetupRunning(threadId: string) {
-    const thread = this.state.get(threadId);
-    return !!thread?.projectSetup && !!thread.projectId && thread.status === 'running';
-  }
-
-  async saveProjectSettings(threadId: string, app: { startCommand: string; setupCommand: string }) {
-    const thread = this.state.require(threadId);
-    if (!thread.projectSetup || !thread.projectId) throw new UserError('Only a project setup thread can change project settings.');
-    const project = await this.projects.setApp(thread.projectId, app);
-    return `Saved to ${project.name}'s settings. The dashboard now offers Start.`;
-  }
-
-  start(input: ParamsOf<'threads.start'>, options: { repairToolId?: string; projectSetup?: boolean } = {}) {
+  start(input: ParamsOf<'threads.start'>, options: { repairToolId?: string } = {}) {
     const { state } = this;
     return state.track(async () => {
       const { text, model, machineId, images: uploads = [] } = input;
@@ -488,7 +463,6 @@ export class Threads {
         const issue = checkout ? input.issue?.ref ?? issueNamedIn(text) : undefined;
         if (issue) thread.issue = issue;
         if (checkout && input.issue?.title) thread.title = titleFrom(input.issue.ref.startsWith('#') ? `${input.issue.ref} ${input.issue.title}` : input.issue.title);
-        if (options.projectSetup && project) Object.assign(thread, { projectSetup: true, title: `Set up ${project.name} app`, titleManual: true });
         if (input.startedBy) thread.startedBy = input.startedBy;
         if (options.repairToolId) { thread.repairToolId = options.repairToolId; thread.title = `Repair ${this.resources?.state().tools.find(tool => tool.id === options.repairToolId)?.name ?? options.repairToolId}`; }
         if (checkout) thread.workspace = await this.deliveries.git.allocate(thread.id, checkout.path);

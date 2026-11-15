@@ -1,54 +1,12 @@
-/* Project dashboard: the project app's controls and logs, threads by state, recently shipped, settled. */
+/* Project dashboard: threads by state, recently shipped, then Changelog and Settled folded. One quiet line per item. */
 .dashboard-page {
   display: flex;
   flex-direction: column;
-  gap: 24px;
-  width: min(760px, calc(100% - 32px));
+  gap: 32px;
+  width: min(720px, calc(100% - 32px));
   margin: 0 auto;
-  padding: 24px 0 64px;
+  padding: 32px 0 64px;
 }
-.app-card {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 14px 16px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--panel);
-}
-.app-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-.app-row .ghost {
-  height: 30px;
-  padding: 0 10px;
-}
-.app-dot {
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--line-2);
-}
-.app-dot.running { background: var(--green); }
-.app-dot:is(.starting, .updating, .stopping) { background: var(--blue); animation: app-pulse 1.2s ease-in-out infinite; }
-.app-dot:is(.failed, .exited) { background: var(--red); }
-@keyframes app-pulse { 50% { opacity: 0.35; } }
-.app-status { color: var(--ink-strong); font-weight: 600; white-space: nowrap; }
-.app-commit {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.app-card code, .changelog code { color: var(--muted); font-size: 12px; }
-.app-note { margin: 0; color: var(--muted); font-size: 12.5px; }
-.app-note.warn { color: var(--amber); }
-.app-note.error { color: var(--red); }
-.app-auto { color: var(--muted); font-size: 12.5px; cursor: pointer; }
 .dashboard-section {
   display: flex;
   flex-direction: column;
@@ -57,17 +15,18 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  margin: 0 0 6px;
-  color: var(--dim);
+  margin: 0 0 4px;
+  padding: 0 10px;
+  color: var(--muted);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
 }
 .dashboard-count {
   color: var(--faint, var(--dim));
   font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
-.dashboard-empty { margin: 0; color: var(--dim); }
+.dashboard-empty { margin: 0; padding: 0 10px; color: var(--dim); font-size: 13px; }
 /* Settled: folded by default, opened by its heading. */
 .dashboard-fold > summary {
   width: fit-content;
@@ -97,15 +56,15 @@
   padding: 0;
   list-style: none;
 }
-.changelog li + li { border-top: 1px solid var(--line); }
 .changelog-commit {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
+  align-items: center;
+  gap: 12px;
   width: 100%;
-  padding: 8px 10px;
+  height: 34px;
+  padding: 0 10px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 8px;
   background: none;
   color: var(--ink);
   font: inherit;
@@ -114,58 +73,21 @@
 }
 button.changelog-commit { cursor: pointer; }
 button.changelog-commit:hover { background: var(--hover, var(--active)); }
-.changelog-text {
-  display: flex;
+.changelog-subject {
   flex: 1;
-  flex-direction: column;
-  gap: 2px;
   min-width: 0;
-}
-.changelog-subject, .changelog-note {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.changelog-note { color: var(--muted); font-size: 12px; }
-.changelog-commit .dim { flex: none; font-size: 12px; }
-.changelog-running { flex: none; color: var(--green); font-size: 12px; }
-.app-logs {
-  max-height: 60vh;
-  margin: 0;
-  padding: 12px;
-  overflow: auto;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--code);
-  color: var(--ink);
-  font-size: 12px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-.app-hint {
-  min-width: 0;
-  overflow: hidden;
-  font-size: 12.5px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-/* One fixed slot so the times line up whether or not a commit expands. */
-.changelog-chevron {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 12px;
-  align-self: center;
-  color: var(--dim);
-}
-.changelog-chevron svg { width: 12px; height: 12px; transition: transform 120ms ease; }
-.changelog li.expanded .changelog-chevron svg { transform: rotate(180deg); }
+.changelog-when { flex: none; color: var(--dim); font-size: 12px; font-variant-numeric: tabular-nums; }
+.changelog-note { margin: 0; color: var(--muted); }
+.changelog li.expanded > .changelog-commit { background: var(--hover, var(--active)); }
 .changelog-detail {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 2px 10px 10px 72px;
+  padding: 8px 10px 12px;
   font-size: 12.5px;
 }
 .changelog-actions {
@@ -181,3 +103,16 @@ button.changelog-commit:hover { background: var(--hover, var(--active)); }
   font-size: 12px;
   text-decoration: none;
 }
+/* Thread rows here are one line like the commits below them, with the state as a quiet tag. */
+.dashboard-rows .row.within-project { height: 34px; }
+.dashboard-rows .row.within-project .row-main { padding-inline: 10px; }
+.dashboard-rows .row.within-project .row-status { position: static; }
+.row-inline-state {
+  max-width: 220px;
+  overflow: hidden;
+  color: var(--dim);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.row-inline-state.tone-working { color: var(--dim); }

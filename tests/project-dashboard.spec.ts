@@ -6,19 +6,23 @@ import { git } from '../apps/worker/src/git.js';
 import { BROWSER_AUTHOR, initRepoWithOrigin } from '../apps/worker/src/testing/gitRepo.js';
 import { chatClient, chatFixture, startProjectThread } from './chat.js';
 
-const server = (version: string) => `require('http').createServer((q,s)=>s.end('${version}')).listen(Number(process.env.PORT),'127.0.0.1');\n`;
-
-test('the project dashboard starts the app from main, follows new commits, and lists threads, commits and logs', async ({ page, baseURL }, info) => {
-  test.setTimeout(90_000);
+test('the project dashboard lists the project’s threads by state and what recently shipped to main', async ({ page, baseURL }, info) => {
+  test.setTimeout(60_000);
   const { deliveryFolder } = await chatFixture(baseURL!);
   const home = dirname(deliveryFolder);
   const folder = join(home, 'dashboard-project');
   const origin = join(home, 'dashboard-origin.git');
-  await initRepoWithOrigin(folder, origin, { 'server.cjs': server('dashboard v1') }, { author: BROWSER_AUTHOR, message: 'Serve v1' });
+  await initRepoWithOrigin(folder, origin, { 'README.md': 'v1\n' }, { author: BROWSER_AUTHOR, message: 'Start the project' });
+  // A GitHub merge commit, which the dashboard shows by its pull request title.
+  await git(folder, 'checkout', '--quiet', '-b', 'feature');
+  await writeFile(join(folder, 'README.md'), 'v2\n');
+  await git(folder, 'commit', '--quiet', '-am', 'Change the readme');
+  await git(folder, 'checkout', '--quiet', '-');
+  await git(folder, 'merge', '--quiet', '--no-ff', 'feature', '-m', 'Merge pull request #12 from owner/feature', '-m', 'Explain the project in the readme');
+  await git(folder, 'push', '--quiet');
   const client = await chatClient(baseURL!);
   // Fixture: the folder is added like any project; everything under test goes through the UI.
   const checkout = await client.call('checkouts.add', { path: folder, profileId: 'personal' });
-  const app = async () => (await client.call('projectApps.get', {})).find((a) => a.projectId === checkout.projectId);
   try {
     await startProjectThread(page, baseURL!, /dashboard-project/, 'Delivery follow-up');
     await expect(page.getByText('Fresh workspace ready.', { exact: true })).toBeVisible();
@@ -28,43 +32,14 @@ test('the project dashboard starts the app from main, follows new commits, and l
     await page.getByRole('menuitem', { name: 'Dashboard', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'dashboard-project' })).toBeVisible();
     await expect(page.locator('.dashboard-rows .row-title', { hasText: 'Delivery follow-up' })).toBeVisible();
+    // The Needs you heading already says Ready; the row does not repeat it.
+    await expect(page.locator('.dashboard-rows .row', { hasText: 'Delivery follow-up' })).not.toContainText('Ready');
 
-    // No start command yet: an agent can set it up, or you enter it in the project's settings.
-    await expect(page.getByRole('button', { name: 'Set up with agent' })).toBeVisible();
-    await page.getByRole('button', { name: 'Enter manually' }).click();
-    await page.getByRole('textbox', { name: 'Start command' }).fill('node server.cjs');
-    await page.getByRole('textbox', { name: 'Setup command' }).fill('node -e "require(\'fs\').writeFileSync(\'setup-ran.txt\', \'yes\')"');
-    await page.getByRole('button', { name: 'Save', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'dashboard-project' })).toBeVisible();
-
-    await page.getByRole('button', { name: 'Start', exact: true }).click();
-    await expect(page.locator('.app-status')).toHaveText('Running', { timeout: 20_000 });
-    await expect(page.getByRole('button', { name: 'Open app' })).toBeVisible();
-    await expect(page.locator('.app-commit')).toContainText('Serve v1');
-    const first = await app();
-    expect(await (await fetch(first!.url!)).text()).toBe('dashboard v1');
-
-    // A new commit on main updates and restarts the app by itself.
-    await writeFile(join(folder, 'server.cjs'), server('dashboard v2'));
-    await git(folder, 'commit', '--quiet', '-am', 'Serve v2');
-    await git(folder, 'push', '--quiet');
-    await expect(page.locator('.app-commit')).toContainText('Serve v2', { timeout: 30_000 });
-    await expect(page.locator('.app-status')).toHaveText('Running', { timeout: 20_000 });
-    await expect.poll(async () => { const a = await app(); return a?.url ? (await fetch(a.url).then((r) => r.text(), () => '')) : ''; }, { timeout: 20_000 }).toBe('dashboard v2');
-    // The thread's own checkout is untouched; the app runs from a checkout of its own.
-    expect(await git(folder, 'status', '--porcelain')).toBe('');
-
-    // Recently shipped sits on the page itself; the app's logs open inside its card.
-    await expect(page.locator('.changelog li').first()).toContainText('Serve v2');
-    await expect(page.locator('.changelog li.running')).toContainText('Serve v2');
+    // Recently shipped: one line per commit on main, a merge shown by its PR title.
     await expect(page.locator('.changelog li')).toHaveCount(2);
-    await page.getByRole('button', { name: 'Logs', exact: true }).click();
-    await expect(page.locator('.app-logs')).toContainText('$ node server.cjs');
+    await expect(page.locator('.changelog li').first()).toHaveText(/^Explain the project in the readme/);
+    await expect(page.locator('.changelog li').nth(1)).toContainText('Start the project');
     await page.screenshot({ path: info.outputPath('project-dashboard.png') });
-
-    await page.getByRole('button', { name: 'Stop', exact: true }).click();
-    await expect(page.locator('.app-status')).toHaveText('Stopped', { timeout: 20_000 });
-    await expect(page.getByRole('button', { name: 'Start', exact: true })).toBeVisible();
 
     // Opening a thread from the dashboard leaves it.
     await page.locator('.dashboard-rows .row-main').first().click();
@@ -77,7 +52,6 @@ test('the project dashboard starts the app from main, follows new commits, and l
     await page.locator('.dashboard-fold > summary', { hasText: 'Changelog' }).click();
     await expect(page.getByText('Nothing shipped yet.')).toBeVisible();
   } finally {
-    await client.call('projectApps.stop', { projectId: checkout.projectId }).catch(() => {});
     await client.call('checkouts.remove', { id: checkout.id, deleteThreads: true }).catch(() => {});
     client.close();
   }

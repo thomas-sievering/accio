@@ -13,8 +13,6 @@ import type { RemoteMachine } from './relay.js';
  */
 export type ThreadView = {
   repairToolId?: string;
-  /** GLOSSARY: Project setup thread. Started from the dashboard to find and save the project app's commands. */
-  projectSetup?: boolean;
   /** The hub that owns this thread's profile; immutable across view switches. */
   hubId?: string;
   /** GLOSSARY: Relay. Set only on threads another machine owns; actions go to that machine. */
@@ -295,7 +293,6 @@ const Start = z.union([
 ]);
 /** Base64 bytes of one pasted image, which the client has already shrunk to the attachment limit. */
 const Upload = z.object({ name: z.string().max(180), mimeType: z.enum(IMAGE_TYPES), data: z.string().min(1).max(Math.ceil(IMAGE_ATTACHMENT_BYTES / 3) * 4 + 4) });
-const ProjectSetup = z.object({ projectId: z.string().min(1) });
 const SetModel = z.object({ threadId: z.string(), model: ModelSelection });
 /** GLOSSARY: Goal. The status bar's controls; setting one goes through `/goal` in a message. */
 const GoalAction = z.object({ threadId: z.string(), action: z.enum(['pause', 'resume', 'clear']) });
@@ -316,8 +313,6 @@ export const threadMethods = {
   'threads.list': method<z.ZodObject<{}>, ThreadView[]>(z.object({})),
   /** Creates a thread in a checkout and sends its first message: a thread exists only once something was said. */
   'threads.start': method<typeof Start, ThreadView>(Start),
-  /** GLOSSARY: Project setup thread. Starts one in the project's checkout; it saves its findings through the project_settings accio tool. */
-  'threads.setUpProject': method<typeof ProjectSetup, ThreadView>(ProjectSetup),
   'threads.transcript': method<typeof ThreadId, TranscriptItem[]>(ThreadId),
   /** Items and cursor captured together; subscribe before requesting, then ignore events through this cursor. */
   'threads.observe': method<typeof ThreadId, TranscriptSnapshot>(ThreadId),
