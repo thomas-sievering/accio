@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { ProfileView, ProjectView, ResourceScope, ResourcesState } from '@accio/protocol';
+import { projectKey, type ProfileView, type ProjectView, type ResourceScope, type ResourcesState } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { useLiveState } from '../app/useLive';
 
@@ -41,7 +41,7 @@ export function LoadError({ error, retry }: { error: string; retry: () => void }
 }
 
 /** The key the hub selects a project by: its remote, so every checkout of it shares the selection. */
-export const projectKey = (project: ProjectView) => project.repoKey ?? `local:${project.id}`;
+export { projectKey };
 
 export const isOptional = (scope: ResourceScope) => !scope.global && scope.profileIds.length === 0 && scope.projectKeys.length === 0;
 

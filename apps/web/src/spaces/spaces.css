@@ -1,0 +1,4 @@
+/* GLOSSARY: Space. A project already in another space can't be picked. */
+.space-projects .check:has(input:disabled) span {
+  color: var(--dim);
+}

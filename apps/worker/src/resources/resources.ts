@@ -1,7 +1,7 @@
 import { SECRET_MCP_SERVER } from '../secrets/secrets.js';
 import { join } from 'node:path';
 import { access } from 'node:fs/promises';
-import type { McpDefinition, ResourcesState, ToolDefinition, WorkspaceSkill, SkillEntry } from '@accio/protocol';
+import { projectKey, type McpDefinition, type ResourcesState, type ToolDefinition, type WorkspaceSkill, type SkillEntry } from '@accio/protocol';
 import { enabled, type McpAccess, type ResourceAccess } from '@accio/hub';
 import type { Router, Broadcast } from '../rpc/router.js';
 import type { Profiles } from '../profiles/profiles.js';
@@ -31,7 +31,7 @@ export class ResourceManager {
   async workspaceSkills(profileId?: string, projectId?: string, cwd?: string): Promise<WorkspaceSkill[]> {
     const state = this.state();
     const project = this.projects.state().projects.find(p => p.id === projectId);
-    const key = project ? project.repoKey ?? `local:${project.id}` : undefined;
+    const key = project ? projectKey(project) : undefined;
     const library: WorkspaceSkill[] = await Promise.all(state.skills.map(async skill => {
       const enabledBy = skill.scope.global ? 'global' : profileId && skill.scope.profileIds.includes(profileId) ? 'profile' : key && skill.scope.projectKeys.includes(key) ? 'project' : null;
       const local = enabledBy ? await this.localSkill(skill) : skill;
@@ -54,7 +54,7 @@ export class ResourceManager {
     if (!project) throw new Error('No such project');
     const skill = this.state().skills.find(skill => skill.id === id);
     if (!skill) throw new Error('Only library skills can be enabled or disabled');
-    const key = project.repoKey ?? `local:${project.id}`;
+    const key = projectKey(project);
     await this.store.setSkillProject(id, { projectKey: key, enabled: on });
     this.announce();
   }
@@ -64,7 +64,7 @@ export class ResourceManager {
   private local(machineId?: string) { if (machineId && machineId !== this.machineId) throw new Error('This machine must be online locally; remote execution is not available yet'); }
   private checkScope(scope: { profileIds: string[]; projectKeys: string[] }) {
     for (const id of scope.profileIds) this.profiles.require(id);
-    const keys = new Set(this.projects.state().projects.map(p => p.repoKey ?? `local:${p.id}`));
+    const keys = new Set(this.projects.state().projects.map(projectKey));
     if (scope.projectKeys.some(key => !keys.has(key))) throw new Error('No such project');
   }
   register(router: Router) {
@@ -133,7 +133,7 @@ export class ResourceManager {
   }
   async prepare(profileId: string, projectId: string, env: Record<string, string>, options: { repair?: boolean; cwd?: string } = {}): Promise<TurnResources> {
     const project = this.projects.state().projects.find(p => p.id === projectId);
-    const key = project ? project.repoKey ?? `local:${project.id}` : undefined;
+    const key = project ? projectKey(project) : undefined;
     const state = this.state();
     const tools = state.tools;
     if (options.repair) return { env: this.tools.env(state.tools, env), instructions: '', mcps: {}, snapshot: { tools: [], skills: [], mcps: [] }, release: () => {} };
