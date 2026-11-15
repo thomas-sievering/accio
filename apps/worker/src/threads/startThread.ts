@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { ModelSelection, ModelView, ParamsOf, ThreadView } from '@accio/protocol';
-import { mentionedModel } from '../harnesses/models.js';
+import { inheritedModel, mentionedModel } from '../harnesses/models.js';
 import type { SiblingTarget } from '../spaces/siblingThreads.js';
 import { accioTool } from '../tools/tools.js';
 
@@ -51,9 +51,8 @@ export function startThreadTool(deps: StartThreadDeps) {
       const target = deps.machine(machineName);
       const sibling = project ? await deps.sibling(caller.projectId, project, target) : undefined;
       const offered = deps.models(sibling?.profileId ?? caller.profileId);
-      // Another profile may not offer this thread's model; the thread then starts on that profile's default.
-      const inherited = !sibling || offered.some((m) => m.harnessId === caller.model.harnessId && m.id === caller.model.modelId);
-      const model = handle ? mentionedModel(offered, handle, caller.model.effort).selection : inherited ? caller.model : undefined;
+      const model = handle ? mentionedModel(offered, handle, caller.model.effort).selection
+        : sibling ? inheritedModel(offered, caller.model) : caller.model;
       const where = sibling ? { checkoutId: sibling.checkoutId } : caller.checkoutId ? { checkoutId: caller.checkoutId } : { profileId: caller.profileId };
       const started = await deps.start({ ...where, text: message, ...(model ? { model } : {}), ...(target ? { machineId: target.id } : {}) });
       return `Started thread "${started.title}" (${started.id})${sibling ? ` in ${sibling.name}` : ''} on ${target?.name ?? 'this machine'}. It runs on its own and shows in the thread list.`;
