@@ -281,6 +281,10 @@ export class Threads {
         const checkout = this.projects.checkout(checkoutId);
         return this.issues.list(this.projects.projectOf(checkout).profileId, checkout.path);
       })
+      .on('threads.issueBody', ({ checkoutId, ref }) => {
+        const checkout = this.projects.checkout(checkoutId);
+        return this.issues.body(this.projects.projectOf(checkout).profileId, checkout.path, ref);
+      })
       .on('threads.offeredIssues', async ({ threadId, offerId }) => {
         const { offer, profileId, checkoutPath } = await this.issueOffer(threadId, offerId);
         const list = await this.issues.list(profileId, checkoutPath);

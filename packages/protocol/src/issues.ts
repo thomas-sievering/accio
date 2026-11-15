@@ -40,12 +40,18 @@ export type OfferedIssue = { ref: string; label: string; title: string; url?: st
 /** Each offered issue as the tracker has it now; no `issue` once it is closed or no longer listed. */
 export type IssueOfferStatus = { issues: { ref: string; issue?: IssueView }[]; unavailable?: string };
 
+/** GLOSSARY: Issue. One open issue's body as its tracker has it: the GitHub issue's markdown, or a local issue file without its title line. */
+export type IssueBody = { ref: string; body: string };
+
 const CheckoutIssues = z.object({ checkoutId: z.string().min(1) });
+const CheckoutIssue = CheckoutIssues.extend({ ref: z.string().min(1).max(4096) });
 const Offer = z.object({ threadId: z.string(), offerId: z.string().min(1).max(512) });
 const OfferIssue = Offer.extend({ ref: z.string().min(1).max(4096) });
 export const issueMethods = {
   /** The open issues of a checkout's tracker, for a new thread to pick up. */
   'threads.issues': method<typeof CheckoutIssues, IssueList>(CheckoutIssues),
+  /** GLOSSARY: Issue. One open issue's body, read when it is opened rather than with the list. */
+  'threads.issueBody': method<typeof CheckoutIssue, IssueBody>(CheckoutIssue),
   /** GLOSSARY: Issue offer. How the tracker has the issues of one offer now. */
   'threads.offeredIssues': method<typeof Offer, IssueOfferStatus>(Offer),
   /** GLOSSARY: Issue offer. Starts a thread on one ready issue of an offer, claiming it like the picker. */

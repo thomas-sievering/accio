@@ -1,6 +1,6 @@
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { IssueList, IssueTrackerView, IssueView } from '@accio/protocol';
+import type { IssueBody, IssueList, IssueTrackerView, IssueView } from '@accio/protocol';
 import { maybeGit } from '../git.js';
 
 /** Runs gh in a repository as a profile's GitHub account and returns stdout. */
@@ -73,6 +73,25 @@ export class Issues {
     const inWorktree = await readFile(join(worktree, ref), 'utf8').then((text) => ({ text, root: worktree }), () => undefined);
     const target = inWorktree ?? { text: await readFile(join(checkoutPath, ref), 'utf8'), root: checkoutPath };
     await writeFile(join(target.root, ref), withStatus(target.text, 'claimed'));
+  }
+
+  /**
+   * GLOSSARY: Issue. One open issue's body, read when it is opened: through the
+   * profile's GitHub account, or from the file in the checkout without its title line.
+   * A local `ref` must be one of the open issue files, never any path in the checkout.
+   */
+  async body(profileId: string, cwd: string, ref: string): Promise<IssueBody> {
+    const tracker = await findTracker(cwd);
+    if (tracker?.kind === 'github') {
+      const number = /^#([1-9]\d*)$/.exec(ref)?.[1];
+      if (!number) throw new Error(`${ref} is not a GitHub issue`);
+      const out = await this.gh(profileId, cwd, ['issue', 'view', number, '--json', 'body'])
+        .catch((error) => { throw new Error(`Couldn’t read ${ref} with gh: ${firstLine(error)}`); });
+      return { ref, body: (JSON.parse(out) as { body?: string }).body ?? '' };
+    }
+    if (tracker?.kind !== 'local') throw new Error('This project has no issue tracker Accio can read');
+    if (!(await localIssues(cwd)).some((issue) => issue.ref === ref)) throw new Error(`${ref} is not an open issue`);
+    return { ref, body: localBody(await readFile(join(cwd, ref), 'utf8')) };
   }
 
   private async read(profileId: string, cwd: string): Promise<IssueList> {
@@ -174,6 +193,14 @@ export async function localIssues(cwd: string): Promise<IssueView[]> {
 function headerLine(text: string, name: string) {
   const header = text.split(/^##\s/m)[0]!;
   return new RegExp(`^\\**${name}\\**:\\**\\s*(.+?)\\s*$`, 'im').exec(header)?.[1]?.trim();
+}
+
+/** A local issue file without what the reader shows apart: its title, and the header's `Status:` and `Blocked by:` lines. */
+function localBody(text: string) {
+  const at = text.search(/^##\s/m);
+  const header = at < 0 ? text : text.slice(0, at);
+  const kept = header.replace(/^\s*#\s+.*$/m, '').replace(/^\**(?:Status|Blocked by)\**:.*(?:\r?\n|$)/gim, '').replace(/^\s+/, '');
+  return kept + (at < 0 ? '' : text.slice(at));
 }
 
 /** The issue text with its `Status:` line set, added under the title when it has none. */

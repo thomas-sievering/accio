@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { IssueList, IssueView } from '@accio/protocol';
-import { issueFilterGroups, issueGraph } from './issueGraph';
+import { issueFilterGroups, issueGraph, issueLinks } from './issueGraph';
 
 const issue = (label: string, blockedBy: string[] = [], more: Partial<IssueView> = {}): IssueView =>
   ({ ref: label, label, title: `Issue ${label}`, blockedBy, labels: [], assignees: [], ...more });
@@ -76,5 +76,29 @@ describe('issueGraph', () => {
     const rows = issueGraph(github(issue('#1', ['#2']), issue('#2', ['#1']))).rows;
     expect(rows).toHaveLength(2);
     expect(rows.flatMap((r) => [...r.incoming, ...r.outgoing])).toEqual([0, 0]);
+  });
+});
+
+describe('issueLinks', () => {
+  it('lists what an issue waits on and what it blocks, across every group', () => {
+    const list = github(
+      issue('#1', [], { group: '#10 Relay' }),
+      issue('#2', ['#1', '#7'], { group: '#10 Relay' }),
+      issue('#3', ['#2'], { group: '#10 Relay' }),
+      issue('#7', [], { group: '#20 Picker' }),
+    );
+    const labels = (links: ReturnType<typeof issueLinks>) => ({ blockedBy: links.blockedBy.map((i) => i.label), blocks: links.blocks.map((i) => i.label) });
+    expect(labels(issueLinks(list, '#2'))).toEqual({ blockedBy: ['#1', '#7'], blocks: ['#3'] });
+    expect(labels(issueLinks(list, '#7'))).toEqual({ blockedBy: [], blocks: ['#2'] });
+    expect(labels(issueLinks(list, '#9'))).toEqual({ blockedBy: [], blocks: [] });
+  });
+
+  it('links local issues by number within their own feature folder', () => {
+    const list: IssueList = { tracker: { kind: 'local', folder: '.scratch' }, issues: [
+      issue('01', [], { group: 'relay', ref: 'relay/01' }), issue('02', ['1'], { group: 'relay', ref: 'relay/02' }), issue('01', [], { group: 'picker', ref: 'picker/01' }),
+    ] };
+    expect(issueLinks(list, 'relay/02').blockedBy.map((i) => i.ref)).toEqual(['relay/01']);
+    expect(issueLinks(list, 'relay/01').blocks.map((i) => i.ref)).toEqual(['relay/02']);
+    expect(issueLinks(list, 'picker/01').blocks).toEqual([]);
   });
 });
