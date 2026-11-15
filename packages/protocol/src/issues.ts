@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { method } from './rpc.js';
+import type { ThreadView } from './threads.js';
 
 /**
  * GLOSSARY: Issue tracker. Where a project's open issues live, as its agent skills
@@ -30,10 +31,25 @@ export type IssueView = {
 /** A checkout's open issues, or why there are none to show. A project with no tracker has neither tracker nor issues. */
 export type IssueList = { tracker?: IssueTrackerView; issues: IssueView[]; unavailable?: string };
 
+/**
+ * GLOSSARY: Issue offer. One issue a thread offered through the offer_issues accio tool,
+ * as the tracker had it then; `threadId` once a thread was started from it there.
+ */
+export type OfferedIssue = { ref: string; label: string; title: string; url?: string; threadId?: string };
+
+/** Each offered issue as the tracker has it now; no `issue` once it is closed or no longer listed. */
+export type IssueOfferStatus = { issues: { ref: string; issue?: IssueView }[]; unavailable?: string };
+
 const CheckoutIssues = z.object({ checkoutId: z.string().min(1) });
+const Offer = z.object({ threadId: z.string(), offerId: z.string().min(1).max(512) });
+const OfferIssue = Offer.extend({ ref: z.string().min(1).max(4096) });
 export const issueMethods = {
   /** The open issues of a checkout's tracker, for a new thread to pick up. */
   'threads.issues': method<typeof CheckoutIssues, IssueList>(CheckoutIssues),
+  /** GLOSSARY: Issue offer. How the tracker has the issues of one offer now. */
+  'threads.offeredIssues': method<typeof Offer, IssueOfferStatus>(Offer),
+  /** GLOSSARY: Issue offer. Starts a thread on one ready issue of an offer, claiming it like the picker. */
+  'threads.implementIssue': method<typeof OfferIssue, ThreadView>(OfferIssue),
 };
 
 /**
@@ -48,4 +64,12 @@ export function issueNamedIn(text: string) {
 export function issueMessage(issue: Pick<IssueView, 'ref' | 'title'>, notes: string) {
   const line = `Work on ${issue.ref}: ${issue.title}`;
   return notes.trim() ? `${line}\n\n${notes.trim()}` : line;
+}
+
+/**
+ * GLOSSARY: Issue offer. The first message of a thread started from an offer: the issue,
+ * the implement skill when the project has one, and the thread that planned it.
+ */
+export function implementMessage(issue: Pick<IssueView, 'ref' | 'title'>, plannedIn: string) {
+  return issueMessage(issue, `Use the implement skill if it is enabled. This issue was planned in @${plannedIn}; read that thread when the issue leaves something open.`);
 }

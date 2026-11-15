@@ -36,6 +36,7 @@ export function renderItem(item: TranscriptItem): string | null {
       return `[Tool ${item.name}; ${item.status}] ${item.summary}${output}`;
     }
     case 'choice': return `[Assistant offered a choice] ${item.question}`;
+    case 'issueOffer': return `[Assistant offered issues to implement] ${item.issues.map((issue) => `${issue.label} ${issue.title}${issue.threadId ? ' (started)' : ''}`).join('; ')}`;
     case 'notice': return `[${item.tone === 'error' ? 'Error' : 'Note'}] ${item.text}`;
     default: return null;
   }

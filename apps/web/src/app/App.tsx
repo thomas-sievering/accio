@@ -115,6 +115,7 @@ function Shell() {
     setSettings(null);
     setSheet(null);
   };
+  useAppEvent('thread.open', ({ id }) => openThread(id));
   const close = () => setSheet(null);
   const openProfile = (profileId: string) => setSettings({ section: 'profiles', profileId });
   const openSecrets = useCallback((profileId: string) => setSettings({ section: 'secrets', profileId }), []);

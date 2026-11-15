@@ -61,6 +61,11 @@ const SECTIONS: Section[] = [
     ].join('\n'),
   },
   {
+    id: 'issues',
+    title: 'Published issues',
+    text: () => 'After you publish issues to the project\'s issue tracker, such as tickets from a spec, offer the ones to implement with the offer_issues tool. The user can then start a thread on each ready one, so don\'t repeat them in full in your reply.',
+  },
+  {
     id: 'files',
     title: 'File links',
     text: ({ platform }) => `Link any other file you produce by its absolute path, such as [report.pdf](${exampleDir(platform)}/report.pdf), so the user can download it.`,

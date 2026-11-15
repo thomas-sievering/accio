@@ -65,6 +65,11 @@ describe('layoutTranscript', () => {
     expect(shape(layoutTranscript([...items, say('a'), done()]))).toEqual(['q', { work: [['1', '2']] }, 's', 'a']);
   });
 
+  it('keeps an issue offer visible when the work around it is folded', () => {
+    const offer: TranscriptItem = { kind: 'issueOffer', id: 'o', turnId: 't1', issues: [{ ref: '#207', label: '#207', title: 'Fold' }] };
+    expect(shape(layoutTranscript([ask('q'), tool('1'), offer, tool('2'), say('a'), done()]))).toEqual(['q', { work: [['1', '2']] }, 'o', 'a']);
+  });
+
   it('carries the duration, failures and a stable id on the work block', () => {
     const [, work] = layoutTranscript([ask('q'), tool('1', 'Bash', 't1', 'error'), tool('2'), say('a'), done('t1', 42_000)]);
     expect(work).toMatchObject({ kind: 'work', id: 't1:work', live: false, ms: 42_000, failed: 1 });

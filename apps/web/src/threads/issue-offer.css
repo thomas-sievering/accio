@@ -1,0 +1,19 @@
+/* GLOSSARY: Issue offer. Issues the harness published, each with Implement while it is ready. Rows reuse the picker's label, title and pill. */
+.issue-offer { align-self: stretch; max-width: 640px; padding: 10px 6px 6px; border: 1px solid var(--line); border-radius: 10px; font-size: 13px; }
+.issue-offer-title { display: flex; align-items: center; gap: 7px; margin: 0 8px 6px; color: var(--muted); font-size: 12px; }
+.issue-offer-mark { display: grid; color: var(--green); }
+.issue-offer-mark svg { width: 13px; height: 13px; }
+.issue-offer-list { margin: 0; padding: 0; list-style: none; }
+.issue-offer-row { display: flex; align-items: center; gap: 9px; min-height: 34px; padding: 4px 8px; border-radius: 7px; }
+.issue-offer-row:hover { background: var(--raised); }
+.issue-offer-row a.issue-option-label { color: var(--dim); text-decoration: none; }
+.issue-offer-row a.issue-option-label:hover { color: var(--ink); text-decoration: underline; }
+.issue-offer-row.closed .issue-option-title { color: var(--dim); text-decoration: line-through; }
+.issue-pill.ready { border-color: color-mix(in oklch, var(--green) 35%, transparent); color: var(--green); }
+.issue-offer-action { flex: none; padding: 3px 10px; border: 1px solid var(--line-2); border-radius: 7px; background: transparent; color: var(--ink); font: inherit; font-size: 12px; cursor: pointer; }
+.issue-offer-action:hover:not(:disabled) { background: var(--raised-2); }
+.issue-offer-action.primary { border-color: transparent; background: var(--ink); color: var(--bg); }
+.issue-offer-action.primary:hover:not(:disabled) { background: var(--ink-strong); }
+.issue-offer-action:disabled { opacity: 0.5; cursor: default; }
+.issue-offer-note { margin: 6px 8px 2px; color: var(--muted); font-size: 12px; }
+.issue-offer-note.error { color: var(--red); }

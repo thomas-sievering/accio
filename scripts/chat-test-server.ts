@@ -207,6 +207,13 @@ const harness = new FakeHarness(async function* (run) {
     yield { type: 'result', subtype: 'success', is_error: false, session_id: SESSION };
     return;
   }
+  // GLOSSARY: Issue offer. A planning thread that has just published two tickets, one waiting on the other.
+  if (run.prompt === 'Publish the tickets') {
+    yield { type: 'assistant', parent_tool_use_id: null, session_id: SESSION, message: { id: 'offer', content: [{ type: 'tool_use', id: 'offer-1', name: 'mcp__accio__offer_issues', input: { refs: ['#205', '#194'] } }] } } as HarnessMessage;
+    yield { type: 'user', parent_tool_use_id: null, session_id: SESSION, message: { content: [{ type: 'tool_result', tool_use_id: 'offer-1', content: 'shown' }] } } as HarnessMessage;
+    yield* replyWith('Published #205 and #194.');
+    return;
+  }
   if (run.prompt.startsWith('I pick ')) {
     yield* replyWith(`Got it: ${run.prompt.split('\n')[0]}`);
     return;

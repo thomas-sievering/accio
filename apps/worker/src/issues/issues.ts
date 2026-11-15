@@ -42,10 +42,11 @@ export class Issues {
   private recent = new Map<string, { at: number; list: Promise<IssueList> }>();
   constructor(private gh: GhAs) {}
 
-  list(profileId: string, cwd: string): Promise<IssueList> {
+  /** `fresh` skips a recent read, such as right after the harness published issues. */
+  list(profileId: string, cwd: string, fresh = false): Promise<IssueList> {
     const key = `${profileId}\n${cwd}`;
     const known = this.recent.get(key);
-    if (known && Date.now() - known.at < FRESH_MS) return known.list;
+    if (known && !fresh && Date.now() - known.at < FRESH_MS) return known.list;
     const list = this.read(profileId, cwd);
     this.recent.set(key, { at: Date.now(), list });
     list.catch(() => this.recent.delete(key));

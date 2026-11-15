@@ -113,3 +113,33 @@ test('a project without issues offers no issue picker', async ({ page, baseURL }
   await expect(page.locator('.machine-trigger').first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'Pick an issue', exact: true })).toHaveCount(0);
 });
+
+// Last in the file: it claims #205, after the first test has checked the claims so far.
+test('issues a thread published are offered, and Implement starts a claimed thread on a ready one', async ({ page, baseURL }, info) => {
+  const { issuesClaimFile } = await chatFixture(baseURL!);
+  await page.setViewportSize({ width: 1100, height: 760 });
+  await draftIn(page, baseURL, /issues-project/);
+  await page.locator('.composer textarea').fill('Publish the tickets');
+  await page.locator('.composer textarea').press('Enter');
+
+  const offer = page.getByRole('region', { name: 'Issues to implement' });
+  await expect(offer).toBeVisible();
+  await expect(page.locator('.msg.assistant').filter({ hasText: 'Published #205 and #194.' })).toBeVisible();
+  const ready = offer.getByRole('listitem').filter({ hasText: 'Snoozed threads lose their goal' });
+  const blocked = offer.getByRole('listitem').filter({ hasText: 'Settle threads once' });
+  await expect(ready.locator('.issue-option-label')).toHaveText('#205');
+  await expect(ready.locator('.issue-pill')).toHaveText('Ready');
+  await expect(blocked.locator('.issue-pill')).toHaveText('Waits on #205');
+  await expect(blocked.getByRole('button')).toHaveCount(0);
+  await page.screenshot({ path: info.outputPath('offer.png') });
+  await offer.screenshot({ path: info.outputPath('offer-card.png') });
+
+  await ready.getByRole('button', { name: 'Implement #205 in a new thread' }).click();
+  await expect(ready.locator('.issue-pill')).toHaveText('Started');
+  await expect.poll(async () => JSON.parse(await readFile(issuesClaimFile, 'utf8').catch(() => '[]'))).toContainEqual(['issue', 'edit', '205', '--add-assignee', '@me']);
+  await offer.screenshot({ path: info.outputPath('offer-started.png') });
+
+  await ready.getByRole('button', { name: 'Open thread', exact: true }).click();
+  await expect(page.locator('.msg.user').filter({ hasText: 'Work on #205: Snoozed threads lose their goal on restart' })).toContainText('Use the implement skill if it is enabled');
+  await page.screenshot({ path: info.outputPath('started-thread.png') });
+});

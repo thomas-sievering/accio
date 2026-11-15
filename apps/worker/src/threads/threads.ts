@@ -1,8 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { DeliveryStepName, ParamsOf, ShippedNote, ThreadView } from '@accio/protocol';
-import { issueNamedIn } from '@accio/protocol';
+import { implementMessage, issueNamedIn, threadHandle, type DeliveryStepName, type OfferedIssue, type ParamsOf, type ShippedNote, type ThreadView, type TranscriptItem } from '@accio/protocol';
 import type { SecretsAccess } from '@accio/hub';
 import { now } from '../time.js';
 import type { Profiles } from '../profiles/profiles.js';
@@ -49,6 +48,7 @@ import { registerThreadSkills } from './threadSkills.js';
 import { ThreadNaming } from './naming.js';
 import { changeHarness, readThreadPage } from './handoff.js';
 import { Issues } from '../issues/issues.js';
+import { findIssue, implementable, issueOfferTool, offeredIssues } from './issueOffer.js';
 import type { SpaceContext } from '../spaces/spaceContext.js';
 import { cleanExecutionEnv } from './harnessEnv.js';
 import { Waits, waitForTool } from './waits.js';
@@ -79,6 +79,9 @@ export class Threads {
   private naming: ThreadNaming;
   private issues: Issues;
   private changelog: Changelog;
+  /** GLOSSARY: Issue offer. Changes to offers run one at a time, so two starts both stay recorded. */
+  private offerWrites: Promise<unknown> = Promise.resolve();
+  private implementing = new Set<string>();
   private restartCandidates = new Set<string>();
   private restartDeliveries = new Set<string>();
 
@@ -115,7 +118,9 @@ export class Threads {
     }, deliveryHosting);
     this.turns = new Turns(this.state, { profiles, projects, models, machines, harnesses, secrets: this.secrets, content: this.content, deliveries: this.deliveries, tools,
       images: { claim: (threadId, ids) => this.uploads.claim(threadId, ids, this.assets), file: (threadId, asset) => this.assets.harnessFile(threadId, asset) },
-      resources: () => this.resources, spaceContext: () => this.spaceContext, toolsOff: (harnessId) => builtinToolsOff(harnessId, this.toolOverrides?.()[harnessId]), onWorkFinished: id => this.naming.refine(id), onRepairFinished: (toolId) => this.onRepairFinished?.(toolId), knownThreads: () => this.knownThreads?.() ?? this.views() });
+      resources: () => this.resources, spaceContext: () => this.spaceContext, toolsOff: (harnessId) => builtinToolsOff(harnessId, this.toolOverrides?.()[harnessId]), onWorkFinished: id => this.naming.refine(id), onRepairFinished: (toolId) => this.onRepairFinished?.(toolId), knownThreads: () => this.knownThreads?.() ?? this.views(),
+      offeredIssues: (threadId, refs) => this.offeredIssues(threadId, refs) });
+    tools?.add(issueOfferTool((threadId, refs) => this.offeredIssues(threadId, refs, true), (threadId) => !!this.state.get(threadId)?.checkoutId));
     this.waits = new Waits(this.state, {
       threads: () => this.knownThreads?.() ?? this.views(),
       wake: (threadId, text) => this.wake(threadId, text),
@@ -276,6 +281,13 @@ export class Threads {
         const checkout = this.projects.checkout(checkoutId);
         return this.issues.list(this.projects.projectOf(checkout).profileId, checkout.path);
       })
+      .on('threads.offeredIssues', async ({ threadId, offerId }) => {
+        const { offer, profileId, checkoutPath } = await this.issueOffer(threadId, offerId);
+        const list = await this.issues.list(profileId, checkoutPath);
+        return { issues: offer.issues.map(({ ref }) => { const issue = findIssue(list.issues, ref); return issue ? { ref, issue } : { ref }; }),
+          ...(list.unavailable ? { unavailable: list.unavailable } : {}) };
+      })
+      .on('threads.implementIssue', ({ threadId, offerId, ref }) => this.implementIssue(threadId, offerId, ref))
       .on('threads.transcript', async ({ threadId }) => {
         const live = await transcripts.get(state.require(threadId).id);
         state.require(threadId);
@@ -497,6 +509,55 @@ export class Threads {
         releaseProfile();
       }
     });
+  }
+
+  /** GLOSSARY: Issue offer. The offered references as the thread's tracker lists them; throws for any it doesn't. */
+  private async offeredIssues(threadId: string, refs: string[], fresh = false): Promise<OfferedIssue[]> {
+    const thread = this.state.require(threadId);
+    if (!thread.checkoutId) throw new UserError('Only a thread in a project can offer issues.');
+    const checkout = this.projects.checkout(thread.checkoutId);
+    return offeredIssues(await this.issues.list(thread.profileId, checkout.path, fresh), refs);
+  }
+
+  private async issueOffer(threadId: string, offerId: string) {
+    const thread = this.state.require(threadId);
+    const live = await this.state.transcripts.get(threadId);
+    const offer = live.items.find((item): item is Extract<TranscriptItem, { kind: 'issueOffer' }> => item.kind === 'issueOffer' && item.id === offerId);
+    if (!offer) throw new UserError('No such issue offer');
+    if (!thread.checkoutId) throw new UserError('This thread has no project checkout.');
+    return { thread, offer, profileId: thread.profileId, checkoutPath: this.projects.checkout(thread.checkoutId).path };
+  }
+
+  /**
+   * GLOSSARY: Issue offer. Starts a thread on one offered issue, through the issue
+   * picker's path so it is claimed the same way, once the tracker shows it open,
+   * unblocked and unclaimed. The offer records the thread.
+   */
+  private async implementIssue(threadId: string, offerId: string, ref: string): Promise<ThreadView> {
+    const key = JSON.stringify([threadId, offerId, ref]);
+    if (this.implementing.has(key)) throw new UserError('Already starting a thread for this issue.');
+    this.implementing.add(key);
+    try {
+      const { thread, offer, profileId, checkoutPath } = await this.issueOffer(threadId, offerId);
+      const offered = offer.issues.find((issue) => issue.ref === ref);
+      if (!offered) throw new UserError(`${ref} is not in this offer.`);
+      if (offered.threadId && this.state.get(offered.threadId)) throw new UserError(`${offered.label} already has a thread.`);
+      const issue = findIssue((await this.issues.list(profileId, checkoutPath, true)).issues, ref);
+      const can = implementable(issue);
+      if (!can.ok) throw new UserError(can.reason === 'closed' ? `${offered.label} is no longer open.` : can.reason === 'claimed' ? `${offered.label} is already claimed.` : `${offered.label} ${can.reason}.`);
+      const started = await this.start({ checkoutId: thread.checkoutId, text: implementMessage(issue!, threadHandle(thread)), model: thread.model, issue: { ref: issue!.ref, title: issue!.title } });
+      const write = this.offerWrites.then(async () => {
+        const live = await this.state.transcripts.get(threadId);
+        const current = live.items.find((item) => item.kind === 'issueOffer' && item.id === offerId);
+        if (current?.kind !== 'issueOffer') return;
+        await this.state.transcripts.add(threadId, { ...current, issues: current.issues.map((i) => i.ref === ref ? { ...i, threadId: started.id } : i) });
+      });
+      this.offerWrites = write.catch(() => {});
+      await write;
+      return started;
+    } finally {
+      this.implementing.delete(key);
+    }
   }
 
   /** GLOSSARY: Issue. Claims the issue a thread started from; a failure is noted in the thread, never undoing the start. */

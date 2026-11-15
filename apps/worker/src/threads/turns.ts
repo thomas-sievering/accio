@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mediaKind, mediaMimeType, normalizeMarkdownSource, type ChoicePick, type ModelSelection, type ThreadAsset, type ThreadView, type WorkspaceSkill } from '@accio/protocol';
+import { mediaKind, mediaMimeType, normalizeMarkdownSource, type ChoicePick, type ModelSelection, type OfferedIssue, type ThreadAsset, type ThreadView, type WorkspaceSkill } from '@accio/protocol';
 import { mentionedModel, type Models } from '../harnesses/models.js';
 import type { Machines } from '../machine/machine.js';
 import type { Profiles } from '../profiles/profiles.js';
@@ -12,6 +12,7 @@ import type { SpaceContext } from '../spaces/spaceContext.js';
 import { now } from '../time.js';
 import type { AccioTools } from '../tools/tools.js';
 import { isChoiceTool, parseChoice, pickPrompt } from './choice.js';
+import { isIssueOfferTool, parseIssueOffer } from './issueOffer.js';
 import type { ThreadContent } from './content.js';
 import type { Deliveries } from './deliveries.js';
 import { deliveryPrompt } from './delivery.js';
@@ -58,6 +59,8 @@ export type TurnDeps = {
   images: { claim: (threadId: string, uploadIds: string[]) => Promise<ThreadAsset[]>; file: (threadId: string, asset: ThreadAsset) => Promise<string> };
   /** GLOSSARY: Thread mention. Every thread a message can mention, other machines' included. */
   knownThreads?: () => readonly ThreadView[];
+  /** GLOSSARY: Issue offer. The offered references as the thread's tracker lists them; throws for any it doesn't. */
+  offeredIssues?: (threadId: string, refs: string[]) => Promise<OfferedIssue[]>;
 };
 
 /** Starting, running, steering and finishing the turns of threads on this machine. */
@@ -434,6 +437,8 @@ export class Turns {
       await state.update(threadId, (t) => ({ ...t, sessionId: change.sessionId, handoff: undefined }), { quiet: true });
     } else if (change.type === 'tool' && isChoiceTool(change.item.name)) {
       await this.offerChoice(threadId, change, cwd);
+    } else if (change.type === 'tool' && isIssueOfferTool(change.item.name) && await this.offerIssues(threadId, change)) {
+      // Shown as the offer, in place of its tool row.
     } else if (change.type === 'tool') {
       await deps.content.saveTool(threadId, change.item.id, change.input, change.content);
       const loadedSkills = change.item.status === 'done' ? observedSkillLoads(change.item.name, change.input, change.item.summary, cwd, skills) : [];
@@ -450,6 +455,23 @@ export class Turns {
     } else if (change.type === 'delta') {
       await state.transcripts.appendText(threadId, change.itemId, change.text);
     }
+  }
+
+  /**
+   * GLOSSARY: Issue offer. Replaces its tool row once the call succeeded, which means
+   * the tracker listed every reference. Later updates of the call leave it alone, so
+   * the threads started from it stay recorded. False: show the call as a tool row.
+   */
+  private async offerIssues(threadId: string, change: Extract<TranscriptChange, { type: 'tool' }>): Promise<boolean> {
+    const { state, deps } = this;
+    const live = await state.transcripts.get(threadId);
+    if (live.items.some((item) => item.id === change.item.id && item.kind === 'issueOffer')) return true;
+    const refs = parseIssueOffer(change.input);
+    if (change.item.status !== 'done' || !refs || !deps.offeredIssues) return false;
+    const issues = await deps.offeredIssues(threadId, refs).catch(() => undefined);
+    if (!issues) return false;
+    await state.transcripts.add(threadId, { kind: 'issueOffer', id: change.item.id, turnId: change.item.turnId, issues });
+    return true;
   }
 
   /**

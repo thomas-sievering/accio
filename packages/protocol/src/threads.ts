@@ -6,6 +6,7 @@ import { IMAGE_ATTACHMENT_BYTES, IMAGE_TYPES, IMAGES_PER_MESSAGE, type AssetUrl,
 import type { LoadedSkill } from './workspaceSkills.js';
 import type { SecretRequestItem } from './secrets.js';
 import type { RemoteMachine } from './relay.js';
+import type { OfferedIssue } from './issues.js';
 
 /**
  * GLOSSARY: Thread. A durable conversation, optionally attached to a checkout
@@ -265,6 +266,8 @@ export type TranscriptItem =
   | { kind: 'tool'; id: string; turnId: string; name: string; summary: string; status: 'running' | 'done' | 'error' | 'interrupted'; output?: string; detailRevision?: number; loadedSkills?: LoadedSkill[]; step?: ToolStep }
   /** GLOSSARY: Choice. Screenshots the harness offers; you pick one in your next message. */
   | { kind: 'choice'; id: string; turnId: string; question: string; options: ChoiceOption[] }
+  /** GLOSSARY: Issue offer. Issues the harness published, each startable as a thread of its own. */
+  | { kind: 'issueOffer'; id: string; turnId: string; issues: OfferedIssue[] }
   | { kind: 'notice'; id: string; turnId: string; tone: 'info' | 'error'; text: string }
   /** GLOSSARY: Shipped note. Added once a delivery is verified on its target; it stands as its own turn. */
   | { kind: 'shipped'; id: string; turnId: string; at: string; entry: ChangelogEntry }

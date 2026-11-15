@@ -25,6 +25,8 @@ export type AppEvents = {
   'space.open': { id: string };
   /** A thread was snoozed until a time (ISO); the sidebar says so briefly. */
   'thread.snoozed': { threadId: string; until: string; untilOnline?: string };
+  /** Open a thread, such as one started from an issue offer. */
+  'thread.open': { id: string };
   /** Open the side panel at a tab, such as Delivery after pressing Ship. */
   'panel.show': PanelTab;
 };

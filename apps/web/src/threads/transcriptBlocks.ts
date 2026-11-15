@@ -59,9 +59,10 @@ function layoutTurn(items: TranscriptItem[], running: boolean): TranscriptBlock[
   // A choice is what the turn asks of you, so it stays out of the fold with the reply.
   while (answer > prompt && (body[answer - 1]!.kind === 'assistant' || body[answer - 1]!.kind === 'choice')) answer--;
   const beforeAnswer = body.slice(prompt, answer);
-  // Private entry and its usage records stay visible even when other work is folded.
-  const secrets = beforeAnswer.filter((item) => item.kind === 'secret');
-  const work = beforeAnswer.filter((item) => item.kind !== 'secret');
+  // Private entry and its usage records stay visible even when other work is folded, and so do issue offers, which ask something of you.
+  const kept = (item: TranscriptItem) => item.kind === 'secret' || item.kind === 'issueOffer';
+  const secrets = beforeAnswer.filter(kept);
+  const work = beforeAnswer.filter((item) => !kept(item));
   if (finished && !work.length) return groupTools([...body.slice(0, prompt), finished, ...body.slice(prompt)]);
   const failed = work.filter((item) => item.kind === 'tool' && item.status === 'error').length;
   return [

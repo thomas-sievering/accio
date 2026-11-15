@@ -15,6 +15,7 @@ import { RevealContext, useReveal, type Reveal } from './reveal';
 const revealFrames = 30;
 const NO_MODELS: never[] = [];
 import { Choice, optionName } from './Choice';
+import { IssueOffer } from './IssueOffer';
 import { MentionTargets } from './Mentions';
 import { UserMessageText } from './PastedText';
 import { ReactionBar } from './Reactions';
@@ -224,6 +225,8 @@ const Item = memo(function Item({ threadId, item, preparing, picked, pickName }:
       </div>;
     case 'choice':
       return <Choice threadId={threadId} item={item} picked={picked} />;
+    case 'issueOffer':
+      return <IssueOffer threadId={threadId} item={item} />;
     case 'assistant':
       if (!item.text.trim()) return null;
       return <div className="msg assistant" data-item-id={item.id}><AssistantMarkdown threadId={threadId} text={item.text} media={item.media} preparing={preparing} /></div>;
