@@ -7,6 +7,8 @@ import { hasSignedInAccount, ProfilesProvider, useProfiles } from '../profiles/p
 import { ProjectsProvider, useProjects } from '../projects/projects';
 import { AddProjectSheet } from '../projects/AddProjectSheet';
 import { ProjectDashboard } from '../projects/ProjectDashboard';
+import { SpaceView } from '../spaces/SpaceView';
+import { useSpaces } from '../spaces/spaces';
 import { ThreadsProvider, useThreads } from '../threads/threads';
 import { PendingSecretsProvider } from '../secrets/pendingSecrets';
 import { ResourcesProvider } from '../resources/resources';
@@ -68,22 +70,30 @@ function Shell() {
   useAppEvent('project.open', ({ id }) => setSettings({ section: 'projects', projectId: id }));
   const [panelWanted, togglePanel] = usePanelOpen();
   const [limits, setLimits] = useState<{ scope: LimitsScope; navigation: number } | null>(saved.limits !== undefined ? { scope: saved.limits, navigation } : null);
-  const [dashboard, setDashboard] = useState<{ projectId: string; navigation: number } | null>(saved.dashboard !== undefined ? { projectId: saved.dashboard, navigation } : null);
-  // Like Limits, the dashboard covers the main pane until a thread or draft is opened.
-  const dashboardProject = dashboard !== null && dashboard.navigation === navigation ? state?.projects.find((p) => p.id === dashboard.projectId) : undefined;
-  const closeDashboard = useCallback(() => setDashboard(null), []);
-  useAppEvent('project.dashboard', ({ id }) => { setLimits(null); setDashboard({ projectId: id, navigation }); });
+  // Like Limits, a project dashboard or a space view covers the main pane until a thread or draft is opened.
+  const [page, setPage] = useState<{ view: PageView; navigation: number } | null>(() => {
+    const view: PageView | undefined = saved.dashboard !== undefined ? { dashboard: saved.dashboard } : saved.space !== undefined ? { space: saved.space } : undefined;
+    return view ? { view, navigation } : null;
+  });
+  const pageView = page !== null && page.navigation === navigation ? page.view : undefined;
+  const { spaces } = useSpaces();
+  const dashboardProject = pageView && 'dashboard' in pageView ? state?.projects.find((p) => p.id === pageView.dashboard) : undefined;
+  const openSpace = pageView && 'space' in pageView ? spaces?.find((s) => s.id === pageView.space) : undefined;
+  const closePage = useCallback(() => setPage(null), []);
+  useAppEvent('project.dashboard', ({ id }) => { setLimits(null); setPage({ view: { dashboard: id }, navigation }); });
+  useAppEvent('space.open', ({ id }) => { setSettings(null); setLimits(null); setPage({ view: { space: id }, navigation }); });
   const limitsOpen = limits !== null && limits.navigation === navigation;
   useEffect(() => {
     const view: SavedView = {
       ...(settings ? { settings: settings.section } : {}),
       ...(limitsOpen ? { limits: limits.scope } : {}),
-      ...(dashboard !== null && dashboard.navigation === navigation ? { dashboard: dashboard.projectId } : {}),
+      ...pageView,
     };
     localStorage.setItem(viewKey, JSON.stringify(view));
-  }, [viewKey, settings, limits, limitsOpen, dashboard, navigation]);
-  // The panel belongs to an open thread or draft: home, onboarding, Limits and a project dashboard have none.
-  const hasPane = !!(thread || draft) && !limitsOpen && !dashboardProject;
+  }, [viewKey, settings, limits, limitsOpen, pageView]);
+  const pageOpen = !!dashboardProject || !!openSpace;
+  // The panel belongs to an open thread or draft: home, onboarding, Limits, a project dashboard and a space view have none.
+  const hasPane = !!(thread || draft) && !limitsOpen && !pageOpen;
   const panelOpen = panelWanted && hasPane;
   const narrow = useNarrow();
   const overlay = panelOpen && narrow && settings === null;
@@ -129,7 +139,7 @@ function Shell() {
   const openLimits = (scope: LimitsScope, origin?: SettingsRoute) => {
     limitsOrigin.current = origin;
     limitsReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    setDashboard(null);
+    setPage(null);
     setLimits({ scope, navigation });
   };
   const draftProfileId = draft && (draft.profileId ?? state?.projects.find((p) => p.id === state.checkouts.find((c) => c.id === draft.checkoutId)?.projectId)?.profileId);
@@ -210,13 +220,14 @@ function Shell() {
             <LimitsView scope={limits.scope} onScope={(scope) => setLimits({ scope, navigation })} onClose={closeLimits}
               onOpenAccount={openAccount} />
           )}
-          {dashboardProject && !limitsOpen && !settings && <ProjectDashboard key={dashboardProject.id} project={dashboardProject} onClose={closeDashboard} />}
+          {dashboardProject && !limitsOpen && !settings && <ProjectDashboard key={dashboardProject.id} project={dashboardProject} onClose={closePage} />}
+          {openSpace && !limitsOpen && !settings && <SpaceView key={openSpace.id} space={openSpace} onClose={closePage} />}
           {/* Keep the composer and reading position mounted while checking limits/settings. */}
-          <div className="thread-surface" hidden={limitsOpen || !!dashboardProject || settings !== null}>
+          <div className="thread-surface" hidden={limitsOpen || pageOpen || settings !== null}>
             {draft ? (
-              <DraftPane key={`${draft.checkoutId}:${draft.profileId}`} {...draft} active={!limitsOpen && !dashboardProject && !settings} onOpenProfile={openProfile} onOpenLimits={openLimits} />
+              <DraftPane key={`${draft.checkoutId}:${draft.profileId}`} {...draft} active={!limitsOpen && !pageOpen && !settings} onOpenProfile={openProfile} onOpenLimits={openLimits} />
             ) : thread ? (
-              <ThreadPane key={thread.id} thread={thread} onOpenSecrets={openSecrets} active={!limitsOpen && !dashboardProject && !settings} onOpenProfile={openProfile} onOpenLimits={openLimits} />
+              <ThreadPane key={thread.id} thread={thread} onOpenSecrets={openSecrets} active={!limitsOpen && !pageOpen && !settings} onOpenProfile={openProfile} onOpenLimits={openLimits} />
             ) : (
               <>
                 <header className="main-top drag" />
@@ -235,7 +246,10 @@ function Shell() {
 }
 
 /** The page open over the thread pane, as remembered across restarts. Ids that no longer exist fall back to the thread pane. */
-type SavedView = { settings?: SettingsRoute['section']; limits?: LimitsScope; dashboard?: string };
+type SavedView = { settings?: SettingsRoute['section']; limits?: LimitsScope; dashboard?: string; space?: string };
+
+/** A page over the thread pane: one project's dashboard (its id) or one space's view (its id). */
+type PageView = { dashboard: string } | { space: string };
 
 function savedView(key: string): SavedView {
   try {

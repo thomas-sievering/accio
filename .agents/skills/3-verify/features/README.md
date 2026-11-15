@@ -11,7 +11,7 @@ This is the maintained source for driving Accio as a user. Read the affected fea
 
 ## Driving conventions
 
-The harness is Playwright. Recipes use `page` from the runner's default-export journey contract and exact accessible roles/names from the app. Wrap actions with `action`, capture ARIA plus screenshots with `capture`, and assert outcomes. Scope settings navigation with `page.locator('.sidebar nav')`; breadcrumbs repeat names. Use `page.getByRole('button', { name: 'Back', exact: true }).click()` to leave settings. The app remembers the selected settings page, Limits, dashboard, thread or draft across reloads within each hub.
+The harness is Playwright. Recipes use `page` from the runner's default-export journey contract and exact accessible roles/names from the app. Wrap actions with `action`, capture ARIA plus screenshots with `capture`, and assert outcomes. Scope settings navigation with `page.locator('.sidebar nav')`; breadcrumbs repeat names. Use `page.getByRole('button', { name: 'Back', exact: true }).click()` to leave settings. The app remembers the selected settings page, Limits, dashboard, space view, thread or draft across reloads within each hub.
 
 ## Proof and reporting
 
@@ -25,7 +25,7 @@ Record feature IDs and entry points in `actions.json`. Pair the action trace wit
 - [Sorting Hat](sorting-hat.md): linking a hub to a Sorting Hat of its own, accounts, houses and limits through it, the unlinked-profile and unreachable notices and the admin token’s boundary.
 - [Limits](limits.md): sidebar/composer/account-settings entries, profile scope, shared accounts, refresh, reset confirmation and connection states.
 - [Projects](projects.md): add folders through onboarding or toolbar, inspect duplicates, remote grouping, settings and removal.
-- [Spaces](spaces.md): Settings → Spaces, adding, renaming and deleting spaces, their projects and their home.
+- [Spaces](spaces.md): Settings → Spaces, adding, renaming and deleting spaces, their projects and their home; the space view from the project-name menu or `Open`.
 - [Project dashboard](project-dashboard.md): Dashboard in the thread header's project menu, the project app's Start/Stop/Restart/Update and auto-update, threads, commits and logs.
 - [Built-in tools](harness-tools.md): per-harness tool switches under Settings → Harnesses, hub-wide, with reset.
 - [System prompt](system-prompt.md): read-only Settings page with each harness's delivery and the shared sections.

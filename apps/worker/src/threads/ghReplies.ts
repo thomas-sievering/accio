@@ -37,3 +37,5 @@ export const GhWorkflows = z.object({ workflows: z.array(z.object({ state: z.str
 export const GhJob = z.object({ status: text, conclusion: text, steps: z.array(z.object({ name: z.string(), status: z.string() })).nullish() });
 export const GhBranchRules = z.array(z.object({ type: z.string() }));
 export const GhBranch = z.object({ protection: z.object({ enabled: z.boolean().nullish() }).nullish() });
+/** `gh api repos/{slug}/activity`: how each update moved a branch, including pushes and PR merges. */
+export const GhActivity = z.array(z.object({ before: z.string(), after: z.string() }));

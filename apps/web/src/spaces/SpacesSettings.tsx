@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { projectKey, type ProjectView, type Space } from '@accio/protocol';
+import { emitAppEvent } from '../app/appEvents';
 import { useClient } from '../app/connection';
 import { Spaces as SpacesIcon } from '../app/icons';
 import { SettingRow, SettingsFooter, SettingsSection } from '../app/Settings';
@@ -10,7 +11,7 @@ import { useProjects } from '../projects/projects';
 import { MenuSelect } from '../ui/MenuSelect';
 import { useSpaces } from './spaces';
 
-/** GLOSSARY: Space. Every space of the hub, each opening its editor as a detail page ('new' adds one). */
+/** GLOSSARY: Space. Every space of the hub, each opening its editor as a detail page ('new' adds one) or its space view. */
 export function SpacesSettings({ spaceId, onOpen, onBack }: { spaceId?: string; onOpen: (id: string) => void; onBack: () => void }) {
   const { spaces } = useSpaces();
   const { state } = useProjects();
@@ -27,6 +28,7 @@ export function SpacesSettings({ spaceId, onOpen, onBack }: { spaceId?: string; 
         <SettingRow key={space.id} icon={<SpacesIcon />} title={space.name}
           description={[`${space.projectKeys.length} project${space.projectKeys.length === 1 ? '' : 's'}`, space.homeProjectKey ? `Home ${nameOf(space.homeProjectKey)}` : 'No home'].join(' · ')}>
           <button type="button" className="ghost" aria-label={`Edit ${space.name}`} onClick={() => onOpen(space.id)}>Edit</button>
+          <button type="button" className="ghost" aria-label={`Open ${space.name}`} onClick={() => emitAppEvent('space.open', { id: space.id })}>Open</button>
         </SettingRow>
       ))}
     </SettingsSection>

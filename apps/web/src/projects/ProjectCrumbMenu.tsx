@@ -1,17 +1,20 @@
 import { useId, useRef } from 'react';
-import type { ProjectView } from '@accio/protocol';
+import { projectKey, type ProjectView } from '@accio/protocol';
 import { emitAppEvent } from '../app/appEvents';
 import { useAction } from '../app/useAction';
+import { useSpaces } from '../spaces/spaces';
 import { focusMenuItem, onMenuKeyDown } from '../ui/menuKeys';
 
 /**
- * The thread header's project name: a menu to open the project dashboard, the thread's folder
- * in Explorer, or its settings. Explorer needs this desktop's own server.
+ * The thread header's project name: a menu to open the project dashboard, its space's view
+ * (only for a project in a space), the thread's folder in Explorer, or its settings.
+ * Explorer needs this desktop's own server.
  */
 export function ProjectCrumbMenu({ project, path }: { project: ProjectView; path?: string }) {
   const id = useId();
   const menu = useRef<HTMLDivElement>(null);
   const { error, run, clear } = useAction();
+  const space = useSpaces().spaceOf(projectKey(project));
   const canOpenFolder = !!path && window.accioDesktop?.serverOrigin === window.location.origin;
   const close = () => menu.current?.hidePopover();
   const openFolder = () => run(async () => {
@@ -30,6 +33,7 @@ export function ProjectCrumbMenu({ project, path }: { project: ProjectView; path
       onKeyDown={onMenuKeyDown}
       onToggle={(e) => { if (e.newState === 'open') { clear(); focusMenuItem(menu.current); } }}>
       {item('Dashboard', () => { close(); emitAppEvent('project.dashboard', { id: project.id }); })}
+      {space && item('Space', () => { close(); emitAppEvent('space.open', { id: space.id }); })}
       {canOpenFolder && item('Open in Explorer', () => void openFolder())}
       {item('Project settings', () => { close(); emitAppEvent('project.open', { id: project.id }); })}
       {error && <p className="error menu-error" role="alert">Could not open the folder: {error}</p>}

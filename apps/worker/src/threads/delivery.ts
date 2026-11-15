@@ -10,7 +10,7 @@ import { DELIVERY_STEP_INSTRUCTIONS } from './deliveryStep.js';
 import { SHIPPED_NOTE_INSTRUCTIONS } from './shippedNote.js';
 import { type TriggerEvent, workflowMayRun } from './workflowTriggers.js';
 import type { z } from 'zod';
-import { GhBranch, GhBranchRules, GhCheckRuns, GhCommitStatus, GhJob, GhPullRequest, GhPullRequests, GhWorkflows, type GhCheck } from './ghReplies.js';
+import { GhActivity, GhBranch, GhBranchRules, GhCheckRuns, GhCommitStatus, GhJob, GhPullRequest, GhPullRequests, GhWorkflows, type GhCheck } from './ghReplies.js';
 
 const exec = promisify(execFile);
 /** Waiting uses machine-side checks; a model is woken only when it has more work. */
@@ -244,7 +244,7 @@ export class DeliveryGit {
     await record({ publishedRevision, integratedAt: result.integratedAt ?? checkedAt });
     let noChecks: ThreadDelivery['noChecks'];
     if (slug) {
-      const scope = { since: workspace.startRevision, events: [{ name: 'push' as const, branch: delivery.baseBranch }] };
+      const scope = { since: workspace.startRevision, events: [{ name: 'push' as const, branch: delivery.baseBranch }], pushedTo: delivery.baseBranch };
       try { noChecks = await verifyGitHubChecks(workspace.sourcePath, slug, publishedRevision, result.integratedAt ?? delivery.requestedAt, host, scope); }
       catch (error) {
         const checks = error instanceof DeliveryPending ? error.ci?.checks : undefined;
@@ -342,6 +342,8 @@ type CheckScope = {
   events: TriggerEvent[];
   /** For pull requests, GitHub may read workflows from the target branch too. */
   baseRef?: string;
+  /** The branch the revision was pushed or merged to. GitHub filters that push by its own before..after, which can be narrower than `since`. */
+  pushedTo?: string;
 };
 
 /** Resolves when the revision's checks pass, or with why it has none. */
@@ -354,11 +356,26 @@ async function verifyGitHubChecks(cwd: string, slug: string, revision: string, r
   const workflows = await host(cwd, ['api', `repos/${slug}/actions/workflows?per_page=100`], GhWorkflows);
   const active = workflows.workflows.filter(w => w.state === 'active');
   if (!active.length) return 'no-workflows';
-  if (!await anyWorkflowMayRun(cwd, revision, active, scope)) return 'filtered';
+  const since = scope.pushedTo ? await pushedFrom(cwd, slug, revision, scope.pushedTo, host) : undefined;
+  if (!await anyWorkflowMayRun(cwd, revision, active, since ? { ...scope, since } : scope)) return 'filtered';
   // A workflow should run, but GitHub may still be registering it. Allow
   // registration time, but never infer that missing checks passed.
   if (Date.now() - Date.parse(requestedAt) < 2 * 60_000) throw new DeliveryPending('Waiting for GitHub to report checks for this revision.');
   throw new UserError('GitHub reported no checks for this revision within two minutes of the delivery request, although a workflow’s filters cover it. Run the applicable verification, then request delivery again. The workspace has been kept.');
+}
+
+/**
+ * The branch tip the update that brought `revision` to `branch` replaced, as GitHub recorded it.
+ * Commits that reached the branch before that, such as ones a thread rebased onto, are not part of
+ * this push's path filters. Undefined when GitHub cannot say or the tip is not a local ancestor.
+ */
+async function pushedFrom(cwd: string, slug: string, revision: string, branch: string, host: Host): Promise<string | undefined> {
+  let activity: z.infer<typeof GhActivity>;
+  try { activity = await host(cwd, ['api', `repos/${slug}/activity?ref=${encodeURIComponent(`refs/heads/${branch}`)}&per_page=100`], GhActivity); }
+  catch { return undefined; }
+  const before = activity.find(a => a.after === revision)?.before;
+  if (!before || /^0+$/.test(before)) return undefined;
+  return await maybeGit(cwd, 'merge-base', '--is-ancestor', before, revision) === null ? undefined : before;
 }
 
 /** True unless every active workflow's triggers provably exclude the revision. Anything unreadable counts as may run. */

@@ -703,6 +703,42 @@ it.each(['docs/note.md', 'apps/feature.ts'] as const)('delivers a push without c
   else await expect(manager.verify(thread.workspace!, intent)).rejects.toBeInstanceOf(DeliveryPending);
 });
 
+it.each(['recorded', 'unavailable'] as const)('filters a push by what it pushed, not by changes the thread rebased onto (push activity %s)', async activity => {
+  const { c, source, origin, checkout } = await setup();
+  await mkdir(join(source, '.github', 'workflows'), { recursive: true });
+  await writeFile(join(source, '.github', 'workflows', 'ci.yml'), 'on:\n  push:\n    branches: [main]\n    paths: [apps/**]\n');
+  await git(source, 'add', '.'); await git(source, 'commit', '--quiet', '-m', 'ci'); await git(source, 'push', '--quiet');
+  const thread = await c.call('threads.start', { checkoutId: checkout.id, text: 'work' });
+  await wait(c, thread.id);
+  // Someone else's code lands on main after the thread started; its own push ran CI.
+  const writer = join(t.home, 'remote-writer');
+  await cloneRepo(origin, writer);
+  await mkdir(join(writer, 'apps'), { recursive: true });
+  await writeFile(join(writer, 'apps', 'feature.ts'), 'other work\n');
+  await git(writer, 'add', '.'); await git(writer, 'commit', '--quiet', '-m', 'other'); await git(writer, 'push', '--quiet', 'origin', 'HEAD:refs/heads/main');
+  const before = await git(writer, 'rev-parse', 'HEAD');
+  await mkdir(join(thread.workspace!.path, 'docs'), { recursive: true });
+  await writeFile(join(thread.workspace!.path, 'docs', 'note.md'), 'change\n');
+  await publish(thread.workspace!.path);
+  const after = await git(thread.workspace!.path, 'rev-parse', 'HEAD');
+  await git(source, 'config', `url.${origin.replaceAll('\\', '/')}.insteadOf`, 'https://github.com/test/fixture.git');
+  await git(source, 'remote', 'set-url', 'origin', 'https://github.com/test/fixture.git');
+  const manager = new DeliveryGit(t.home, async (_cwd, args) => {
+    if (args[1]!.includes('check-runs')) return { total_count: 0, check_runs: [] };
+    if (args[1]!.includes('/actions/workflows')) return { workflows: [{ state: 'active', path: '.github/workflows/ci.yml' }] };
+    if (args[1]!.includes('/activity')) {
+      if (activity === 'unavailable') throw new DeliveryPending('GitHub refused access.');
+      return [{ before, after }, { before: thread.workspace!.startRevision, after: before }];
+    }
+    return { total_count: 0, statuses: [] };
+  });
+  const requestedAt = new Date(Date.now() - 3 * 60_000).toISOString();
+  const intent: ThreadDelivery = { mode: 'ship', policy: 'direct', status: 'running', baseBranch: 'main', requestedAt };
+  if (activity === 'recorded') expect(await manager.verify(thread.workspace!, intent)).toMatchObject({ status: 'delivered', noChecks: 'filtered' });
+  // Without GitHub's record of the push, the thread's whole range still counts, so missing checks still block.
+  else await expect(manager.verify(thread.workspace!, intent)).rejects.toThrow('Waiting for GitHub to report checks');
+});
+
 it.each(['in_progress', 'success', 'failure', 'original failure'] as const)('follows containing target CI after superseded cancellation: %s', async status => {
   const { c, source, origin, checkout } = await setup();
   const thread = await c.call('threads.start', { checkoutId: checkout.id, text: 'work' });
