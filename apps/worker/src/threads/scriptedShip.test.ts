@@ -1,10 +1,11 @@
-import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { ThreadView } from '@accio/protocol';
 import { FakeHarness, replyWith } from '../testing/fakeHarness.js';
 import { startTestApp, type TestClient } from '../testing/testApp.js';
 import { git } from '../git.js';
+import { cloneRepo, initRepoWithOrigin } from '../testing/gitRepo.js';
 
 // These tests spawn real Git and Node processes; allow for Windows CI contention.
 vi.setConfig({ testTimeout: 30_000 });
@@ -40,19 +41,7 @@ async function setup(script: (run: Parameters<ConstructorParameters<typeof FakeH
   await c.signedIn('Personal');
   const source = join(t.home, 'source');
   const origin = join(t.home, 'origin.git');
-  await mkdir(source);
-  await git(source, 'init', '--quiet', '-b', 'main');
-  await git(source, 'config', 'user.name', 'Accio Test');
-  await git(source, 'config', 'user.email', 'accio@example.test');
-  await git(source, 'config', 'core.autocrlf', 'false');
-  await writeFile(join(source, 'seed.txt'), 'base\n');
-  await writeFile(join(source, 'check.cjs'), CHECK);
-  await git(source, 'add', '.');
-  await git(source, 'commit', '--quiet', '-m', 'base');
-  await git(t.home, 'init', '--quiet', '--bare', '-b', 'main', origin);
-  await git(source, 'remote', 'add', 'origin', origin);
-  await git(source, 'push', '--quiet', '-u', 'origin', 'main');
-  await git(source, 'remote', 'set-head', 'origin', '-a');
+  await initRepoWithOrigin(source, origin, { 'seed.txt': 'base\n', 'check.cjs': CHECK });
   const checkout = await c.call('checkouts.add', { path: source, profileId: 'personal' });
   const counter = join(t.home, 'test-runs');
   await c.call('projects.setDelivery', { projectId: checkout.projectId, deliveryPolicy: 'direct', previewCommand: '', testCommand: `node check.cjs "${counter}" ${flaky}` });
@@ -70,9 +59,7 @@ const working = (file: string, content = 'feature\n') => async function* (run: {
 
 async function pushFromElsewhere(origin: string, file: string, content: string) {
   const writer = join(t.home, `writer-${Math.random().toString(36).slice(2)}`);
-  await git(t.home, 'clone', '--quiet', origin, writer);
-  await git(writer, 'config', 'user.name', 'Accio Test');
-  await git(writer, 'config', 'user.email', 'accio@example.test');
+  await cloneRepo(origin, writer);
   await writeFile(join(writer, file), content);
   await git(writer, 'add', '.');
   await git(writer, 'commit', '--quiet', '-m', `remote ${file}`);
@@ -200,9 +187,7 @@ it('runs a scripted ship cut off by a restart again once accio is back', async (
 it('rebases and pushes without retesting when the target moves before the push', async () => {
   const { c, harness, origin, checkout, runs, counter } = await setup(working('feature.txt'));
   const writer = join(t.home, 'racer');
-  await git(t.home, 'clone', '--quiet', origin, writer);
-  await git(writer, 'config', 'user.name', 'Accio Test');
-  await git(writer, 'config', 'user.email', 'accio@example.test');
+  await cloneRepo(origin, writer);
   await writeFile(join(writer, 'other.txt'), 'raced\n');
   await git(writer, 'add', '.');
   await git(writer, 'commit', '--quiet', '-m', 'race');

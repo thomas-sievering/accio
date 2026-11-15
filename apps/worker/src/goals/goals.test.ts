@@ -1,16 +1,9 @@
 import { afterEach, expect, it } from 'vitest';
-import type { HarnessTurn } from '../threads/harness.js';
 import { FakeHarness, replyWith, toolCall } from '../testing/fakeHarness.js';
-import { startTestApp } from '../testing/testApp.js';
+import { callAccioTools as mcp, startTestApp } from '../testing/testApp.js';
 
 let app: Awaited<ReturnType<typeof startTestApp>>;
 afterEach(async () => { await app?.stop(); });
-
-async function mcp(run: HarnessTurn, method: string, params?: unknown) {
-  const response = await fetch(run.tools!.url, { method: 'POST', headers: { 'content-type': 'application/json', authorization: run.tools!.authorization },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) });
-  return (await response.json() as { result: any }).result;
-}
 
 it('works toward a goal across turns accio starts itself, until the harness reports it achieved', async () => {
   const listed: string[][] = [];
@@ -21,7 +14,7 @@ it('works toward a goal across turns accio starts itself, until the harness repo
     yield* replyWith(`turn ${n}`);
   });
   app = await startTestApp({ harness });
-  const c = await app.connect(); await c.signedIn('Personal');
+  const c = await app.signedIn('Personal');
   const thread = await c.call('threads.start', { profileId: 'personal', text: '/goal make the tests pass' });
   await expect.poll(async () => (await c.call('threads.list', {}))[0]!.goal?.status).toBe('achieved');
   await expect.poll(async () => (await c.call('threads.list', {}))[0]!.status).toBe('idle');
@@ -54,7 +47,7 @@ it('pauses when the harness is blocked, resumes from the status bar, and clears'
     yield* replyWith(`turn ${n}`);
   });
   app = await startTestApp({ harness });
-  const c = await app.connect(); await c.signedIn('Personal');
+  const c = await app.signedIn('Personal');
   const thread = await c.call('threads.start', { profileId: 'personal', text: 'hello' });
   await expect.poll(async () => (await c.call('threads.list', {}))[0]!.status).toBe('idle');
   await c.call('threads.send', { threadId: thread.id, text: '/goal deploy' });

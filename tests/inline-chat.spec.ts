@@ -1,17 +1,12 @@
-import { expect, test, _electron, type Page, type ElectronApplication } from '@playwright/test';
-import { createRequire } from 'node:module';
-import { readFile, mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { expect, test, type Page, type ElectronApplication } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
+import { newChatDraft, withElectron } from './chat.js';
 
-const require = createRequire(import.meta.url);
 const token = 'isolated-chat-test-token';
 
 test('Claude cache usage shows provider accounting once and survives reopening', async ({ page, baseURL }, testInfo) => {
   await page.goto(`${baseURL}/#token=${token}`);
-  await page.locator('.sidebar').getByRole('button', { name: 'New thread', exact: true }).click();
-  await page.getByRole('option', { name: 'No project', exact: true }).click();
-  if (await page.getByRole('combobox', { name: 'Search profiles' }).isVisible()) await page.getByRole('option', { name: 'Personal', exact: true }).click();
+  await newChatDraft(page);
   await expect(page.locator('.context-meter')).toHaveCount(0);
   await page.locator('.composer textarea').fill('Cache usage fixture');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
@@ -56,9 +51,7 @@ for (const submit of ['Enter', 'Send'] as const) {
       });
     });
     await page.goto(`${baseURL}/#token=${token}`);
-    await page.locator('.sidebar').getByRole('button', { name: 'New thread', exact: true }).click();
-    await page.getByRole('option', { name: 'No project', exact: true }).click();
-    if (await page.getByRole('combobox', { name: 'Search profiles' }).isVisible()) await page.getByRole('option', { name: 'Personal', exact: true }).click();
+    await newChatDraft(page);
     const input = page.locator('.composer textarea');
     const text = `First ${submit} startup feedback`;
     await input.fill(text);
@@ -102,9 +95,7 @@ test('a thread that finishes starting after you moved to another stays in the ba
     });
   });
   await page.goto(`${baseURL}/#token=${token}`);
-  await page.locator('.sidebar').getByRole('button', { name: 'New thread', exact: true }).click();
-  await page.getByRole('option', { name: 'No project', exact: true }).click();
-  if (await page.getByRole('combobox', { name: 'Search profiles' }).isVisible()) await page.getByRole('option', { name: 'Personal', exact: true }).click();
+  await newChatDraft(page);
   const text = 'Started in the background';
   await page.locator('.composer textarea').fill(text);
   await page.locator('.composer textarea').press('Enter');
@@ -357,18 +348,10 @@ test('reading position stays put through updates and jump-to-latest restores fol
 
 test('Electron renderer supports the same tools, snapshots, viewer and media controls', async ({ baseURL }) => {
   test.setTimeout(60_000);
-  const home = await mkdtemp(join(tmpdir(), 'accio-chat-electron-'));
-  const executablePath = require('electron') as string;
-  const environment = Object.fromEntries(Object.entries(process.env).filter(([key, value]) => key !== 'ELECTRON_RUN_AS_NODE' && value !== undefined));
-  const desktop = await _electron.launch({ executablePath, args: [resolve('tests/electron-shell.cjs'), `--user-data-dir=${home}`], env: { ...environment, ACCIO_CHAT_TEST_URL: baseURL!, ACCIO_CHAT_TEST_DOWNLOADS: home } });
-  try {
-    const page = await desktop.firstWindow();
+  await withElectron(baseURL!, 'accio-chat-electron-', async (desktop, page) => {
     await openChat(page, baseURL!, false);
     await mediaAndTools(page, desktop);
-  } finally {
-    await desktop.close();
-    await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
-  }
+  });
 });
 
 test('running sub-agents show their latest step, then fold into ordinary Agent rows', async ({ page, baseURL }, testInfo) => {

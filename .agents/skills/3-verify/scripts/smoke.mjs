@@ -1,19 +1,15 @@
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { addLocalProject, controls, createFirstProfile } from './steps.mjs';
 
 export default async function smoke({ page, runDir, home, fixture, action, capture, doctor }) {
-  const button = (name) => page.getByRole('button', { name, exact: true });
-  const settings = page.locator('.sidebar nav');
-  const section = (name) => settings.getByRole('button', { name, exact: true });
+  const { button, section } = controls(page);
   const profileRow = (name) => page.getByRole('button', { name: new RegExp('^' + name + ' No house on the Sorting Hat$') });
   const settingsFile = () => readFile(join(home, 'hub/settings.json'), 'utf8').then(JSON.parse);
 
   await action('profiles/first-run: create Verify personal', async () => {
-    await button('Continue').click();
-    await page.getByPlaceholder('personal, work…').fill('Verify personal');
-    await button('Continue').click();
-    await page.getByText('Choose an account for Verify personal', { exact: true }).waitFor();
+    await createFirstProfile(page);
     assert((await settingsFile()).profiles.some((p) => p.name === 'Verify personal'));
   });
   await capture('profiles-first-run');
@@ -86,11 +82,7 @@ export default async function smoke({ page, runDir, home, fixture, action, captu
 
   await action('projects/toolbar: add the disposable local folder', async () => {
     await button('Back').click();
-    await button('Add project').click();
-    await page.getByRole('textbox', { name: 'Folder', exact: true }).fill(fixture);
-    await page.getByRole('dialog').getByText(/no git remote; this folder is its own project/).waitFor();
-    await button('Add').click();
-    await page.getByRole('dialog').waitFor({ state: 'hidden' });
+    await addLocalProject(page, fixture);
     const projects = JSON.parse(await readFile(join(home, 'projects.json'), 'utf8'));
     assert(projects.checkouts.some((c) => c.path.toLowerCase() === fixture.toLowerCase()));
   });

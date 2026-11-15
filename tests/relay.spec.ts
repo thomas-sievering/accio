@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { TestClient } from '../apps/worker/src/testing/testApp.js';
+import { newChatDraft } from './chat.js';
 
 async function pasteImage(page: Page) {
   const data = (await readFile(resolve('tests/fixtures/chat.png'))).toString('base64');
@@ -19,9 +20,7 @@ test('remote actions match relay support and become read-only when the owner goe
     socket.onMessage(message => { if (JSON.parse(String(message)).method === 'threads.upload') uploads++; server.send(message); });
   });
   await page.goto(`${baseURL}/#token=relay-test-token`);
-  await page.locator('.sidebar').getByRole('button', { name: 'New thread', exact: true }).click();
-  await page.getByRole('option', { name: 'No project', exact: true }).click();
-  if (await page.getByRole('combobox', { name: 'Search profiles' }).isVisible()) await page.getByRole('option', { name: 'Personal', exact: true }).click();
+  await newChatDraft(page);
   await page.locator('.composer textarea').fill('Relay cleanup check');
   await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled();
   await pasteImage(page);

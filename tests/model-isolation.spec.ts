@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startHubService } from '../apps/hub/src/index.js';
 import { fakeClaudeFetch, startTestSortingHat, TestClient } from '../apps/worker/src/testing/testApp.js';
+import { newChatDraft } from './chat.js';
 
 /** Real hub switching; the transport holds model replies to expose a stale cached paint. */
 test('model pickers keep identical profile IDs isolated across hubs', async ({ page, baseURL }) => {
@@ -51,9 +52,7 @@ test('model pickers keep identical profile IDs isolated across hubs', async ({ p
       });
     });
     const draft = async () => {
-      await page.locator('.sidebar').getByRole('button', { name: 'New thread', exact: true }).click();
-      await page.getByRole('option', { name: 'No project', exact: true }).click();
-      if (await page.getByRole('combobox', { name: 'Search profiles' }).isVisible()) await page.getByRole('option', { name: 'Personal', exact: true }).click();
+      await newChatDraft(page);
     };
     await page.goto(`${baseURL}/#token=isolated-chat-test-token`);
     await draft();

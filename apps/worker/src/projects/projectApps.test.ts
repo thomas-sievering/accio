@@ -1,9 +1,10 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { ProjectAppView, ProjectsState } from '@accio/protocol';
 import { git } from '../git.js';
+import { initRepoWithOrigin } from '../testing/gitRepo.js';
 import { Router } from '../rpc/router.js';
 import { ProjectApps } from './projectApps.js';
 import type { Projects } from './projects.js';
@@ -26,18 +27,7 @@ async function setup() {
   home = await mkdtemp(join(tmpdir(), 'accio-apps-'));
   const source = join(home, 'source');
   const origin = join(home, 'origin.git');
-  await mkdir(source);
-  await git(source, 'init', '--quiet', '-b', 'main');
-  await git(source, 'config', 'user.name', 'Accio Test');
-  await git(source, 'config', 'user.email', 'accio@example.test');
-  await git(source, 'config', 'core.autocrlf', 'false');
-  await writeFile(join(source, 'server.cjs'), SERVER('v1'));
-  await git(source, 'add', '.');
-  await git(source, 'commit', '--quiet', '-m', 'v1');
-  await git(home, 'init', '--quiet', '--bare', '-b', 'main', origin);
-  await git(source, 'remote', 'add', 'origin', origin);
-  await git(source, 'push', '--quiet', '-u', 'origin', 'main');
-  await git(source, 'remote', 'set-head', 'origin', '-a');
+  await initRepoWithOrigin(source, origin, { 'server.cjs': SERVER('v1') }, { message: 'v1' });
   const state: ProjectsState = {
     projects: [{ id: 'p1', name: 'demo', profileId: 'personal', repoKey: null, startCommand: 'node server.cjs', setupCommand: 'node -e "require(\'fs\').writeFileSync(\'setup.txt\', String(Date.now()))"' }],
     checkouts: [{ id: 'c1', projectId: 'p1', path: source }],

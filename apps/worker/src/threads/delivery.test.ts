@@ -7,6 +7,7 @@ import { RESTART_NOTICE, RESUME_PROMPT } from './thread.js';
 import { startTestApp, type TestClient } from '../testing/testApp.js';
 import { DeliveryGit, DeliveryPending, deliveryPrompt, ghFailure } from './delivery.js';
 import { git } from '../git.js';
+import { cloneRepo, initRepoWithOrigin } from '../testing/gitRepo.js';
 import type { ThreadDelivery, ThreadView } from '@accio/protocol';
 
 // These tests spawn real Git processes; allow for Windows CI contention.
@@ -23,18 +24,7 @@ async function setup(harness = new FakeHarness()) {
   await c.signedIn('Personal');
   const source = join(t.home, 'source');
   const origin = join(t.home, 'origin.git');
-  await mkdir(source);
-  await git(source, 'init', '--quiet', '-b', 'main');
-  await git(source, 'config', 'user.name', 'Accio Test');
-  await git(source, 'config', 'user.email', 'accio@example.test');
-  await git(source, 'config', 'core.autocrlf', 'false');
-  await writeFile(join(source, 'seed.txt'), 'base\n');
-  await git(source, 'add', '.');
-  await git(source, 'commit', '--quiet', '-m', 'base');
-  await git(t.home, 'init', '--quiet', '--bare', '-b', 'main', origin);
-  await git(source, 'remote', 'add', 'origin', origin);
-  await git(source, 'push', '--quiet', '-u', 'origin', 'main');
-  await git(source, 'remote', 'set-head', 'origin', '-a');
+  await initRepoWithOrigin(source, origin, { 'seed.txt': 'base\n' });
   const checkout = await c.call('checkouts.add', { path: source, profileId: 'personal' });
   return { c, source, origin, checkout };
 }
@@ -50,9 +40,7 @@ async function publish(cwd: string) {
 
 async function advanceOrigin(origin: string, branch = 'main') {
   const writer = join(t.home, 'remote-writer');
-  await git(t.home, 'clone', '--quiet', origin, writer);
-  await git(writer, 'config', 'user.name', 'Accio Test');
-  await git(writer, 'config', 'user.email', 'accio@example.test');
+  await cloneRepo(origin, writer);
   if (branch !== 'main') await git(writer, 'checkout', '--quiet', '-b', branch);
   await writeFile(join(writer, 'remote-only.txt'), 'latest remote work\n');
   await git(writer, 'add', '.');

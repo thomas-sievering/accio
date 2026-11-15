@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { newChatDraft } from './chat.js';
 
 test('measures a settings baseline and shows the persisted last request in a thread', async ({ page, baseURL }, testInfo) => {
   await page.goto(`${baseURL}/#token=isolated-chat-test-token`);
@@ -12,9 +13,7 @@ test('measures a settings baseline and shows the persisted last request in a thr
   await expect(baseline).toContainText('Tokens are rough estimates');
   await page.screenshot({ path: testInfo.outputPath('prompt-baseline.png') });
   await page.getByRole('button', { name: 'Back', exact: true }).click();
-  await page.locator('.sidebar').getByRole('button', { name: 'New thread', exact: true }).click();
-  await page.getByRole('option', { name: 'No project', exact: true }).click();
-  if (await page.getByRole('combobox', { name: 'Search profiles' }).isVisible()) await page.getByRole('option', { name: 'Personal', exact: true }).click();
+  await newChatDraft(page);
   await expect(page.getByLabel('Prompt size', { exact: true })).toHaveCount(0);
   await page.locator('.composer textarea').fill('Prompt size fixture');
   await page.getByRole('button', { name: 'Send', exact: true }).click();

@@ -24,8 +24,7 @@ it('captures streamed items with their event cursor and persists interrupted par
   });
   const t = await startTestApp({ harness });
   stop = t.stop;
-  const c = await t.connect();
-  await c.signedIn('Personal');
+  const c = await t.signedIn('Personal');
   const thread = await c.call('threads.start', { profileId: 'personal', text: 'hello' });
   try {
     const firstDelta = await c.waitFor('thread.delta', (event) => event.threadId === thread.id);
