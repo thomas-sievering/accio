@@ -47,3 +47,17 @@ export async function cloneRepo(origin: string, folder: string, author: GitAutho
   await git(dirname(folder), 'clone', '--quiet', origin, folder);
   await setAuthor(folder, author);
 }
+
+/**
+ * Makes every git command in this process fetch `url` from the folder `from` instead, as a clone
+ * from GitHub would without reaching it. Undone by forgetFetchFrom.
+ */
+export function fetchFrom(from: string, url: string) {
+  const n = Number(process.env.GIT_CONFIG_COUNT ?? 0);
+  Object.assign(process.env, { GIT_CONFIG_COUNT: String(n + 1), [`GIT_CONFIG_KEY_${n}`]: `url.${from.replaceAll('\\', '/')}.insteadOf`, [`GIT_CONFIG_VALUE_${n}`]: url });
+}
+
+export function forgetFetchFrom() {
+  for (let n = Number(process.env.GIT_CONFIG_COUNT ?? 0) - 1; n >= 0; n--) { delete process.env[`GIT_CONFIG_KEY_${n}`]; delete process.env[`GIT_CONFIG_VALUE_${n}`]; }
+  delete process.env.GIT_CONFIG_COUNT;
+}

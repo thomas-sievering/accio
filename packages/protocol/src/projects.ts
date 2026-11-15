@@ -54,6 +54,11 @@ const CloneCheckout = z.object({
   url: z.string().min(1),
   profileId: z.string(),
 });
+/**
+ * The URL the machine's checkout of the repository fetches from, so another machine can clone it the
+ * same way without a thread to start there (GLOSSARY: Space).
+ */
+const CloneUrl = z.object({ machineId: z.string(), repoKey: z.string().min(1) });
 /** deleteThreads records explicit confirmation to delete all current checkout threads. */
 const RemoveCheckout = z.object({ id: z.string(), deleteThreads: z.boolean().optional() });
 const SetProfile = z.object({ projectId: z.string(), profileId: z.string() });
@@ -71,6 +76,7 @@ export const projectMethods = {
   'checkouts.inspect': method<typeof Path, FolderInspection>(Path),
   'checkouts.add': method<typeof AddCheckout, CheckoutView>(AddCheckout),
   'checkouts.clone': method<typeof CloneCheckout, CheckoutView>(CloneCheckout),
+  'checkouts.cloneUrl': method<typeof CloneUrl, { url: string }>(CloneUrl),
   'checkouts.remove': method<typeof RemoveCheckout, null>(RemoveCheckout),
   'projects.setProfile': method<typeof SetProfile, ProjectView>(SetProfile),
   'projects.setDelivery': method<typeof DeliverySettings, ProjectView>(DeliverySettings),

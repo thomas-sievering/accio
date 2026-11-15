@@ -208,7 +208,8 @@ export class Turns {
       const env = { ...turnEnv(state.home, thread.profileId, thread.model.harnessId, access), ...await deps.machines.github.env(thread.profileId, cwd).catch(() => ({})) };
       resources = await deps.resources()?.prepare(thread.profileId, thread.projectId, env, { repair: !!thread.repairToolId, cwd });
       const project = deps.projects.state().projects.find((p) => p.id === thread.projectId);
-      const space = project && await deps.spaceContext()?.section({ project, cwd });
+      // GLOSSARY: Space. A thread's first turn waits for its space's home to be cloned here.
+      const space = project && await deps.spaceContext()?.section({ project, cwd, firstTurn: !delivering && !thread.workVersion });
       if (controller.signal.aborted || state.closing) throw new UserError('Turn interrupted before starting');
       if (!delivering) {
         if (!options.resume && !options.retry) thread = { ...thread, workVersion: (thread.workVersion ?? 0) + 1 };

@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { ProfileView, ThreadView } from '@accio/protocol';
 import { git } from '../git.js';
 import { FakeHarness, replyWith } from '../testing/fakeHarness.js';
-import { initRepoWithOrigin } from '../testing/gitRepo.js';
+import { fetchFrom, forgetFetchFrom, initRepoWithOrigin } from '../testing/gitRepo.js';
 import { callAccioTools, startTestApp, type TestClient } from '../testing/testApp.js';
 
 /** A folder without a remote: a local project, keyed local:<project id>, whose threads need no fetch. */
@@ -45,7 +45,7 @@ function starting(args: () => Record<string, unknown>) {
 describe('start_thread in another project of the space', () => {
   let t: Awaited<ReturnType<typeof startTestApp>> | undefined;
   let root: string;
-  afterEach(async () => { await t?.stop(); t = undefined; await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); });
+  afterEach(async () => { forgetFetchFrom(); await t?.stop(); t = undefined; await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); });
 
   async function app(args: () => Record<string, unknown>) {
     root = await mkdtemp(join(tmpdir(), 'accio-sibling-'));
@@ -112,13 +112,33 @@ describe('start_thread in another project of the space', () => {
     expect(answers[0]).toEqual({ isError: true, text: "This thread's project is in no space, so it can only start threads in its own project. Leave out project." });
   });
 
-  it('says when the sibling has no checkout on this machine', async () => {
+  it("clones a sibling missing here into its profile's folder, then starts in it", async () => {
+    const { c, work, answers } = await app(() => ({ project: 'hrc_web' }));
+    const mcp = await localProject(c, join(root, 'hrc_mcp'));
+    // This machine knows hrc_web under the Work profile, but its checkout was deleted.
+    const gone = join(root, 'hrc_web');
+    const web = await keyedProject(c, gone, 'github.com/me/hrc_web', work);
+    await rm(gone, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+    fetchFrom(`${gone}.git`, 'https://github.com/me/hrc_web.git');
+    const folder = join(root, 'work');
+    await c.call('machines.setProfileFolders', { machineId: (await c.thisMachine()).id, profileId: work.id, folders: [folder] });
+    await c.call('spaces.save', { name: 'hrc', projectKeys: [`local:${mcp.projectId}`, 'github.com/me/hrc_web'] });
+
+    const caller = await c.call('threads.start', { checkoutId: mcp.id, text: 'start it' });
+    const [child] = await startedBy(c, caller);
+    expect(answers[0]!.text).toContain(' in hrc_web on this machine.');
+    expect(child).toMatchObject({ projectId: web.projectId, profileId: work.id });
+    const { checkouts } = await c.call('projects.get', {});
+    expect(checkouts.find((checkout) => checkout.id === child!.checkoutId)?.path).toBe(join(folder, 'hrc_web'));
+  });
+
+  it('says when the sibling is not available on this machine', async () => {
     const { c, answers } = await app(() => ({ project: 'hrc_web' }));
     const mcp = await localProject(c, join(root, 'hrc_mcp'));
     await c.call('spaces.save', { name: 'hrc', projectKeys: [`local:${mcp.projectId}`, 'github.com/me/hrc_web'] });
 
     const caller = await c.call('threads.start', { checkoutId: mcp.id, text: 'start it' });
     expect(await startedBy(c, caller)).toEqual([]);
-    expect(answers[0]).toEqual({ isError: true, text: 'hrc_web has no checkout on this machine. Add one there first, or start the thread on a machine that has it.' });
+    expect(answers[0]).toEqual({ isError: true, text: "hrc_web is not available on this machine: no machine that has it is online, so its profile isn't known." });
   });
 });

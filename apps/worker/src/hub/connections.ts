@@ -18,6 +18,7 @@ import { Projects } from '../projects/projects.js';
 import { Spaces } from '../spaces/spaces.js';
 import { SpaceContext } from '../spaces/spaceContext.js';
 import { SiblingThreads } from '../spaces/siblingThreads.js';
+import { MissingCheckouts } from '../spaces/missingCheckouts.js';
 import { registerProjectChangelog } from '../projects/projectChangelog.js';
 import { Threads } from '../threads/threads.js';
 import type { Harness } from '../threads/harness.js';
@@ -138,7 +139,9 @@ export class HubConnections {
         },
       }));
     }
-    const siblings = new SiblingThreads({ spaces: () => spaces.list(), projects: () => projects.state(), projectsOn: (machineId) => relay.projectsOn(machineId) });
+    // GLOSSARY: Space. Checkouts of the space's projects, cloned here when missing, for the Space section and start_thread.
+    const spaceCheckouts = new MissingCheckouts({ projects: () => projects.state(), clone: (repoKey, url, profileId) => projects.clone(repoKey, url, profileId), source: (repoKey) => relay.cloneSource(repoKey) });
+    const siblings = new SiblingThreads({ spaces: () => spaces.list(), projects: () => projects.state(), projectsOn: (machineId) => relay.projectsOn(machineId), checkoutHere: (key) => spaceCheckouts.checkout(key) });
     tools.add(startThreadTool({
       here: this.here.id,
       caller: (id) => threads.views().find((t) => t.id === id),
@@ -168,7 +171,7 @@ export class HubConnections {
       const folder = resources.tools.folder(tool);
       return (await threads.start({ profileId: profile.id, machineId: this.here.id, text: `Repair ${tool.name} on this machine\n\nDiagnose the failure, fix the installation, test it and verify the result. Work on this machine only.\nPackage: ${tool.package}@${tool.version}\nExecutable: ${tool.executable}\nManaged installation folder: ${folder}\nInstall with npm install --prefix <that folder> ${tool.package}@${tool.version}. Keep the installation inside that folder.\nHealth check arguments: ${JSON.stringify(tool.checkArgs)}\nFailure:\n${detail}\n\nAccio will rerun the health check after this thread completes. Report what you changed and the commands and results that prove it works.` }, { repairToolId: tool.id })).id;
     }, this.resourceCommand);
-    resources.register(router); threads.resources = resources; threads.toolOverrides = () => settings.harnessTools(); threads.onRepairFinished = id => resources.tools.afterRepair(id); threads.knownThreads = () => relay.merged(); threads.spaceContext = new SpaceContext({ spaces: () => spaces.list(), projects: () => projects.state() });
+    resources.register(router); threads.resources = resources; threads.toolOverrides = () => settings.harnessTools(); threads.onRepairFinished = id => resources.tools.afterRepair(id); threads.knownThreads = () => relay.merged(); threads.spaceContext = new SpaceContext({ spaces: () => spaces.list(), projects: () => projects.state(), checkouts: spaceCheckouts });
     profiles.setReferenceSource(() => [...projects.state().projects.map((p) => p.profileId), ...threads.profileReferences()]);
     let reconciliation: Promise<unknown> = Promise.resolve();
     let initialized = false;

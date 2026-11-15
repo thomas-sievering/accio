@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { stat } from 'node:fs/promises';
 import { basename } from 'node:path';
 import type { CheckoutView, ProjectView } from '@accio/protocol';
 import { UserError } from '../rpc/router.js';
@@ -70,4 +71,12 @@ export function removeCheckout(data: ProjectsData, checkoutId: string): Projects
   const checkouts = data.checkouts.filter((c) => c.id !== checkoutId);
   const projectStays = checkouts.some((c) => c.projectId === checkout.projectId);
   return { checkouts, projects: projectStays ? data.projects : data.projects.filter((p) => p.id !== checkout.projectId) };
+}
+
+/** The first of the project's checkouts still on disk here, in the order they were added. */
+export async function checkoutHere({ checkouts }: ProjectsData, project: Project | undefined): Promise<Checkout | undefined> {
+  for (const c of project ? checkouts.filter((c) => c.projectId === project.id) : []) {
+    if (await stat(c.path).then((s) => s.isDirectory(), () => false)) return c;
+  }
+  return undefined;
 }

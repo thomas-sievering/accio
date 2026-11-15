@@ -6,10 +6,11 @@ import type { Machines } from '../machine/machine.js';
 import type { Broadcast, Router } from '../rpc/router.js';
 import { UserError } from '../rpc/router.js';
 import { JsonFile } from '@accio/persistence';
-import { cloneInto, inspectFolder } from './git.js';
+import { cloneInto, inspectFolder, remoteUrlOf } from './git.js';
 import { samePath } from '../paths.js';
 import {
   addCheckout,
+  checkoutHere,
   findProjectFor,
   projectNameFor,
   removeCheckout,
@@ -92,20 +93,26 @@ export class Projects {
     this.removeThreads = remove;
   }
 
-  /** This machine's checkout of a repository, cloned under the profile's folder here (else home) when there is none. */
-  private async clone(repoKey: string, url: string, profileId: string): Promise<Checkout> {
-    const have = () => {
-      const project = this.data.projects.find((p) => p.repoKey === repoKey);
-      return project && this.data.checkouts.find((c) => c.projectId === project.id);
-    };
-    const existing = have();
+  /**
+   * GLOSSARY: Checkout. This machine's checkout of a repository, cloned from `url` under the profile's
+   * folder here (else home) when none is on disk. Calls for the same repository at once share one clone.
+   */
+  clone(repoKey: string, url: string, profileId: string): Promise<Checkout> {
+    const pending = this.cloning.get(repoKey) ?? this.cloneOnce(repoKey, url, profileId).finally(() => this.cloning.delete(repoKey));
+    this.cloning.set(repoKey, pending);
+    return pending;
+  }
+
+  private async cloneOnce(repoKey: string, url: string, profileId: string): Promise<Checkout> {
+    const have = () => checkoutHere(this.data, this.data.projects.find((p) => p.repoKey === repoKey));
+    const existing = await have();
     if (existing) return existing;
     await this.profiles.syncReferences();
     const release = this.profiles.useProfile(profileId);
     try {
       const base = this.machines.profileFoldersHere().find((p) => p.id === profileId)?.folders[0] ?? homedir();
       const facts = await cloneInto(base, repoKey, url);
-      const added = have();
+      const added = await have();
       if (added) return added;
       if (this.data.checkouts.some((c) => samePath(c.path, facts.root))) throw new UserError(`${facts.root} is already added to another project`);
       const { data, checkout } = addCheckout(this.data, facts, profileId);
@@ -149,10 +156,11 @@ export class Projects {
           release();
         }
       })
-      .on('checkouts.clone', ({ repoKey, url, profileId }) => {
-        const pending = this.cloning.get(repoKey) ?? this.clone(repoKey, url, profileId).finally(() => this.cloning.delete(repoKey));
-        this.cloning.set(repoKey, pending);
-        return pending;
+      .on('checkouts.clone', ({ repoKey, url, profileId }) => this.clone(repoKey, url, profileId))
+      .on('checkouts.cloneUrl', async ({ repoKey }) => {
+        const checkout = await checkoutHere(this.data, this.data.projects.find((p) => p.repoKey === repoKey));
+        if (!checkout) throw new UserError(`This machine has no checkout of ${repoKey}.`);
+        return { url: await remoteUrlOf(checkout.path, repoKey) };
       })
       .on('checkouts.remove', async ({ id, deleteThreads }) => {
         this.checkout(id);
