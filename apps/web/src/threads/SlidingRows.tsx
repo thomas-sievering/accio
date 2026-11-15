@@ -91,8 +91,21 @@ export function SlidingRow({ id, children }: { id: string; children: ReactNode }
   );
 }
 
-/** A shelf keeps its place in the group: it slides when the rows above it come or go. */
+/** The shelves below the inbox. A shelf that empties fades out with its last row rather than vanishing. */
+export function ShelfList({ children }: { children: ReactNode }) {
+  return (
+    <div className="shelves">
+      <AnimatePresence initial={false} mode="popLayout">{children}</AnimatePresence>
+    </div>
+  );
+}
+
+/** A shelf keeps its place in the group: it slides when the rows above it come or go. It opens through CSS (shelf-in). */
 export function SlidingShelf({ className, children, ref }: { className: string; children: ReactNode; ref?: React.Ref<HTMLElement> }) {
   const { reduce } = useContext(SlideCtx);
-  return <motion.section ref={ref} className={className} layout={reduce ? false : 'position'}>{children}</motion.section>;
+  return (
+    <motion.section ref={ref} className={className} layout={reduce ? false : 'position'} initial={false} exit={{ opacity: 0 }}>
+      {children}
+    </motion.section>
+  );
 }

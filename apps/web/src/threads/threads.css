@@ -314,6 +314,8 @@
 
 /* Snoozed and Settled shelves, below the list inside the sidebar's scroll region. */
 .shelves {
+  /* A shelf that empties steps out of the flow at its place while it fades (SlidingRows.tsx). */
+  position: relative;
   margin-top: auto;
   padding-top: 16px;
 }

@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from 'react';
 import { Chevron } from '../app/icons';
 import { useLocalState } from '../app/useLive';
 import { shelveThreads, type ThreadShelves as Shelves } from './shelves';
-import { RowList, SlidingRow, SlidingShelf } from './SlidingRows';
+import { RowList, ShelfList, SlidingRow, SlidingShelf } from './SlidingRows';
 import { ThreadRow } from './ThreadRow';
 import { useThreads } from './threads';
 
@@ -47,26 +47,27 @@ export function ThreadShelves({ view }: { view: ShelfView }) {
   );
 
   return (
-    <div className="shelves">
+    <ShelfList>
       {shelf('working', 'Working', shelves.working.map((t) => (
         <SlidingRow key={t.id} id={t.id}><ThreadRow thread={t} place="working" /></SlidingRow>
       )))}
       {shelf('snoozed', 'Snoozed', shelves.snoozed.map((t) => (
         <SlidingRow key={t.id} id={t.id}><ThreadRow thread={t} place="snoozed" /></SlidingRow>
       )))}
-      {shelf('settled', 'Settled', <>
-        {shelves.settled.slice(0, view.settledShown).map((t) => (
+      {/* One flat list of keyed rows, so each settled row leaves on its own. */}
+      {shelf('settled', 'Settled', [
+        ...shelves.settled.slice(0, view.settledShown).map((t) => (
           <SlidingRow key={t.id} id={t.id}><ThreadRow thread={t} place="settled" /></SlidingRow>
-        ))}
-        {hidden > 0 && (
+        )),
+        hidden > 0 && (
           <SlidingRow key="settled-more" id="settled-more">
             <button className="shelf-more" onClick={view.showMoreSettled}>
               Show {Math.min(SETTLED_PAGE, hidden)} more
             </button>
           </SlidingRow>
-        )}
-      </>)}
-    </div>
+        ),
+      ])}
+    </ShelfList>
   );
 }
 
@@ -87,16 +88,17 @@ function useCreatedShelves(): Set<ShelfName> {
   return created;
 }
 
-function Shelf(props: { name: ShelfName; label: string; count: number; view: ShelfView; arriving: boolean; children: ReactNode }) {
+// ShelfList's presence measures a leaving shelf through `ref`, so it reaches the section.
+function Shelf(props: { name: ShelfName; label: string; count: number; view: ShelfView; arriving: boolean; children: ReactNode; ref?: Ref<HTMLElement> }) {
   const expanded = props.view.expanded[props.name];
   // Decided once, when the shelf mounts: later renders must not restart or cut its opening.
   const [arriving] = useState(props.arriving);
-  const section = useRef<HTMLElement>(null);
   return (
-    <SlidingShelf ref={section} className={`shelf${arriving ? ' arriving' : ''}`}>
-      <button className="shelf-head" aria-expanded={expanded} onClick={() => {
+    <SlidingShelf ref={props.ref} className={`shelf${arriving ? ' arriving' : ''}`}>
+      <button className="shelf-head" aria-expanded={expanded} onClick={(e) => {
+        const section = e.currentTarget.parentElement;
         props.view.toggle(props.name);
-        if (!expanded) requestAnimationFrame(() => section.current?.querySelector('.row')?.scrollIntoView({ block: 'nearest' }));
+        if (!expanded) requestAnimationFrame(() => section?.querySelector('.row')?.scrollIntoView({ block: 'nearest' }));
       }}>
         <span>{props.label}</span>
         <span className="shelf-count">{props.count}</span>

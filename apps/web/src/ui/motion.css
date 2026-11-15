@@ -69,10 +69,11 @@ button[popovertarget]:active:not(:disabled),
    Each row rises 6px into place, one beat after the last. The beat
    is 22ms and only the first six take one: past that a long project
    list would still be arriving after the panel had landed, which
-   reads as late rather than as following. Only while the popover
-   opens ([data-entering], set by popoverEntrance.ts): a row that mounts
-   later, as a search widens or a step changes, is there at once. */
-[data-entering]:popover-open :is(.menu-item, .picker-option) {
+   reads as late rather than as following. Rows start from below only
+   in the frames the popover opens in ([data-entering], set by
+   popoverEntrance.ts): a row that mounts later, as a search widens or a
+   step changes, has no starting style and is there at once. */
+:popover-open :is(.menu-item, .picker-option) {
   transition:
     opacity 160ms ease,
     translate 220ms var(--ease-settle);
@@ -84,11 +85,11 @@ button[popovertarget]:active:not(:disabled),
     translate: 0 6px;
   }
 }
-[data-entering]:popover-open :is(.menu-item, .picker-option):nth-child(1) { transition-delay: 30ms; }
-[data-entering]:popover-open :is(.menu-item, .picker-option):nth-child(2) { transition-delay: 52ms; }
-[data-entering]:popover-open :is(.menu-item, .picker-option):nth-child(3) { transition-delay: 74ms; }
-[data-entering]:popover-open :is(.menu-item, .picker-option):nth-child(4) { transition-delay: 96ms; }
-[data-entering]:popover-open :is(.menu-item, .picker-option):nth-child(5) { transition-delay: 118ms; }
+:popover-open :is(.menu-item, .picker-option):nth-child(1) { transition-delay: 30ms; }
+:popover-open :is(.menu-item, .picker-option):nth-child(2) { transition-delay: 52ms; }
+:popover-open :is(.menu-item, .picker-option):nth-child(3) { transition-delay: 74ms; }
+:popover-open :is(.menu-item, .picker-option):nth-child(4) { transition-delay: 96ms; }
+:popover-open :is(.menu-item, .picker-option):nth-child(5) { transition-delay: 118ms; }
 
 /* Fades stay, travel goes. */
 @media (prefers-reduced-motion: reduce) {
@@ -102,5 +103,5 @@ button[popovertarget]:active:not(:disabled),
     :is(.menu, .new-thread-picker, .model-picker, .issue-picker)[popover]:popover-open { scale: none; }
     [data-entering]:popover-open :is(.menu-item, .picker-option) { translate: none; }
   }
-  [data-entering]:popover-open :is(.menu-item, .picker-option) { transition-delay: 0ms; }
+  :popover-open :is(.menu-item, .picker-option) { transition-delay: 0ms; }
 }
