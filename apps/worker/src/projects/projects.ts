@@ -123,6 +123,20 @@ export class Projects {
     }
   }
 
+  /** Adds a folder on this machine: a known repository joins its project, anything else starts one in the profile. */
+  async addFolder(path: string, profileId?: string): Promise<Checkout> {
+    const release = profileId ? this.profiles.useProfile(profileId) : () => {};
+    try {
+      await this.profiles.syncReferences();
+      const facts = await inspectFolder(path);
+      const { data, checkout } = addCheckout(this.data, facts, profileId);
+      await this.commit(data);
+      return checkout;
+    } finally {
+      release();
+    }
+  }
+
   register(router: Router) {
     router
       .on('projects.get', () => this.data)
@@ -144,18 +158,7 @@ export class Projects {
           suggestedProfileId: suggestProfile(this.machines.profileFoldersHere(), facts.root),
         };
       })
-      .on('checkouts.add', async ({ path, profileId }) => {
-        const release = profileId ? this.profiles.useProfile(profileId) : () => {};
-        try {
-          await this.profiles.syncReferences();
-          const facts = await inspectFolder(path);
-          const { data, checkout } = addCheckout(this.data, facts, profileId);
-          await this.commit(data);
-          return checkout;
-        } finally {
-          release();
-        }
-      })
+      .on('checkouts.add', ({ path, profileId }) => this.addFolder(path, profileId))
       .on('checkouts.clone', ({ repoKey, url, profileId }) => this.clone(repoKey, url, profileId))
       .on('checkouts.cloneUrl', async ({ repoKey }) => {
         const checkout = await checkoutHere(this.data, this.data.projects.find((p) => p.repoKey === repoKey));

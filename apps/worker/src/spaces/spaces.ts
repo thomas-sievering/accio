@@ -35,7 +35,7 @@ export class Spaces {
 }
 
 /** The hub explains why it refused a save, such as a project already in another space. */
-async function refused<T>(run: () => Promise<T>): Promise<T> {
+export async function refused<T>(run: () => Promise<T>): Promise<T> {
   try { return await run(); } catch (error) {
     if ((error as { status?: number }).status === 400) throw new UserError((error as Error).message);
     throw error;

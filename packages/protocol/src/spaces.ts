@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { method } from './rpc.js';
+import type { ThreadView } from './threads.js';
 
 /**
  * GLOSSARY: Project, as the hub and the paired machines know it: its repository key,
@@ -26,12 +27,29 @@ export const SaveSpace = z.object({
 export type SaveSpace = z.output<typeof SaveSpace>;
 const SpaceId = z.object({ id: z.string().min(1).max(128) });
 
+/**
+ * GLOSSARY: Home. Creates a new project from Accio's built-in home template, in the profile's folder
+ * on this machine (else the home folder), as a local folder or a new GitHub repo under the GitHub login
+ * chosen for that profile on this machine (refused without one). It saves `space` as given with the new project added as its home, then starts the
+ * home's first thread with the starter prompt.
+ */
+export const CreateHome = z.object({
+  space: SaveSpace.omit({ homeProjectKey: true }),
+  name: z.string().trim().min(1, 'Enter a name for the home.').max(100)
+    .regex(/^(?!\.+$)[A-Za-z0-9._-]+$/, "Use letters, digits, '.', '-' or '_', as in a folder or repository name."),
+  profileId: z.string().min(1),
+  location: z.enum(['folder', 'github']),
+});
+export type CreateHome = z.output<typeof CreateHome>;
+export type CreatedHome = { space: Space; checkoutId: string; path: string; thread: ThreadView };
+
 /** No accio tool reaches these: only the user decides what context a project gets. */
 export const spaceMethods = {
   'spaces.list': method<z.ZodObject<{}>, Space[]>(z.object({})),
   'spaces.save': method<typeof SaveSpace, Space>(SaveSpace),
   /** Deletes only the grouping; its projects, checkouts and threads stay as they are. */
   'spaces.delete': method<typeof SpaceId, null>(SpaceId),
+  'spaces.createHome': method<typeof CreateHome, CreatedHome>(CreateHome),
 };
 
 export type SpaceEvents = { 'spaces.changed': Space[] };
