@@ -76,22 +76,26 @@ function IssueDetails({ projectId, checkoutId, list, issue, onOpen, titled, clos
 }
 
 /**
- * GLOSSARY: Issue. Open thread when an open thread in the project works on the issue (a
- * local claim lives in that thread's worktree, so the list may still say Ready); otherwise
- * Start a thread, through the issue picker's start-and-claim path, while the issue is ready.
+ * GLOSSARY: Project dashboard. Open thread when a thread in the project works on the issue:
+ * an open one (a local claim lives in its worktree, so the list may still say Ready), or a
+ * settled one for a claimed issue. Otherwise Start a thread, through the issue picker's
+ * start-and-claim path, while the issue is ready.
  */
 function IssueThread({ projectId, checkoutId, issue }: { projectId: string; checkoutId: string; issue: IssueView }) {
   const client = useClient();
   const { threads, select } = useThreads();
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string>();
-  const working = useMemo(() => (threads ?? [])
-    .filter((t) => t.issue === issue.ref && t.projectId === projectId && !t.settledAt)
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0], [threads, issue.ref, projectId]);
+  const state = issueState(issue);
+  // An open thread first; a settled one still holds the claim of an issue the tracker shows claimed.
+  const working = useMemo(() => {
+    const own = (threads ?? []).filter((t) => t.issue === issue.ref && t.projectId === projectId)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    return own.find((t) => !t.settledAt) ?? (state === 'claimed' ? own[0] : undefined);
+  }, [threads, issue.ref, projectId, state]);
   if (working) {
     return <button type="button" className="issue-reader-action primary" title={working.title} onClick={() => select(working.id)}>Open thread</button>;
   }
-  const state = issueState(issue);
   const start = async () => {
     setStarting(true);
     setError(undefined);

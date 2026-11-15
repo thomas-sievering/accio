@@ -215,6 +215,8 @@ test('the reader starts a thread on a ready issue, claimed like the picker, and 
     // Fixture: a thread already works on 03, as one started from the picker would.
     const touring = await client.call('threads.start', { checkoutId: checkout.id, text: `Work on ${claimed}: Offer a short tour`, issue: { ref: claimed, title: 'Offer a short tour' } });
     await expect.poll(async () => (await client.call('threads.list', {})).find((t) => t.id === touring.id)?.status, { timeout: 20_000 }).toBe('idle');
+    // Settled, it still holds the claim, so the reader still opens it.
+    await client.call('threads.settle', { threadId: touring.id });
 
     await page.setViewportSize({ width: 1400, height: 800 });
     await startProjectThread(page, baseURL!, /start-issue-project/, 'Plan the onboarding');
@@ -231,7 +233,7 @@ test('the reader starts a thread on a ready issue, claimed like the picker, and 
     await expect(reader.locator('.issue-pill')).toHaveText('Blocked');
     await expect(start).toBeDisabled();
 
-    // A claimed issue whose thread Accio knows opens it.
+    // A claimed issue whose thread Accio knows opens it, even once that thread settled.
     await rows.filter({ hasText: 'Offer a short tour' }).getByRole('button').click();
     await expect(reader.locator('.issue-pill')).toHaveText('Claimed');
     await expect(start).toHaveCount(0);
