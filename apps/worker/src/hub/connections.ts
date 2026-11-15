@@ -18,6 +18,7 @@ import { startThreadTool } from '../threads/startThread.js';
 import { Projects } from '../projects/projects.js';
 import { Spaces } from '../spaces/spaces.js';
 import { SpaceContext } from '../spaces/spaceContext.js';
+import { SiblingThreads } from '../spaces/siblingThreads.js';
 import { ProjectApps } from '../projects/projectApps.js';
 import { Threads } from '../threads/threads.js';
 import type { Harness } from '../threads/harness.js';
@@ -139,10 +140,12 @@ export class HubConnections {
         },
       }));
     }
+    const siblings = new SiblingThreads({ spaces: () => spaces.list(), projects: () => projects.state(), projectsOn: (machineId) => relay.projectsOn(machineId) });
     tools.add(startThreadTool({
       caller: (id) => threads.views().find((t) => t.id === id),
       models: (profileId) => models.list(profileId).models,
       machine: (name) => { if (!name) return undefined; const found = findMachine(settings.machines(), name); return found.id === this.here.id ? undefined : found; },
+      sibling: (projectId, project, machine) => siblings.target(projectId, project, machine),
       start: async (params) => {
         const response = await router.handle({ id: 0, method: 'threads.start', params });
         if (!response?.ok) throw new Error(response?.error ?? 'Invalid request');

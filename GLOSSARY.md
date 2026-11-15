@@ -203,7 +203,7 @@ A helper turn that a thread's harness starts through the `agent` accio tool for 
 _Avoid_: Subthread, child thread, worker, helper thread
 
 **Started thread**:
-A new thread that another thread starts through the start_thread accio tool, when you ask for one, for example on another machine. Unlike a sub-agent it is a full thread: it has its own transcript, shows in the list, and you follow it and talk to it yourself. It starts in the same project, on the thread's machine or in another machine's checkout of the same repository, cloned there if needed, and on the starting thread's model unless you mention another. The starting thread does not wait for it.
+A new thread that another thread starts through the start_thread accio tool, when you ask for one, for example on another machine. Unlike a sub-agent it is a full thread: it has its own transcript, shows in the list, and you follow it and talk to it yourself. It starts in the same project, on the thread's machine or in another machine's checkout of the same repository, cloned there if needed, and on the starting thread's model unless you mention another. A thread in a space can start one in another project of the space instead, including the home: it works in that project's checkout on the chosen machine, under that project's profile. The starting thread does not wait for it.
 _Avoid_: Child thread, spawned thread, sub-thread
 
 **Model mention**:

@@ -1,5 +1,5 @@
 import { stat } from 'node:fs/promises';
-import { projectKey, type ProjectsState, type ProjectView, type Space } from '@accio/protocol';
+import { projectKey, type CheckoutView, type ProjectsState, type ProjectView, type Space } from '@accio/protocol';
 import { maybeGit } from '../git.js';
 
 export type SpaceContextDeps = {
@@ -40,11 +40,7 @@ export class SpaceContext {
     const { projects, checkouts } = this.deps.projects();
     const project = projects.find((p) => projectKey(p) === key);
     const name = project?.name ?? nameOfKey(key);
-    // The first of the project's checkouts still on disk here, in the order they were added.
-    let path: string | undefined;
-    for (const c of project ? checkouts.filter((c) => c.projectId === project.id) : []) {
-      if (await stat(c.path).then((s) => s.isDirectory(), () => false)) { path = c.path; break; }
-    }
+    const path = (await checkoutHere({ projects, checkouts }, project))?.path;
     // #195 clones a missing sibling and says when it can't be had on this machine.
     if (!path) return { name, place: 'not on this machine yet' };
     const branch = await currentBranch(path);
@@ -52,8 +48,16 @@ export class SpaceContext {
   }
 }
 
+/** The first of the project's checkouts still on disk here, in the order they were added. */
+export async function checkoutHere({ checkouts }: ProjectsState, project: ProjectView | undefined): Promise<CheckoutView | undefined> {
+  for (const c of project ? checkouts.filter((c) => c.projectId === project.id) : []) {
+    if (await stat(c.path).then((s) => s.isDirectory(), () => false)) return c;
+  }
+  return undefined;
+}
+
 /** A project this machine has no record of goes by its repository's name, as a new checkout of it would. */
-function nameOfKey(key: string) {
+export function nameOfKey(key: string) {
   return key.split('/').pop() || key;
 }
 

@@ -10,11 +10,12 @@ const models = [
   { harnessId: 'codex', id: 'gpt-6.1-sol', name: 'GPT-6.1-Sol', efforts: [{ id: 'medium' }, { id: 'high' }] },
 ] as ModelView[];
 
-function setup(caller: ReturnType<StartThreadDeps['caller']> = { checkoutId: 'co1', profileId: 'p1', model: { harnessId: 'claudeCode', modelId: 'opus', effort: 'high' } }) {
+function setup(caller: ReturnType<StartThreadDeps['caller']> = { checkoutId: 'co1', projectId: 'pr1', profileId: 'p1', model: { harnessId: 'claudeCode', modelId: 'opus', effort: 'high' } }) {
   const start = vi.fn(async (params: ParamsOf<'threads.start'>) => ({ id: 'new', title: 'Fix the window controls', ...params }) as unknown as ThreadView);
   const tool = startThreadTool({
     caller: (id) => id === 'caller' ? caller : undefined,
     models: () => models,
+    sibling: async () => { throw new Error('No space'); },
     machine: (name) => { if (!name) return undefined; const found = findMachine(machines, name); return found.id === 'here' ? undefined : found; },
     start,
   });
@@ -34,13 +35,13 @@ it('starts it on the machine the user mentioned, on the model they mentioned', a
 });
 
 it('starts a No project caller\'s thread in its profile', async () => {
-  const { tool, start } = setup({ checkoutId: '', profileId: 'p1', model: { harnessId: 'claudeCode', modelId: 'opus' } });
+  const { tool, start } = setup({ checkoutId: '', projectId: '', profileId: 'p1', model: { harnessId: 'claudeCode', modelId: 'opus' } });
   await tool.call({ message: 'Fix it' }, context);
   expect(start).toHaveBeenCalledWith({ profileId: 'p1', text: 'Fix it', model: { harnessId: 'claudeCode', modelId: 'opus' } });
 });
 
 it('uses the mentioned model’s fallback when it cannot inherit the caller’s effort', async () => {
-  const { tool, start } = setup({ checkoutId: 'co1', profileId: 'p1', model: { harnessId: 'claudeCode', modelId: 'opus', effort: 'max' } });
+  const { tool, start } = setup({ checkoutId: 'co1', projectId: 'pr1', profileId: 'p1', model: { harnessId: 'claudeCode', modelId: 'opus', effort: 'max' } });
   await tool.call({ message: 'Fix it', model: '@sol' }, context);
   expect(start).toHaveBeenCalledWith({ checkoutId: 'co1', text: 'Fix it', model: { harnessId: 'codex', modelId: 'gpt-6.1-sol', effort: 'medium' } });
 });

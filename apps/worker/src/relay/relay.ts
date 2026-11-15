@@ -116,6 +116,13 @@ export class Relay {
     });
   }
 
+  /** Another machine's projects and checkouts, as it last reported them; undefined when it is not on the relay or on an earlier build. */
+  projectsOn(machineId: string): ProjectsState | undefined {
+    const snapshot = this.remote.get(machineId);
+    if (machineId === this.deps.here || !this.online.has(machineId) || !snapshot?.checkouts) return undefined;
+    return { projects: snapshot.projects, checkouts: snapshot.checkouts };
+  }
+
   /** Sends a call about another machine's thread to that machine. Undefined: the thread is this machine's. */
   forward(method: string, params: unknown): Promise<unknown> | undefined {
     if (method === 'threads.start') return this.startThere(params as ParamsOf<'threads.start'>);
@@ -169,12 +176,17 @@ export class Relay {
     return this.startOn(machineId, name, input);
   }
 
-  /** Starts it in that machine's checkout of the same repository, cloning one there first if it has none. */
+  /**
+   * Starts it in that machine's checkout of the same repository, cloning one there first if it has none.
+   * A checkout of that machine's own, such as a sibling's for start_thread, is used as it is.
+   */
   private async startOn(machineId: string, name: string, input: ParamsOf<'threads.start'>): Promise<unknown> {
     const { text, model } = input;
     const socket = this.socket!;
     let params: ParamsOf<'threads.start'>;
-    if ('checkoutId' in input) {
+    if ('checkoutId' in input && this.remote.get(machineId)?.checkouts?.some((c) => c.id === input.checkoutId)) {
+      params = { checkoutId: input.checkoutId, text, ...(model ? { model } : {}) };
+    } else if ('checkoutId' in input) {
       const { projects, checkouts } = this.deps.projects();
       const here = checkouts.find((c) => c.id === input.checkoutId);
       const project = projects.find((p) => p.id === here?.projectId);

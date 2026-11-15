@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it } from 'vitest';
 import { startHubService } from '@accio/hub';
 import type { ThreadView } from '@accio/protocol';
-import { startTestApp, startTestSortingHat, TestClient } from '../testing/testApp.js';
+import { callAccioTools, startTestApp, startTestSortingHat, TestClient } from '../testing/testApp.js';
 import { FakeHarness, gate, replyWith } from '../testing/fakeHarness.js';
 
 /** GLOSSARY: Relay. Two machines on one hub: the PC reads and drives the MacBook's thread. */
@@ -14,7 +14,7 @@ describe('thread relay between machines', () => {
   const cleanup: (() => Promise<unknown>)[] = [];
   afterEach(async () => { for (const stop of cleanup.splice(0).reverse()) await stop().catch(() => {}); });
 
-  async function machines(harness = new FakeHarness()) {
+  async function machines(harness = new FakeHarness(), pcHarness = new FakeHarness()) {
     const home = await mkdtemp(join(tmpdir(), 'accio-relay-hub-'));
     cleanup.push(() => rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
     const hat = await startTestSortingHat(home); cleanup.push(() => hat.close());
@@ -29,7 +29,7 @@ describe('thread relay between machines', () => {
     };
     const mac = await join_({ harness });
     await mac.client.call('sortingHat.configure', { url: hat.url, adminToken: hat.adminToken, hubName: 'Home' });
-    const pc = await join_({ harness: new FakeHarness() });
+    const pc = await join_({ harness: pcHarness });
     return { hub, mac, pc, join: join_ };
   }
   const remote = (threads: ThreadView[], id: string) => threads.find((t) => t.id === id);
@@ -216,5 +216,36 @@ describe('thread relay between machines', () => {
     await mac.app.stop();
     await pc.client.waitFor('machines.changed', (all) => !all.find((m) => m.id === macId)?.relay, 10_000);
     await expect(pc.client.call('threads.start', { profileId: profile.id, text: 'hi', machineId: macId })).rejects.toThrow(/offline/);
+  }, 30_000);
+
+  it('starts a thread in a sibling project of the space, in its checkout on the machine named', async () => {
+    const answers: string[] = [];
+    let macName = '';
+    // The PC's thread asks for one in notes, a sibling only the MacBook has: here, then on the MacBook.
+    const pcHarness = new FakeHarness(async function* (run) {
+      if (run.tools && run.prompt === 'start it') {
+        for (const machine of [undefined, macName]) {
+          const result = await callAccioTools(run, 'tools/call', { name: 'start_thread', arguments: { message: 'Write the notes', project: 'notes', ...(machine ? { machine } : {}) } });
+          answers.push(result.content[0].text);
+        }
+      }
+      yield* replyWith('done');
+    });
+    const { mac, pc } = await machines(new FakeHarness(), pcHarness);
+    const profile = await mac.client.signedIn('Personal');
+    const work = await mac.client.signedIn('Work');
+    const pcCheckout = await checkout(pc, 'accio', 'https://github.com/me/accio', profile.id);
+    const notes = await checkout(mac, 'notes', 'https://github.com/me/notes', work.id);
+    const macView = await mac.client.thisMachine();
+    macName = macView.name;
+    await pc.client.call('spaces.save', { name: 'accio', projectKeys: ['github.com/me/accio', 'github.com/me/notes'] });
+    await pc.client.waitFor('machines.changed', (all) => !!all.find((m) => m.id === macView.id)?.relay?.repos.includes('github.com/me/notes'), 10_000);
+
+    const caller = await pc.client.call('threads.start', { checkoutId: pcCheckout.id, text: 'start it' });
+    await pc.client.waitFor('threads.changed', (list) => list.some((t) => t.id === caller.id && t.status === 'idle'), 10_000);
+    expect(answers[0]).toBe('notes has no checkout on this machine. Add one there first, or start the thread on a machine that has it.');
+    expect(answers[1]).toContain(` in notes on ${macName}. It runs on its own`);
+    const childId = answers[1]!.match(/\(([^)]+)\)/)![1]!;
+    await expect.poll(async () => remote(await mac.client.call('threads.list', {}), childId), { timeout: 10_000 }).toMatchObject({ checkoutId: notes.id, profileId: work.id });
   }, 30_000);
 });
