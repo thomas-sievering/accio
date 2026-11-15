@@ -2,3 +2,66 @@
 .space-projects .check:has(input:disabled) span {
   color: var(--dim);
 }
+
+/* GLOSSARY: Space, Home. The space view: the home pinned on top, then a card per project. */
+.space-projects-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.space-project {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.space-project.home {
+  border-color: var(--line-2);
+}
+.space-project-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.space-project-head .ghost {
+  flex: none;
+  height: 30px;
+  padding: 0 10px;
+}
+.space-project-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.space-project-text b {
+  color: var(--ink-strong);
+  font-weight: 600;
+}
+.space-project-text small {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  color: var(--dim);
+  font-size: 12px;
+}
+.space-project-text small > span {
+  flex: none;
+  white-space: nowrap;
+}
+.space-project-text small > span + span::before {
+  content: '·';
+  margin-right: 6px;
+}
+.space-project-text small > .space-checkout {
+  display: flex;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.space-checkout.missing {
+  color: var(--amber);
+}
