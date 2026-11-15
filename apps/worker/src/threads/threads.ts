@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { DeliveryStepName, ParamsOf, ShippedNote, ThreadView } from '@accio/protocol';
+import { issueNamedIn } from '@accio/protocol';
 import type { SecretsAccess } from '@accio/hub';
 import { now } from '../time.js';
 import type { Profiles } from '../profiles/profiles.js';
@@ -148,6 +149,7 @@ export class Threads {
     for (const t of started) if (t.status === 'running') savedAt.set(t.id, await state.transcripts.savedAt(t.id));
     const { threads, interrupted } = recoverAfterRestart(started, t => savedAt.get(t.id));
     state.list = threads.map(t => t.delivery?.status === 'delivered' && t.delivery.completedAt && t.status === 'interrupted' ? { ...t, status: 'idle' } : t);
+    const named = await this.nameIssues();
     const recoveredRelease = await this.deliveries.recoverReleases();
     for (const thread of interrupted) {
       const live = await state.transcripts.get(thread.id);
@@ -162,11 +164,28 @@ export class Threads {
       });
       await state.transcripts.flush(thread.id);
     }
-    if (bound || recoveredRelease || interrupted.length || started.length < stored.length || state.list.some(t => t.delivery?.status === 'blocked')) await state.file.write(state.list);
+    if (bound || named || recoveredRelease || interrupted.length || started.length < stored.length || state.list.some(t => t.delivery?.status === 'blocked')) await state.file.write(state.list);
     await this.deliveries.resumeObservation();
     this.restartCandidates = new Set(state.list.filter(t => t.status === 'interrupted' && t.resumeAfterRestart && t.sessionId).map(t => t.id));
     // A Ship requested while no turn was left to finish, such as a scripted ship cut off by the restart.
     this.restartDeliveries = new Set(state.list.filter(t => t.status === 'idle' && t.delivery?.status === 'queued').map(t => t.id));
+  }
+
+  /**
+   * GLOSSARY: Issue. Open project threads started before threads kept their issue
+   * get it from their first message, so the picker knows they are in progress.
+   */
+  private async nameIssues() {
+    const { state } = this;
+    let named = false;
+    for (const thread of state.list.filter(t => t.checkoutId && !t.settledAt && !t.issue)) {
+      const first = (await state.transcripts.get(thread.id)).items.find(item => item.kind === 'user');
+      const issue = first?.kind === 'user' ? issueNamedIn(first.text) : undefined;
+      if (!issue) continue;
+      state.list = state.list.map(t => t.id === thread.id ? { ...t, issue } : t);
+      named = true;
+    }
+    return named;
   }
 
   /** Called once tools are listening, and again when an offline hub reconnects. */
@@ -419,6 +438,8 @@ export class Threads {
         if (goal && goal.type !== 'set') throw new UserError('Start a thread with /goal <objective>.');
         if (goal?.type === 'set') thread.goal = newGoal(goal.objective, now());
         // GLOSSARY: Issue. A thread from an issue starts with the issue's title, not its reference.
+        const issue = checkout ? input.issue?.ref ?? issueNamedIn(text) : undefined;
+        if (issue) thread.issue = issue;
         if (checkout && input.issue?.title) thread.title = titleFrom(input.issue.ref.startsWith('#') ? `${input.issue.ref} ${input.issue.title}` : input.issue.title);
         if (options.projectSetup && project) Object.assign(thread, { projectSetup: true, title: `Set up ${project.name} app`, titleManual: true });
         if (options.repairToolId) { thread.repairToolId = options.repairToolId; thread.title = `Repair ${this.resources?.state().tools.find(tool => tool.id === options.repairToolId)?.name ?? options.repairToolId}`; }

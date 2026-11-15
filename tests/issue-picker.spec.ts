@@ -55,6 +55,26 @@ test('a GitHub issue picked in a new thread is named in the first message and as
   await expect(page.locator('.msg.user').filter({ hasText: 'Work on #208: Retry the relay handshake after the hub restarts' })).toBeVisible();
   await expect.poll(() => newestThread(baseURL, text).then((thread) => thread?.title)).toBe('#208 Retry the relay handshake after the hub restarts');
   await expect.poll(async () => JSON.parse(await readFile(issuesClaimFile, 'utf8').catch(() => '[]'))).toEqual([['issue', 'edit', '208', '--add-assignee', '@me']]);
+
+  // A later draft shows #208 in progress; choosing it opens its thread instead of starting another.
+  await draftIn(page, baseURL, /issues-project/);
+  await page.getByRole('button', { name: 'Pick an issue', exact: true }).click();
+  await expect(picker.locator('.issue-picker-group span:first-child')).toHaveText(['Ready for agent', 'Needs triage', 'Blocked', 'In progress']);
+  const working = picker.getByRole('group', { name: 'In progress' }).getByRole('option', { name: /#208/ });
+  await expect(working).toContainText(/working|open/);
+  await working.hover();
+  await expect(picker.locator('.issue-picker-footer')).toContainText('Enter open thread');
+  await page.screenshot({ path: info.outputPath('github-in-progress.png') });
+  await page.keyboard.press('Enter');
+  await expect(picker).toBeHidden();
+  await expect(page.locator('.msg.user').filter({ hasText: 'Work on #208: Retry the relay handshake after the hub restarts' })).toBeVisible();
+
+  // Its New thread button still attaches it to a fresh draft.
+  await draftIn(page, baseURL, /issues-project/);
+  await page.getByRole('button', { name: 'Pick an issue', exact: true }).click();
+  await working.hover();
+  await picker.getByRole('button', { name: 'Start another thread on #208' }).click();
+  await expect(page.locator('.composer-chip')).toContainText('#208 Retry the relay handshake after the hub restarts');
 });
 
 test('a local issue is grouped by feature, removable, and marked claimed in the thread’s worktree', async ({ page, baseURL }, info) => {

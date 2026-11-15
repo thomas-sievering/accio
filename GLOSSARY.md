@@ -215,7 +215,7 @@ Where a project's open issues live, as its agent skills record it in `docs/agent
 _Avoid_: Backlog, ticket system
 
 **Issue**:
-One open issue a new thread can pick up. In a project's draft, the Pick an issue chip beside the machine lists them: GitHub issues by triage label, ready for an agent first and blocked last; local issues by feature. The chip shows only when the tracker has open issues. The picked issue sits above the message, which may then be empty; sending names it in the first message (`Work on #208: …`), starts the thread's title from it, and claims it once the thread has started: assigned to you on GitHub, or `Status: claimed` in the thread's worktree copy of a local file. A claim that fails is noted in the thread.
+One open issue a new thread can pick up. In a project's draft, the Pick an issue chip beside the machine lists them: GitHub issues by triage label (Ready for agent, Needs triage, Open for unlabelled, Ready for human, then Blocked); local issues by feature. Issues an open thread in the project already works on come last, under In progress: choosing one opens that thread, and its New thread button attaches it anyway. A thread knows its issue from the pick, or else from the first `#123` in its first message's first line, as when another thread starts it. The chip shows only when the tracker has open issues. The picked issue sits above the message, which may then be empty; sending names it in the first message (`Work on #208: …`), starts the thread's title from it, and claims it once the thread has started: assigned to you on GitHub, or `Status: claimed` in the thread's worktree copy of a local file. A claim that fails is noted in the thread.
 _Avoid_: Ticket, task
 
 **Machine mention**:

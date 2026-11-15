@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { issueMessage } from '@accio/protocol';
+import { issueMessage, issueNamedIn } from '@accio/protocol';
 import { findTracker, Issues, localIssues, withStatus } from './issues.js';
 import { runCommand } from '../resources/process.js';
 import { FakeHarness } from '../testing/fakeHarness.js';
@@ -87,6 +87,13 @@ describe('issue trackers', () => {
     expect(issueMessage({ ref: '#208', title: 'Retry' }, '  ')).toBe('Work on #208: Retry');
     expect(issueMessage({ ref: '#208', title: 'Retry' }, 'No jitter\n')).toBe('Work on #208: Retry\n\nNo jitter');
   });
+
+  it('finds the GitHub issue a first message works on in its first line', () => {
+    expect(issueNamedIn('Work on #208: Retry')).toBe('#208');
+    expect(issueNamedIn('Implement GitHub issue #196 ("Spaces"), a slice of the parent spec #177')).toBe('#196');
+    expect(issueNamedIn('Fix the build\n\nlike #12 did')).toBeUndefined();
+    expect(issueNamedIn('Use &#39; and color #fff and a/#3')).toBeUndefined();
+  });
 });
 
 describe('starting a thread from an issue', () => {
@@ -120,11 +127,28 @@ describe('starting a thread from an issue', () => {
     });
     expect((await c.call('threads.issues', { checkoutId: checkout.id })).issues.map((i) => i.ref)).toEqual(['#208', '#194']);
     const thread = await c.call('threads.start', { checkoutId: checkout.id, text: 'Work on #208: Retry the relay handshake', issue: { ref: '#208', title: 'Retry the relay handshake' } });
-    expect(thread.title).toBe('#208 Retry the relay handshake');
+    expect(thread).toMatchObject({ title: '#208 Retry the relay handshake', issue: '#208' });
     await expect.poll(() => edits).toEqual([['issue', 'edit', '208', '--add-assignee', '@me']]);
     const failed = await c.call('threads.start', { checkoutId: checkout.id, text: 'Work on #194: Settle threads', issue: { ref: '#194', title: 'Settle threads' } });
     await expect.poll(async () => (await c.call('threads.transcript', { threadId: failed.id })).some((i) => i.kind === 'notice' && i.text.startsWith('Could not claim #194: no permission'))).toBe(true);
     expect((await c.call('threads.transcript', { threadId: thread.id })).some((i) => i.kind === 'notice')).toBe(false);
+  });
+
+  it('keeps the issue a typed first message names, and finds it again for open threads that predate it', async () => {
+    const t = await startTestApp({ harness: new FakeHarness() }); stop = t.stop;
+    const c = await t.connect(); await c.signedIn('Personal');
+    const path = join(t.home, 'repo'); await mkdir(path);
+    const checkout = await c.call('checkouts.add', { path, profileId: 'personal' });
+    const typed = await c.call('threads.start', { checkoutId: checkout.id, text: 'Implement GitHub issue #196 ("Space view"), a slice of #177' });
+    const plain = await c.call('threads.start', { checkoutId: checkout.id, text: 'Tidy the README' });
+    expect([typed.issue, plain.issue]).toEqual(['#196', undefined]);
+    await c.waitFor('threads.changed', (ts) => ts.filter((t) => t.status === 'idle').length === 2);
+    await t.stop({ keepHome: true }); stop = undefined;
+    const file = join(t.home, 'threads.json');
+    await writeFile(file, JSON.stringify(JSON.parse(await readFile(file, 'utf8')).map(({ issue: _, ...thread }: { issue?: string }) => thread)));
+    const restarted = await startTestApp({ harness: new FakeHarness() }, t.home); stop = restarted.stop;
+    const threads = await (await restarted.connect()).call('threads.list', {});
+    expect(Object.fromEntries(threads.map((t) => [t.id, t.issue]))).toEqual({ [typed.id]: '#196', [plain.id]: undefined });
   });
 
   it('marks a local issue claimed in the thread’s worktree, leaving the checkout alone', async () => {

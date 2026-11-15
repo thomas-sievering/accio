@@ -55,6 +55,8 @@ export type ThreadView = {
   queuedMessages?: QueuedMessage[];
   /** GLOSSARY: Goal. Absent until `/goal` sets one; cleared with `/goal clear`. */
   goal?: ThreadGoal;
+  /** GLOSSARY: Issue. The issue it works on, by its `ref` as `threads.issues` lists it: picked, or named first in its first message's first line. */
+  issue?: string;
 };
 
 /**
