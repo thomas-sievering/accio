@@ -130,7 +130,7 @@ A named group of projects that share context, such as "hrc" or "Copilot Studio a
 _Avoid_: Workspace, home, group
 
 **Home**:
-The project in a space that holds what applies to the whole space, such as its glossary, decisions and notes about each project. It is an ordinary project in every other way: threads start in it and ship changes to it. A space has at most one home.
+The project in a space that holds what applies to the whole space, such as its glossary, decisions and notes about each project. It is an ordinary project in every other way: threads start in it and ship changes to it. A space has at most one home. Settings labels the picker "Home project".
 _Avoid_: Home repo (in UI text), space repo
 
 **Checkout**:

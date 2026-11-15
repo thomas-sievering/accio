@@ -17,7 +17,7 @@ test('creates a space in Settings, adds projects and marks its home', async ({ p
     const projects = page.getByRole('group', { name: 'Projects', exact: true });
     await projects.getByRole('checkbox', { name: /^delivery-project/ }).check();
     await projects.getByRole('checkbox', { name: /^review-project/ }).check();
-    await pick(page, 'Home', 'review-project');
+    await pick(page, 'Home project', 'review-project');
     await page.screenshot({ path: info.outputPath('new-space.png') });
     await button('Add space').click();
 
@@ -38,9 +38,9 @@ test('creates a space in Settings, adds projects and marks its home', async ({ p
 
     // Changing the home, then removing its project, leaves the space without one.
     await button('Edit hrc').click();
-    await pick(page, 'Home', 'delivery-project');
+    await pick(page, 'Home project', 'delivery-project');
     await projects.getByRole('checkbox', { name: /^delivery-project/ }).uncheck();
-    await expect(button('Home')).toHaveText('No home');
+    await expect(button('Home project')).toHaveText('No home');
     await button('Save').click();
     await expect(row).toContainText('1 project · No home');
 
