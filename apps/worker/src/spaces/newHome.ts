@@ -1,4 +1,4 @@
-import { mkdir, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { projectKey, type CreatedHome, type CreateHome, type ParamsOf, type ProjectsState, type SaveSpace, type Space, type ThreadView } from '@accio/protocol';
@@ -18,8 +18,10 @@ export type NewHomeDeps = {
   requireProfile: (profileId: string) => void;
   /** The profile's first folder on this machine, if it has one. */
   profileFolder: (profileId: string) => string | undefined;
-  /** Whether a thread can start in the profile: it has a signed-in model. */
-  canStartThreads: (profileId: string) => boolean;
+  /** Refuses, as threads.start would, when a thread can't start in the profile on its default model now. */
+  requireThreadsStart: (profileId: string) => Promise<void>;
+  /** Removes a checkout this machine added, and its project with its last checkout. */
+  removeCheckout: (checkoutId: string) => Promise<void>;
   /** The GitHub login chosen for the profile on this machine, if any. */
   githubLogin: (profileId: string) => string | undefined;
   /** Runs gh in `cwd` as the profile's GitHub account. */
@@ -42,9 +44,18 @@ export class NewHomes {
   async create({ space, name, profileId, location }: CreateHome): Promise<CreatedHome> {
     this.deps.requireProfile(profileId);
     const members = this.members(space);
-    if (!this.deps.canStartThreads(profileId)) throw new UserError("Sign in to a provider in this profile first, so the home's first thread can start.");
-    const path = join(this.deps.profileFolder(profileId) ?? homedir(), name);
-    if (await stat(path).catch(() => null)) throw new UserError(`${path} already exists. Choose another name.`);
+    await this.deps.requireThreadsStart(profileId).catch((error: Error) => {
+      throw new UserError(`The home's first thread can't start in this profile: ${error.message}`);
+    });
+    const base = this.deps.profileFolder(profileId) ?? homedir();
+    const path = join(base, name);
+    await mkdir(base, { recursive: true });
+    // Claims the folder: a second request for the same name fails here, and never removes this one's.
+    await mkdir(path).catch((error: NodeJS.ErrnoException) => {
+      throw error.code === 'EEXIST' ? new UserError(`${path} already exists. Choose another name.`) : error;
+    });
+    // Until the space is saved, nothing else points at the folder: a failure removes it, so the name stays free.
+    const discard = () => rm(path, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }).catch(() => {});
 
     let checkout: Checkout;
     try {
@@ -53,14 +64,14 @@ export class NewHomes {
       if (location === 'github') await this.publish(path, name, profileId);
       checkout = await this.deps.addFolder(path, profileId);
     } catch (error) {
-      // Nothing points at the folder yet, so a failed home leaves nothing behind and the name stays free.
-      await rm(path, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }).catch(() => {});
+      await discard();
       throw error;
     }
     const project = this.deps.projects().projects.find((p) => p.id === checkout.projectId)!;
     const key = projectKey(project);
-    const saved = await this.deps.saveSpace({ ...space, projectKeys: [...space.projectKeys.filter((k) => k !== key), key], homeProjectKey: key }).catch((error: Error) => {
-      throw new UserError(`Created ${path} and added it as a project, but couldn't make it the home of ${space.name}: ${error.message}`);
+    const saved = await this.deps.saveSpace({ ...space, projectKeys: [...space.projectKeys.filter((k) => k !== key), key], homeProjectKey: key }).catch(async (error: Error) => {
+      await this.deps.removeCheckout(checkout.id).then(discard, () => {});
+      throw new UserError(`Couldn't make ${name} the home of ${space.name}: ${error.message}${location === 'github' ? ` Its GitHub repo stays; delete it there or add it again in Settings / Projects.` : ''}`);
     });
     const thread = await this.deps.start({ checkoutId: checkout.id, text: starterPrompt(saved.name, members) }).catch((error: Error) => {
       throw new UserError(`Created the home ${project.name}, but couldn't start its first thread: ${error.message}`);
@@ -97,7 +108,6 @@ export class NewHomes {
 }
 
 async function writeTemplate(path: string, files: Record<string, string>) {
-  await mkdir(path, { recursive: true });
   for (const [file, content] of Object.entries(files)) {
     await mkdir(dirname(join(path, file)), { recursive: true });
     await writeFile(join(path, file), content, { flag: 'wx' });

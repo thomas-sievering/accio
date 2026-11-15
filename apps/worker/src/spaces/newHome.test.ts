@@ -108,9 +108,23 @@ describe('creating a new home for a space', () => {
     const { c, folder } = await app();
     await c.call('profiles.save', { name: 'Work' });
     await expect(c.call('spaces.createHome', { space: { name: 'hrc', projectKeys: [] }, name: 'hrc-home', profileId: 'work', location: 'folder' }))
-      .rejects.toThrow("Sign in to a provider in this profile first, so the home's first thread can start.");
+      .rejects.toThrow("The home's first thread can't start in this profile: ");
     await expect(readdir(join(folder, 'hrc-home'))).rejects.toThrow();
     expect(await c.call('spaces.list', {})).toEqual([]);
+  });
+
+  it('creates one home when two ask for the same folder at once, keeping it whole', async () => {
+    const { c, folder } = await app();
+    const ask = () => c.call('spaces.createHome', { space: { name: 'hrc', projectKeys: [] }, name: 'hrc-home', profileId: 'personal', location: 'folder' });
+    const [first, second] = await Promise.allSettled([ask(), ask()]);
+    const outcomes = [first.status, second.status].sort();
+    expect(outcomes).toEqual(['fulfilled', 'rejected']);
+    const refused = [first, second].find((r) => r.status === 'rejected') as PromiseRejectedResult;
+    expect(refused.reason.message).toBe(`${join(folder, 'hrc-home')} already exists. Choose another name.`);
+    expect(await readFile(join(folder, 'hrc-home', 'AGENTS.md'), 'utf8')).toContain('# hrc');
+    expect((await git(join(folder, 'hrc-home'), 'status', '--porcelain')).trim()).toBe('');
+    const created = (first.status === 'fulfilled' ? first : second) as PromiseFulfilledResult<{ thread: { id: string } }>;
+    await idle(c, created.value.thread.id);
   });
 
   it('refuses a project already in another space before creating anything', async () => {
