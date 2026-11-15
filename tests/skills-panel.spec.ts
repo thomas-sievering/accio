@@ -176,7 +176,7 @@ test('Skills tab shows the harness’s own skills read-only and overridden skill
   await expect(harnessFold.locator('.skills-count')).toHaveText('2');
   await harnessFold.click();
   const simplify = skillRow(page, 'fixture-simplify');
-  await expect(simplify).toContainText('Built in');
+  await expect(simplify.locator('.skill-origin')).toHaveCount(0);
   await simplify.getByRole('button', { name: /^fixture-simplify/ }).click();
   await expect(simplify).toContainText('Ships with Claude');
   await expect(simplify.getByText(/doesn’t share this skill’s instructions/)).toBeVisible();

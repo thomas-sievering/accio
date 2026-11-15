@@ -60,7 +60,6 @@ export const harnessName = (harnessId: string) => (harnessId === 'codex' ? 'Code
 /** Where a skill comes from, as a short label. */
 export function originLabel(skill: WorkspaceSkill): string {
   if (skill.origin === 'repository') return 'Repository';
-  if (skill.origin === 'harness') return 'Built in';
   const via = skill.enabledBy === 'global' ? 'Everywhere' : skill.enabledBy === 'profile' ? 'Profile' : 'Library';
   return skill.sourceName && skill.sourceName !== via ? `${via} · ${skill.sourceName}` : via;
 }

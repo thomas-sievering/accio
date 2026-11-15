@@ -18,8 +18,8 @@ export function enabledLevel(scope: ResourceScope, context: LevelContext): Skill
 
 /**
  * ADR 0020: among enabled skills of one name, the narrowest level wins and wider ones are
- * marked overridden by it; two at the winning level are a conflict. Harness skills don't
- * compete. Marks the given skills in place and returns them.
+ * marked overridden by it; two at one level are a conflict, whether or not they win.
+ * Harness skills don't compete. Marks the given skills in place and returns them.
  */
 export function resolveLevels(skills: WorkspaceSkill[]): WorkspaceSkill[] {
   const rank = (skill: WorkspaceSkill) => SKILL_LEVELS.indexOf(skill.enabledBy!);
@@ -27,10 +27,10 @@ export function resolveLevels(skills: WorkspaceSkill[]): WorkspaceSkill[] {
   for (const name of new Set(competing.map(skill => skill.name))) {
     const named = competing.filter(skill => skill.name === name);
     const best = Math.min(...named.map(rank));
-    const winners = named.filter(skill => rank(skill) === best);
     for (const skill of named) {
       if (rank(skill) > best) skill.overriddenBy = SKILL_LEVELS[best];
-      else if (winners.length > 1) skill.conflict = winners.some(other => other.origin === 'repository') && winners.some(other => other.origin === 'library')
+      const level = named.filter(other => rank(other) === rank(skill));
+      if (level.length > 1) skill.conflict = level.some(other => other.origin === 'repository') && level.some(other => other.origin === 'library')
         ? `This project already has a skill named ${name}. Choose either the project copy or the synced skill in settings.`
         : `More than one enabled skill is named ${name}. Choose one source before the next turn.`;
     }
