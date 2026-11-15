@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
 import { MAX_MODEL_BODY, readBody } from './bodies.js';
+import { drivingModel, imageReply, imageRoute, ImageRequestError, readImageRequest, responsesBody, type ImageRoute } from './images.js';
 import { anthropicList, openaiList, openaiModel, type AnthropicModel } from './models.js';
 import type { CodexModel } from './openaiAuth.js';
 import type { UsageEntry } from './usage.js';
@@ -138,16 +139,63 @@ export function forwardModelRequests({ accounts, upstream = ANTHROPIC_API, fetch
   }
 
   async function handleOpenAI(req: IncomingMessage, res: ServerResponse, house: { id: string; hatKeyId: string }) {
-    const houseId = house.id;
-    const path = req.url?.split('?')[0];
-    if (req.method !== 'POST' || !['/openai/responses', '/openai/responses/compact'].includes(path ?? '')) return sendError(res, 404, 'invalid_request_error', 'Unknown Codex endpoint');
+    const path = req.url?.split('?')[0] ?? '';
+    const images = imageRoute(path);
+    if (images) return handleImages(req, res, house, images);
+    if (req.method !== 'POST' || !['/openai/responses', '/openai/responses/compact'].includes(path)) return sendError(res, 404, 'invalid_request_error', 'Unknown Codex endpoint');
     const at = Date.now();
+    const body = await modelBody(req, res);
+    if (!body) return;
+    const sent = await sendToCodex(req, res, house.id, path.slice('/openai'.length), body);
+    if (!sent) return;
+    relay(sent.response, res, new Set(['set-cookie']), usageTap('openai', sent.response.headers.get('content-type'), (reported) =>
+      record({ at, providerId: 'openai', house, accountId: sent.accountId, body, reported })));
+  }
+
+  /**
+   * OpenAI's Images API, answered with one Responses request that makes the
+   * image (images.ts). The answer is read whole, then sent in the Images API's
+   * shape; a failure from ChatGPT is passed on as it came.
+   */
+  async function handleImages(req: IncomingMessage, res: ServerResponse, house: { id: string; hatKeyId: string }, route: ImageRoute) {
+    if (req.method !== 'POST') return sendOpenAIError(res, 405, `${req.method} is not allowed on ${req.url}`);
+    const at = Date.now();
+    const raw = await modelBody(req, res);
+    if (!raw) return;
+    let request;
+    try { request = readImageRequest(raw, route); } catch (error) {
+      if (error instanceof ImageRequestError) return sendOpenAIError(res, 400, error.message, error.param);
+      throw error;
+    }
+    if (!accounts.accountIdInUse(house.id, 'openai')) return sendError(res, 401, 'authentication_error', `House ${house.id} has no signed-in ChatGPT account`);
+    const model = drivingModel(accounts.codexModels(house.id));
+    if (!model) return sendOpenAIError(res, 503, `House ${house.id}'s ChatGPT account lists no models to make images with. Sign it in again.`);
+    const body = Buffer.from(JSON.stringify(responsesBody(request, model)));
+    const sent = await sendToCodex(req, res, house.id, '/responses', body);
+    if (!sent) return;
+    const { response, accountId } = sent;
+    const tap = usageTap('openai', response.headers.get('content-type'), (reported) => record({ at, providerId: 'openai', house, accountId, body, reported }));
+    if (!response.ok) return relay(response, res, new Set(['set-cookie']), tap);
+    const chunks: Buffer[] = [];
+    try {
+      for await (const chunk of response.body ?? []) { const bytes = Buffer.from(chunk as Uint8Array); chunks.push(bytes); tap.write(bytes); }
+    } finally { tap.end(); }
+    if (res.destroyed) return;
+    const reply = imageReply(Buffer.concat(chunks).toString('utf8'));
+    if (!reply.ok) return sendOpenAIError(res, 502, reply.message, null, 'image_generation_failed');
+    sendJson(res, reply.body);
+  }
+
+  /**
+   * Sends a body to ChatGPT's Codex backend with the house's ChatGPT account in
+   * use: refreshed and sent again once on 401, and sent with the next account
+   * once when this one ran out. Null after answering the caller itself.
+   */
+  async function sendToCodex(req: IncomingMessage, res: ServerResponse, houseId: string, upstreamPath: string, body: Buffer) {
     accounts.noteRequest(houseId, 'openai');
     const used = accounts.accountIdInUse(houseId, 'openai');
     let credentials = await accounts.openaiCredentials(houseId);
-    if (!credentials) return sendError(res, 401, 'authentication_error', `House ${houseId} has no signed-in ChatGPT account`);
-    const body = await modelBody(req, res);
-    if (!body) return;
+    if (!credentials) { sendError(res, 401, 'authentication_error', `House ${houseId} has no signed-in ChatGPT account`); return null; }
     const signal = abortOnClose(res);
     const send = (auth: NonNullable<typeof credentials>) => {
       const headers = new Headers();
@@ -155,9 +203,10 @@ export function forwardModelRequests({ accounts, upstream = ANTHROPIC_API, fetch
         if (value === undefined || dropRequestHeader(key) || /^(chatgpt-|openai-organization$|openai-project$|cookie$|anthropic-)/i.test(key)) continue;
         headers.set(key, Array.isArray(value) ? value.join(', ') : value);
       }
+      headers.set('content-type', 'application/json');
       headers.set('authorization', `Bearer ${auth.accessToken}`);
       headers.set('chatgpt-account-id', auth.chatgptAccountId);
-      return openaiFetch(`${openaiUpstream}${path!.slice('/openai'.length)}`, {
+      return openaiFetch(`${openaiUpstream}${upstreamPath}`, {
         method: 'POST', headers, body: new Uint8Array(body), signal,
       });
     };
@@ -165,16 +214,14 @@ export function forwardModelRequests({ accounts, upstream = ANTHROPIC_API, fetch
     if (response.status === 401) {
       await response.body?.cancel();
       credentials = await accounts.openaiCredentials(houseId, true);
-      if (!credentials) return sendError(res, 401, 'authentication_error', 'This house’s ChatGPT account is no longer signed in');
+      if (!credentials) { sendError(res, 401, 'authentication_error', 'This house’s ChatGPT account is no longer signed in'); return null; }
       response = await send(credentials);
     }
     if (response.status === 429 && used && await accounts.recheckAfterLimit(houseId, 'openai', used)) {
       const next = await accounts.openaiCredentials(houseId);
       if (next) { await response.body?.cancel(); response = await send(next); credentials = next; }
     }
-    const accountId = credentials.accountId;
-    relay(response, res, new Set(['set-cookie']), usageTap('openai', response.headers.get('content-type'), (reported) =>
-      record({ at, providerId: 'openai', house, accountId, body, reported })));
+    return { response, accountId: credentials.accountId };
   }
 }
 
@@ -290,6 +337,12 @@ async function modelBody(req: IncomingMessage, res: ServerResponse): Promise<Buf
   res.writeHead(413, { 'content-type': 'application/json' });
   res.end(JSON.stringify({ type: 'error', error: { type: 'request_too_large', message: `The request body is larger than the Sorting Hat forwards (${MAX_MODEL_BODY / 1024 / 1024} MB). Send fewer or smaller images or files.` } }));
   return null;
+}
+
+/** An error in OpenAI's shape, for the routes that answer as OpenAI's API rather than forward to it. */
+function sendOpenAIError(res: ServerResponse, status: number, message: string, param: string | null = null, code: string | null = null) {
+  res.writeHead(status, { 'content-type': 'application/json' });
+  res.end(JSON.stringify({ error: { type: status >= 500 ? 'server_error' : 'invalid_request_error', message, param, code } }));
 }
 
 export function sendError(res: ServerResponse, status: number, type: string, message: string) {

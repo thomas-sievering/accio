@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -140,4 +140,29 @@ it('starts app-server with switched-off built-in tools removed', async () => {
   await iterator.next();
   expect(fake.latest.options.config).toContain('features.goals=false');
   while (!(await iterator.next()).done) { /* drain */ }
+});
+
+it('disables the skills Codex finds in user folders, so a turn sees only Accio skills and its harness skills', async () => {
+  home = await mkdtemp(join(tmpdir(), 'accio-skills-codex-'));
+  const user = join(home, 'user-skills');
+  for (const [folder, name] of [[user, 'leaky'], [join(home, 'codex', 'skills', '.system'), 'imagegen']] as const) {
+    await mkdir(join(folder, name), { recursive: true });
+    await writeFile(join(folder, name, 'SKILL.md'), `---\nname: ${name}\n---\n`);
+  }
+  const fake = new FakeCodex(); fake.userSkills = user;
+  const harness = codexHarness(fake.factory);
+  const env = { CODEX_HOME: join(home, 'codex'), ACCIO_OPENAI_URL: 'http://127.0.0.1:1234/openai', ACCIO_OPENAI_KEY: 'key' };
+  const turn = async () => { for await (const _ of harness.run({ cwd: home!, prompt: 'hi', sessionId: null, env, signal: new AbortController().signal })) { /* drain */ } };
+  await turn();
+  const started = fake.clients.filter(client => client.requests.some(r => r.method === 'thread/start'));
+  expect(started).toHaveLength(1);
+  expect(started[0]!.options.config).toContain(`skills.config=[{path=${JSON.stringify(join(user, 'leaky', 'SKILL.md'))},enabled=false}]`);
+  expect(fake.clients.every(client => client.closed)).toBe(true);
+  // The next turn already knows the folder's skills: one launch, still disabled.
+  const before = fake.clients.length;
+  await turn();
+  expect(fake.clients.length - before).toBe(1);
+  expect(fake.latest.options.config?.some(c => c.includes('leaky'))).toBe(true);
+  // GLOSSARY: Harness skill. Codex's own skills are reported, user folders never.
+  expect(await harness.skills!({ cwd: home, env })).toEqual([{ name: 'imagegen', description: 'Helpful imagegen', path: join(home, 'codex', 'skills', '.system', 'imagegen', 'SKILL.md') }]);
 });

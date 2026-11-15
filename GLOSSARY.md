@@ -78,6 +78,10 @@ _Avoid_: Thinking level, reasoning effort, thinking budget
 Tools accio gives every harness, such as offer_choice. Each machine serves them to its own harnesses over MCP, under the name `accio`; each turn may use them only while it runs. Some are offered only to the turns that need them, such as shipped_note to a delivery turn.
 _Avoid_: Accio MCP, custom tools, plugins
 
+**Image generation**:
+Making an image, or editing one, with the profile's ChatGPT account through the Sorting Hat's image routes. Threads on every harness can do it with the generate_image accio tool, which is offered only while the profile's house has a signed-in ChatGPT account. The image is saved on the thread's machine for the thread to embed. It uses the ChatGPT account's limits and counts in its usage.
+_Avoid_: Image attachment (an image you send), DALL·E
+
 **Built-in tools**:
 A harness's own tools, such as Claude Code's WebSearch or Codex's goals, grouped into switches under Settings → Harnesses. The switches are shared settings for the whole hub. By default only a shell and file reading and editing are on; other capabilities come as accio tools that work the same on every harness. Changes apply from each thread's next turn.
 _Avoid_: Default tools, native tools, harness tools

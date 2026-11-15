@@ -174,4 +174,63 @@ describe('workspace skill inventory and loading evidence', () => {
     await c.waitFor('threads.changed', threads => threads.some(t => t.id === thread.id && t.status === 'idle') && harness.runs.length === 2);
     expect(harness.runs[1]?.resourceInstructions).toContain('Helpful review');
   });
+  it('lets the narrowest level win and keeps the overridden skill listed, while a clash within one level stays a conflict', async () => {
+    const { t, c, checkout, docs, harness } = await fixture();
+    for (const [id, names] of [['shared', ['notes', 'docs']], ['more', ['docs']]] as const) {
+      const folder = join(t.home, id);
+      for (const name of names) await put(join(folder, name), name);
+      await runCommand('git', ['init', '--quiet', '-b', 'main'], { cwd: folder });
+      await runCommand('git', ['add', '.'], { cwd: folder });
+      await runCommand('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.test', 'commit', '--quiet', '-m', 'initial'], { cwd: folder });
+      await c.call('skills.addSource', { id, name: id, url: folder, ref: 'HEAD' });
+    }
+    const everywhere = (await c.call('resources.get', {})).skills.filter(skill => skill.sourceId !== 'library');
+    for (const skill of everywhere) await c.call('skills.setScope', { id: skill.id, scope: { global: true, profileIds: [], projectKeys: [] } });
+    const library = everywhere.filter(skill => skill.sourceId === 'shared');
+    const context = { checkoutId: checkout.id };
+    const skills = (await c.call('threads.skills', context)).skills;
+    const named = (name: string) => skills.filter(skill => skill.name === name && skill.enabled);
+    // Project (the repository's notes) over Everywhere; Profile (docs) over Everywhere.
+    expect(named('notes').map(skill => [skill.origin, skill.overriddenBy, skill.conflict])).toEqual([['repository', undefined, undefined], ['library', 'project', undefined]]);
+    expect(named('docs').find(skill => skill.id === docs.id)).not.toHaveProperty('overriddenBy');
+    // Both Everywhere docs lose to the Profile one, and still clash with each other, without blocking a turn.
+    expect(named('docs').filter(skill => skill.id !== docs.id)).toEqual([0, 1].map(() => expect.objectContaining({ enabledBy: 'global', overriddenBy: 'profile', conflict: expect.stringContaining('docs') })));
+    expect(named('docs').find(skill => skill.id === docs.id)).not.toHaveProperty('conflict');
+    const thread = await c.call('threads.start', { ...context, text: 'work' });
+    await c.waitFor('threads.changed', threads => threads.some(t => t.id === thread.id && t.status === 'idle'));
+    const delivered = harness.runs[0]!.resourceInstructions!;
+    expect(delivered).toContain(join('.agents', 'skills', 'notes', 'SKILL.md'));
+    expect(delivered.match(/- notes:/g)).toHaveLength(1);
+    expect(delivered.match(/- docs:/g)).toHaveLength(1);
+    expect(delivered).not.toContain(join(library.find(skill => skill.name === 'docs')!.path));
+    // The same name twice at the Project level is still a choice to make.
+    const sharedNotes = library.find(skill => skill.name === 'notes')!;
+    await c.call('threads.setSkillEnabled', { ...context, skillId: sharedNotes.id, enabled: true });
+    const clash = (await c.call('threads.skills', context)).skills.filter(skill => skill.name === 'notes');
+    expect(clash.every(skill => skill.conflict && !skill.overriddenBy)).toBe(true);
+    await expect(c.call('threads.send', { threadId: thread.id, text: 'again' })).rejects.toThrow('notes');
+  });
+  it('reports the harness skills of a thread or a draft, apart from the levels', async () => {
+    const claude = Object.assign(new FakeHarness(), { skills: async () => [{ name: 'simplify', description: 'Ships with Claude' }, { name: 'notes', description: 'Also a repository name' }] });
+    const t = await startTestApp({ harness: claude, codexHarness: Object.assign(new FakeHarness(), { skills: async () => [{ name: 'imagegen', description: 'Ships with Codex', path: '/codex/imagegen/SKILL.md' }] }) }); stop = t.stop;
+    const c = await t.connect(); await c.signedIn('Personal');
+    const folder = join(t.home, 'project');
+    await put(join(folder, '.agents', 'skills', 'notes'), 'notes');
+    const checkout = await c.call('checkouts.add', { path: folder, profileId: 'personal' });
+    const draft = await c.call('threads.skills', { checkoutId: checkout.id });
+    expect(draft.harnessId).toBe('claudeCode');
+    expect(draft.skills.filter(skill => skill.origin === 'harness')).toEqual([
+      expect.objectContaining({ name: 'notes', enabled: true, enabledBy: null }),
+      expect.objectContaining({ name: 'simplify', description: 'Ships with Claude', enabled: true, enabledBy: null }),
+    ]);
+    // A harness skill competes with no level.
+    expect(draft.skills.filter(skill => skill.name === 'notes').every(skill => !skill.conflict && !skill.overriddenBy)).toBe(true);
+    const codex = await c.call('threads.skills', { checkoutId: checkout.id, harnessId: 'codex' });
+    expect(codex.skills.filter(skill => skill.origin === 'harness').map(skill => [skill.name, skill.path])).toEqual([['imagegen', '/codex/imagegen/SKILL.md']]);
+    await expect(c.call('threads.setSkillEnabled', { checkoutId: checkout.id, skillId: codex.skills.find(skill => skill.origin === 'harness')!.id, enabled: false })).rejects.toThrow();
+    const thread = await c.call('threads.start', { checkoutId: checkout.id, text: 'work' });
+    await c.waitFor('threads.changed', threads => threads.some(t => t.id === thread.id && t.status === 'idle'));
+    expect((await c.call('threads.skills', { threadId: thread.id })).skills.filter(skill => skill.origin === 'harness').map(skill => skill.name)).toEqual(['notes', 'simplify']);
+    expect(claude.runs[0]?.resourceInstructions).not.toContain('simplify');
+  });
 });

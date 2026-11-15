@@ -54,11 +54,21 @@ export function providerOf(harnessId: string): ProviderId {
 }
 
 /** A turn's environment: only its profile's hub access for the provider its harness uses. */
+const codexHomeOf = (home: string, profileId: string) => join(home, 'profiles', profileId, 'codex');
+
+/** GLOSSARY: Harness skill. Where a profile's harness keeps its own files, to ask it about its skills; no hub access. */
+export function harnessHomeEnv(home: string, profileId: string, harnessId: string): Record<string, string> {
+  const env = cleanExecutionEnv(process.env);
+  if (harnessId === 'codex') env.CODEX_HOME = codexHomeOf(home, profileId);
+  else env.CLAUDE_CONFIG_DIR = configFolderOf(home, profileId);
+  return env;
+}
+
 export function turnEnv(home: string, profileId: string, harnessId: string, access: HubAccess): Record<string, string> {
   const env = harnessEnv(process.env, access, configFolderOf(home, profileId));
   if (harnessId !== 'codex') return env;
   delete env.ANTHROPIC_AUTH_TOKEN; delete env.ANTHROPIC_BASE_URL; delete env.CLAUDE_CONFIG_DIR;
-  env.CODEX_HOME = join(home, 'profiles', profileId, 'codex');
+  env.CODEX_HOME = codexHomeOf(home, profileId);
   env.ACCIO_OPENAI_URL = `${access.baseUrl}/openai`;
   env.ACCIO_OPENAI_KEY = access.accessKey;
   return env;

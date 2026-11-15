@@ -36,6 +36,7 @@ import { configFolderOf } from '../profiles/claudeConfigFolder.js';
 import { Relay } from '../relay/relay.js';
 import type { Updates } from '../machine/update.js';
 import { findMachine, machineTools } from '../machine/machineTools.js';
+import { imageTool } from '../images/imageTool.js';
 
 export type SavedHub = { id: string; name: string; url: string; token: string; home: string; local: boolean; managed?: boolean; snapshot?: HubSnapshot };
 export type HubWorkspace = { client: HubClient; router: Router; relay: Relay; profiles: Profiles; machines: Machines; models: Models; projects: Projects; spaces: Spaces; threads: Threads; tools: AccioTools; resources: ResourceManager; secrets: SecretsAccess; home: string; initialize(origin: string): void; close(): Promise<void> };
@@ -127,6 +128,15 @@ export class HubConnections {
           return response.result as TranscriptItem[];
         } }, id, handle, offset, limit)
         : threads.readThread(id, offset, limit))]);
+    tools.add(imageTool({
+      thread: (id) => threads.toolContext(id),
+      canMakeImages: (profileId) => {
+        const profile = profiles.get(profileId) && profiles.profileView(profileId);
+        return !!profile?.house && !!profile.providers.find((p) => p.id === 'openai')?.accounts.some((a) => a.signedIn);
+      },
+      access: (profileId) => profiles.hubAccess(profileId, 'openai'),
+      folder: join(record.home, 'images'),
+    }));
     registerHarnesses(router, settings, models, this.runners, tools);
     const updates = this.updates;
     if (updates) {
