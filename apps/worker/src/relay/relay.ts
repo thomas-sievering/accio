@@ -79,8 +79,13 @@ export class Relay {
       peers: (machines) => this.peers(machines),
       disconnected: () => this.peers([]),
     });
+    if (this.asleep) this.socket.setAsleep(true);
     this.socket.start();
   }
+
+  /** GLOSSARY: Snooze. Off the relay while the system sleeps. */
+  setAsleep(asleep: boolean) { this.asleep = asleep; this.socket?.setAsleep(asleep); }
+  private asleep = false;
 
   /** This machine's threads with the other machines' threads, each tagged with its machine. */
   merged(local: ThreadView[] = this.deps.threads()): ThreadView[] {

@@ -31,8 +31,10 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
   const here = { ...machineInfo(await loadMachineId(opts.home)), ...(version ? { version } : {}) };
   const codex = await codexInstall();
   const harnesses = [await claudeCodeInstall(), ...(codex.version ? [codex] : [])];
-  const updates = new Updates({ machineId: here.id, run: runCommand, pnpm: pnpmHere(), host: desktopHost(), ...(deps.updates ?? { root }) });
+  const host = desktopHost();
+  const updates = new Updates({ machineId: here.id, run: runCommand, pnpm: pnpmHere(), host, ...(deps.updates ?? { root }) });
   const connections = new HubConnections(opts.home, here, harnesses, { claudeCode: deps.harness ?? claudeCode, codex: deps.codexHarness ?? codexHarness(deps.codexFactory) }, (...args) => send(...args), deps.resourceCommand, deps.claudeModels ?? (deps.harness ? undefined : sdkClaudeModels), deps.deliveryHosting, updates, deps.github);
+  host?.onSleep((asleep) => connections.setAsleep(asleep));
   await connections.load();
   const shouldStartLocal = !connections.initialized || connections.saved.some((s) => s.managed);
   let local: Awaited<ReturnType<typeof startHubService>> | undefined;

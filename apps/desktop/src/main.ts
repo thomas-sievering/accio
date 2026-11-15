@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, desktopCapturer, dialog, ipcMain, Menu, screen, shell, systemPreferences, webContents, type NativeImage } from 'electron';
+import { app, BrowserWindow, clipboard, desktopCapturer, dialog, ipcMain, Menu, powerMonitor, screen, shell, systemPreferences, webContents, type NativeImage } from 'electron';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { dirname, isAbsolute, join } from 'node:path';
@@ -39,6 +39,16 @@ function startWorker(): Promise<Ready> {
   });
   child.stdout?.on('data', (d) => process.stdout.write(d));
   child.on('message', (message: DesktopMessage) => { void answerWorker(message, (reply) => child.send(reply)); });
+  // GLOSSARY: Snooze. Between suspend and a real wake the worker stays away from its hubs. A dark
+  // wake (a sleeping Mac running for a moment) sends no resume, so it never looks like this machine is back.
+  const power = (asleep: boolean, why: string) => () => {
+    console.log(`[power] ${why}`);
+    if (child.connected) child.send({ type: 'power', asleep } satisfies DesktopMessage);
+  };
+  powerMonitor.on('suspend', power(true, 'suspend'));
+  powerMonitor.on('resume', power(false, 'resume'));
+  powerMonitor.on('unlock-screen', power(false, 'unlock-screen'));
+  powerMonitor.on('user-did-become-active', power(false, 'user-did-become-active'));
   return worker.ready;
 }
 

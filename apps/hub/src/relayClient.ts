@@ -32,6 +32,7 @@ export class RelaySocket {
   private ws?: WebSocket;
   private retry?: ReturnType<typeof setTimeout>;
   private stopped = false;
+  private asleep = false;
   private pending = new Map<string, Pending>();
   private parts = new Map<string, { total: number; chunks: string[]; received: number; size: number }>();
   private attempts = 0;
@@ -40,6 +41,15 @@ export class RelaySocket {
   constructor(private url: string, private token: string, private handlers: RelayHandlers) {}
 
   start() { this.connect(); }
+
+  /** GLOSSARY: Snooze. Off the relay while the system sleeps, so a dark wake does not show this machine online. */
+  setAsleep(asleep: boolean) {
+    if (this.stopped || asleep === this.asleep) return;
+    this.asleep = asleep;
+    if (!asleep) { this.attempts = 0; if (!this.ws || this.ws.readyState >= WebSocket.CLOSING) this.connect(); return; }
+    clearTimeout(this.retry); this.retry = undefined;
+    this.ws?.terminate();
+  }
 
   call(to: string, method: string, params: unknown, timeoutMs = REQUEST_TIMEOUT_MS): Promise<unknown> {
     if (!this.open) return Promise.reject(new Error('This machine is not connected to the hub relay.'));
@@ -67,7 +77,7 @@ export class RelaySocket {
   }
 
   private connect() {
-    if (this.stopped) return;
+    if (this.stopped || this.asleep) return;
     const url = new URL('/relay', this.url); url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(url, { headers: { authorization: `Bearer ${this.token}` }, handshakeTimeout: 10_000, maxPayload: RELAY_FRAME_BYTES });
     this.ws = ws;
@@ -87,7 +97,7 @@ export class RelaySocket {
 
   /** Jittered backoff: a restarted hub must not see every machine reconnect in the same second. */
   private schedule() {
-    if (this.stopped || this.retry) return;
+    if (this.stopped || this.asleep || this.retry) return;
     const delay = Math.min(30_000, 1000 * 2 ** Math.min(this.attempts++, 5)) * (0.5 + Math.random() / 2);
     this.retry = setTimeout(() => { this.retry = undefined; this.connect(); }, delay);
     this.retry.unref?.();

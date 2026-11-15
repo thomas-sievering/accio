@@ -9,6 +9,8 @@ export type DesktopHost = {
   relaunch(): void;
   /** A PNG of the app's window, after running `script` in it if given; `note` says what it left out and why. */
   capture(script?: string): Promise<AppScreenshot>;
+  /** GLOSSARY: Snooze. Called when the system goes to sleep (true) and really wakes again (false). */
+  onSleep(listener: (asleep: boolean) => void): void;
 };
 
 export type AppScreenshot = { png: Buffer; note?: string };
@@ -17,7 +19,9 @@ export type AppScreenshot = { png: Buffer; note?: string };
 export type DesktopMessage =
   | { type: 'relaunch' }
   | { type: 'capture'; id: string; script?: string }
-  | { type: 'captured'; id: string; png?: string; note?: string; error?: string };
+  | { type: 'captured'; id: string; png?: string; note?: string; error?: string }
+  /** A dark wake, which runs this worker for a moment while the system sleeps, sends nothing. */
+  | { type: 'power'; asleep: boolean };
 
 const CAPTURE_TIMEOUT_MS = 30_000;
 
@@ -25,7 +29,9 @@ const CAPTURE_TIMEOUT_MS = 30_000;
 export function desktopHost(proc: NodeJS.Process = process): DesktopHost | undefined {
   if (proc.env.ACCIO_DESKTOP !== '1' || !proc.send) return undefined;
   const pending = new Map<string, { resolve(shot: AppScreenshot): void; reject(error: Error): void }>();
+  const sleepers = new Set<(asleep: boolean) => void>();
   proc.on('message', (message: DesktopMessage) => {
+    if (message?.type === 'power') { for (const listener of sleepers) listener(message.asleep === true); return; }
     if (message?.type !== 'captured') return;
     const waiting = pending.get(message.id);
     if (!waiting) return;
@@ -36,6 +42,7 @@ export function desktopHost(proc: NodeJS.Process = process): DesktopHost | undef
   const send = (message: DesktopMessage) => { proc.send!(message); };
   return {
     relaunch: () => send({ type: 'relaunch' }),
+    onSleep: (listener) => { sleepers.add(listener); },
     capture: (script) => new Promise((resolve, reject) => {
       const id = randomUUID();
       const timer = setTimeout(() => { pending.delete(id); reject(new Error('The window did not answer in time.')); }, CAPTURE_TIMEOUT_MS);

@@ -40,7 +40,7 @@ export function MentionMenu({ options, active, left, browsing, sigil = '@', onPi
         {'model' in option
           ? <><ProviderLogo providerId={option.model.providerId} /><PrettyName name={option.model.name} /></>
           : 'machine' in option
-            ? <><Monitor /><span className="mention-machine">{option.machine.name}</span>{option.machine.thisMachine && <small>This machine</small>}</>
+            ? <><Monitor /><span className="mention-machine">{option.machine.name}</span>{option.machine.thisMachine ? <small>This machine</small> : !option.machine.connected && <small>Offline</small>}</>
             : 'thread' in option
               ? <><MessageSquare /><span className="mention-thread">{option.thread.title || 'Untitled'}</span></>
               : 'skill' in option

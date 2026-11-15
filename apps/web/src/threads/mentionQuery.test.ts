@@ -44,13 +44,14 @@ describe('machine mentions', () => {
 
   it('offers a row per kind while only @ is typed', () => {
     expect(mentionOptions(state, '', machines).map((o) => o.handle)).toEqual(['kind:models', 'kind:machines']);
-    expect(mentionOptions(state, '', machines, undefined, 'machines').map((o) => o.handle)).toEqual(['studio-laptop']);
+    expect(mentionOptions(state, '', machines, undefined, 'machines').map((o) => o.handle)).toEqual(['studio-laptop', 'desk']);
   });
 
-  it('lists online machines after the models, never one a model handle hides', () => {
+  it('lists machines after the models, online before offline, never one a model handle hides', () => {
     expect(mentionOptions(state, 'o', machines).map((o) => o.handle)).toEqual(['opus']);
     expect(mentionOptions(state, 'lap', machines).map((o) => o.handle)).toEqual(['studio-laptop']);
     expect(mentionOptions(undefined, 'st', machines).map((o) => o.handle)).toEqual(['studio-laptop']);
+    expect(mentionOptions(undefined, '', [machine('m2', 'Desk', false), machine('m1', 'Studio Laptop')], undefined, 'machines').map((o) => o.handle)).toEqual(['studio-laptop', 'desk']);
   });
 });
 

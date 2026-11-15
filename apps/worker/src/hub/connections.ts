@@ -49,10 +49,16 @@ export class HubConnections {
   private cacheTimer?: ReturnType<typeof setTimeout>;
   private closing = false;
   private origin?: string;
+  private asleep = false;
   initialized = false;
   constructor(private home: string, private here: MachineInfo, private harnesses: HarnessInstall[], private runners: Record<string, Harness>, private send: (event: any, data: any, hubId?: string) => void, private resourceCommand?: CommandRunner, private claudeModelSource?: ClaudeModelSource, private deliveryHosting?: DeliveryHosting, private updates?: Updates, private github?: GhRunner) {
     this.file = new JsonFile(join(home, 'hub-connections.json'), () => []);
     this.register();
+  }
+  /** GLOSSARY: Snooze. Keeps this machine away from every hub while the system sleeps. */
+  setAsleep(asleep: boolean) {
+    this.asleep = asleep;
+    for (const workspace of this.workspaces.values()) { workspace.client.setAsleep(asleep); workspace.relay.setAsleep(asleep); }
   }
   async load() { this.initialized = await access(this.file.path).then(() => true, () => false); this.saved = await this.file.read(); }
   get defaultId() { return this.saved[0]?.id; }
@@ -67,6 +73,7 @@ export class HubConnections {
   async open(record: SavedHub) {
     const client = new HubClient(record.url, record.id, record.token, { ...this.here, harnesses: this.harnesses });
     if (record.snapshot) client.snapshot = record.snapshot;
+    client.setAsleep(this.asleep);
     await client.start();
     const settings = remoteSettings(client);
     const router = new Router(this.global);
@@ -181,6 +188,7 @@ export class HubConnections {
     workspace = { client, router, relay, profiles, machines, models, projects, spaces, threads, tools, resources, secrets, home: record.home,
       initialize: origin => { if (!initialized) relay.start(record.url, record.token); tools.listen(record.id === this.defaultId ? origin : `${origin}/hubs/${record.id}`); initialized = true; continueAfterRestart(); if (client.status === 'connected') reconciliation = resources.reconcile().catch(error => console.error('[resources] startup check failed', error)); },
       close: async () => { stopUpdates?.(); await relay.close(); await threads.close(); await secrets.close(); await resources.close(); await reconciliation; await profiles.close(); await projects.close(); await client.close(); } };
+    relay.setAsleep(this.asleep);
     this.workspaces.set(record.id, workspace);
     client.onChanged(() => { this.announce(); broadcast('resources.changed', resources.state()); relay.announce(); continueAfterRestart(); });
     if (client.status === 'connected') { await profiles.load(); await profiles.syncReferences(); }

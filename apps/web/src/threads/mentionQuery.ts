@@ -28,8 +28,8 @@ const KINDS: { kind: MentionKind; label: string }[] = [{ kind: 'models', label: 
 /**
  * What the @ menu lists. With only @ typed, a row per kind that has something to offer,
  * or that kind's list straight away when it is the only one. Once you type, or inside a kind,
- * the matches: offered models, favourites first, by handle or any word of their name; online
- * machines, except one whose handle a model already has; then threads by any word of their title,
+ * the matches: offered models, favourites first, by handle or any word of their name; machines,
+ * online before offline, except one whose handle a model already has; then threads by any word of their title,
  * open before Working before Snoozed before Settled. Before you type, a kind lists the recent threads only.
  */
 export function mentionOptions(state: ModelsState | undefined, query: string, machines: MachineView[] = [], threads?: ThreadShelves, browsing?: MentionKind): MentionOption[] {
@@ -41,7 +41,8 @@ export function mentionOptions(state: ModelsState | undefined, query: string, ma
   const taken = new Set(models.map((h) => h.handle));
   const lists: Record<MentionKind, () => MentionOption[]> = {
     models: () => models.filter((h) => matches(h.handle, h.model.name)).sort((a, b) => favorite(a.model) - favorite(b.model)).slice(0, 8),
-    machines: () => machineHandles(machines).filter((h) => h.machine.connected && !taken.has(h.handle) && matches(h.handle, h.machine.name)).slice(0, 4),
+    machines: () => machineHandles(machines).filter((h) => !taken.has(h.handle) && matches(h.handle, h.machine.name))
+      .sort((a, b) => Number(b.machine.connected) - Number(a.machine.connected)).slice(0, 4),
     threads: () => (['open', 'working', 'snoozed', 'settled'] as const).flatMap((group) => {
       const shelf = (threads?.[group] ?? []).map((thread) => ({ handle: threadHandle(thread), thread, group }));
       return query ? shelf.filter((o) => matches(o.handle, o.thread.title)) : shelf.slice(0, RECENT[group]);

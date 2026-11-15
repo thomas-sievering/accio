@@ -235,7 +235,7 @@ Naming another thread of the same profile in a message with `@` and its handle, 
 _Avoid_: Thread link, thread reference
 
 **Snooze**:
-Hiding a thread until a chosen time, when it comes back. Another machine's thread can't be read or settled while that machine is offline, so it is snoozed until the machine is back instead, or for a week if it stays away. Its machine can't record that snooze, so the hub keeps it, and every machine shows it; the hub drops it when the machine reconnects, so the thread wakes everywhere at once.
+Hiding a thread until a chosen time, when it comes back. Another machine's thread can't be read or settled while that machine is offline, so it is snoozed until the machine is back instead, or for a week if it stays away. Its machine can't record that snooze, so the hub keeps it, and every machine shows it; the hub drops it when the machine reconnects, so the thread wakes everywhere at once. While its system sleeps a machine stays away from the hub, so a dark wake, which runs it for a moment, does not count as back.
 _Avoid_: Mute, defer
 
 **Settle**:

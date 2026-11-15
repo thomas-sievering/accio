@@ -18,7 +18,7 @@ import { composerKey, useDraft } from './drafts';
 
 /**
  * Enter steers the running turn; Ctrl+Enter queues. Shift+Enter adds a line.
- * Typing @ offers the profile's models, the online machines and the profile's threads to mention, each mention
+ * Typing @ offers the profile's models, the machines, offline too, and the profile's threads to mention, each mention
  * then drawn as a pill (GLOSSARY: Model mention, Machine mention, Thread mention). Typing / offers the skills
  * the next turn gets, and picking one puts `/name` in the message.
  * Pasted images go above the message when the model reads them (GLOSSARY: Image attachment).

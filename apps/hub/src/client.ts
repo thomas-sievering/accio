@@ -25,6 +25,7 @@ export class HubClient {
   private sequence = 0;
   private appliedSequence = 0;
   private refreshAgain = false;
+  private asleep = false;
   constructor(readonly url: string, readonly id: string, private token: string, private hello: MachineHello) {}
   onChanged(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
   private changed() { for (const listener of this.listeners) listener(); }
@@ -36,6 +37,7 @@ export class HubClient {
     this.snapshot = snapshot; this.status = 'connected'; this.error = undefined; this.changed();
   }
   async start() {
+    if (this.asleep) return;
     try {
       const health = await this.http('/healthz', undefined, false);
       if (health.hubId !== this.id || health.protocol !== HUB_PROTOCOL) throw new Error('This address belongs to a different or incompatible hub.');
@@ -44,6 +46,8 @@ export class HubClient {
   }
   async call<T = any>(method: string, params: unknown = {}): Promise<T> {
     if (this.stopped) throw new Error('This hub connection is closed');
+    // Said again once it wakes, from start().
+    if (this.asleep && method === 'machine.hello') { this.hello = params as MachineHello; return null as T; }
     try {
       const sequence = ++this.sequence;
       const reply = await this.http('/rpc', { method, params });
@@ -72,7 +76,7 @@ export class HubClient {
     return data;
   }
   private events() {
-    if (this.stopped) return;
+    if (this.stopped || this.asleep) return;
     const url = new URL('/events', this.url); url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(url, { headers: { authorization: `Bearer ${this.token}` }, handshakeTimeout: 10_000, maxPayload: 16_384 });
     this.ws = ws;
@@ -81,8 +85,20 @@ export class HubClient {
     ws.on('error', () => {});
     ws.on('close', () => { if (this.ws === ws && !this.stopped) { this.offline(new Error('Hub connection lost. Reconnecting…')); this.schedule(); } });
   }
+  /**
+   * GLOSSARY: Snooze. While the system sleeps this machine stays away from the hub: a dark wake
+   * that runs the worker for a moment must not look like the machine coming back.
+   */
+  setAsleep(asleep: boolean) {
+    if (this.stopped || asleep === this.asleep) return;
+    this.asleep = asleep;
+    if (!asleep) { void this.start(); return; }
+    clearTimeout(this.retry); this.retry = undefined;
+    const ws = this.ws; this.ws = undefined; ws?.terminate();
+    this.offline(new Error('This machine is asleep.'));
+  }
   private offline(error: unknown) { this.status = 'offline'; this.error = error instanceof Error ? error.message : 'Hub is unavailable'; this.changed(); }
-  private schedule() { if (this.stopped || this.retry) return; this.retry = setTimeout(() => { this.retry = undefined; void this.start(); }, 2500); this.retry.unref(); }
+  private schedule() { if (this.stopped || this.asleep || this.retry) return; this.retry = setTimeout(() => { this.retry = undefined; void this.start(); }, 2500); this.retry.unref(); }
   async close() { this.stopped = true; clearTimeout(this.retry); this.ws?.terminate(); }
 }
 
