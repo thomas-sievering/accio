@@ -39,3 +39,8 @@
 .issue-picker-footer kbd { padding: 1px 4px; border-radius: 4px; background: var(--raised-2); color: var(--ink); font: inherit; font-size: 10.5px; }
 .composer-chip .issue-chip-mark { display: grid; color: var(--green); }
 .composer-chip .issue-chip-mark svg { width: 12px; height: 12px; }
+.issue-option.working .issue-option-mark { color: var(--dim); }
+.issue-pill.working { border-color: color-mix(in oklch, var(--green) 35%, transparent); color: var(--green); }
+.issue-option-another { display: grid; flex: none; place-items: center; width: 22px; height: 22px; margin: -3px -4px -3px 0; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--dim); cursor: pointer; opacity: 0; }
+.issue-option[aria-selected='true'] .issue-option-another { opacity: 1; }
+.issue-option-another:hover, .issue-option-another:focus-visible { background: var(--raised); color: var(--ink); }

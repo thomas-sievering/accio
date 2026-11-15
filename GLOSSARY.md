@@ -150,7 +150,7 @@ What a composer holds before it sends: text, Pasted text and image attachments. 
 _Avoid_: Unsent thread, pending thread
 
 **Turn**:
-Work by the harness until it finishes or is interrupted, started by a user message, Resume or a delivery request. Each turn uses the account in use of the profile's house for that harness's provider. Steering can add messages during the same turn.
+Work by the harness until it finishes or is interrupted, started by a user message, Resume, a delivery request, a Goal's next step or a Wait being met. Each turn uses the account in use of the profile's house for that harness's provider. Steering can add messages during the same turn.
 _Avoid_: Run, request
 
 **Context window**:
@@ -203,8 +203,12 @@ A helper turn that a thread's harness starts through the `agent` accio tool for 
 _Avoid_: Subthread, child thread, worker, helper thread
 
 **Started thread**:
-A new thread that another thread starts through the start_thread accio tool, when you ask for one, for example on another machine. Unlike a sub-agent it is a full thread: it has its own transcript, shows in the list, and you follow it and talk to it yourself. It starts in the same project, on the thread's machine or in another machine's checkout of the same repository, cloned there if needed, and on the starting thread's model unless you mention another. A thread in a space can start one in another project of the space instead, including the home: it works in that project's checkout on the chosen machine, under that project's profile. The starting thread does not wait for it.
+A new thread that another thread starts through the start_thread accio tool, when you ask for one, for example on another machine. Unlike a sub-agent it is a full thread: it has its own transcript, shows in the list, and you follow it and talk to it yourself. It starts in the same project, on the thread's machine or in another machine's checkout of the same repository, cloned there if needed, and on the starting thread's model unless you mention another. A thread in a space can start one in another project of the space instead, including the home: it works in that project's checkout on the chosen machine, under that project's profile. The starting thread does not wait for it, unless it sets a Wait on it.
 _Avoid_: Child thread, spawned thread, sub-thread
+
+**Wait**:
+What a thread waits for between turns, set by its harness through the wait_for accio tool: threads it started reaching a state (stopped, a pull request open, delivered), a pull request merging or finishing its checks, a time, or a command accio runs exiting. The harness ends its turn; accio watches the conditions itself and starts the next turn, with what happened, when any of them is met, or all if the harness asked. A started thread that fails or is interrupted meets every Wait on it. A Goal pauses while its thread waits. You can talk to the thread meanwhile and the Wait stays; a bar above the composer shows it and can cancel it, and settling the thread cancels it too. A command still running when accio stops does not survive it: the Wait wakes and says so. It works the same on every harness; no harness's own background or scheduling feature is used.
+_Avoid_: Subscription, watch, trigger, wakeup, sleep
 
 **Model mention**:
 Naming a model in a message with `@` and its handle, such as `@sonnet` or `@sol`, so sub-agents for that work run on it, on either harness. The handle is the model's family; when two offered models share one, both add their version, such as `@opus-5.5`. Typing only `@` in the composer offers Models, Machines and Threads, each opening its list; typing after it lists the matches of every kind. Each mention shows as a pill in the composer and as a chip in the sent message, which keeps the text. The thread's own model does not change.
@@ -215,7 +219,7 @@ Where a project's open issues live, as its agent skills record it in `docs/agent
 _Avoid_: Backlog, ticket system
 
 **Issue**:
-One open issue a new thread can pick up. In a project's draft, the Pick an issue chip beside the machine lists them: GitHub issues by triage label, ready for an agent first and blocked last; local issues by feature. The chip shows only when the tracker has open issues. The picked issue sits above the message, which may then be empty; sending names it in the first message (`Work on #208: …`), starts the thread's title from it, and claims it once the thread has started: assigned to you on GitHub, or `Status: claimed` in the thread's worktree copy of a local file. A claim that fails is noted in the thread.
+One open issue a new thread can pick up. In a project's draft, the Pick an issue chip beside the machine lists them: GitHub issues by triage label (Ready for agent, Needs triage, Open for unlabelled, Ready for human, then Blocked); local issues by feature. Issues an open thread in the project already works on come last, under In progress: choosing one opens that thread, and its New thread button attaches it anyway. A thread knows its issue from the pick, or else from the first `#123` in its first message's first line, as when another thread starts it. The chip shows only when the tracker has open issues. The picked issue sits above the message, which may then be empty; sending names it in the first message (`Work on #208: …`), starts the thread's title from it, and claims it once the thread has started: assigned to you on GitHub, or `Status: claimed` in the thread's worktree copy of a local file. A claim that fails is noted in the thread.
 _Avoid_: Ticket, task
 
 **Machine mention**:
@@ -285,7 +289,7 @@ A thread started by **Set up with agent** on a project dashboard without a start
 _Avoid_: Onboarding, auto-config
 
 **Shelf**:
-A group of threads in the sidebar apart from the open list: Working, Snoozed and Settled. Working holds threads in progress without you: a running turn, or a delivery GitHub is carrying. A thread comes back to the top of the open list when it finishes or needs you, such as for a secret, a review or a manual merge.
+A group of threads in the sidebar apart from the open list: Working, Snoozed and Settled. Working holds threads in progress without you: a running turn, a delivery GitHub is carrying, or a Wait. A thread comes back to the top of the open list when it finishes or needs you, such as for a secret, a review or a manual merge.
 _Avoid_: Folder, inbox, tab
 
 ## Secrets and hub connections

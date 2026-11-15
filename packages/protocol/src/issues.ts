@@ -36,6 +36,14 @@ export const issueMethods = {
   'threads.issues': method<typeof CheckoutIssues, IssueList>(CheckoutIssues),
 };
 
+/**
+ * GLOSSARY: Issue. The GitHub issue a first message works on: the first `#123` in its
+ * first line, as in `Work on #208: …` or `Implement GitHub issue #196 (…)`.
+ */
+export function issueNamedIn(text: string) {
+  return /(?<![\w&/])#([1-9]\d*)\b/.exec(text.trimStart().split('\n')[0]!)?.[0];
+}
+
 /** The first message for a picked issue: its reference and title, then any notes. */
 export function issueMessage(issue: Pick<IssueView, 'ref' | 'title'>, notes: string) {
   const line = `Work on ${issue.ref}: ${issue.title}`;

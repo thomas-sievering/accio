@@ -12,6 +12,7 @@ import { useProjects } from '../projects/projects';
 import { Composer } from './Composer';
 import { QueueTray } from './QueueTray';
 import { GoalBar } from './GoalBar';
+import { WaitBar } from './WaitBar';
 import { PendingPick, optionName } from './Choice';
 import { DeliveryActions } from './DeliveryActions';
 import { MachinePicker } from './MachinePicker';
@@ -89,7 +90,7 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
         key={thread.id}
         imagesUnavailable={imagesUnavailable}
         disabled={!!unavailable || savingModel || thread.delivery?.status === 'queued' || thread.delivery?.status === 'running' || !place.profile || !accountForModel(place.profile, thread.model)?.signedIn}
-        actions={<><DeliveryActions key={thread.id} thread={thread} project={place.project} canRun={!!place.profile && !!accountForModel(place.profile, thread.model)?.signedIn} /><GoalBar thread={thread} /><QueueTray thread={thread} /></>}
+        actions={<><DeliveryActions key={thread.id} thread={thread} project={place.project} canRun={!!place.profile && !!accountForModel(place.profile, thread.model)?.signedIn} /><GoalBar thread={thread} /><WaitBar thread={thread} /><QueueTray thread={thread} /></>}
         target={thread.id}
         draftId={`thread:${thread.id}`}
         profileId={thread.profileId}
@@ -122,7 +123,7 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
  */
 export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile, onOpenLimits }: { checkoutId: string; profileId?: string; active?: boolean; onOpenProfile: (profileId: string) => void; onOpenLimits: (profileId: string) => void }) {
   const client = useClient();
-  const { select } = useThreads();
+  const { select, threads } = useThreads();
   const place = usePlace(checkoutId, profileId);
   const [choice, setChoice] = useState<{ checkoutId: string; profileId?: string; model: ModelSelection }>();
   const model = choice?.checkoutId === checkoutId && choice.profileId === place.profile?.id ? choice.model : defaultModel(place.profile);
@@ -148,6 +149,16 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
   }, [client, checkoutId]);
   useEffect(readIssues, [readIssues]);
   const issueList = issues?.checkoutId === checkoutId ? issues.list : undefined;
+  // GLOSSARY: Issue. Open threads in this project, on any machine, by the issue they work on.
+  const projectId = place.project?.id;
+  const working = useMemo(() => {
+    const byIssue = new Map<string, ThreadView[]>();
+    for (const thread of threads ?? []) {
+      if (!thread.issue || thread.settledAt || !projectId || thread.projectId !== projectId) continue;
+      byIssue.set(thread.issue, [...(byIssue.get(thread.issue) ?? []), thread].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
+    }
+    return byIssue;
+  }, [threads, projectId]);
   const offersIssues = !!issueList && (issueList.issues.length > 0 || !!issueList.unavailable || !!issue) && (!machines || !!machine?.thisMachine);
   // A start can take a while; moving elsewhere meanwhile unmounts the draft, and the new thread must not pull focus back.
   const open = useRef(true);
@@ -197,7 +208,8 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
         />
         <div className="draft-machine draft-context">
           <MachinePicker machines={startable} value={machineId} onChange={setChosenMachineId} note={(m) => noCheckout(m) ? 'No checkout yet' : undefined} />
-          {offersIssues && <IssuePicker list={issueList!} value={issue} onOpen={readIssues} onChange={(issue) => setPicked({ checkoutId, issue })} />}
+          {offersIssues && <IssuePicker list={issueList!} value={issue} onOpen={readIssues} onChange={(issue) => setPicked({ checkoutId, issue })}
+            working={working} onOpenThread={(id) => void viewTransition('thread-open', () => select(id))} />}
         </div>
       </div>
     </>

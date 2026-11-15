@@ -88,6 +88,15 @@ describe('deliveries on Working', () => {
   });
 });
 
+describe('Waits on Working', () => {
+  const wait = { id: 'w', setAt: '2026-11-03T10:00:00Z', wakeWhen: 'any' as const, note: 'Review it', conditions: [{ kind: 'after' as const, at: '2026-11-03T11:00:00Z' }] };
+
+  it('keeps an idle thread with a Wait on Working, but not one whose last turn failed', () => {
+    expect(shelveThreads([thread('waiting', { wait })], now).working.map((t) => t.id)).toEqual(['waiting']);
+    expect(shelveThreads([thread('failed', { wait, status: 'failed' })], now).working).toEqual([]);
+  });
+});
+
 describe('createPlacementTracker', () => {
   const at = now.getTime();
 

@@ -168,6 +168,8 @@ export function threadStatus(t: ThreadView, { needsSecret = false }: { needsSecr
     return { label: carries ? delivery!.label : 'Working', tone: 'working', glyph: 'spinner', showLabel: carries, delivery };
   }
   if (delivery) return { label: delivery.label, tone: delivery.tone, glyph: delivery.glyph, showLabel: true, delivery };
+  // GLOSSARY: Wait. accio starts its next turn itself.
+  if (t.wait && t.status === 'idle') return { label: 'Waiting', tone: 'waiting', glyph: 'dot', showLabel: true };
   return { label: turnLabels[t.status], tone: t.status === 'idle' ? 'ready' : t.status, glyph: 'dot', showLabel: true };
 }
 

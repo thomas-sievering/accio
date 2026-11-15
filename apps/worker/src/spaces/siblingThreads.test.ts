@@ -69,7 +69,7 @@ describe('start_thread in another project of the space', () => {
 
     const caller = await c.call('threads.start', { checkoutId: mcp.id, text: 'start it' });
     const [child] = await startedBy(c, caller);
-    expect(answers[0]).toEqual({ text: `Started thread "${child!.title}" (${child!.id}) in hrc_api on this machine. It runs on its own and shows in the thread list.`, isError: false });
+    expect(answers[0]).toEqual({ text: `Started thread "${child!.title}" (${child!.id}) in hrc_api on this machine. It runs on its own and shows in the thread list. To be woken when it finishes or opens a PR, call wait_for and end your turn.`, isError: false });
     expect(child).toMatchObject({ checkoutId: api.id, projectId: api.projectId, profileId: work.id });
     await idle(c, child!.id);
     expect(harness.runs.find((run) => run.prompt === 'Fix the login page')?.cwd).not.toBe(harness.runs[0]!.cwd);

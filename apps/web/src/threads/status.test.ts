@@ -23,6 +23,12 @@ describe('threadStatus without delivery', () => {
     expect(sidebar(thread({ status: 'failed' }))).toMatchObject({ label: 'Failed', tone: 'failed' });
   });
 
+  it('says Waiting for an idle thread with a Wait', () => {
+    const wait = { id: 'w', setAt: '', wakeWhen: 'any' as const, note: 'x', conditions: [{ kind: 'after' as const, at: '' }] };
+    expect(threadStatus(thread({ wait }))).toMatchObject({ label: 'Waiting', tone: 'waiting', glyph: 'dot' });
+    expect(threadStatus(thread({ wait, status: 'running' })).label).toBe('Working');
+  });
+
   it('puts a pending secret first', () => {
     expect(threadStatus(thread({ status: 'running' }), { needsSecret: true })).toMatchObject({ label: 'Needs a secret', tone: 'secret', showLabel: true });
   });

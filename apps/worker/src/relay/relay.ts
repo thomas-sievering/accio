@@ -209,7 +209,7 @@ export class Relay {
    * A checkout of that machine's own, such as a sibling's for start_thread, is used as it is.
    */
   private async startOn(machineId: string, name: string, input: ParamsOf<'threads.start'>): Promise<unknown> {
-    const { text, model } = input;
+    const { text, model, startedBy } = input;
     const socket = this.socket!;
     let params: ParamsOf<'threads.start'>;
     if ('checkoutId' in input && this.remote.get(machineId)?.checkouts?.some((c) => c.id === input.checkoutId)) {
@@ -229,8 +229,8 @@ export class Relay {
           .catch((error: Error) => { throw new UserError(error.message === NOT_RELAYED ? OLDER(name) : error.message); }) as CheckoutView;
         checkoutId = cloned.id;
       }
-      params = { checkoutId, text, ...(model ? { model } : {}) };
-    } else params = { profileId: input.profileId, text, ...(model ? { model } : {}) };
+      params = { checkoutId, text, ...(model ? { model } : {}), ...(startedBy ? { startedBy } : {}) };
+    } else params = { profileId: input.profileId, text, ...(model ? { model } : {}), ...(startedBy ? { startedBy } : {}) };
     return socket.call(machineId, 'threads.start', params).then((result) => {
       if (!isThreadView(result)) return result;
       // List it before the owner's next snapshot arrives, so the client can open it straight away.
