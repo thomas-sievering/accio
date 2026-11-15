@@ -45,7 +45,7 @@ export async function startProjectThread(page: Page, baseURL: string, project: R
 export async function withElectron(baseURL: string, prefix: string, use: (desktop: ElectronApplication, page: Page) => Promise<void>) {
   const home = await mkdtemp(join(tmpdir(), prefix));
   const require = createRequire(import.meta.url);
-  const executablePath = require(require.resolve('electron', { paths: [resolve('apps/desktop')] })) as string;
+  const executablePath = require('electron') as string;
   const environment = Object.fromEntries(Object.entries(process.env).filter(([key, value]) => key !== 'ELECTRON_RUN_AS_NODE' && value !== undefined));
   const desktop = await _electron.launch({ executablePath, args: [resolve('tests/electron-shell.cjs'), `--user-data-dir=${home}`], env: { ...environment, ACCIO_CHAT_TEST_URL: baseURL, ACCIO_CHAT_TEST_DOWNLOADS: home } });
   try {

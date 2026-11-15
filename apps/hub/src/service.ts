@@ -6,6 +6,7 @@ import { GitHubLogin, methods, noHouseMessage, noSortingHatMessage, ResourceScop
 import { SharedSettings, type MachineHello, type SharedSeed } from './sharedSettings.js';
 import { HubError } from './errors.js';
 import { HubTrust } from './trust.js';
+import { HUB_INTERVAL_MS, keepAlive } from './keepAlive.js';
 import { accountSelection, profileViews, saveSharedProfile } from './profile.js';
 import { SortingHatLink } from './sortingHatLink.js';
 import type { CodexModel, Fetch } from './sortingHatClient.js';
@@ -42,6 +43,12 @@ export type HubServiceOptions = {
   mcpFetch?: Fetch; publicUrl?: string; secretKey?: string;
   /** GLOSSARY: Accio version. What this hub runs, shown to clients. */
   version?: string;
+  /**
+   * Header a trusted forwarding proxy sets to the real client address, such as `cf-connecting-ip`
+   * behind a Cloudflare Tunnel. Pairing is limited per that address; unset, per socket address,
+   * because a client could send any header itself. A list takes its last entry, the one the proxy added.
+   */
+  clientAddressHeader?: string;
 };
 const SecretId = z.string().min(1).max(160);
 const SecretScope = z.object({ profileId: SecretId, projectId: SecretId.nullable(), slot: SecretSlot });
@@ -57,6 +64,55 @@ const secretCalls = {
   'secrets.bind': z.object({ id: SecretId, scope: SecretScope }),
   'secrets.used': z.object({ id: SecretId, version: z.number().int().positive(), scope: SecretScope }),
 };
+const ShortId = z.string().min(1).max(512);
+const SkillEntry = z.object({ id: z.string(), sourceId: z.string(), name: z.string(), description: z.string(), path: z.string(), revision: z.string(), scope: ResourceScope });
+const Skills = z.array(SkillEntry).min(1).max(10_000);
+const write = <M extends typeof RESOURCE_WRITES[number], A extends [z.ZodType, ...z.ZodType[]]>(method: M, ...args: A) => z.object({ method: z.literal(method), args: z.tuple(args) });
+/** One entry per mutation in RESOURCE_WRITES, with its arguments in order. */
+const ResourceWrite = z.discriminatedUnion('method', [
+  write('saveTool', methods['tools.save'].params),
+  write('deleteTool', ShortId),
+  write('saveSource', methods['skills.addSource'].params, Skills),
+  write('stageSkills', ShortId, Skills),
+  write('applySkills', ShortId, ShortId),
+  write('deleteSource', ShortId),
+  write('setSkillScope', ShortId, ResourceScope),
+  write('setSkillProject', ShortId, z.object({ projectKey: ShortId, enabled: z.boolean() })),
+  write('saveMcp', methods['mcp.save'].params),
+  write('deleteMcp', ShortId),
+  write('setCredential', ShortId, z.object({ accessToken: z.string(), refreshToken: z.string().optional(), expiresAt: z.number().optional(), tokenEndpoint: z.string().optional(), clientId: z.string().optional(), clientSecret: z.string().optional() })),
+  write('setToolStatus', z.object({ toolId: ShortId, machineId: z.string(), status: z.enum(['pending', 'installing', 'ready', 'error']), version: z.string().optional(), detail: z.string().optional(),
+    checkedAt: z.string().optional(), repairThreadId: z.string().optional(), repairError: z.string().optional() })),
+]);
+/** A machine's local browser callback, the only redirect address a sign-in may name. */
+function isBrowserCallback(value: string) {
+  if (!URL.canParse(value)) return false;
+  const u = new URL(value);
+  return u.protocol === 'http:' && u.hostname === 'localhost' && u.pathname === '/callback' && !!u.port && !u.search && !u.hash && !u.username && !u.password;
+}
+/** Methods only paired machines call, or call with more than the client protocol lists. */
+const machineCalls = {
+  'machine.hello': z.object({
+    id: z.string().min(1).max(128), name: z.string().min(1).max(256), platform: z.string().min(1).max(64), version: z.string().min(1).max(128),
+    harnesses: z.array(z.object({ harnessId: z.string().min(1).max(64), version: z.string().max(128).nullable() })).max(100),
+    githubAccounts: z.array(GitHubLogin).max(100).optional(),
+  }),
+  'machine.references': z.object({ profiles: z.array(z.string()).max(10_000) }),
+  'machine.modelKey': z.object({ profileId: z.string().min(1).max(160) }),
+  'hub.pairingCode': z.object({}),
+  'hub.revokeMachine': z.object({ machineId: z.string().min(1).max(128) }),
+  'resources.write': ResourceWrite,
+  'mcp.grant': z.object({ id: ShortId, profileId: z.string().min(1).max(160), projectKey: ShortId.optional() }),
+  'mcp.release': z.object({ token: ShortId }),
+  'accounts.beginSignIn': z.object({ id: z.string(), redirectUri: z.string().max(512).refine(isBrowserCallback, 'Invalid browser callback').optional() }),
+  'accounts.callback': z.object({ signInId: ShortId, code: z.string().min(1).max(16_384), state: z.string().max(1024).optional() }),
+};
+/** Names the first problem, such as `profiles.0: Invalid input: expected string, received number`. */
+function invalid(error: z.ZodError) {
+  const issue = error.issues[0];
+  const where = issue?.path.length ? `${issue.path.join('.')}: ` : '';
+  return new HubError(`Invalid hub request parameters${issue ? ` (${where}${issue.message})` : ''}`);
+}
 type Login = { machineId: string; accountId: string; providerId: ProviderId; startedAt: number; complete?: AccountView };
 /** How long a machine may finish a sign-in it started; the Sorting Hat expires its own too. */
 const SIGN_IN_TTL_MS = 15 * 60_000;
@@ -140,22 +196,20 @@ export async function startHubService(opts: HubServiceOptions) {
     return pending;
   }
   async function execute(machineId: string, method: string, raw: any): Promise<unknown> {
-    const schema = (methods as Record<string, any>)[method]?.params ?? (secretCalls as Record<string, z.ZodType>)[method] ?? (settingCalls as Record<string, z.ZodType>)[method];
-    const parsed = schema?.safeParse(raw);
-    if (parsed && !parsed.success) throw new HubError('Invalid hub request parameters');
-    const p = parsed ? parsed.data : raw;
+    const schema: z.ZodType | undefined = (machineCalls as Record<string, z.ZodType>)[method] ?? (methods as Record<string, any>)[method]?.params ?? (secretCalls as Record<string, z.ZodType>)[method] ?? (settingCalls as Record<string, z.ZodType>)[method];
+    if (!schema) throw new HubError(`Unknown hub method ${method}`);
+    const parsed = schema.safeParse(raw);
+    if (!parsed.success) throw invalid(parsed.error);
+    const p = parsed.data as any;
     switch (method) {
       case 'machine.hello': {
         const hello = p as MachineHello;
-        if (hello.id !== machineId || !hello.name || !hello.platform || !hello.version || !Array.isArray(hello.harnesses) || (hello.githubAccounts !== undefined && !(Array.isArray(hello.githubAccounts) && hello.githubAccounts.every((l) => GitHubLogin.safeParse(l).success))) || JSON.stringify(hello).length > 16_384) throw new HubError('Invalid machine identity');
+        if (hello.id !== machineId || JSON.stringify(hello).length > 16_384) throw new HubError('Invalid machine identity');
         await settings.machineConnected(hello); return null;
       }
-      case 'machine.references': {
-        if (!Array.isArray(p.profiles) || p.profiles.length > 10_000 || p.profiles.some((id: unknown) => typeof id !== 'string')) throw new HubError('Invalid profile references');
-        await trust.references(machineId, p.profiles); return null;
-      }
+      case 'machine.references': await trust.references(machineId, p.profiles); return null;
       case 'machine.modelKey': {
-        const profile = typeof p.profileId === 'string' ? settings.profiles().find((profile) => profile.id === p.profileId) : undefined;
+        const profile = settings.profiles().find((profile) => profile.id === p.profileId);
         if (!profile) throw new HubError('No such profile');
         if (!link.configured) throw new HubError(noSortingHatMessage);
         // GLOSSARY: Hat key. One per profile and machine, with the address threads reach the Sorting Hat at.
@@ -165,7 +219,6 @@ export async function startHubService(opts: HubServiceOptions) {
       }
       case 'hub.pairingCode': return HubTrust.createCode(opts.home);
       case 'hub.revokeMachine': {
-        if (typeof p.machineId !== 'string') throw new HubError('Invalid machine');
         await trust.revoke(p.machineId);
         await link.forgetMachine(p.machineId);
         for (const [token, grant] of grants) if (grant.machineId === p.machineId) { grant.release(); grants.delete(token); }
@@ -187,31 +240,18 @@ export async function startHubService(opts: HubServiceOptions) {
       case 'secrets.bind': await secrets.bind(p.id, p.scope); return null;
       case 'secrets.used': await secrets.used(p.id, p.version, p.scope); return null;
       case 'resources.write': {
-        if (!RESOURCE_WRITES.includes(p.method) || !Array.isArray(p.args) || p.args.length > 2) throw new HubError('Invalid resource mutation');
-        const args = [...p.args];
-        const definitionSchema = { saveTool: methods['tools.save'].params, saveMcp: methods['mcp.save'].params, saveSource: methods['skills.addSource'].params }[p.method as 'saveTool' | 'saveMcp' | 'saveSource'];
-        if (definitionSchema) args[0] = definitionSchema.parse(args[0]);
-        else if (p.method !== 'setToolStatus' && (typeof args[0] !== 'string' || !args[0] || args[0].length > 512)) throw new HubError('Invalid resource identity');
-        if (p.method === 'saveSource' || p.method === 'stageSkills') {
-          if (!Array.isArray(args[1]) || !args[1].length || args[1].length > 10_000) throw new HubError('Invalid skills');
-          for (const skill of args[1]) {
-            if (!skill || ['id', 'sourceId', 'name', 'description', 'path', 'revision'].some(key => typeof skill[key] !== 'string')) throw new HubError('Invalid skill');
-            skill.scope = ResourceScope.parse(skill.scope);
-          }
-        }
-        if (p.method === 'setSkillScope') args[1] = ResourceScope.parse(args[1]);
-        if (p.method === 'setSkillProject' && (!args[1] || typeof args[1].projectKey !== 'string' || !args[1].projectKey || args[1].projectKey.length > 512 || typeof args[1].enabled !== 'boolean')) throw new HubError('Invalid project skill selection');
-        if (p.method === 'setToolStatus' && (!args[0] || args[0].machineId !== machineId || typeof args[0].toolId !== 'string' || !['pending', 'installing', 'ready', 'error'].includes(args[0].status))) throw new HubError('Invalid machine tool status');
-        if (p.method === 'setCredential' && (!resources.state().mcps.some(value => value.id === args[0] && value.auth === 'bearer') || typeof args[1]?.accessToken !== 'string')) throw new HubError('Select a bearer-authenticated MCP server');
-        if (p.method === 'deleteMcp') await mcp.signOut(args[0]);
-        await (resources[p.method as typeof RESOURCE_WRITES[number]] as (...values: any[]) => Promise<void>).apply(resources, args);
+        const { method: write, args } = p as z.output<typeof ResourceWrite>;
+        if (write === 'setToolStatus' && args[0].machineId !== machineId) throw new HubError('Invalid machine tool status');
+        if (write === 'setCredential' && !resources.state().mcps.some(value => value.id === args[0] && value.auth === 'bearer')) throw new HubError('Select a bearer-authenticated MCP server');
+        if (write === 'deleteMcp') await mcp.signOut(args[0]);
+        await (resources[write] as (...values: any[]) => Promise<void>).apply(resources, args);
         return null;
       }
       case 'mcp.beginSignIn': return mcp.beginSignIn(p.id).catch(error => { throw new HubError(error.message); });
       case 'mcp.completeSignIn': await mcp.completeSignIn(p.callbackUrl, p.id).catch(error => { throw new HubError(error.message); }); return null;
       case 'mcp.signOut': await mcp.signOut(p.id); return null;
       case 'mcp.grant': {
-        if (typeof p.id !== 'string' || typeof p.profileId !== 'string' || !settings.profiles().some(profile => profile.id === p.profileId)) throw new HubError('Invalid MCP grant');
+        if (!settings.profiles().some(profile => profile.id === p.profileId)) throw new HubError('Invalid MCP grant');
         const grant = mcp.grant(p.id, p.profileId, p.projectKey); grants.set(grant.token, { machineId, release: grant.release }); return { token: grant.token };
       }
       case 'mcp.release': {
@@ -222,19 +262,9 @@ export async function startHubService(opts: HubServiceOptions) {
       case 'accounts.delete': await link.deleteAccount(p.id); return null;
       case 'accounts.signOut': return link.write((c) => c.signOut(p.id));
       case 'accounts.beginSignIn': {
-        const redirectUri = raw.redirectUri;
-        if (redirectUri !== undefined) {
-          const u = new URL(redirectUri);
-          if (u.protocol !== 'http:' || u.hostname !== 'localhost' || u.pathname !== '/callback' || !u.port || u.search || u.hash || u.username || u.password) throw new HubError('Invalid browser callback');
-        }
-        const result = await link.write((c) => c.beginSignIn(p.id, redirectUri));
+        const result = await link.write((c) => c.beginSignIn(p.id, p.redirectUri));
         logins.set(result.signInId, { machineId, accountId: p.id, providerId: result.providerId, startedAt: Date.now() });
         return result;
-      }
-      case 'accounts.completeSignIn': {
-        const pending = login(p.signInId, machineId);
-        pending.complete = await completeRemote(p.signInId, { code: p.code });
-        return pending.complete;
       }
       case 'accounts.signInStatus': {
         const pending = login(p.signInId, machineId);
@@ -316,6 +346,12 @@ export async function startHubService(opts: HubServiceOptions) {
     const safe = error instanceof HubError || error instanceof SecretStoreError;
     json(res, safe ? 400 : 500, { error: safe ? error.message : 'Hub request failed. Check the hub service.' });
   }); });
+  const forwardedHeader = opts.clientAddressHeader?.trim().toLowerCase() || undefined;
+  function clientAddress(req: IncomingMessage) {
+    const forwarded = forwardedHeader && req.headers[forwardedHeader];
+    const value = (Array.isArray(forwarded) ? forwarded.at(-1) : forwarded)?.split(',').at(-1)?.trim();
+    return value || (req.socket.remoteAddress ?? 'unknown');
+  }
   async function handle(req: IncomingMessage, res: ServerResponse) {
     const target = new URL(req.url ?? '/', 'http://localhost');
     if (!req.url?.startsWith('/') || target.origin !== 'http://localhost') return json(res, 404, { error: 'Unknown hub endpoint' });
@@ -327,7 +363,7 @@ export async function startHubService(opts: HubServiceOptions) {
     }
     if (path === '/healthz' && req.method === 'GET') return json(res, closing ? 503 : 200, { hubId: trust.id, protocol: HUB_PROTOCOL, ready: !closing });
     if (path === '/pair' && req.method === 'POST') {
-      const address = req.socket.remoteAddress ?? 'unknown';
+      const address = clientAddress(req);
       if (pairingAttempts.size > 1000) for (const [key, v] of pairingAttempts) if (v.until < Date.now()) pairingAttempts.delete(key);
       const counter = pairingAttempts.get(address);
       if (counter && counter.until > Date.now() && counter.count >= 10) return json(res, 429, { error: 'Too many pairing attempts. Try again in a minute.' });
@@ -368,8 +404,7 @@ export async function startHubService(opts: HubServiceOptions) {
         const previous = relays.get(machineId);
         relays.set(machineId, ws);
         previous?.close(4000, 'Replaced by a newer connection');
-        (ws as any).alive = true;
-        ws.on('pong', () => { (ws as any).alive = true; });
+        keepAlive(ws, HUB_INTERVAL_MS, { endOnWake: false });
         ws.on('error', () => {});
         ws.on('message', (data, binary) => { if (!binary && relays.get(machineId) === ws) forward(machineId, String(data)); });
         ws.once('close', () => { if (relays.get(machineId) === ws) { relays.delete(machineId); relayPeers(); } });
@@ -380,34 +415,24 @@ export async function startHubService(opts: HubServiceOptions) {
     if (!machineId || req.url !== '/events') { socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n'); return; }
     sockets.handleUpgrade(req, socket, head, (ws) => {
       owners.set(ws, machineId);
-      (ws as any).alive = true;
-      ws.on('pong', () => { (ws as any).alive = true; });
+      keepAlive(ws, HUB_INTERVAL_MS, { endOnWake: false });
       ws.on('error', () => {});
       ws.once('close', () => { owners.delete(ws); if (![...owners.values()].includes(machineId)) void settings.machineDisconnected(machineId).catch(() => {}); });
       ws.send(JSON.stringify({ revision }));
     });
   });
-  const heartbeat = setInterval(() => {
-    for (const ws of relay.clients) {
-      if (!(ws as any).alive) { ws.terminate(); continue; }
-      (ws as any).alive = false; ws.ping();
-    }
-    for (const ws of sockets.clients) {
-      const owner = owners.get(ws);
-      if (!(ws as any).alive || !owner) { ws.terminate(); continue; }
-      (ws as any).alive = false; ws.ping();
-    }
-    // The Sorting Hat expires its own sign-ins.
+  // The Sorting Hat expires its own sign-ins.
+  const loginSweep = setInterval(() => {
     for (const [id, pending] of logins) if (Date.now() - pending.startedAt > SIGN_IN_TTL_MS) logins.delete(id);
   }, 25_000);
-  heartbeat.unref();
+  loginSweep.unref();
   await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(opts.port ?? 47322, opts.host ?? '127.0.0.1', resolve); });
   const address = server.address();
   const port = typeof address === 'object' && address ? address.port : opts.port!;
   const url = `http://${opts.host ?? '127.0.0.1'}:${port}`;
   mcp.setUrl(opts.publicUrl ?? url);
   return { sortingHatLink: link, settings, resources, secrets, trust, port, url, snapshot, createPairingCode: () => HubTrust.createCode(opts.home),
-    async close() { closing = true; clearInterval(heartbeat); for (const ws of sockets.clients) ws.terminate(); for (const ws of relay.clients) ws.terminate();
+    async close() { closing = true; clearInterval(loginSweep); for (const ws of sockets.clients) ws.terminate(); for (const ws of relay.clients) ws.terminate();
       // server.close() drops only the connections idle right now; a request finishing later would keep its socket open until the client's keep-alive timeout (~3s).
       const sweep = setInterval(() => server.closeIdleConnections(), 25);
       await new Promise<void>((resolve) => server.close(() => resolve())).finally(() => clearInterval(sweep)); sockets.close(); relay.close(); await queue; for (const grant of grants.values()) grant.release(); await link.close(); await secrets.close(); await resources.close(); await settings.close(); await trust.close(); } };

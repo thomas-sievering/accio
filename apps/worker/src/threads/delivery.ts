@@ -9,6 +9,8 @@ import { git, maybeGit } from '../git.js';
 import { DELIVERY_STEP_INSTRUCTIONS } from './deliveryStep.js';
 import { SHIPPED_NOTE_INSTRUCTIONS } from './shippedNote.js';
 import { type TriggerEvent, workflowMayRun } from './workflowTriggers.js';
+import type { z } from 'zod';
+import { GhBranch, GhBranchRules, GhCheckRuns, GhCommitStatus, GhJob, GhPullRequest, GhPullRequests, GhWorkflows, type GhCheck } from './ghReplies.js';
 
 const exec = promisify(execFile);
 /** Waiting uses machine-side checks; a model is woken only when it has more work. */
@@ -19,7 +21,9 @@ export class DeliveryPending extends UserError {
 export class DeliveryUnavailable extends UserError {}
 export type DeliveryObservation = (patch: Partial<ThreadDelivery>) => Promise<void>;
 /** Runs a gh JSON read. `env` carries the profile's GitHub account (GLOSSARY: GitHub account). */
-export type DeliveryHosting = (cwd: string, args: string[], env?: Record<string, string>) => Promise<any>;
+export type DeliveryHosting = (cwd: string, args: string[], env?: Record<string, string>) => Promise<unknown>;
+/** A gh JSON read checked against the fields its caller reads (see ghReplies.ts). */
+type Host = <T>(cwd: string, args: string[], schema: z.ZodType<T>) => Promise<T>;
 /** Environment for gh on behalf of the owning thread's profile. */
 export type GitHubEnv = Record<string, string>;
 export type HostRoute = { pullRequest?: DeliveryPullRequest; pullRequestUrl?: string; requiresPullRequest?: boolean };
@@ -38,12 +42,12 @@ export function modifiedLines(patch: string): number {
 
 /** Git owns worktree removal; we never recursively delete a project or force a dirty checkout away. */
 export class DeliveryGit {
-  private reads = new Map<string, Promise<any>>();
+  private reads = new Map<string, Promise<unknown>>();
   private bases = new Map<string, Promise<string>>();
   constructor(private home: string, private hostingJson: DeliveryHosting = ghJson) {}
 
   /** Concurrent observers of one project's PR share host reads, including failures. */
-  private hosting = (cwd: string, args: string[], env?: GitHubEnv): Promise<any> => {
+  private raw(cwd: string, args: string[], env?: GitHubEnv): Promise<unknown> {
     // Reads as different accounts can see different things; only the same account's are shared.
     const key = JSON.stringify([resolve(cwd), args, env?.GH_TOKEN ?? '']);
     const existing = this.reads.get(key);
@@ -51,7 +55,10 @@ export class DeliveryGit {
     const read = Promise.resolve().then(() => this.hostingJson(cwd, args, env)).finally(() => this.reads.delete(key));
     this.reads.set(key, read);
     return read;
-  };
+  }
+  private host(env?: GitHubEnv): Host {
+    return async (cwd, args, schema) => parseGh(args, schema, await this.raw(cwd, args, env));
+  }
 
   /** Fetch once for concurrent starts; leave the source checkout's branch and files alone. */
   private async freshBase(sourcePath: string, localRevision: string): Promise<string> {
@@ -108,23 +115,23 @@ export class DeliveryGit {
    * host leaves the project's policy, and the prompt still forbids bypassing rules.
    */
   async hostRoute(workspace: ThreadWorkspace, baseBranch: string, env?: GitHubEnv): Promise<HostRoute> {
-    const host = (cwd: string, args: string[]) => this.hosting(cwd, args, env);
+    const host = this.host(env);
     const origin = await maybeGit(workspace.sourcePath, 'config', '--get', 'remote.origin.url');
     const slug = origin ? githubRepo(origin) : undefined;
     if (!slug) return {};
     const route: HostRoute = {};
     try {
-      const prs = await host(workspace.sourcePath, ['pr', 'list', '--repo', slug, '--head', workspace.branch, '--state', 'open', '--json', PR_FIELDS]);
-      const pr = (prs as any[]).find(p => p.baseRefName === baseBranch);
+      const prs = await host(workspace.sourcePath, ['pr', 'list', '--repo', slug, '--head', workspace.branch, '--state', 'open', '--json', PR_FIELDS], GhPullRequests);
+      const pr = prs.find(p => p.baseRefName === baseBranch);
       const identity = pullRequestIdentity(pr?.url);
       if (pr && identity && identity.repository.toLowerCase() === slug.toLowerCase())
         Object.assign(route, { pullRequestUrl: pr.url, pullRequest: { ...identity, state: 'open', headRevision: pr.headRefOid, baseBranch: pr.baseRefName } });
     } catch { /* Ship still proceeds under the project's policy. */ }
     try {
       const branch = encodeURIComponent(baseBranch);
-      const rules = await host(workspace.sourcePath, ['api', `repos/${slug}/rules/branches/${branch}`]);
-      const ruled = (rules as any[]).some(r => ['pull_request', 'merge_queue', 'required_status_checks'].includes(r.type));
-      const classic = !ruled && (await host(workspace.sourcePath, ['api', `repos/${slug}/branches/${branch}`]))?.protection?.enabled === true;
+      const rules = await host(workspace.sourcePath, ['api', `repos/${slug}/rules/branches/${branch}`], GhBranchRules);
+      const ruled = rules.some(r => ['pull_request', 'merge_queue', 'required_status_checks'].includes(r.type));
+      const classic = !ruled && (await host(workspace.sourcePath, ['api', `repos/${slug}/branches/${branch}`], GhBranch)).protection?.enabled === true;
       if (ruled || classic) route.requiresPullRequest = true;
     } catch { /* Same as above. */ }
     return route;
@@ -169,7 +176,7 @@ export class DeliveryGit {
   }
 
   async verify(workspace: ThreadWorkspace, delivery: ThreadDelivery, observed?: DeliveryObservation, env?: GitHubEnv): Promise<ThreadDelivery> {
-    const host = (cwd: string, args: string[]) => this.hosting(cwd, args, env);
+    const host = this.host(env);
     let result = { ...delivery };
     const record = async (patch: Partial<ThreadDelivery>) => {
       result = { ...result, ...patch };
@@ -180,16 +187,16 @@ export class DeliveryGit {
     const slug = origin ? githubRepo(origin) : undefined;
     const localRevision = await maybeGit(workspace.path, 'rev-parse', 'HEAD');
     const revision = delivery.status === 'running' ? localRevision : delivery.revision ?? localRevision;
-    let pr: any;
+    let pr: GhPullRequest | undefined;
     // Read a known PR even if its source branch/worktree disappeared. Host facts survive local errors.
     if (delivery.mode === 'review' || delivery.policy === 'pull-request') {
       if (!slug) throw new UserError('PR verification currently requires a GitHub origin and authenticated gh CLI.');
       const linked = delivery.pullRequest ?? pullRequestIdentity(delivery.pullRequestUrl);
       if (linked && linked.repository.toLowerCase() !== slug.toLowerCase()) throw new UserError('The PR repository no longer matches origin. Request Ship again.');
-      if (linked) pr = await host(workspace.sourcePath, ['pr', 'view', String(linked.number), '--repo', slug, '--json', PR_FIELDS]);
+      if (linked) pr = await host(workspace.sourcePath, ['pr', 'view', String(linked.number), '--repo', slug, '--json', PR_FIELDS], GhPullRequest);
       else {
-        const prs = await host(workspace.sourcePath, ['pr', 'list', '--repo', slug, '--head', workspace.branch, '--state', 'all', '--json', PR_FIELDS]);
-        pr = prs.find((p: any) => p.headRefOid === revision && p.baseRefName === delivery.baseBranch);
+        const prs = await host(workspace.sourcePath, ['pr', 'list', '--repo', slug, '--head', workspace.branch, '--state', 'all', '--json', PR_FIELDS], GhPullRequests);
+        pr = prs.find(p => p.headRefOid === revision && p.baseRefName === delivery.baseBranch);
       }
       if (!pr) throw new UserError('No PR for this revision was found. The workspace has been kept.');
       const identity = pullRequestIdentity(pr.url);
@@ -223,8 +230,9 @@ export class DeliveryGit {
         if (pr.autoMergeRequest || pr.mergeStateStatus === 'QUEUED') throw new DeliveryPending('Waiting for the PR to merge.', false, 'merge');
         throw new DeliveryPending('The PR is ready. Continuing the authorized merge in the owning thread.', true, 'merge');
       }
-      publishedRevision = pr.mergeCommit?.oid;
-      if (!publishedRevision) throw new UserError('Could not verify the merged commit.');
+      const merged = pr.mergeCommit?.oid;
+      if (!merged) throw new UserError('Could not verify the merged commit.');
+      publishedRevision = merged;
     }
     try { await git(workspace.path, 'fetch', '--quiet', 'origin', `refs/heads/${delivery.baseBranch}:refs/remotes/origin/${delivery.baseBranch}`); }
     catch { throw new DeliveryUnavailable('Could not read the latest target branch on origin. Retrying without publishing again.'); }
@@ -292,13 +300,21 @@ function pullRequestIdentity(url?: string): Pick<DeliveryPullRequest, 'host' | '
   if (!match || !Number.isSafeInteger(Number(match[2]))) return undefined;
   return { host: 'github.com', repository: match[1]!, number: Number(match[2]), url: url! };
 }
-async function ghJson(cwd: string, args: string[], env?: GitHubEnv): Promise<any> {
+async function ghJson(cwd: string, args: string[], env?: GitHubEnv): Promise<unknown> {
   let stdout: string;
   try {
     ({ stdout } = await exec('gh', args, { cwd, windowsHide: true, timeout: 30_000, maxBuffer: 4 * 1024 * 1024, ...(env ? { env: { ...process.env, ...env } } : {}) }));
   } catch (error) { throw new DeliveryUnavailable(ghFailure(error)); }
   try { return JSON.parse(stdout); }
   catch { throw new DeliveryUnavailable('GitHub sent an unreadable reply. Observation will retry.'); }
+}
+/** Checks a gh reply against the fields delivery reads, so a changed gh fails here, naming the command. */
+function parseGh<T>(args: string[], schema: z.ZodType<T>, reply: unknown): T {
+  const parsed = schema.safeParse(reply);
+  if (parsed.success) return parsed.data;
+  const command = args[0] === 'api' ? `gh api ${args[1]?.split('?')[0]}` : `gh ${args.slice(0, 2).join(' ')}`;
+  const field = parsed.error.issues[0]?.path.join('.');
+  throw new DeliveryUnavailable(`${command} returned output Accio does not recognize${field ? ` (${field})` : ''}. Update the GitHub CLI if it is old; observation will retry.`);
 }
 
 /** Says what went wrong, so a GitHub outage is not mistaken for a sign-in problem. Exported for tests. */
@@ -313,7 +329,7 @@ export function ghFailure(error: unknown): string {
   if (status === 403 || status === 404) return `GitHub refused access to this repository (HTTP ${status}). The GitHub account in use may not have access; choose the profile's GitHub account in Settings / Machines. Observation will retry.`;
   return 'Could not read GitHub delivery or checks. Observation will retry.';
 }
-function assertChecks(checks: any[]) {
+function assertChecks(checks: GhCheck[]) {
   const conclusions = checks.map(c => String(c.conclusion ?? c.state).toLowerCase());
   const failed = checks.filter((_, index) => ['failure', 'error', 'cancelled', 'timed_out', 'action_required', 'startup_failure'].includes(conclusions[index]!));
   if (failed.length) throw new DeliveryPending(`Checks are failing: ${failed.map(c => `${c.name ?? c.context ?? 'CI check'} (${String(c.conclusion ?? c.state).toLowerCase()})`).join(', ')}.`, true);
@@ -329,14 +345,14 @@ type CheckScope = {
 };
 
 /** Resolves when the revision's checks pass, or with why it has none. */
-async function verifyGitHubChecks(cwd: string, slug: string, revision: string, requestedAt: string, hostingJson: typeof ghJson, scope: CheckScope): Promise<ThreadDelivery['noChecks']> {
-  const checks = await hostingJson(cwd, ['api', `repos/${slug}/commits/${revision}/check-runs?per_page=100`]);
-  const statuses = await hostingJson(cwd, ['api', `repos/${slug}/commits/${revision}/status?per_page=100`]);
+async function verifyGitHubChecks(cwd: string, slug: string, revision: string, requestedAt: string, host: Host, scope: CheckScope): Promise<ThreadDelivery['noChecks']> {
+  const checks = await host(cwd, ['api', `repos/${slug}/commits/${revision}/check-runs?per_page=100`], GhCheckRuns);
+  const statuses = await host(cwd, ['api', `repos/${slug}/commits/${revision}/status?per_page=100`], GhCommitStatus);
   if (checks.total_count > 100 || statuses.total_count > 100) throw new UserError('Too many checks to verify automatically. The workspace has been kept.');
-  await assertChecksWithProgress(cwd, slug, revision, [...(checks.check_runs ?? []), ...(statuses.statuses ?? [])], hostingJson);
-  if (checks.check_runs?.length || statuses.statuses?.length) return undefined;
-  const workflows = await hostingJson(cwd, ['api', `repos/${slug}/actions/workflows?per_page=100`]);
-  const active: { path?: unknown }[] = workflows.workflows?.filter((w: any) => w.state === 'active') ?? [];
+  await assertChecksWithProgress(cwd, slug, revision, [...checks.check_runs, ...statuses.statuses], host);
+  if (checks.check_runs.length || statuses.statuses.length) return undefined;
+  const workflows = await host(cwd, ['api', `repos/${slug}/actions/workflows?per_page=100`], GhWorkflows);
+  const active = workflows.workflows.filter(w => w.state === 'active');
   if (!active.length) return 'no-workflows';
   if (!await anyWorkflowMayRun(cwd, revision, active, scope)) return 'filtered';
   // A workflow should run, but GitHub may still be registering it. Allow
@@ -346,7 +362,7 @@ async function verifyGitHubChecks(cwd: string, slug: string, revision: string, r
 }
 
 /** True unless every active workflow's triggers provably exclude the revision. Anything unreadable counts as may run. */
-async function anyWorkflowMayRun(cwd: string, revision: string, workflows: { path?: unknown }[], scope: CheckScope): Promise<boolean> {
+async function anyWorkflowMayRun(cwd: string, revision: string, workflows: { path?: string | null }[], scope: CheckScope): Promise<boolean> {
   if (await maybeGit(cwd, 'merge-base', '--is-ancestor', scope.since, revision) === null) return true;
   const changed = await maybeGit(cwd, 'log', '-m', '--no-renames', '--format=', '--name-only', `${scope.since}..${revision}`);
   if (changed === null) return true;
@@ -362,24 +378,24 @@ async function anyWorkflowMayRun(cwd: string, revision: string, workflows: { pat
 }
 
 /** Progress is optional evidence: a missing Actions permission must never change delivery decisions. */
-async function assertChecksWithProgress(cwd: string, slug: string, revision: string, checks: any[], hostingJson: typeof ghJson) {
+async function assertChecksWithProgress(cwd: string, slug: string, revision: string, checks: GhCheck[], host: Host) {
   try { assertChecks(checks); }
   catch (error) {
     if (!(error instanceof DeliveryPending)) throw error;
     const progress: DeliveryCI = { revision, updatedAt: now(), checks: [] };
     progress.checks = await Promise.all(checks.map(async check => {
       const status = String(check.conclusion || check.status || check.state || 'pending').toLowerCase();
-      const url = check.html_url ?? check.detailsUrl ?? check.target_url ?? check.targetUrl;
+      const url = check.html_url ?? check.detailsUrl ?? check.target_url ?? check.targetUrl ?? undefined;
       const entry: DeliveryCI['checks'][number] = { name: check.name ?? check.context ?? 'CI check', status, url };
       // Only fetch active Actions jobs, and only on this repository's GitHub URL.
       const job = typeof url === 'string' && url.startsWith(`https://github.com/${slug}/actions/runs/`)
         ? url.match(/\/job\/(\d+)(?:[/?#]|$)/)?.[1] : undefined;
       if (job && ['in_progress', 'queued', 'pending', 'waiting', 'requested'].includes(status)) {
         try {
-          const data = await hostingJson(cwd, ['api', `repos/${slug}/actions/jobs/${job}`]);
+          const data = await host(cwd, ['api', `repos/${slug}/actions/jobs/${job}`], GhJob);
           const steps = data.steps ?? [];
-          const active = steps.findIndex((s: any) => s.status === 'in_progress');
-          if (active >= 0) entry.step = { name: steps[active].name, current: active + 1, total: steps.length };
+          const active = steps.findIndex(s => s.status === 'in_progress');
+          if (active >= 0) entry.step = { name: steps[active]!.name, current: active + 1, total: steps.length };
           if (data.status && !data.conclusion) entry.status = data.status;
         } catch { /* Keep the check-level state when Actions details are unavailable. */ }
       }

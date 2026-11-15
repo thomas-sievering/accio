@@ -1,14 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ChangelogEntry, ProjectAppView, ProjectChangelog, ProjectView } from '@accio/protocol';
+import { threadPlace, type ChangelogEntry, type ProjectAppView, type ProjectChangelog, type ProjectView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { emitAppEvent } from '../app/appEvents';
 import { ChevronDown, Close, Play, Refresh, Settings, StopSquare } from '../app/icons';
 import { useAction } from '../app/useAction';
 import { useLive } from '../app/useLive';
-import { relativeTime } from '../limits/limitsModel';
+import { formatDayTime, formatRelative } from '../ui/dates';
 import { ThreadMenuProvider } from '../threads/ThreadMenu';
 import { ThreadRow } from '../threads/ThreadRow';
-import { placeOf } from '../threads/shelves';
 import { useThreads } from '../threads/threads';
 import { ProjectMark } from './ProjectMark';
 import { ProfileLabel } from '../profiles/ProfileLabel';
@@ -96,7 +95,7 @@ function AppControls({ project, app }: { project: ProjectView; app: ProjectAppVi
         <span className={`app-dot ${status}`} aria-hidden="true" />
         <span className="app-status">{STATUS[status]}</span>
         {!project.startCommand && <span className="dim app-hint">{setup ? 'An agent is setting up the app' : 'Run this project’s app from main'}</span>}
-        {shown && commit && <span className="app-commit" title={`${commit.subject}\n${commit.author} · ${new Date(commit.at).toLocaleString()}`}>
+        {shown && commit && <span className="app-commit" title={`${commit.subject}\n${commit.author} · ${formatDayTime(commit.at)}`}>
           <code>{commit.sha.slice(0, 7)}</code> <span className="dim">{commit.subject}</span>
         </span>}
         <span className="spacer" />
@@ -162,7 +161,7 @@ function Threads({ project }: { project: ProjectView }) {
   return (
     <>
       {GROUPS.map(({ place, label }) => {
-        const rows = active.filter((t) => placeOf(t, now) === place);
+        const rows = active.filter((t) => threadPlace(t, now) === place);
         return rows.length > 0 && (
           <section key={place} className="dashboard-section" aria-label={label}>
             <h3 className="dashboard-heading">{label} <span className="dashboard-count">{rows.length}</span></h3>
@@ -237,7 +236,7 @@ function Shipped({ project, entries, running }: { project: ProjectView; entries:
                 {entry?.note && <span className="changelog-note">{entry.note.summary}</span>}
               </span>
               {c.sha === running && <span className="changelog-running">running</span>}
-              <span className="dim" title={`${c.author} · ${new Date(c.at).toLocaleString()}`}>{relativeTime(Date.parse(c.at), now)}</span>
+              <span className="dim" title={`${c.author} · ${formatDayTime(c.at, now)}`}>{formatRelative(c.at, now)}</span>
             </>;
             return (
               <li key={c.sha} className={`${c.sha === running ? 'running' : ''}${open ? ' expanded' : ''}`}>

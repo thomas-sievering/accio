@@ -2,6 +2,8 @@
 
 The production address is `https://accio.mediatom.cc`. It uses the existing remotely managed Cloudflare homeserver tunnel, forwarding to `http://accio-hub:47322` on `media_server_default`. No host port or Tailscale is required. The desktop and coding harnesses stay on their own machines.
 
+Behind the tunnel every client reaches the hub from the same address, so `compose.yaml` sets `ACCIO_CLIENT_ADDRESS_HEADER=cf-connecting-ip`: the hub then limits pairing attempts (10 a minute) per real client address, which Cloudflare sets and clients can't forge. Leave it unset when the hub is reachable without a proxy that overwrites that header; it then limits per socket address.
+
 ## Provision
 
 Build `Dockerfile.hub` for Linux amd64 or pull a verified image from `ghcr.io/thomas-sievering/accio-hub`. Put `compose.yaml` and `deploy.sh` in `/home/tom/accio`. Provision `/data/configs/accio` for UID/GID 1000 with mode 700, then set `ACCIO_HUB_IMAGE` in `.env` to the immutable image reference and run `docker compose up -d hub` from that directory. Inspect existing state and containers first; this is Compose project `accio`, separate from the media and CLI proxy projects.

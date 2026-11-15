@@ -1,4 +1,5 @@
 import type { DeliveryCI } from '@accio/protocol';
+import { formatDayTime } from '../ui/dates';
 
 const finished = (status: string) => ['success', 'neutral', 'skipped'].includes(status);
 
@@ -23,6 +24,6 @@ export function DeliveryProgress({ ci }: { ci: DeliveryCI }) {
         <span>{check.step ? `${check.step.name} · step ${check.step.current} of ${check.step.total}` : check.status.replaceAll('_', ' ')}</span>
       </li>;
     })}</ul>
-    <small>{ci.checks.filter(c => finished(c.status)).length} of {ci.checks.length} checks complete · {ci.revision.slice(0, 7)} · last checked <time dateTime={ci.updatedAt}>{new Date(ci.updatedAt).toLocaleTimeString()}</time></small>
+    <small>{ci.checks.filter(c => finished(c.status)).length} of {ci.checks.length} checks complete · {ci.revision.slice(0, 7)} · last checked <time dateTime={ci.updatedAt}>{formatDayTime(ci.updatedAt)}</time></small>
   </div>;
 }

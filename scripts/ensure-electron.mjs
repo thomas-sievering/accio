@@ -3,8 +3,8 @@ import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
 
-// Resolve from the desktop app: it is the only package that depends on electron.
-const require = createRequire(new URL('../apps/desktop/package.json', import.meta.url));
+// The root and the desktop app declare the same electron, so resolving from the root finds it.
+const require = createRequire(new URL('../package.json', import.meta.url));
 let installJs;
 try {
   installJs = require.resolve('electron/install.js');

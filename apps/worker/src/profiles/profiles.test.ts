@@ -2,7 +2,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { JsonFile } from '@accio/persistence';
-import { claudeAccount, startTestApp } from '../testing/testApp.js';
+import { claudeAccount, claudeCallback, startTestApp } from '../testing/testApp.js';
 
 describe('profiles slice', () => {
   let t: Awaited<ReturnType<typeof startTestApp>>;
@@ -25,7 +25,7 @@ describe('profiles slice', () => {
     expect(a.ANTHROPIC_AUTH_TOKEN).not.toBe(b.ANTHROPIC_AUTH_TOKEN);
   });
 
-  it('signs a selected named account in with a pasted code and tells every client who it is', async () => {
+  it('signs a selected named account in through the browser callback and tells every client who it is', async () => {
     t = await startTestApp();
     const a = await t.connect();
     const b = await t.connect();
@@ -34,11 +34,12 @@ describe('profiles slice', () => {
     await a.call('profiles.save', { id: profile.id, name: profile.name, accountIds: { anthropic: [account.id] } });
     const { signInId, url } = await a.call('accounts.beginSignIn', { id: account.id });
     expect(url).toMatch(/^https:\/\/claude\.ai\/oauth\/authorize\?/);
-    const state = new URL(url).searchParams.get('state');
 
-    await expect(a.call('accounts.completeSignIn', { signInId, code: 'me#wrong-state' })).rejects.toThrow(/different sign-in/);
-    const signed = await a.call('accounts.completeSignIn', { signInId, code: `me#${state}` });
-    expect(signed).toMatchObject({ email: 'me@example.com', organization: null });
+    expect((await fetch(claudeCallback(url, 'me', 'wrong-state'))).status).toBe(400);
+    expect(await a.call('accounts.signInStatus', { signInId })).toEqual({ status: 'pending' });
+    expect((await fetch(claudeCallback(url, 'me'))).status).toBe(200);
+    const signed = await a.call('accounts.signInStatus', { signInId });
+    expect(signed).toMatchObject({ status: 'complete', account: { email: 'me@example.com', organization: null } });
     const pushed = await b.waitFor('profiles.changed', (list) => !!list[0] && claudeAccount(list[0]) !== null);
     expect(JSON.stringify(pushed)).not.toMatch(/oauth-|refresh-|hat-/);
 
@@ -52,8 +53,7 @@ describe('profiles slice', () => {
     const other = await t.connect();
     const account = await c.call('accounts.save', { name: 'Team account 1' });
     expect(account).toMatchObject({ name: 'Team account 1', signedIn: false });
-    const start = await c.call('accounts.beginSignIn', { id: account.id });
-    await c.call('accounts.completeSignIn', { signInId: start.signInId, code: 'team' });
+    await c.claudeSignIn(account.id, 'team');
     const personal = await c.call('profiles.save', { createHouse: true, name: 'Personal', accountIds: { anthropic: [account.id] } });
     const work = await c.call('profiles.save', { createHouse: true, name: 'Work', accountIds: { anthropic: [account.id] } });
     expect(claudeAccount(personal)?.id).toBe(account.id);

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { PromptMeasurement, SystemPromptView } from '@accio/protocol';
 import { useClient, useConnectionStatus } from '../app/connection';
+import { useAction } from '../app/useAction';
 import { SettingRow, SettingsSection } from '../app/Settings';
 import { PromptSizeBreakdown } from './PromptSizeBreakdown';
 
@@ -54,15 +55,12 @@ export function SystemPromptSettings() {
 function Baseline({ harnessId, name }: { harnessId: string; name: string }) {
   const client = useClient();
   const [measurement, setMeasurement] = useState<PromptMeasurement>();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
+  const { busy, error, run } = useAction();
   return <div className="prompt-baseline">
     <SettingRow title={name} description="Baseline with current built-in tool settings">
       <button disabled={busy} onClick={async () => {
-        setBusy(true); setError(undefined); setMeasurement(undefined);
-        try { setMeasurement(await client.call('systemPrompt.measure', { harnessId })); }
-        catch (err) { setError((err as Error).message); }
-        finally { setBusy(false); }
+        setMeasurement(undefined);
+        setMeasurement(await run(() => client.call('systemPrompt.measure', { harnessId })));
       }}>{busy ? 'Measuring…' : measurement ? 'Measure again' : 'Measure baseline'}</button>
     </SettingRow>
     {error && <p className="error" role="alert">{error}</p>}

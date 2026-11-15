@@ -148,7 +148,7 @@ describe('Codex and ChatGPT accounts', () => {
     const [selected] = (await c.call('profiles.list', {})).filter((p) => p.id === claude.id);
     expect(selected?.providers.flatMap((p) => p.accounts).map((a) => a.providerId)).toEqual(['anthropic', 'openai']);
     await expect(c.call('profiles.save', { id: profile.id, name: profile.name, accountIds: { anthropic: [account.id] } })).rejects.toThrow(/anthropic/);
-    await expect(c.call('accounts.completeSignIn', { signInId: 'not-claude', code: 'code' })).rejects.toThrow(/expired/);
+    await expect(c.call('accounts.signInStatus', { signInId: 'not-claude' })).rejects.toThrow(/expired/);
     expect((await c.call('profiles.list', {})).find((p) => p.id === profile.id)?.providers[0]?.accounts).toEqual([]);
   });
 

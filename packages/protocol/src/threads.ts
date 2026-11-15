@@ -204,6 +204,11 @@ export type ChoiceOption = { label: string; source: string; asset?: ThreadAsset;
 /** Which option of which choice a message picked. */
 export type ChoicePick = { choiceId: string; option: number };
 
+/** A, B, C…: how the harness and the user name a choice's options. */
+export function optionLetter(index: number): string {
+  return String.fromCharCode(65 + index);
+}
+
 /** One entry of a thread's transcript. */
 /** GLOSSARY: Sub-agent. The latest tool call of the sub-agent a running tool started. */
 export type ToolStep = { name: string; summary: string };

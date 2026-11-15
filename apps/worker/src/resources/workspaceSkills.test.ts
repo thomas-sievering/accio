@@ -46,6 +46,15 @@ describe('workspace skill inventory and loading evidence', () => {
     expect(observedSkillLoads('Read', { file_path: 'README.md' }, '', cwd, [skill])).toEqual([]);
   });
 
+  it('matches a workspace given with different case or mixed separators using the shared path rule', () => {
+    const skill: WorkspaceSkill = { id: 'notes', name: 'notes', path: resolve('repo/.agents/skills/notes/SKILL.md'), description: '', origin: 'repository', enabled: true, enabledBy: 'project' };
+    const cwd = resolve('repo');
+    const caseInsensitive = process.platform !== 'linux';
+    expect(observedSkillLoads('Read', { file_path: `${cwd}\\.agents/skills\\notes/SKILL.md` }, '', cwd, [skill])).toHaveLength(1);
+    expect(observedSkillLoads('Read', { file_path: skill.path.toUpperCase() }, '', cwd, [skill])).toHaveLength(caseInsensitive ? 1 : 0);
+    expect(observedSkillLoads('Read', { file_path: '.agents/skills/notes/SKILL.md' }, '', cwd.toUpperCase(), [skill])).toHaveLength(caseInsensitive ? 1 : 0);
+  });
+
   it('prefers .agents by declared name across roots but preserves duplicates within a root', async () => {
     const root = await mkdtemp(join(tmpdir(), 'accio-skills-')); folders.push(root);
     await put(join(root, '.agents', 'skills', 'canonical'), 'notes');

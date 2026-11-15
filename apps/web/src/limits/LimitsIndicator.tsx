@@ -2,7 +2,8 @@ import type { AccountView } from '@accio/protocol';
 import { Limits } from '../app/icons';
 import { useProfiles } from '../profiles/profiles';
 import { useLimits, useWatchLimits } from './limits';
-import { blockingWindow, formatRemaining, level, relativeTime, remainingPercent, resetDue, tightestWindow } from './limitsModel';
+import { blockingWindow, formatRemaining, level, remainingPercent, resetDue, tightestWindow } from './limitsModel';
+import { formatRelative } from '../ui/dates';
 
 /**
  * The selected model's account, at a glance: its tightest general window as
@@ -33,7 +34,7 @@ export function LimitsIndicator({ account, active = true, onOpen }: { account: A
   } else if (tightest && remaining !== null) {
     tone = level(tightest);
     text = tone === 'empty' ? `${tightest.label} used up` : `${formatRemaining(remaining)}`;
-    const reset = tightest.resetsAt ? `, resets ${relativeTime(Date.parse(tightest.resetsAt), now)}` : '';
+    const reset = tightest.resetsAt ? `, resets ${formatRelative(Date.parse(tightest.resetsAt), now)}` : '';
     detail = `${tightest.label} ${tone === 'empty' ? 'used up' : `${formatRemaining(remaining)} left`}${reset}${lastKnown ? ', last known' : ''}`;
   } else if (snapshot) detail = 'no usage reported';
 

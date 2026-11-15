@@ -1,9 +1,9 @@
 import { createContext, useContext, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import type { ThreadView } from '@accio/protocol';
+import { threadPlace, type ThreadView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { useAction } from '../app/useAction';
 import { focusMenuItem, onMenuKeyDown } from '../ui/menuKeys';
-import { awaitsMachine, placeOf } from './shelves';
+import { awaitsMachine } from './shelves';
 import { snoozeThread } from './SnoozeNotice';
 import { useThreads, type ThreadActions } from './threads';
 import { releaseFirstMessage } from './sentImages';
@@ -45,7 +45,7 @@ export function ThreadMenuItems({ thread, close, onRename, before }: {
     if ((await run(async () => (await fn(), true))) === true) close();
   };
   const running = thread.status === 'running';
-  const place = placeOf(thread, now);
+  const place = threadPlace(thread, now);
   // Another machine's thread while that machine is offline: the hub keeps its snooze until the
   // machine is back; settling waits until you can read it.
   const awaiting = awaitsMachine(thread);

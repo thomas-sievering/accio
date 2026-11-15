@@ -1,10 +1,11 @@
 import { createServer } from 'node:http';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import type { CodexClient } from './codex.js';
-import { OpenAIAuth } from './openaiAuth.js';
+import { SignInEndedError } from './claudeOAuth.js';
+import { OpenAIAuth, type OpenAIAccount } from './openaiAuth.js';
 
 it('finishes numeric-loopback logins internally without returning a token-bearing success redirect', async () => {
   const home = await mkdtemp(join(tmpdir(), 'accio-browser-callback-'));
@@ -29,5 +30,24 @@ it('finishes numeric-loopback logins internally without returning a token-bearin
   } finally {
     await auth.close(); await new Promise<void>((resolve) => server.close(() => resolve()));
     await rm(home, { recursive: true, force: true });
+  }
+});
+
+it('ends the sign-in when Codex cannot refresh it, but not when Codex fails otherwise', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'accio-refresh-refused-'));
+  const credentialId = '00000000-0000-4000-8000-000000000001';
+  await mkdir(join(home, 'codex', credentialId), { recursive: true });
+  const expired = `h.${Buffer.from(JSON.stringify({ exp: 1 })).toString('base64url')}.s`;
+  await writeFile(join(home, 'codex', credentialId, 'auth.json'), JSON.stringify({ tokens: { access_token: expired, account_id: 'acct' } }));
+  let failure = 'Your refresh token was already used. Please log out and sign in again.';
+  const client = { request: async () => { throw new Error(failure); }, onNotification: () => () => {}, onExit: () => () => {}, close: async () => {} } as unknown as CodexClient;
+  const auth = new OpenAIAuth(home, async () => client);
+  const account = { credentialId } as OpenAIAccount;
+  try {
+    await expect(auth.credentials(account)).rejects.toBeInstanceOf(SignInEndedError);
+    failure = 'connection reset';
+    await expect(auth.credentials(account)).rejects.not.toBeInstanceOf(SignInEndedError);
+  } finally {
+    await auth.close(); await rm(home, { recursive: true, force: true });
   }
 });

@@ -79,7 +79,6 @@ export class Profiles {
       .on('accounts.delete', (p) => this.client.call('accounts.delete', p))
       .on('accounts.signOut', (p) => this.client.call('accounts.signOut', p))
       .on('accounts.beginSignIn', ({ id }) => this.signIns.begin(id))
-      .on('accounts.completeSignIn', async (p) => { const result = await this.client.call('accounts.completeSignIn', p); this.signIns.finish(p.signInId); return result; })
       .on('accounts.signInStatus', async (p) => {
         try {
           const result = await this.client.call('accounts.signInStatus', p);

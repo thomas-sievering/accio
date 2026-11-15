@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { threadHandle } from '@accio/protocol';
+import { threadHandle, type ThreadView } from '@accio/protocol';
 import { FakeHarness, replyWith } from '../testing/fakeHarness.js';
 import { callAccioTools as mcp, startTestApp, type TestClient } from '../testing/testApp.js';
+import { threadMentionContext } from './threadMentions.js';
 
 const opus = { harnessId: 'claudeCode', modelId: 'opus' };
 
@@ -63,5 +64,20 @@ describe('mentioning another thread', () => {
     const thread = await c.call('threads.start', { profileId: profile.id, model: opus, text: 'Ask @nobody-123456 about it' });
     await idle(c, thread.id);
     expect(harness.runs[0]!.prompt).toBe('Ask @nobody-123456 about it');
+  });
+});
+
+describe('where a mentioned thread sits', () => {
+  const base: ThreadView = {
+    id: '3f2a9c1b-0000-4000-8000-000000000000', checkoutId: 'c1', projectId: 'p1', profileId: 'a1', model: opus, title: 'Login', status: 'running',
+    createdAt: '2026-11-03T10:00:00Z', updatedAt: '2026-11-03T10:00:00Z', snoozedUntil: null, settledAt: null,
+  };
+  const caller = { id: 'caller', profileId: 'a1' };
+  const placed = (t: ThreadView) => threadMentionContext(`@${threadHandle(t)}`, [t], caller).match(/\((.*)\)\]$/)![1];
+
+  it('agrees with the sidebar on a thread waiting on a secret and one with a delivery in progress', () => {
+    expect(placed({ ...base, needsSecret: true })).toBe('open, waiting for a secret');
+    const delivery = { mode: 'ship', policy: 'pull-request', status: 'waiting', waitingOn: 'checks', baseBranch: 'main', requestedAt: base.createdAt } as const;
+    expect(placed({ ...base, status: 'idle', delivery })).toBe('working, delivery in progress');
   });
 });

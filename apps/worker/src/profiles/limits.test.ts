@@ -50,14 +50,12 @@ describe('account limits RPC and hub ownership', () => {
     } });
     const c = await t.connect();
     const account = await c.call('accounts.save', { name: 'Unused Claude' });
-    let start = await c.call('accounts.beginSignIn', { id: account.id });
-    await c.call('accounts.completeSignIn', { signInId: start.signInId, code: 'first' });
+    await c.claudeSignIn(account.id, 'first');
     const result = await c.call('accounts.refreshLimits', { accountIds: [account.id] });
     expect(tokens).toEqual(['Bearer oauth-first', 'Bearer oauth-refreshed']);
     expect(result[0]?.status).toBe('ready');
     expect(await c.call('profiles.list', {})).toEqual([]);
-    start = await c.call('accounts.beginSignIn', { id: account.id });
-    await c.call('accounts.completeSignIn', { signInId: start.signInId, code: 'different-identity' });
+    await c.claudeSignIn(account.id, 'different-identity');
     expect((await c.call('accounts.limits', {}))[0]).toMatchObject({ status: 'idle', snapshot: null });
     await c.call('accounts.refreshLimits', { accountIds: [account.id] });
     expect(tokens.at(-1)).toBe('Bearer oauth-different-identity');
@@ -82,8 +80,7 @@ describe('account limits RPC and hub ownership', () => {
     const reading = c.call('accounts.refreshLimits', { accountIds: [id] });
     await started;
     try {
-      const start = await other.call('accounts.beginSignIn', { id });
-      await other.call('accounts.completeSignIn', { signInId: start.signInId, code: 'new-identity' });
+      await other.claudeSignIn(id, 'new-identity');
       await other.call('accounts.refreshLimits', { accountIds: [id] });
     } finally { release(); }
     await reading;

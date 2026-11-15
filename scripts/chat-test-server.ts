@@ -104,6 +104,10 @@ const harness = new FakeHarness(async function* (run) {
     yield* replyWith(`Reactions: ${read.join('; ')}. Typed: ${typedText(run.prompt) || 'nothing'}`); return;
   }
   if (pasted.length) { yield* replyWith(`Read ${pasted.map(lineCount).join(' + ')} pasted lines, then: ${typedText(run.prompt) || 'nothing typed'}`); return; }
+  if (run.prompt === 'Table fixture') {
+    const widePath = 'apps/web/src/threads/' + 'deeply/nested/'.repeat(6) + 'AssistantMarkdown.tsx';
+    yield* replyWith(`| Step | File |\n| --- | --- |\n| Wide | \`${widePath}\` |\n\n| A | B |\n| --- | --- |\n| 1 | 2 |`); return;
+  }
   if (run.prompt === 'Cache usage fixture') {
     const message = { id: 'cache-response', content: [{ type: 'text' as const, text: 'Cache usage recorded.' }],
       usage: { input_tokens: 100, cache_read_input_tokens: 800, cache_creation_input_tokens: 100,
