@@ -146,7 +146,7 @@ A durable conversation with a harness, optionally attached to a project's checko
 _Avoid_: Chat, session, agent, conversation
 
 **Draft**:
-What a composer holds before it sends: text, Pasted text and image attachments. It stays when you move to another thread; text and Pasted text also survive a restart. A new thread whose draft has something in it is listed at the top of the inbox as Draft until it is sent or emptied; it is not yet a thread.
+What a composer holds before it sends: text, Pasted text and image attachments. It stays when you move to another thread; text and Pasted text also survive a restart. A new thread whose draft has something in it is listed at the top of the inbox as Draft until it is sent or emptied; it is not yet a thread. In a thread, Up in an empty composer brings back the text of your last message there as a draft.
 _Avoid_: Unsent thread, pending thread
 
 **Turn**:

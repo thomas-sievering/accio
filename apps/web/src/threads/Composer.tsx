@@ -41,6 +41,7 @@ export function Composer({
   model,
   handsOffImages,
   imagesUnavailable,
+  lastMessage,
 }: {
   /** `images` are upload ids, in the order they were pasted; `previews` their local copies. */
   onSend: (text: string, mode: 'steer' | 'queue' | undefined, images: string[], previews: string[]) => Promise<void>;
@@ -68,6 +69,8 @@ export function Composer({
   /** Sending hands the images' local copies to `onSend` to free, and each image travels into the sent message. */
   handsOffImages?: boolean;
   imagesUnavailable?: string;
+  /** What Up in an empty composer brings back: the text of your last message here. */
+  lastMessage?: string;
 }) {
   const client = useClient();
   const { threads, shelves, selectedId, select, now, placement } = useThreads();
@@ -350,6 +353,14 @@ export function Composer({
               // Inside a kind's list, Backspace on a bare @ goes back to the kinds rather than deleting it.
               if ((e.key === 'Backspace' || e.key === 'ArrowLeft') && kind && !mention!.query) { e.preventDefault(); setBrowsing(undefined); setHighlight(0); return; }
               if (e.key === 'Escape') { e.preventDefault(); setDismissed(mention!.start); return; }
+            }
+            // Like shell history: only an empty composer takes it, so Up never replaces a draft or fights the cursor.
+            if (e.key === 'ArrowUp' && lastMessage && !text && pastes.length === 0 && reactions.length === 0 && images.length === 0 && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !e.nativeEvent.isComposing && e.keyCode !== 229) {
+              e.preventDefault();
+              const el = e.currentTarget;
+              setText(lastMessage);
+              requestAnimationFrame(() => el.setSelectionRange(lastMessage.length, lastMessage.length));
+              return;
             }
             if (e.key === 'Tab' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !e.nativeEvent.isComposing && e.keyCode !== 229) {
               const next = shelves.open[(shelves.open.findIndex((thread) => thread.id === selectedId) + 1) % shelves.open.length];

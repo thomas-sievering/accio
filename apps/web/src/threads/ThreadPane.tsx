@@ -33,6 +33,7 @@ import { newThreadDraftId } from './drafts';
 import { useThreadAvailability, remoteImagesReason } from './useThreadAvailability';
 import { UserMessageText } from './PastedText';
 import { OfflineThread } from './OfflineThread';
+import { lastSentText } from './lastMessage';
 
 /** Where a thread runs, looked up once for the header, the notice and the composer. */
 function usePlace(checkoutId: string, profileId?: string, projectId?: string) {
@@ -93,6 +94,7 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
         actions={<><DeliveryActions key={thread.id} thread={thread} project={place.project} canRun={!!place.profile && !!accountForModel(place.profile, thread.model)?.signedIn} /><GoalBar thread={thread} /><WaitBar thread={thread} /><QueueTray thread={thread} /></>}
         target={thread.id}
         draftId={`thread:${thread.id}`}
+        lastMessage={lastSentText(items)}
         profileId={thread.profileId}
         skills={{ threadId: thread.id }}
         stopDisabled={!!unavailable}
