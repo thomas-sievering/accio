@@ -1,19 +1,24 @@
 import { useId, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
-import type { IssueList, IssueView } from '@accio/protocol';
-import { Folder, Issue, Search } from '../app/icons';
+import type { IssueList, IssueView, ThreadView } from '@accio/protocol';
+import { Folder, Issue, MessageSquarePlus, Search } from '../app/icons';
 import { issueGroups } from './issueGroups';
 
 /**
  * GLOSSARY: Issue. A quiet chip beside the machine that picks an open issue for a new
  * thread: a searchable list grouped by triage role (GitHub) or feature (local files).
  * The picked issue rides above the message and is claimed once the thread starts.
+ * An issue an open thread already works on sits under In progress and opens that
+ * thread; its New thread button attaches it anyway.
  */
-export function IssuePicker({ list, value, onChange, onOpen }: {
+export function IssuePicker({ list, value, onChange, onOpen, working = new Map(), onOpenThread }: {
   list: IssueList;
   value?: IssueView;
   onChange: (issue: IssueView) => void;
   /** Called as the list opens, to read the issues again. */
   onOpen: () => void;
+  /** The open threads working on each issue, by ref, newest first. */
+  working?: ReadonlyMap<string, ThreadView[]>;
+  onOpenThread: (threadId: string) => void;
 }) {
   const id = useId();
   const menu = useRef<HTMLDivElement>(null);
@@ -22,12 +27,19 @@ export function IssuePicker({ list, value, onChange, onOpen }: {
   const [position, setPosition] = useState<CSSProperties>({});
   const [query, setQuery] = useState('');
   const [highlight, setHighlight] = useState(0);
-  const groups = issueGroups(list, query);
+  const groups = issueGroups(list, query, new Set(working.keys()));
   const flat = groups.flatMap((group) => group.issues);
   const active = Math.min(highlight, flat.length - 1);
   const source = list.tracker?.kind === 'github' ? list.tracker.repository : list.tracker?.folder;
 
   const pick = (issue: IssueView) => { menu.current?.hidePopover(); onChange(issue); };
+  // An issue in progress opens its thread rather than starting another.
+  const choose = (issue: IssueView) => {
+    const thread = working.get(issue.ref)?.[0];
+    if (!thread) return pick(issue);
+    menu.current?.hidePopover();
+    onOpenThread(thread.id);
+  };
   const keys = (event: KeyboardEvent) => {
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
@@ -35,7 +47,7 @@ export function IssuePicker({ list, value, onChange, onOpen }: {
     } else if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
       event.preventDefault();
       const issue = flat[active];
-      if (issue) pick(issue);
+      if (issue) choose(issue);
     }
   };
 
@@ -76,9 +88,11 @@ export function IssuePicker({ list, value, onChange, onOpen }: {
           <div className="issue-picker-group"><span>{group.name}</span><span>{group.issues.length}</span></div>
           {group.issues.map((issue) => {
             const index = flat.indexOf(issue);
+            const threads = working.get(issue.ref) ?? [];
             return <div key={issue.ref} id={`${id}-${index}`} role="option" aria-selected={index === active}
-              className={`issue-option${issue.blockedBy.length ? ' blocked' : ''}${issue.ref === value?.ref ? ' current' : ''}`}
-              onMouseDown={(e) => e.preventDefault()} onMouseMove={() => index !== active && setHighlight(index)} onClick={() => pick(issue)}>
+              className={`issue-option${issue.blockedBy.length ? ' blocked' : ''}${threads.length ? ' working' : ''}${issue.ref === value?.ref ? ' current' : ''}`}
+              title={threads.length ? `Open “${threads[0]!.title}”` : undefined}
+              onMouseDown={(e) => e.preventDefault()} onMouseMove={() => index !== active && setHighlight(index)} onClick={() => choose(issue)}>
               <span className="issue-option-mark"><Issue /></span>
               <span className="issue-option-label">{issue.label}</span>
               <span className="issue-option-title">{issue.title}</span>
@@ -86,11 +100,14 @@ export function IssuePicker({ list, value, onChange, onOpen }: {
               {issue.assignees.length > 0 && <span className="issue-pill">{issue.assignees.join(', ')}</span>}
               {list.tracker?.kind === 'local' && issue.status === 'claimed' && <span className="issue-pill">claimed</span>}
               {issue.blockedBy.length > 0 && <span className="issue-pill blocked">blocked by {issue.blockedBy.join(', ')}</span>}
+              {threads.length > 0 && <span className="issue-pill working">{threads.some((t) => t.status === 'running') ? 'working' : 'open'}{threads.length > 1 ? ` · ${threads.length} threads` : ''}</span>}
+              {threads.length > 0 && <button type="button" className="issue-option-another" tabIndex={-1} title="Start another thread on this issue" aria-label={`Start another thread on ${issue.label}`}
+                onClick={(e) => { e.stopPropagation(); pick(issue); }}><MessageSquarePlus /></button>}
             </div>;
           })}
         </div>)}
       </div>
-      <div className="issue-picker-footer"><span><kbd>↑↓</kbd> move</span><span><kbd>Enter</kbd> attach</span><span><kbd>Esc</kbd> close</span></div>
+      <div className="issue-picker-footer"><span><kbd>↑↓</kbd> move</span><span><kbd>Enter</kbd> {flat[active] && working.has(flat[active].ref) ? 'open thread' : 'attach'}</span><span><kbd>Esc</kbd> close</span></div>
     </div>
   </>;
 }

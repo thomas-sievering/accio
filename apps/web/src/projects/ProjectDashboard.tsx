@@ -1,14 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { threadPlace, type ChangelogEntry, type ProjectAppView, type ProjectChangelog, type ProjectView } from '@accio/protocol';
+import { threadPlace, type ChangelogEntry, type ProjectChangelog, type ProjectView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { emitAppEvent } from '../app/appEvents';
-import { ChevronDown, Close, Play, Refresh, Settings, StopSquare } from '../app/icons';
-import { useAction } from '../app/useAction';
+import { ChevronDown, Close, Settings } from '../app/icons';
 import { useEscapeClose } from '../app/useEscapeClose';
 import { useLive } from '../app/useLive';
-import { formatDayTime, formatRelative } from '../ui/dates';
+import { formatDayTime } from '../ui/dates';
 import { ThreadMenuProvider } from '../threads/ThreadMenu';
-import { ThreadRow } from '../threads/ThreadRow';
+import { ThreadRow, timeAgo } from '../threads/ThreadRow';
 import { useThreads } from '../threads/threads';
 import { ProjectMark } from './ProjectMark';
 import { ProfileLabel } from '../profiles/ProfileLabel';
@@ -20,13 +19,11 @@ const SHIPPED_SHOWN = 8;
 
 /**
  * GLOSSARY: Project dashboard. Opened from the project name in a thread's header:
- * the project app's controls and logs on top, then its threads by state, then what
- * recently landed on its default branch, then its Changelog and settled threads, folded.
+ * its threads by state, then what recently landed on its default branch, then its
+ * Changelog and settled threads, folded.
  */
 export function ProjectDashboard({ project, onClose }: { project: ProjectView; onClose: () => void }) {
   const client = useClient();
-  const apps = useLive(() => client.call('projectApps.get', {}), 'projectApps.changed');
-  const app = apps?.find((a) => a.projectId === project.id);
   const entries = useLive(() => client.call('changelog.list', {}), 'changelog.changed');
   const heading = useRef<HTMLElement>(null);
   useEffect(() => { heading.current?.focus(); }, [project.id]);
@@ -47,96 +44,15 @@ export function ProjectDashboard({ project, onClose }: { project: ProjectView; o
       </header>
       <div className="settings-scroll">
         <div className="dashboard-page">
-          <AppControls project={project} app={app} />
           <ThreadMenuProvider>
             <Threads project={project} />
-            <Shipped project={project} entries={entries} running={app?.status === 'stopped' ? undefined : app?.commit?.sha} />
+            <Shipped project={project} entries={entries} />
             <ChangelogFold projectId={project.id} entries={entries} />
             <Settled key={project.id} project={project} />
           </ThreadMenuProvider>
         </div>
       </div>
     </>
-  );
-}
-
-const STATUS: Record<ProjectAppView['status'], string> = {
-  stopped: 'Stopped', starting: 'Starting…', running: 'Running', updating: 'Updating…', stopping: 'Stopping…', exited: 'Exited', failed: 'Failed',
-};
-
-function AppControls({ project, app }: { project: ProjectView; app: ProjectAppView | undefined }) {
-  const client = useClient();
-  const { busy, error, run } = useAction();
-  const [logsOpen, setLogsOpen] = useState(false);
-  const { threads, select } = useThreads();
-  // GLOSSARY: Project setup thread. One still open is where the setup goes on.
-  const setup = threads?.find((t) => t.projectSetup && t.projectId === project.id && !t.settledAt);
-  const status = app?.status ?? 'stopped';
-  const working = status === 'starting' || status === 'updating' || status === 'stopping';
-  const call = (method: 'projectApps.start' | 'projectApps.stop' | 'projectApps.restart' | 'projectApps.update') =>
-    void run(() => client.call(method, { projectId: project.id }));
-  const openApp = (url: string) => void run(async () => {
-    const desktop = window.accioDesktop?.openPreview;
-    if (desktop) await desktop(url);
-    else if (!window.open(url, '_blank', 'noopener')) throw new Error('Allow popups to open the app.');
-  });
-  const commit = app?.commit;
-  const shown = status !== 'stopped' || commit;
-
-  return (
-    <section className="app-card" aria-label="App">
-      <div className="app-row">
-        <span className={`app-dot ${status}`} aria-hidden="true" />
-        <span className="app-status">{STATUS[status]}</span>
-        {!project.startCommand && <span className="dim app-hint">{setup ? 'An agent is setting up the app' : 'Run this project’s app from main'}</span>}
-        {shown && commit && <span className="app-commit" title={`${commit.subject}\n${commit.author} · ${formatDayTime(commit.at)}`}>
-          <code>{commit.sha.slice(0, 7)}</code> <span className="dim">{commit.subject}</span>
-        </span>}
-        <span className="spacer" />
-        {/* The app's output belongs to the app, so it opens here rather than on a tab of its own. */}
-        {project.startCommand && <button type="button" className="ghost" aria-expanded={logsOpen} onClick={() => setLogsOpen(!logsOpen)}>{logsOpen ? 'Hide logs' : 'Logs'}</button>}
-        {!project.startCommand ? (
-          <>
-            <button type="button" className="ghost" onClick={() => emitAppEvent('settings.open', { section: 'projects', projectId: project.id, fromDashboard: true })}>Enter manually</button>
-            {setup
-              ? <button type="button" className="ghost primary" onClick={() => select(setup.id)}>Open setup thread</button>
-              : <button type="button" className="ghost primary" disabled={busy} title="An agent finds the setup and start commands, tries them and saves them"
-                onClick={() => void run(async () => select((await client.call('threads.setUpProject', { projectId: project.id })).id))}>Set up with agent</button>}
-          </>
-        ) : status === 'running' || working ? (
-          <>
-            {app?.url && <button type="button" className="ghost" disabled={busy} onClick={() => openApp(app.url!)}>Open app</button>}
-            {!working && <button type="button" className="ghost with-icon" disabled={busy} onClick={() => call('projectApps.restart')}><Refresh />Restart</button>}
-            {status !== 'stopping' && <button type="button" className="ghost with-icon" disabled={busy} onClick={() => call('projectApps.stop')}><StopSquare />Stop</button>}
-          </>
-        ) : (
-          <>
-            {status !== 'stopped' && <button type="button" className="ghost" disabled={busy} onClick={() => call('projectApps.stop')}>Stop</button>}
-            <button type="button" className="ghost primary with-icon" disabled={busy} onClick={() => call(status === 'stopped' ? 'projectApps.start' : 'projectApps.restart')}><Play />{status === 'stopped' ? 'Start' : 'Restart'}</button>
-          </>
-        )}
-      </div>
-      {app?.available && !working && status !== 'stopped' && (
-        <div className="app-row app-note">
-          <span>Update available · <code>{app.available.sha.slice(0, 7)}</code> <span className="dim">{app.available.subject}</span></span>
-          <span className="spacer" />
-          <button type="button" className="ghost" disabled={busy} onClick={() => call('projectApps.update')}>Update &amp; restart</button>
-        </div>
-      )}
-      {app?.failedUpdate && (
-        <p className="app-note warn">Update to <code>{app.failedUpdate.commit.sha.slice(0, 7)}</code> failed: {app.failedUpdate.message} Kept the previous version.</p>
-      )}
-      {app?.error && <p className="app-note error">{app.error}</p>}
-      {error && <p className="app-note error">{error}</p>}
-      {project.startCommand && (
-        <label className="app-row app-auto">
-          <input type="checkbox" role="switch" className="switch" checked={app?.autoUpdate ?? true} disabled={busy}
-            onChange={(e) => void run(() => client.call('projectApps.setAutoUpdate', { projectId: project.id, on: e.target.checked }))} />
-          <span>Auto-update from {app?.branch ?? 'main'}</span>
-        </label>
-      )}
-      {logsOpen && <Logs project={project} />}
-    </section>
   );
 }
 
@@ -189,31 +105,33 @@ function Settled({ project }: { project: ProjectView }) {
 }
 
 /**
- * Recently shipped: the default branch's newest commits, each joined to the Changelog entry
- * that delivered it. Such a commit shows its shipped note and expands to what to try, its
- * thread and PR; the Changelog fold below covers older changes and other targets.
+ * Recently shipped: the default branch's newest commits, one line each, joined to the
+ * Changelog entry that delivered it. Such a commit expands to its shipped note, what to
+ * try, its thread and PR; the Changelog fold below covers older changes and other targets.
  */
-function Shipped({ project, entries, running }: { project: ProjectView; entries: readonly ChangelogEntry[] | undefined; running: string | undefined }) {
+function Shipped({ project, entries }: { project: ProjectView; entries: readonly ChangelogEntry[] | undefined }) {
   const client = useClient();
   const { threads, select } = useThreads();
   const [log, setLog] = useState<ProjectChangelog>();
   const [error, setError] = useState<string>();
   const [all, setAll] = useState(false);
   const [expanded, setExpanded] = useState<string>();
+  const own = (entries ?? []).filter((e) => e.projectId === project.id);
+  // A new delivery is a new commit on the branch: read it again.
+  const delivered = own.length;
   useEffect(() => {
     let live = true;
-    client.call('projects.changelog', { projectId: project.id }).then((l) => { if (live) setLog(l); }, (e: Error) => { if (live) setError(e.message); });
+    client.call('projects.changelog', { projectId: project.id }).then((l) => { if (live) { setLog(l); setError(undefined); } }, (e: Error) => { if (live) setError(e.message); });
     return () => { live = false; };
-  }, [client, project.id, running]);
-  const own = (entries ?? []).filter((e) => e.projectId === project.id);
+  }, [client, project.id, delivered]);
   const existing = new Set(threads?.map((t) => t.id));
-  const now = Date.now();
+  const now = new Date();
   const commits = log?.commits ?? [];
   const shown = all ? commits : commits.slice(0, SHIPPED_SHOWN);
   return (
     <section className="dashboard-section" aria-label="Recently shipped">
       <h3 className="dashboard-heading">
-        Recently shipped{log?.branch && <span className="dashboard-count">to {log.branch}</span>}
+        Recently shipped{log?.branch && <span className="dashboard-count">{log.branch}</span>}
       </h3>
       {error ? <p className="dashboard-empty error">{error}</p>
         : !log ? <p className="dashboard-empty">Loading…</p>
@@ -224,23 +142,19 @@ function Shipped({ project, entries, running }: { project: ProjectView; entries:
             const open = !!entry && expanded === c.sha;
             const tries = entry?.note?.test ?? [];
             const body = <>
-              <code>{c.sha.slice(0, 7)}</code>
-              <span className="changelog-text">
-                <span className="changelog-subject">{c.subject}</span>
-                {entry?.note && <span className="changelog-note">{entry.note.summary}</span>}
-              </span>
-              {c.sha === running && <span className="changelog-running">running</span>}
-              <span className="dim" title={`${c.author} · ${formatDayTime(c.at, now)}`}>{formatRelative(c.at, now)}</span>
+              <span className="changelog-subject">{c.subject}</span>
+              <span className="changelog-when">{timeAgo(c.at, now)}</span>
             </>;
+            const title = `${c.sha.slice(0, 7)} · ${c.author} · ${formatDayTime(c.at, now)}`;
             return (
-              <li key={c.sha} className={`${c.sha === running ? 'running' : ''}${open ? ' expanded' : ''}`}>
+              <li key={c.sha} className={open ? 'expanded' : undefined}>
                 {entry
-                  ? <button type="button" className="changelog-commit" aria-expanded={open} onClick={() => setExpanded(open ? undefined : c.sha)}>
-                    {body}<span className="changelog-chevron" aria-hidden="true"><ChevronDown /></span>
-                  </button>
-                  : <div className="changelog-commit">{body}<span className="changelog-chevron" /></div>}
+                  ? <button type="button" className="changelog-commit" title={title} aria-expanded={open} onClick={() => setExpanded(open ? undefined : c.sha)}>
+{body}</button>
+                  : <div className="changelog-commit" title={title}>{body}</div>}
                 {open && (
                   <div className="changelog-detail">
+                    {entry.note && <p className="changelog-note">{entry.note.summary}</p>}
                     {tries.length > 0 && <ul className="shipped-try" aria-label="Things to try">{tries.map((t, i) => <li key={i}>{t}</li>)}</ul>}
                     <div className="changelog-actions">
                       {existing.has(entry.threadId)
@@ -259,23 +173,4 @@ function Shipped({ project, entries, running }: { project: ProjectView; entries:
       )}
     </section>
   );
-}
-
-function Logs({ project }: { project: ProjectView }) {
-  const client = useClient();
-  const [text, setText] = useState<string>();
-  const pre = useRef<HTMLPreElement>(null);
-  const pinned = useRef(true);
-  useEffect(() => {
-    let live = true;
-    const load = () => client.call('projectApps.logs', { projectId: project.id }).then((r) => { if (live) setText(r.text); }, () => {});
-    void load();
-    const timer = setInterval(load, 2000);
-    return () => { live = false; clearInterval(timer); };
-  }, [client, project.id]);
-  // Follow new output unless you scrolled up to read.
-  useEffect(() => { const el = pre.current; if (el && pinned.current) el.scrollTop = el.scrollHeight; }, [text]);
-  if (text === undefined) return <p className="app-note">Loading…</p>;
-  if (!text.trim()) return <p className="app-note">No output yet.</p>;
-  return <pre ref={pre} className="app-logs" onScroll={(e) => { const el = e.currentTarget; pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24; }}>{text.trim()}</pre>;
 }

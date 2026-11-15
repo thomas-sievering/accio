@@ -24,6 +24,7 @@ import { TurnTranscript, type TranscriptChange } from './transcript.js';
 import { handoffContext, withHandoff } from './handoff.js';
 import { threadMentionContext, withThreadMentions } from './threadMentions.js';
 import type { BuiltinTool } from '../harnesses/builtinTools.js';
+import { waitInstructions } from './waits.js';
 import { afterGoalTurn, CONTINUE_PROMPT, goalInstructions, goalTurnStarted, newGoalPrompt, parseGoalCommand } from '../goals/goal.js';
 
 export type TurnOptions = { resume?: boolean; retry?: boolean; delivery?: boolean; pick?: ChoicePick; queuedId?: string;
@@ -32,7 +33,9 @@ export type TurnOptions = { resume?: boolean; retry?: boolean; delivery?: boolea
   /** Uploads to claim into the thread's assets as the turn starts, such as a new thread's. */
   uploads?: string[];
   /** GLOSSARY: Goal. A turn accio starts itself to keep working toward the goal. */
-  goalContinue?: boolean };
+  goalContinue?: boolean;
+  /** GLOSSARY: Wait. A turn accio starts because the thread's Wait was met. */
+  wake?: boolean };
 
 export type TurnDeps = {
   profiles: Profiles;
@@ -122,7 +125,7 @@ export class Turns {
     const thread = state.require(id);
     const message = thread.queuedMessages?.[0];
     if (!message || message.editing || state.closing || state.lifecycle.has(id) || state.running.has(id) || thread.status !== 'idle') return;
-    try { await this.begin(id, message.text, { pick: message.pick, images: message.images, queuedId: message.id }); }
+    try { await this.begin(id, message.text, { pick: message.pick, images: message.images, queuedId: message.id, ...(message.wake ? { wake: true } : {}) }); }
     catch (error) {
       await state.transcripts.add(id, { kind: 'notice', id: randomUUID(), turnId: 'queue', tone: 'error', text: `Queued message could not start: ${(error as Error).message}` });
     }
@@ -205,7 +208,8 @@ export class Turns {
       const env = { ...turnEnv(state.home, thread.profileId, thread.model.harnessId, access), ...await deps.machines.github.env(thread.profileId, cwd).catch(() => ({})) };
       resources = await deps.resources()?.prepare(thread.profileId, thread.projectId, env, { repair: !!thread.repairToolId, cwd });
       const project = deps.projects.state().projects.find((p) => p.id === thread.projectId);
-      const space = project && await deps.spaceContext()?.section({ project, cwd });
+      // GLOSSARY: Space. A thread's first turn waits for its space's home to be cloned here.
+      const space = project && await deps.spaceContext()?.section({ project, cwd, firstTurn: !delivering && !thread.workVersion });
       if (controller.signal.aborted || state.closing) throw new UserError('Turn interrupted before starting');
       if (!delivering) {
         if (!options.resume && !options.retry) thread = { ...thread, workVersion: (thread.workVersion ?? 0) + 1 };
@@ -221,11 +225,11 @@ export class Turns {
         queuedMessages: options.queuedId ? t.queuedMessages?.filter(m => m.id !== options.queuedId) : t.queuedMessages,
         goal: goalTurnStarted(t.goal),
       }));
-      await transcripts.add(thread.id, { kind: 'user', id: `${turnId}:u`, turnId, text, at: now(), ...(images.length ? { images } : {}), ...(resume ? { resume } : {}), ...(delivering ? { delivery: thread.delivery!.mode } : {}), ...(pick ? { pick } : {}), ...(options.goalContinue ? { goal: 'continue' as const } : {}) });
+      await transcripts.add(thread.id, { kind: 'user', id: `${turnId}:u`, turnId, text, at: now(), ...(images.length ? { images } : {}), ...(resume ? { resume } : {}), ...(delivering ? { delivery: thread.delivery!.mode } : {}), ...(pick ? { pick } : {}), ...(options.goalContinue ? { goal: 'continue' as const } : {}), ...(options.wake ? { wake: true } : {}) });
       const grant = deps.tools?.grant(thread.id);
       const turnResources = resources;
       this.liveInputs.set(thread.id, { turnId });
-      const instructions = [resources?.instructions, space, goalInstructions(next.goal)].filter(Boolean).join('\n\n') || undefined;
+      const instructions = [resources?.instructions, space, goalInstructions(next.goal), waitInstructions(next.wait)].filter(Boolean).join('\n\n') || undefined;
       const turn = this.run(next, turnId, { cwd, prompt, ...(files.length ? { images: files } : {}), env: resources?.env ?? env, signal: controller.signal, ...(grant ? { tools: grant.access } : {}), resourceInstructions: instructions, mcps: resources?.mcps }, delivering, resources?.skills).finally(() => { turnResources?.release(); grant?.revoke(); });
       resources = undefined;
       this.turns.add(turn);
@@ -363,12 +367,12 @@ export class Turns {
     }
   }
 
-  /** GLOSSARY: Goal. Starts the next turn unless something else already did or the thread cannot take one. */
+  /** GLOSSARY: Goal. Starts the next turn unless something else already did or the thread cannot take one. A Wait pauses it until it is met. */
   async continueGoal(threadId: string) {
     const { state } = this;
     const thread = state.get(threadId);
     if (!thread || thread.goal?.status !== 'active' || state.closing || state.running.has(threadId) || state.lifecycle.has(threadId)
-      || thread.status === 'running' || thread.queuedMessages?.length || thread.delivery?.status === 'queued') return;
+      || thread.status === 'running' || thread.queuedMessages?.length || thread.delivery?.status === 'queued' || thread.wait) return;
     try { await this.begin(threadId, CONTINUE_PROMPT, { goalContinue: true }); }
     catch (error) {
       await state.update(threadId, t => t.goal?.status === 'active' ? { ...t, goal: { ...t.goal, status: 'paused', detail: (error as Error).message } } : t);

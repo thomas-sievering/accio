@@ -60,6 +60,11 @@ export class DeliveryGit {
     return async (cwd, args, schema) => parseGh(args, schema, await this.raw(cwd, args, env));
   }
 
+  /** GLOSSARY: Wait. A pull request's state and checks, by URL or by number in `cwd`'s repository, read as delivery reads its own. */
+  pullRequest(cwd: string, ref: string, env?: GitHubEnv): Promise<GhPullRequest> {
+    return this.host(env)(cwd, ['pr', 'view', ref, '--json', PR_FIELDS], GhPullRequest);
+  }
+
   /** Fetch once for concurrent starts; leave the source checkout's branch and files alone. */
   private async freshBase(sourcePath: string, localRevision: string): Promise<string> {
     if (!await maybeGit(sourcePath, 'remote', 'get-url', 'origin')) return localRevision;

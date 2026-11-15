@@ -11,7 +11,6 @@ import type { HarnessMessage } from '../apps/worker/src/threads/harness.js';
 import { DeliveryGit, DeliveryPending } from '../apps/worker/src/threads/delivery.js';
 import { git } from '../apps/worker/src/git.js';
 import { BROWSER_AUTHOR, cloneRepo, initRepo, initRepoWithOrigin } from '../apps/worker/src/testing/gitRepo.js';
-import { PROJECT_APP_TIMING } from '../apps/worker/src/projects/projectApps.js';
 import { lineCount, pastesIn, reactionsIn, typedText } from '../packages/protocol/src/pastes.js';
 import { reactionInfo } from '../packages/protocol/src/reactions.js';
 import { measurePrompt } from '../apps/worker/src/harnesses/promptMeasurement.js';
@@ -78,8 +77,6 @@ const subagentSteps: Record<string, [string, Record<string, string>][]> = {
   deliveries: [['Read', { file_path: 'delivery.ts' }], ['Bash', { command: 'pnpm test delivery' }]],
   review: [['Bash', { command: 'git diff' }], ['Read', { file_path: 'transcript.ts' }]],
 };
-// The project dashboard journey watches a branch advance within seconds.
-Object.assign(PROJECT_APP_TIMING, { pollMs: 1000, debounceMs: 200, graceMs: 3000 });
 const goalTurns = new Map<string, number>();
 const harness = new FakeHarness(async function* (run) {
   // GLOSSARY: Image attachment. Says how many images arrived with the message.
@@ -120,6 +117,13 @@ const harness = new FakeHarness(async function* (run) {
       modelUsage: { [run.model ?? 'claude']: { inputTokens: 100, cacheReadInputTokens: 800, cacheCreationInputTokens: 100, contextWindow: 200_000 } } };
     return;
   }
+  // GLOSSARY: Wait. "Wait fixture: long" waits on a command that never exits on its own; "Wait fixture: short" on one that exits at once.
+  if (run.prompt.startsWith('Wait fixture: ')) {
+    const long = run.prompt.endsWith('long');
+    await callAccioTool(run, 'wait_for', { command: long ? 'node -e "setTimeout(() => {}, 600000)"' : 'node -e "process.exit(0)"', after_minutes: 90, note: long ? 'Check the long build' : 'Check the short build' });
+    yield* replyWith('Waiting for the build.'); return;
+  }
+  if (run.prompt.startsWith('Your Wait is met')) { yield* replyWith('Woke up after the build.'); return; }
   // GLOSSARY: Goal. "/goal fixture …" works for three turns, then reports achieved; "/goal blocked fixture" reports blocked first.
   const goal = /Goal for this thread: (.+)/.exec(run.resourceInstructions ?? '')?.[1];
   if (goal?.includes('fixture')) {
@@ -410,6 +414,8 @@ const choice = await client.call('threads.start', { profileId: 'personal', text:
 await client.waitFor('threads.changed', (threads) => threads.some((entry) => entry.id === choice.id && entry.status === 'idle'));
 const goalThread = await client.call('threads.start', { profileId: 'personal', text: 'Goal fixture' });
 await client.waitFor('threads.changed', (threads) => threads.some((entry) => entry.id === goalThread.id && entry.status === 'idle'));
+const waitThread = await client.call('threads.start', { profileId: 'personal', text: 'Wait fixture' });
+await client.waitFor('threads.changed', (threads) => threads.some((entry) => entry.id === waitThread.id && entry.status === 'idle'));
 // MCP tab: a remote server that still needs signing in, and a local one.
 await client.call('mcp.save', { id: 'docs-search', name: 'docs-search', transport: 'http', url: 'https://mcp.example.test/docs', args: [], auth: 'oauth' });
 await client.call('mcp.save', { id: 'local-db', name: 'local-db', transport: 'stdio', command: 'db-mcp', args: ['--readonly'], auth: 'none' });

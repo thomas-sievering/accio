@@ -39,6 +39,7 @@ export function QueueTray({ thread }: { thread: ThreadView }) {
         <button type="button" disabled={!!unavailable || busy} onClick={() => void run(async () => { await action(message.id, 'cancel'); setEdit(undefined); })}>Cancel</button>
       </form> : <>
         <span className="queued-text" title={summarizePastes(message.text)}>{summarizePastes(message.text).replace(/\s*\n+\s*/g, ' · ') || (message.images?.length ? imageCount(message.images.length) : 'Picked option')}{message.text && message.images?.length ? ` · ${imageCount(message.images.length)}` : ''}</span>
+        {message.wake && <span className="queued-when">Wait met ·</span>}
         <span className="queued-when">{message.editing ? 'Editing' : thread.status === 'running' ? 'after this turn' : 'paused'}</span>
         <button disabled={!!unavailable || busy || message.editing} onClick={() => void run(() => action(message.id, 'steer'))}>{thread.status === 'running' ? 'Steer now' : 'Send now'}</button>
         <button disabled={!!unavailable || busy} onClick={() => void run(async () => { await action(message.id, 'edit'); setEdit({ id: message.id, text: typedText(message.text) }); })}>Edit</button>

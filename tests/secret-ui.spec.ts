@@ -119,7 +119,8 @@ test('save, reuse, manage, use once and decline a secret', async ({ page }) => {
   await page.getByRole('option', { name: 'No project', exact: true }).click();
   await page.getByRole('option', { name: 'Personal', exact: true }).click();
   await send(page, 'request alternate');
-  await expect(card(page)).toContainText('No project');
+  // Starting the thread comes first, so this waits as long as the other requests above.
+  await expect(card(page)).toContainText('No project', { timeout: 15_000 });
   await expect(card(page).getByRole('button', { name: 'Save & use' })).toHaveCount(0);
   await valueField(page).fill(ONCE);
   await card(page).getByRole('button', { name: 'Use once' }).click();

@@ -11,7 +11,6 @@ import { registerHarnesses } from '../harnesses/harnesses.js';
 import { finishGoalTool } from '../goals/goal.js';
 import { deliveryStepTool } from '../threads/deliveryStep.js';
 import { shippedNoteTool } from '../threads/shippedNote.js';
-import { projectSettingsTool } from '../projects/projectSettings.js';
 import { readThreadTool } from '../threads/handoff.js';
 import { readMentionedThread } from '../threads/threadMentions.js';
 import { startThreadTool } from '../threads/startThread.js';
@@ -19,7 +18,8 @@ import { Projects } from '../projects/projects.js';
 import { Spaces } from '../spaces/spaces.js';
 import { SpaceContext } from '../spaces/spaceContext.js';
 import { SiblingThreads } from '../spaces/siblingThreads.js';
-import { ProjectApps } from '../projects/projectApps.js';
+import { MissingCheckouts } from '../spaces/missingCheckouts.js';
+import { registerProjectChangelog } from '../projects/projectChangelog.js';
 import { Threads } from '../threads/threads.js';
 import type { Harness } from '../threads/harness.js';
 import { AccioTools } from '../tools/tools.js';
@@ -83,12 +83,12 @@ export class HubConnections {
       machineConnected: (id) => settings.machines().some((m) => m.id === id && m.connected),
       offlineSnoozes: () => settings.offlineSnoozes(),
       setOfflineSnooze: (threadId, snooze) => settings.setOfflineSnooze(threadId, snooze),
-      send: (event, data) => this.send(event, data, record.id),
+      send: (event, data) => { if (event === 'threads.changed') refs.threads?.threadsChanged(); this.send(event, data, record.id); },
     });
     // A snooze set from another machine, or dropped by the hub, changes how these threads look.
     settings.onMachinesChanged(() => relay.announce());
     const broadcast: Broadcast = (event, data) => {
-      if (event === 'threads.changed') { relay.localChanged(); this.send(event, relay.merged(data as Events['threads.changed']), record.id); }
+      if (event === 'threads.changed') { relay.localChanged(); refs.threads?.threadsChanged(); this.send(event, relay.merged(data as Events['threads.changed']), record.id); }
       else {
         if (event === 'thread.item' || event === 'thread.delta') relay.transcriptEvent(event, data as Events['thread.item']);
         if (event === 'projects.changed') { relay.localChanged(); relay.announce(); }
@@ -107,12 +107,11 @@ export class HubConnections {
     const models = new Models(profiles, settings, this.here.id, claudeModels);
     profiles.register(router); machines.register(router); models.register(router, broadcast);
     const projects = refs.projects = new Projects(record.home, profiles, machines, broadcast); await projects.load(); projects.register(router);
-    const projectApps = new ProjectApps(record.home, projects, broadcast); projectApps.register(router);
+    registerProjectChangelog(router, projects);
     const spaces = new Spaces(settings, broadcast); spaces.register(router);
     const tools = new AccioTools([offerChoice, finishGoalTool((id, outcome, summary) => threads.finishGoal(id, outcome, summary), (id) => threads.goalActive(id)),
       deliveryStepTool((id, step, note) => threads.reportDeliveryStep(id, step, note), (id) => threads.deliveryRunning(id)),
       shippedNoteTool((id, note) => threads.recordShippedNote(id, note), (id) => threads.deliveryRunning(id)),
-      projectSettingsTool((id, app) => threads.saveProjectSettings(id, app), (id) => threads.projectSetupRunning(id)),
       readThreadTool((id, handle, offset, limit) => handle
         ? readMentionedThread({ threads: () => relay.merged(), transcript: async (threadId) => {
           const response = await router.handle({ id: 0, method: 'threads.transcript', params: { threadId } });
@@ -140,8 +139,11 @@ export class HubConnections {
         },
       }));
     }
-    const siblings = new SiblingThreads({ spaces: () => spaces.list(), projects: () => projects.state(), projectsOn: (machineId) => relay.projectsOn(machineId) });
+    // GLOSSARY: Space. Checkouts of the space's projects, cloned here when missing, for the Space section and start_thread.
+    const spaceCheckouts = new MissingCheckouts({ projects: () => projects.state(), clone: (repoKey, url, profileId) => projects.clone(repoKey, url, profileId), source: (repoKey) => relay.cloneSource(repoKey) });
+    const siblings = new SiblingThreads({ spaces: () => spaces.list(), projects: () => projects.state(), projectsOn: (machineId) => relay.projectsOn(machineId), checkoutHere: (key) => spaceCheckouts.checkout(key) });
     tools.add(startThreadTool({
+      here: this.here.id,
       caller: (id) => threads.views().find((t) => t.id === id),
       models: (profileId) => models.list(profileId).models,
       machine: (name) => { if (!name) return undefined; const found = findMachine(settings.machines(), name); return found.id === this.here.id ? undefined : found; },
@@ -169,7 +171,7 @@ export class HubConnections {
       const folder = resources.tools.folder(tool);
       return (await threads.start({ profileId: profile.id, machineId: this.here.id, text: `Repair ${tool.name} on this machine\n\nDiagnose the failure, fix the installation, test it and verify the result. Work on this machine only.\nPackage: ${tool.package}@${tool.version}\nExecutable: ${tool.executable}\nManaged installation folder: ${folder}\nInstall with npm install --prefix <that folder> ${tool.package}@${tool.version}. Keep the installation inside that folder.\nHealth check arguments: ${JSON.stringify(tool.checkArgs)}\nFailure:\n${detail}\n\nAccio will rerun the health check after this thread completes. Report what you changed and the commands and results that prove it works.` }, { repairToolId: tool.id })).id;
     }, this.resourceCommand);
-    resources.register(router); threads.resources = resources; threads.toolOverrides = () => settings.harnessTools(); threads.onRepairFinished = id => resources.tools.afterRepair(id); threads.knownThreads = () => relay.merged(); threads.spaceContext = new SpaceContext({ spaces: () => spaces.list(), projects: () => projects.state() });
+    resources.register(router); threads.resources = resources; threads.toolOverrides = () => settings.harnessTools(); threads.onRepairFinished = id => resources.tools.afterRepair(id); threads.knownThreads = () => relay.merged(); threads.spaceContext = new SpaceContext({ spaces: () => spaces.list(), projects: () => projects.state(), checkouts: spaceCheckouts });
     profiles.setReferenceSource(() => [...projects.state().projects.map((p) => p.profileId), ...threads.profileReferences()]);
     let reconciliation: Promise<unknown> = Promise.resolve();
     let initialized = false;
@@ -177,8 +179,8 @@ export class HubConnections {
       if (initialized && !this.closing) void threads.continueAfterRestart().catch(error => console.error('[threads] startup recovery failed', error));
     };
     workspace = { client, router, relay, profiles, machines, models, projects, spaces, threads, tools, resources, secrets, home: record.home,
-      initialize: origin => { if (!initialized) relay.start(record.url, record.token); if (!initialized) void projectApps.load().catch(error => console.error('[project apps] startup failed', error)); tools.listen(record.id === this.defaultId ? origin : `${origin}/hubs/${record.id}`); initialized = true; continueAfterRestart(); if (client.status === 'connected') reconciliation = resources.reconcile().catch(error => console.error('[resources] startup check failed', error)); },
-      close: async () => { stopUpdates?.(); await relay.close(); await projectApps.close(); await threads.close(); await secrets.close(); await resources.close(); await reconciliation; await profiles.close(); await projects.close(); await client.close(); } };
+      initialize: origin => { if (!initialized) relay.start(record.url, record.token); tools.listen(record.id === this.defaultId ? origin : `${origin}/hubs/${record.id}`); initialized = true; continueAfterRestart(); if (client.status === 'connected') reconciliation = resources.reconcile().catch(error => console.error('[resources] startup check failed', error)); },
+      close: async () => { stopUpdates?.(); await relay.close(); await threads.close(); await secrets.close(); await resources.close(); await reconciliation; await profiles.close(); await projects.close(); await client.close(); } };
     this.workspaces.set(record.id, workspace);
     client.onChanged(() => { this.announce(); broadcast('resources.changed', resources.state()); relay.announce(); continueAfterRestart(); });
     if (client.status === 'connected') { await profiles.load(); await profiles.syncReferences(); }

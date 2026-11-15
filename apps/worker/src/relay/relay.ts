@@ -4,7 +4,7 @@ import { JsonFile } from '@accio/persistence';
 import { RelaySocket, type RelayRequest } from '@accio/hub';
 import { OFFLINE_SNOOZE_MS, RELAY_MACHINE_METHODS, RELAY_THREAD_METHODS, type CheckoutView, type OfflineSnooze, type Events, type MachineView, type ParamsOf, type ProjectsState, type ResultOf, type RelaySnapshot, type ThreadView } from '@accio/protocol';
 import { UserError, type Router } from '../rpc/router.js';
-import { CLONE_TIMEOUT_MS, remoteUrlOf } from '../projects/git.js';
+import { CLONE_TIMEOUT_MS, httpsUrlOf, remoteUrlOf } from '../projects/git.js';
 import type { RemoteMediaKey, ThreadAssets } from '../threads/assets.js';
 
 const RELAY_METHODS = new Set<string>(RELAY_THREAD_METHODS);
@@ -123,6 +123,34 @@ export class Relay {
     return { projects: snapshot.projects, checkouts: snapshot.checkouts };
   }
 
+  /**
+   * GLOSSARY: Checkout. How this machine can clone a repository another machine on the relay has:
+   * that machine's profile for the project, preferring one with a checkout, and the URL that checkout
+   * fetches from. Without one to ask, the URL is an https address from the key. Undefined when no
+   * machine on the relay has the repository: an offline one's last list can't say its profile now.
+   */
+  cloneSource(repoKey: string): { profileId: string; url: () => Promise<string> } | undefined {
+    const holders = [...this.remote].flatMap(([machineId, snapshot]) => {
+      const project = this.online.has(machineId) && this.deps.machineName(machineId) && snapshot.projects.find((p) => p.repoKey === repoKey);
+      if (!project) return [];
+      return [{ machineId, project, asked: !!snapshot.checkouts?.some((c) => c.projectId === project.id) }];
+    });
+    const asked = holders.filter((h) => h.asked);
+    const first = asked[0] ?? holders[0];
+    if (!first) return undefined;
+    return {
+      profileId: first.project.profileId,
+      url: async () => {
+        for (const { machineId } of asked) {
+          // An earlier Accio there doesn't answer this; any failure moves on to the next machine.
+          const answer = await this.socket?.call(machineId, 'checkouts.cloneUrl', { machineId, repoKey }).catch(() => undefined) as ResultOf<'checkouts.cloneUrl'> | undefined;
+          if (answer?.url) return answer.url;
+        }
+        return httpsUrlOf(repoKey);
+      },
+    };
+  }
+
   /** Sends a call about another machine's thread to that machine. Undefined: the thread is this machine's. */
   forward(method: string, params: unknown): Promise<unknown> | undefined {
     if (method === 'threads.start') return this.startThere(params as ParamsOf<'threads.start'>);
@@ -181,7 +209,7 @@ export class Relay {
    * A checkout of that machine's own, such as a sibling's for start_thread, is used as it is.
    */
   private async startOn(machineId: string, name: string, input: ParamsOf<'threads.start'>): Promise<unknown> {
-    const { text, model } = input;
+    const { text, model, startedBy } = input;
     const socket = this.socket!;
     let params: ParamsOf<'threads.start'>;
     if ('checkoutId' in input && this.remote.get(machineId)?.checkouts?.some((c) => c.id === input.checkoutId)) {
@@ -201,8 +229,8 @@ export class Relay {
           .catch((error: Error) => { throw new UserError(error.message === NOT_RELAYED ? OLDER(name) : error.message); }) as CheckoutView;
         checkoutId = cloned.id;
       }
-      params = { checkoutId, text, ...(model ? { model } : {}) };
-    } else params = { profileId: input.profileId, text, ...(model ? { model } : {}) };
+      params = { checkoutId, text, ...(model ? { model } : {}), ...(startedBy ? { startedBy } : {}) };
+    } else params = { profileId: input.profileId, text, ...(model ? { model } : {}), ...(startedBy ? { startedBy } : {}) };
     return socket.call(machineId, 'threads.start', params).then((result) => {
       if (!isThreadView(result)) return result;
       // List it before the owner's next snapshot arrives, so the client can open it straight away.

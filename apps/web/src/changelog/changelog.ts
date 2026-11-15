@@ -44,6 +44,6 @@ export function byDay(entries: readonly ChangelogEntry[], now: Date): { day: str
 export function entryForCommit(c: CommitView, entries: readonly ChangelogEntry[]): ChangelogEntry | undefined {
   const sameRevision = entries.find((e) => e.revision && (c.sha.startsWith(e.revision) || e.revision.startsWith(c.sha)));
   if (sameRevision) return sameRevision;
-  const pr = Number(c.subject.match(/\(#(\d+)\)\s*$/)?.[1]);
+  const pr = c.pullRequest ?? Number(c.subject.match(/\(#(\d+)\)\s*$/)?.[1]);
   return pr > 0 ? entries.find((e) => e.pullRequest?.number === pr) : undefined;
 }

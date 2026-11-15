@@ -1016,7 +1016,11 @@ div.model-picker-empty b { color: var(--ink); font-weight: 500; }
 .composer-bar .limits-chip { flex: none; white-space: nowrap; }
 /* GLOSSARY: Goal. One line above the composer, like the queue tray. */
 .goal-bar { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 32px; margin: 0 10px; padding: 4px 8px; background: var(--raised); border: 1px solid var(--line); border-bottom: 0; border-radius: 9px 9px 0 0; font-size: 12px; }
-.goal-bar + .queue-tray { border-radius: 0; }
+.goal-bar + .queue-tray, .goal-bar + .goal-bar { border-radius: 0; }
+/* GLOSSARY: Wait. Shares the goal bar's line; conditions already met are struck through. */
+.wait-bar > svg { color: var(--amber); }
+.wait-bar .wait-met { color: var(--dim); text-decoration: line-through; }
+.msg.user.wake { opacity: .85; }
 .goal-bar > svg { width: 13px; height: 13px; flex: none; color: var(--blue); }
 .goal-bar.achieved > svg { color: var(--green); }
 .goal-bar.paused > svg { color: var(--amber); }

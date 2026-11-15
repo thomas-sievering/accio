@@ -13,8 +13,6 @@ import type { RemoteMachine } from './relay.js';
  */
 export type ThreadView = {
   repairToolId?: string;
-  /** GLOSSARY: Project setup thread. Started from the dashboard to find and save the project app's commands. */
-  projectSetup?: boolean;
   /** The hub that owns this thread's profile; immutable across view switches. */
   hubId?: string;
   /** GLOSSARY: Relay. Set only on threads another machine owns; actions go to that machine. */
@@ -55,6 +53,40 @@ export type ThreadView = {
   queuedMessages?: QueuedMessage[];
   /** GLOSSARY: Goal. Absent until `/goal` sets one; cleared with `/goal clear`. */
   goal?: ThreadGoal;
+  /** GLOSSARY: Issue. The issue it works on, by its `ref` as `threads.issues` lists it: picked, or named first in its first message's first line. */
+  issue?: string;
+  /** GLOSSARY: Wait. Absent unless the harness set one with wait_for; cleared once it is met or cancelled. */
+  wait?: ThreadWait;
+  /** GLOSSARY: Started thread. The thread that started this one through start_thread, and its machine. */
+  startedBy?: { threadId: string; machineId: string };
+};
+
+/** GLOSSARY: Wait. What a started thread must reach: no turn left to run, a pull request open, or delivered. */
+export type WaitThreadState = 'stopped' | 'pr_open' | 'delivered';
+/** GLOSSARY: Wait. What a pull request must reach: merged (or closed without merging), or its checks finished. */
+export type WaitPullRequestState = 'merged' | 'checks_done';
+
+/** GLOSSARY: Wait. One thing a Wait waits for; `metAt` and `detail` say when and how it was met. */
+export type WaitCondition = (
+  | { kind: 'thread'; threadId: string; title: string; until: WaitThreadState }
+  /** A pull request URL, or a number in the thread's repository. */
+  | { kind: 'pullRequest'; ref: string; until: WaitPullRequestState }
+  | { kind: 'after'; at: string }
+  /** A shell command accio runs in the thread's working folder; it is stopped at `timeoutAt`. */
+  | { kind: 'command'; command: string; timeoutAt: string }
+) & { metAt?: string; detail?: string };
+
+/**
+ * GLOSSARY: Wait. What a thread waits for between turns, set by its harness through the
+ * wait_for accio tool. accio starts the next turn once any (or all) of its conditions are met.
+ */
+export type ThreadWait = {
+  id: string;
+  setAt: string;
+  wakeWhen: 'any' | 'all';
+  /** What the harness told itself to do when it wakes. */
+  note: string;
+  conditions: WaitCondition[];
 };
 
 /**
@@ -72,7 +104,8 @@ export type ThreadGoal = {
   detail?: string;
 };
 
-export type QueuedMessage = { id: string; text: string; pick?: ChoicePick; images?: ThreadAsset[]; editing?: boolean };
+/** `wake`: GLOSSARY: Wait. accio queued it because the thread's Wait was met. */
+export type QueuedMessage = { id: string; text: string; pick?: ChoicePick; images?: ThreadAsset[]; editing?: boolean; wake?: boolean };
 
 export type ThreadWorkspace = {
   path: string;
@@ -227,7 +260,7 @@ export type TranscriptItem =
   /** GLOSSARY: Context window. How full it was at the turn's latest request, as the harness reported; one per turn. */
   | { kind: 'context'; id: string; turnId: string; usedTokens: number; windowTokens: number; compactAtTokens?: number }
   | { kind: 'promptSize'; id: string; turnId: string; harnessId: string; measurement: PromptMeasurement }
-  | { kind: 'user'; id: string; turnId: string; text: string; at: string; images?: ThreadAsset[]; resume?: boolean; delivery?: DeliveryMode; pick?: ChoicePick; steered?: boolean; goal?: 'continue' }
+  | { kind: 'user'; id: string; turnId: string; text: string; at: string; images?: ThreadAsset[]; resume?: boolean; delivery?: DeliveryMode; pick?: ChoicePick; steered?: boolean; goal?: 'continue'; wake?: boolean }
   | { kind: 'assistant'; id: string; turnId: string; text: string; media?: MediaBinding[] }
   | { kind: 'tool'; id: string; turnId: string; name: string; summary: string; status: 'running' | 'done' | 'error' | 'interrupted'; output?: string; detailRevision?: number; loadedSkills?: LoadedSkill[]; step?: ToolStep }
   /** GLOSSARY: Choice. Screenshots the harness offers; you pick one in your next message. */
@@ -250,7 +283,9 @@ const ThreadId = z.object({ threadId: z.string() });
 const Images = z.array(z.string().uuid()).max(IMAGES_PER_MESSAGE).optional();
 /** A picked issue, claimed for the thread once it starts: its reference as `threads.issues` lists it, and its title for the thread's. */
 const StartIssue = z.object({ ref: z.string().min(1).max(4096), title: z.string().trim().max(500) });
-const StartCommon = { text: z.string().trim(), images: Images, model: ModelSelection.optional(), machineId: z.string().optional(), issue: StartIssue.optional() };
+/** GLOSSARY: Started thread. Set by start_thread, so the starting thread can wait for it. */
+const StartedBy = z.object({ threadId: z.string().min(1).max(200), machineId: z.string().min(1).max(200) });
+const StartCommon = { text: z.string().trim(), images: Images, model: ModelSelection.optional(), machineId: z.string().optional(), issue: StartIssue.optional(), startedBy: StartedBy.optional() };
 const said = (start: { text: string; images?: string[] }) => start.text.length > 0 || !!start.images?.length;
 const Start = z.union([
   z.object({ checkoutId: z.string().min(1), ...StartCommon }).refine(said, { message: 'Write a message' }),
@@ -258,7 +293,6 @@ const Start = z.union([
 ]);
 /** Base64 bytes of one pasted image, which the client has already shrunk to the attachment limit. */
 const Upload = z.object({ name: z.string().max(180), mimeType: z.enum(IMAGE_TYPES), data: z.string().min(1).max(Math.ceil(IMAGE_ATTACHMENT_BYTES / 3) * 4 + 4) });
-const ProjectSetup = z.object({ projectId: z.string().min(1) });
 const SetModel = z.object({ threadId: z.string(), model: ModelSelection });
 /** GLOSSARY: Goal. The status bar's controls; setting one goes through `/goal` in a message. */
 const GoalAction = z.object({ threadId: z.string(), action: z.enum(['pause', 'resume', 'clear']) });
@@ -279,8 +313,6 @@ export const threadMethods = {
   'threads.list': method<z.ZodObject<{}>, ThreadView[]>(z.object({})),
   /** Creates a thread in a checkout and sends its first message: a thread exists only once something was said. */
   'threads.start': method<typeof Start, ThreadView>(Start),
-  /** GLOSSARY: Project setup thread. Starts one in the project's checkout; it saves its findings through the project_settings accio tool. */
-  'threads.setUpProject': method<typeof ProjectSetup, ThreadView>(ProjectSetup),
   'threads.transcript': method<typeof ThreadId, TranscriptItem[]>(ThreadId),
   /** Items and cursor captured together; subscribe before requesting, then ignore events through this cursor. */
   'threads.observe': method<typeof ThreadId, TranscriptSnapshot>(ThreadId),
@@ -303,6 +335,8 @@ export const threadMethods = {
   'threads.archive': method<typeof ThreadId, ThreadView>(ThreadId),
   'threads.openPreview': method<typeof ThreadId, { url: string }>(ThreadId),
   'threads.goal': method<typeof GoalAction, ThreadView>(GoalAction),
+  /** GLOSSARY: Wait. Cancels the thread's Wait, stopping any command it runs; no turn starts. */
+  'threads.cancelWait': method<typeof ThreadId, ThreadView>(ThreadId),
   'threads.setModel': method<typeof SetModel, ThreadView>(SetModel),
   /** Stops the running turn; the thread becomes interrupted. */
   'threads.stop': method<typeof ThreadId, null>(ThreadId),

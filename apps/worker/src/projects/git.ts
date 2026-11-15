@@ -24,11 +24,16 @@ export async function inspectFolder(path: string): Promise<FolderFacts> {
   return { root, repoKey: remotes ? repoKeyOf(parseRemotes(remotes)) : null };
 }
 
+/** The repository's https address, for cloning it when no checkout can say how it fetches. */
+export function httpsUrlOf(repoKey: string) {
+  return `https://${repoKey}.git`;
+}
+
 /** The URL a checkout fetches its repository from, so another machine can clone it the same way. */
 export async function remoteUrlOf(path: string, repoKey: string): Promise<string> {
   // As configured: `git remote -v` shows URLs after this machine's insteadOf rewrites.
   const urls = ((await maybeGit(path, 'config', '--get-regexp', '^remote\\..*\\.url$')) ?? '').split(/\r?\n/).map((line) => line.split(' ').slice(1).join(' '));
-  return urls.find((url) => normalizeRemoteUrl(url) === repoKey) ?? `https://${repoKey}.git`;
+  return urls.find((url) => normalizeRemoteUrl(url) === repoKey) ?? httpsUrlOf(repoKey);
 }
 
 /**

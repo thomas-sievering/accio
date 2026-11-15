@@ -53,7 +53,7 @@ export const RELAY_THREAD_METHODS = [
   'threads.start', 'threads.observe', 'threads.transcript', 'threads.toolDetails', 'threads.media', 'threads.deliverySummary',
   'threads.send', 'threads.queued', 'threads.stop', 'threads.resume', 'threads.retry',
   'threads.deliver', 'threads.cancelDelivery', 'threads.checkDelivery', 'threads.archive',
-  'threads.goal', 'threads.setModel', 'threads.snooze', 'threads.settle', 'threads.reopen',
+  'threads.goal', 'threads.cancelWait', 'threads.setModel', 'threads.snooze', 'threads.settle', 'threads.reopen',
   'threads.rename', 'threads.regenerateTitle', 'threads.previewTitle', 'threads.delete',
 ] as const satisfies readonly MethodName[];
 
@@ -61,5 +61,5 @@ export const RELAY_THREAD_METHODS = [
  * Methods about a machine itself, addressed by `machineId`. A call names the machine it is
  * about; any other machine forwards it there through the relay.
  */
-export const RELAY_MACHINE_METHODS = ['update.status', 'update.start', 'app.screenshot', 'checkouts.clone'] as const satisfies readonly MethodName[];
+export const RELAY_MACHINE_METHODS = ['update.status', 'update.start', 'app.screenshot', 'checkouts.clone', 'checkouts.cloneUrl'] as const satisfies readonly MethodName[];
 export type RelayMachineMethod = typeof RELAY_MACHINE_METHODS[number];
