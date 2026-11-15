@@ -81,12 +81,12 @@ export type ThreadPlace = 'open' | 'working' | 'snoozed' | 'settled';
 /**
  * Settled wins over snoozed, snoozed over working; a snooze that has passed puts the thread
  * back in the open list. A running turn waiting for a secret needs you, so it is open; a
- * delivery in progress keeps the thread on Working.
+ * delivery in progress, or a Wait on an idle thread, keeps the thread on Working.
  */
 export function threadPlace(t: ThreadView, now: Date): ThreadPlace {
   if (t.settledAt) return 'settled';
   if (t.snoozedUntil !== null && new Date(t.snoozedUntil) > now) return 'snoozed';
   if (t.needsSecret) return 'open';
-  if (t.status === 'running' || deliveryInProgress(t)) return 'working';
+  if (t.status === 'running' || deliveryInProgress(t) || (t.wait && t.status === 'idle')) return 'working';
   return 'open';
 }

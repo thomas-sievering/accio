@@ -51,6 +51,8 @@ import { ThreadNaming } from './naming.js';
 import { changeHarness, readThreadPage } from './handoff.js';
 import { Issues } from '../issues/issues.js';
 import type { SpaceContext } from '../spaces/spaceContext.js';
+import { cleanExecutionEnv } from './harnessEnv.js';
+import { Waits, waitForTool } from './waits.js';
 
 /** Threads on this machine, their transcripts, and the turns running in them. */
 export class Threads {
@@ -73,6 +75,7 @@ export class Threads {
   private content: ThreadContent;
   private previews: Previews;
   private deliveries: Deliveries;
+  private waits: Waits;
   private turns: Turns;
   private naming: ThreadNaming;
   private issues: Issues;
@@ -114,6 +117,19 @@ export class Threads {
     this.turns = new Turns(this.state, { profiles, projects, models, machines, harnesses, secrets: this.secrets, content: this.content, deliveries: this.deliveries, tools,
       images: { claim: (threadId, ids) => this.uploads.claim(threadId, ids, this.assets), file: (threadId, asset) => this.assets.harnessFile(threadId, asset) },
       resources: () => this.resources, spaceContext: () => this.spaceContext, toolsOff: (harnessId) => builtinToolsOff(harnessId, this.toolOverrides?.()[harnessId]), onWorkFinished: id => this.naming.refine(id), onRepairFinished: (toolId) => this.onRepairFinished?.(toolId), knownThreads: () => this.knownThreads?.() ?? this.views() });
+    this.waits = new Waits(this.state, {
+      threads: () => this.knownThreads?.() ?? this.views(),
+      wake: (threadId, text) => this.wake(threadId, text),
+      pullRequest: async (thread, ref) => {
+        const cwd = this.state.cwd(thread);
+        return this.deliveries.git.pullRequest(cwd, ref, await machines.github.env(thread.profileId, cwd).catch(() => undefined));
+      },
+      command: async (thread) => {
+        const cwd = this.state.cwd(thread);
+        return { cwd, env: { ...cleanExecutionEnv(process.env), ...await machines.github.env(thread.profileId, cwd).catch(() => ({})) } };
+      },
+    });
+    tools?.add(waitForTool((threadId, request) => this.waits.set(threadId, request)));
     tools?.add(agentTool((threadId, input, { signal, progress }) => this.turns.startSubagent(threadId, input, signal, progress)));
     projects.onRemoveThreads((id) => this.deleteThreads(this.state.list.filter((t) => t.checkoutId === id)));
     projects.onCheckInUse((checkoutId) => this.countUsing((t) => t.checkoutId === checkoutId));
@@ -211,6 +227,29 @@ export class Threads {
       this.restartDeliveries.delete(id);
       if (state.get(id)) await this.deliveries.dispatch(id).catch(error => console.error('[delivery] continuing after restart failed', error));
     }
+    if (!state.closing) await this.waits.resume().catch(error => console.error('[waits] resuming after restart failed', error));
+  }
+
+  /** GLOSSARY: Wait. Threads changed here or on another machine, which may meet a Wait. */
+  threadsChanged() { this.waits.changed(); }
+
+  /**
+   * GLOSSARY: Wait. Its Wait was met: start the next turn, or queue the message behind
+   * whatever holds the thread now, so dispatchPending starts it once the thread is free.
+   */
+  private wake(threadId: string, text: string) {
+    const { state, turns } = this;
+    return this.withMessages(threadId, async () => {
+      const thread = state.get(threadId);
+      if (!thread || state.closing) return;
+      const free = !state.running.has(threadId) && thread.status !== 'running' && !state.lifecycle.has(threadId)
+        && thread.delivery?.status !== 'queued' && thread.delivery?.status !== 'running' && !thread.queuedMessages?.length;
+      if (free) {
+        try { await turns.begin(threadId, text, { wake: true }); return; }
+        catch (error) { console.error('[waits] waking the thread failed; queued its message instead', error); }
+      }
+      await this.changeQueue(threadId, queue => [...queue, { id: randomUUID(), text, wake: true }]);
+    });
   }
 
   register(router: Router) {
@@ -321,6 +360,12 @@ export class Threads {
         await this.goalCommand(threadId, { type: action }, `/goal ${action}`);
         return toView(state.require(threadId));
       }))
+      .on('threads.cancelWait', ({ threadId }) => this.withMessages(threadId, async () => {
+        await this.waits.cancel(threadId);
+        // A goal the Wait held back continues now.
+        if (!state.running.has(threadId)) await turns.dispatchPending(threadId);
+        return toView(state.require(threadId));
+      }))
       .on('threads.deliverySummary', ({ threadId }) => deliveries.summary(threadId))
       .on('threads.deliver', ({ threadId, mode }) => deliveries.request(threadId, mode))
       .on('threads.cancelDelivery', ({ threadId }) => deliveries.cancel(threadId))
@@ -359,6 +404,8 @@ export class Threads {
       })
       .on('threads.snooze', ({ threadId, until }) => organize(threadId, t => snooze(t, until)))
       .on('threads.settle', async ({ threadId }) => {
+        // GLOSSARY: Wait. A settled thread is done: its Wait, and any command it runs, stop.
+        if (state.require(threadId).wait) await this.waits.cancel(threadId);
         const view = await organize(threadId, t => settle(t, now()));
         void deliveries.releaseIfUnchanged(threadId);
         return view;
@@ -442,6 +489,7 @@ export class Threads {
         if (issue) thread.issue = issue;
         if (checkout && input.issue?.title) thread.title = titleFrom(input.issue.ref.startsWith('#') ? `${input.issue.ref} ${input.issue.title}` : input.issue.title);
         if (options.projectSetup && project) Object.assign(thread, { projectSetup: true, title: `Set up ${project.name} app`, titleManual: true });
+        if (input.startedBy) thread.startedBy = input.startedBy;
         if (options.repairToolId) { thread.repairToolId = options.repairToolId; thread.title = `Repair ${this.resources?.state().tools.find(tool => tool.id === options.repairToolId)?.name ?? options.repairToolId}`; }
         if (checkout) thread.workspace = await this.deliveries.git.allocate(thread.id, checkout.path);
         if (!checkout) await mkdir(join(state.home, 'workspaces', thread.id), { recursive: true });
@@ -623,6 +671,7 @@ export class Threads {
       this.naming.cancel(id);
       state.starting.delete(id);
       this.deliveries.clearCheck(id);
+      this.waits.forget(id);
     }
     await saved;
     await writes;
@@ -638,6 +687,7 @@ export class Threads {
     state.closing = true;
     await this.naming.close();
     this.deliveries.close();
+    this.waits.close();
     // Persist intent before aborting. An already-aborted controller belongs to an explicit Stop.
     state.list = state.list.map(t => t.resumeAfterRestart !== false && state.running.has(t.id) && !state.running.get(t.id)!.signal.aborted && (t.sessionId || t.delivery?.status === 'running')
       ? { ...t, resumeAfterRestart: true } : t);

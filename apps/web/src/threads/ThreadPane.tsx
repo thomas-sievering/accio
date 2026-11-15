@@ -12,6 +12,7 @@ import { useProjects } from '../projects/projects';
 import { Composer } from './Composer';
 import { QueueTray } from './QueueTray';
 import { GoalBar } from './GoalBar';
+import { WaitBar } from './WaitBar';
 import { PendingPick, optionName } from './Choice';
 import { DeliveryActions } from './DeliveryActions';
 import { MachinePicker } from './MachinePicker';
@@ -89,7 +90,7 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
         key={thread.id}
         imagesUnavailable={imagesUnavailable}
         disabled={!!unavailable || savingModel || thread.delivery?.status === 'queued' || thread.delivery?.status === 'running' || !place.profile || !accountForModel(place.profile, thread.model)?.signedIn}
-        actions={<><DeliveryActions key={thread.id} thread={thread} project={place.project} canRun={!!place.profile && !!accountForModel(place.profile, thread.model)?.signedIn} /><GoalBar thread={thread} /><QueueTray thread={thread} /></>}
+        actions={<><DeliveryActions key={thread.id} thread={thread} project={place.project} canRun={!!place.profile && !!accountForModel(place.profile, thread.model)?.signedIn} /><GoalBar thread={thread} /><WaitBar thread={thread} /><QueueTray thread={thread} /></>}
         target={thread.id}
         draftId={`thread:${thread.id}`}
         profileId={thread.profileId}

@@ -10,6 +10,8 @@ export const START_THREAD_TOOL = 'start_thread';
 export type StartingThread = { checkoutId: string; projectId: string; profileId: string; model: ModelSelection };
 
 export type StartThreadDeps = {
+  /** This machine's id, recorded on the started thread with the caller's. */
+  here: string;
   caller: (threadId: string) => StartingThread | undefined;
   /** Models this machine offers the profile, to find one mentioned with @. */
   models: (profileId: string) => ModelView[];
@@ -35,7 +37,7 @@ export type StartThreadDeps = {
 export function startThreadTool(deps: StartThreadDeps) {
   return accioTool({
     name: START_THREAD_TOOL,
-    description: 'Start a new top-level thread in this project, on this machine or on another paired machine, and return without waiting for it. '
+    description: 'Start a new top-level thread in this project, on this machine or on another paired machine, and return without waiting for it (wait_for can wake you when it finishes). '
       + 'It is a thread of its own that the user follows and talks to, not a sub-agent: use it when the user asks for a new thread, or for one on another machine. '
       + "When this project is in a space, name another of its projects, including the home, in `project` to get a change made there: the thread works in that project's checkout under its profile and ships the change on its own. "
       + 'It sees nothing of this conversation, so write the message as a complete task.',
@@ -54,8 +56,8 @@ export function startThreadTool(deps: StartThreadDeps) {
       const model = handle ? mentionedModel(offered, handle, caller.model.effort).selection
         : sibling ? inheritedModel(offered, caller.model) : caller.model;
       const where = sibling ? { checkoutId: sibling.checkoutId } : caller.checkoutId ? { checkoutId: caller.checkoutId } : { profileId: caller.profileId };
-      const started = await deps.start({ ...where, text: message, ...(model ? { model } : {}), ...(target ? { machineId: target.id } : {}) });
-      return `Started thread "${started.title}" (${started.id})${sibling ? ` in ${sibling.name}` : ''} on ${target?.name ?? 'this machine'}. It runs on its own and shows in the thread list.`;
+      const started = await deps.start({ ...where, text: message, ...(model ? { model } : {}), ...(target ? { machineId: target.id } : {}), startedBy: { threadId, machineId: deps.here } });
+      return `Started thread "${started.title}" (${started.id})${sibling ? ` in ${sibling.name}` : ''} on ${target?.name ?? 'this machine'}. It runs on its own and shows in the thread list. To be woken when it finishes or opens a PR, call wait_for and end your turn.`;
     },
   });
 }

@@ -213,6 +213,8 @@ const Item = memo(function Item({ threadId, item, preparing, picked, pickName }:
     case 'user':
       // GLOSSARY: Goal. A turn accio started itself is a divider, not something you said.
       if (item.goal === 'continue') return <div className="goal-continue" data-item-id={item.id}>Continuing toward the goal</div>;
+      // GLOSSARY: Wait. accio started this turn with what met the Wait; it reads as a notice, not your words.
+      if (item.wake) return <div className="msg user wake" data-item-id={item.id}><span className="msg-pick">Wait met</span><UserMessageText text={item.text} /></div>;
       if (item.resume) return <div className="notice info" data-item-id={item.id}>Resumed</div>;
       return <div className="msg user" data-item-id={item.id}>
         {item.steered && <span className="msg-pick">Steered mid-turn</span>}
