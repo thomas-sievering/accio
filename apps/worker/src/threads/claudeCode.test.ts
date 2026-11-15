@@ -1,3 +1,4 @@
+import { access } from 'node:fs/promises';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { claudeCode } from './claudeCode.js';
 
@@ -214,4 +215,18 @@ it.each([
   for await (const message of claudeCode.run({ cwd: '.', prompt: 'hi', sessionId: null, env: {}, signal: new AbortController().signal })) messages.push(message);
   expect(messages).toEqual([...before, result]);
   expect(q.getContextUsage).toHaveBeenCalledWith({ detail: 'summary' });
+});
+
+it('lists the skills Claude Code ships with once, from a session that can reach no provider, repository or profile', async () => {
+  const q = Object.assign(query(), { initializationResult: vi.fn(async () => ({ commands: [{ name: 'simplify', description: 'Review the changed code' }, { name: 'compact', description: 'Free up context' }] })) });
+  q.next.mockResolvedValueOnce({ done: false, value: { type: 'system', subtype: 'init', session_id: 's', skills: ['simplify', 'debug'] } });
+  queryMock.mockReturnValue(q);
+  expect(await claudeCode.skills!({ env: {} })).toEqual([{ name: 'simplify', description: 'Review the changed code' }, { name: 'debug', description: '' }]);
+  const { options } = queryMock.mock.calls[0]![0];
+  expect(options).toMatchObject({ settingSources: [], tools: [], mcpServers: {}, strictMcpConfig: true, persistSession: false, env: { ANTHROPIC_BASE_URL: 'http://127.0.0.1:9' } });
+  expect(options.env.CLAUDE_CONFIG_DIR.startsWith(options.cwd)).toBe(true);
+  expect(q.close).toHaveBeenCalled();
+  await expect(access(options.cwd)).rejects.toThrow();
+  expect(await claudeCode.skills!({ env: {} })).toHaveLength(2);
+  expect(queryMock).toHaveBeenCalledTimes(1);
 });

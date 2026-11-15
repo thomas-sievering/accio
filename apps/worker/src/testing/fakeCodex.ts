@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { CodexClient, CodexFactory, CodexNotification } from '@accio/codex';
 
@@ -18,6 +18,8 @@ export class FakeCodex {
   rateLimitsResponse: unknown = { rateLimits: null };
   rateLimitsError?: Error;
   holdTurns = false;
+  /** A user skill folder, as ~/.agents/skills is to real Codex: listed with scope user. */
+  userSkills?: string;
   factory: CodexFactory = async (options) => {
     const client = new FakeCodexClient(options, this);
     this.clients.push(client);
@@ -57,6 +59,7 @@ export class FakeCodexClient implements CodexClient {
       case 'account/rateLimits/read':
         if (this.host.rateLimitsError) throw this.host.rateLimitsError;
         result = this.host.rateLimitsResponse; break;
+      case 'skills/list': result = { data: [{ cwd: params.cwds?.[0] ?? this.options.cwd, skills: await this.skills(), errors: [] }] }; break;
       case 'thread/start': result = { thread: { id: 'codex-session' } }; break;
       case 'thread/resume': result = { thread: { id: params.threadId } }; break;
       case 'turn/start':
@@ -66,6 +69,15 @@ export class FakeCodexClient implements CodexClient {
       case 'turn/interrupt': this.emit('turn/completed', { threadId: 'codex-session', turn: { id: 'codex-turn', status: 'interrupted' } }); break;
     }
     return result;
+  }
+  /** What real Codex discovers: its home's bundled skills and the user folder, minus disabled `skills.config` paths. */
+  private async skills() {
+    const disabled = (this.options.config ?? []).filter(c => c.startsWith('skills.config=')).flatMap(c => [...c.matchAll(/path=("(?:[^"\\]|\\.)*")/g)].map(m => JSON.parse(m[1]!) as string));
+    const list = async (folder: string | undefined, scope: string) => {
+      const names = folder ? await readdir(folder).catch(() => [] as string[]) : [];
+      return names.map(name => { const path = join(folder!, name, 'SKILL.md'); return { name, description: `Helpful ${name}`, path, scope, enabled: !disabled.includes(path), pluginId: null }; });
+    };
+    return [...await list(join(this.options.home, 'skills', '.system'), 'system'), ...await list(this.host.userSkills, 'user')];
   }
   reply() {
     this.emit('item/agentMessage/delta', { threadId: 'codex-session', turnId: 'codex-turn', itemId: 'message', delta: 'Hello ' });

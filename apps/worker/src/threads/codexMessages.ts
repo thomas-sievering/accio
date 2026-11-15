@@ -37,3 +37,6 @@ export function parseCodex<T>(message: string, schema: z.ZodType<T>, value: unkn
   const field = parsed.error.issues[0]?.path.join('.');
   throw new Error(`Codex sent ${message} in a form Accio does not recognize${field ? ` (${field})` : ''}.`);
 }
+
+/** GLOSSARY: Harness skill. What Codex's own skill discovery found, and where (`scope`: system, user, admin, repo). */
+export const CodexSkillsList = z.object({ data: z.array(z.object({ skills: z.array(z.object({ name: z.string(), description: text, path: z.string(), scope: z.string(), enabled: z.boolean() })) })) });

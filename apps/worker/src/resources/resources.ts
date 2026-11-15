@@ -1,8 +1,7 @@
 import { SECRET_MCP_SERVER } from '../secrets/secrets.js';
 import { join } from 'node:path';
-import { access } from 'node:fs/promises';
 import { projectKey, type McpDefinition, type ResourcesState, type ToolDefinition, type WorkspaceSkill, type SkillEntry } from '@accio/protocol';
-import { enabled, type McpAccess, type ResourceAccess } from '@accio/hub';
+import type { McpAccess, ResourceAccess } from '@accio/hub';
 import type { Router, Broadcast } from '../rpc/router.js';
 import type { Profiles } from '../profiles/profiles.js';
 import type { Projects } from '../projects/projects.js';
@@ -13,6 +12,7 @@ import type { CommandRunner } from './process.js';
 import type { HarnessMcp, TurnResources } from '../threads/harness.js';
 import { ACCIO_MCP_SERVER } from '../tools/tools.js';
 import { readSkillFile, repositorySkills } from './workspaceSkills.js';
+import { enabledLevel, resolveLevels } from './skillLevels.js';
 
 export class ResourceManager {
   readonly skills: SkillFiles;
@@ -28,19 +28,27 @@ export class ResourceManager {
     this.tools = new ManagedTools(home, machineId, store, () => this.announce(), repair, run);
   }
   state(): ResourcesState { return this.store.state(); }
+  /**
+   * GLOSSARY: Skill level. Every skill a thread here could get: the repository's (Project),
+   * then each library skill at the narrowest level that turns it on, resolved by ADR 0020.
+   */
   async workspaceSkills(profileId?: string, projectId?: string, cwd?: string): Promise<WorkspaceSkill[]> {
-    const state = this.state();
+    return this.levelSkills(this.state(), profileId, projectId, cwd);
+  }
+  /** One state for the whole resolution. Only skills a thread gets need their files here, so a wider source that is overridden can't block a turn. */
+  private async levelSkills(state: ResourcesState, profileId?: string, projectId?: string, cwd?: string): Promise<WorkspaceSkill[]> {
     const project = this.projects.state().projects.find(p => p.id === projectId);
-    const key = project ? projectKey(project) : undefined;
-    const library: WorkspaceSkill[] = await Promise.all(state.skills.map(async skill => {
-      const enabledBy = skill.scope.global ? 'global' : profileId && skill.scope.profileIds.includes(profileId) ? 'profile' : key && skill.scope.projectKeys.includes(key) ? 'project' : null;
-      const local = enabledBy ? await this.localSkill(skill) : skill;
-      return { id: skill.id, name: skill.name, description: skill.description, path: join(local.path, 'SKILL.md'), origin: 'library' as const, enabled: enabledBy !== null, enabledBy, sourceName: state.sources.find(source => source.id === skill.sourceId)?.name, revision: skill.revision };
+    const context = { profileId, projectKey: project ? projectKey(project) : undefined };
+    const library: WorkspaceSkill[] = state.skills.map(skill => {
+      const enabledBy = enabledLevel(skill.scope, context);
+      return { id: skill.id, name: skill.name, description: skill.description, path: join(skill.path, 'SKILL.md'), origin: 'library' as const, enabled: enabledBy !== null, enabledBy, sourceName: state.sources.find(source => source.id === skill.sourceId)?.name, revision: skill.revision };
+    });
+    const skills = resolveLevels([...(cwd ? await repositorySkills(cwd) : []), ...library]);
+    const entries = new Map(state.skills.map(entry => [entry.id, entry]));
+    await Promise.all(skills.map(async skill => {
+      const entry = skill.origin === 'library' && skill.enabled && !skill.overriddenBy ? entries.get(skill.id) : undefined;
+      if (entry) skill.path = join((await this.localSkill(entry)).path, 'SKILL.md');
     }));
-    const skills = [...(cwd ? await repositorySkills(cwd) : []), ...library];
-    for (const skill of skills) {
-      if (skill.enabled && skills.some(other => other.id !== skill.id && other.enabled && other.name === skill.name)) skill.conflict = `More than one enabled skill is named ${skill.name}. Choose one source before the next turn.`;
-    }
     return skills;
   }
   async skillContent(id: string) {
@@ -138,22 +146,12 @@ export class ResourceManager {
     const tools = state.tools;
     if (options.repair) return { env: this.tools.env(state.tools, env), instructions: '', mcps: {}, snapshot: { tools: [], skills: [], mcps: [] }, release: () => {} };
     await this.requireToolsReady();
-    const skills = await Promise.all(state.skills.filter(s => enabled(s.scope, profileId, key)).map(skill => this.localSkill(skill)));
-    const names = new Set<string>();
-    for (const skill of skills) {
-      if (names.has(skill.name)) throw new Error(`More than one enabled skill is named ${skill.name}; select one source`);
-      names.add(skill.name); await this.skills.validate(skill);
-      if (options.cwd && /^[a-zA-Z0-9_-]+$/.test(skill.name)) for (const folder of ['.agents', '.claude']) {
-        if (await access(join(options.cwd, folder, 'skills', skill.name, 'SKILL.md')).then(() => true, () => false)) throw new Error(`This project already has a skill named ${skill.name}. Choose either the project copy or the synced skill in settings.`);
-      }
-    }
-    const repository = options.cwd ? await repositorySkills(options.cwd) : [];
-    const catalog: WorkspaceSkill[] = [...repository, ...skills.map(s => ({ id: s.id, name: s.name, description: s.description, path: join(s.path, 'SKILL.md'), revision: s.revision, origin: 'library' as const, enabled: true, enabledBy: 'project' as const }))];
-    const catalogNames = new Set<string>();
-    for (const skill of catalog) {
-      if (catalogNames.has(skill.name)) throw new Error(`More than one enabled skill is named ${skill.name}; choose one source`);
-      catalogNames.add(skill.name);
-    }
+    // ADR 0020: the turn gets each name's winner; overridden skills stay out, a clash refuses the turn.
+    const catalog = (await this.levelSkills(state, profileId, projectId, options.cwd)).filter(skill => skill.enabled && !skill.overriddenBy);
+    const clash = catalog.find(skill => skill.conflict);
+    if (clash) throw new Error(clash.conflict);
+    const skills = state.skills.filter(entry => catalog.some(skill => skill.origin === 'library' && skill.id === entry.id));
+    for (const skill of skills) await this.skills.validate(await this.localSkill(skill));
     const instructions = catalog.length ? `Skills enabled for this turn:\n${catalog.map(s => `- ${s.name}: ${s.description}\n  Read ${s.path} when relevant.${'revision' in s ? ` Source revision: ${s.revision}` : ''}`).join('\n')}\nRead a skill's SKILL.md before using it. Resolve its relative references against its own folder.` : '';
     const releases: (() => void)[] = [];
     const mcps: Record<string, HarnessMcp> = {};
