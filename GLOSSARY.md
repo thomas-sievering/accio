@@ -86,6 +86,10 @@ _Avoid_: Image attachment (an image you send), DALL·E
 A harness's own tools, such as Claude Code's WebSearch or Codex's goals, grouped into switches under Settings → Harnesses. The switches are shared settings for the whole hub. By default only a shell and file reading and editing are on; other capabilities come as accio tools that work the same on every harness. Changes apply from each thread's next turn.
 _Avoid_: Default tools, native tools, harness tools
 
+**CLI**:
+A command-line program that Accio installs at a pinned version on every machine and tells threads about, such as agent-desktop. It is turned on at the same levels as skills: Everywhere, Profile, Space or Project. A program you installed on a machine yourself is not a CLI until you add it to Accio.
+_Avoid_: Tool (on its own), managed tool, binary
+
 **System prompt**:
 What accio adds to a harness's own instructions for every turn: titled sections that describe accio's chat, such as how to show images inline. Each harness receives it in its own way. Claude Code gets it after its built-in system prompt and Codex as developer instructions. It is read-only and shown under Settings → System prompt.
 _Avoid_: Instructions, preamble, custom prompt
