@@ -54,6 +54,14 @@ Preconditions: healthy instance. New thread, search and filter stay hidden until
   alongside it. Repeat with a snoozed thread. The November 2026 audit found the
   empty-state message counts only drafts, open and Working rows, so a passing
   ordinary search does not cover these branches.
+- **Row motion.** Each sidebar row sits in a `.row-slot` (`threads/SlidingRows.tsx`).
+  Status changes (snooze, settle, reopen, delete, a turn starting or ending) slide the
+  remaining rows for about 320ms and fade removed rows, so an `.row-slot` can stay in
+  the DOM at falling opacity after its thread is gone; wait for `toHaveCount(0)`
+  rather than asserting removal at once. A row crossing between lists carries
+  `data-travelling` while it moves. Search, scope and profile filtering are instant,
+  and an emptied shelf fades out with its last row. `tests/sidebar-motion.spec.ts`
+  covers these, the picker's first-open-only stagger, and the shared press sink.
 - **Completion motion.** Record a paced first turn through its completion and
   the two-second Working delay using [smooth-ui](../../smooth-ui/SKILL.md).
   Inspect the selected row's move from Working into the open list, the last
