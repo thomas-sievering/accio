@@ -51,8 +51,8 @@ export function useWorkspaceSkills(context: SkillContext | undefined): Workspace
   return state.key === key ? { ...state, reload } : { loading: !!key, reload };
 }
 
-/** GLOSSARY: Skill level. How each level is named; a Space level joins with #199. */
-export const LEVEL_NAMES: Record<SkillLevel, string> = { project: 'Project', profile: 'Profile', global: 'Everywhere' };
+/** GLOSSARY: Skill level. How each level is named. */
+export const LEVEL_NAMES: Record<SkillLevel, string> = { project: 'Project', space: 'Space', profile: 'Profile', global: 'Everywhere' };
 
 /** GLOSSARY: Harness skill. The harness a section of its skills is titled with. */
 export const harnessName = (harnessId: string) => (harnessId === 'codex' ? 'Codex' : 'Claude');
@@ -60,12 +60,15 @@ export const harnessName = (harnessId: string) => (harnessId === 'codex' ? 'Code
 /** Where a skill comes from, as a short label. */
 export function originLabel(skill: WorkspaceSkill): string {
   if (skill.origin === 'repository') return 'Repository';
-  const via = skill.enabledBy === 'global' ? 'Everywhere' : skill.enabledBy === 'profile' ? 'Profile' : 'Library';
+  if (skill.origin === 'home') return 'Home';
+  const via = skill.enabledBy === 'global' ? 'Everywhere' : skill.enabledBy === 'profile' ? 'Profile' : skill.enabledBy === 'space' ? 'Space' : 'Library';
   return skill.sourceName && skill.sourceName !== via ? `${via} · ${skill.sourceName}` : via;
 }
 
 /** Shown in the project list: files in the repository, and library skills this project turned on, unless a narrower one of the same name wins. */
 export const isProjectSkill = (skill: WorkspaceSkill) => !skill.overriddenBy && (skill.origin === 'repository' || (skill.origin === 'library' && skill.enabled && skill.enabledBy === 'project'));
+/** GLOSSARY: Home. Shown in the space list: the home's skill files, and library skills turned on for the space, unless the project has one of the name. */
+export const isSpaceSkill = (skill: WorkspaceSkill) => !skill.overriddenBy && (skill.origin === 'home' || (skill.origin === 'library' && skill.enabled && skill.enabledBy === 'space'));
 /** Turned on for every project of the profile, or for everything, and not overridden by a narrower level. */
 export const isInherited = (skill: WorkspaceSkill) => skill.origin === 'library' && skill.enabled && !skill.overriddenBy && (skill.enabledBy === 'profile' || skill.enabledBy === 'global');
 /** ADR 0020: on at a level, but a narrower level has a skill of its name, which the thread gets instead. */

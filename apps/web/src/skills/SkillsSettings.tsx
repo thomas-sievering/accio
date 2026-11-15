@@ -11,6 +11,7 @@ import { ScopeEditor } from '../resources/ScopeEditor';
 import { Field, focusFirstInvalid } from '../resources/Field';
 import { MidPath } from '../projects/MidPath';
 import { MenuSelect } from '../ui/MenuSelect';
+import { useSpaces } from '../spaces/spaces';
 
 const activeRevision = (state: ResourcesState, sourceId: string) => state.skills.find((s) => s.sourceId === sourceId)?.revision;
 
@@ -25,7 +26,7 @@ export function SkillsSettings({ sourceId, onOpen, onBack }: { sourceId?: string
   return (
     <>
       <p className="note">
-        Skills come from Git repositories. A new skill is optional until you enable it for everything, a profile, or a project. Enabled skills are synced: threads read them from the hub’s copy at the revision you applied.
+        Skills come from Git repositories. A new skill is optional until you enable it for everything, a profile, a space or a project. Enabled skills are synced: threads read them from the hub’s copy at the revision you applied.
       </p>
       <SettingsSection add={{ label: 'Add skill source', onClick: () => onOpen('new') }}>
         {[...state.sources].sort((a, b) => a.name.localeCompare(b.name)).map((s) => {
@@ -195,6 +196,9 @@ function SkillRow({ skill }: { skill: SkillEntry }) {
   const client = useClient();
   const { profiles = [] } = useProfiles();
   const { state: projects, checkoutsOf } = useProjects();
+  const { spaces } = useSpaces();
+  // A deleted space's selection stays behind on the hub; saving drops it rather than refusing.
+  const withoutDeletedSpaces = (scope: ResourceScope) => ({ ...scope, spaceIds: scope.spaceIds.filter((id) => !spaces || spaces.some((s) => s.id === id)) });
   const [open, setOpen] = useState<'scope' | 'copy'>();
   const [draft, setDraft] = useState<ResourceScope>();
   const [checkoutId, setCheckoutId] = useState('');
@@ -211,7 +215,7 @@ function SkillRow({ skill }: { skill: SkillEntry }) {
         <span className="setting-text">
           <b>{skill.name}</b>
           {skill.description && <small>{skill.description}</small>}
-          <small className={isOptional(skill.scope) ? 'dim' : 'on-text'}>{isOptional(skill.scope) ? 'Optional' : `On for ${scopeSummary(skill.scope, profiles, projects?.projects)}`}</small>
+          <small className={isOptional(skill.scope) ? 'dim' : 'on-text'}>{isOptional(skill.scope) ? 'Optional' : `On for ${scopeSummary(skill.scope, profiles, projects?.projects, spaces)}`}</small>
         </span>
         <span className="setting-value">
           <button type="button" className="ghost" title="Keep it managed by Accio: it follows this source's applied revision" aria-expanded={open === 'scope'} onClick={() => setOpen(open === 'scope' ? undefined : 'scope')}>Enable for…</button>
@@ -226,7 +230,7 @@ function SkillRow({ skill }: { skill: SkillEntry }) {
             <span className="spacer" />
             <button type="button" className="ghost" onClick={() => { setDraft(undefined); setOpen(undefined); }}>Cancel</button>
             <button type="button" className="ghost primary" disabled={save.busy || !changed}
-              onClick={async () => { if (await save.run(() => client.call('skills.setScope', { id: skill.id, scope }))) { setDraft(undefined); setOpen(undefined); } }}>
+              onClick={async () => { if (await save.run(() => client.call('skills.setScope', { id: skill.id, scope: withoutDeletedSpaces(scope) }))) { setDraft(undefined); setOpen(undefined); } }}>
               {save.busy ? 'Saving…' : 'Save'}
             </button>
           </div>

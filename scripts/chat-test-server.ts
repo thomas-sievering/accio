@@ -405,6 +405,7 @@ await client.call('projects.setDelivery', { projectId: scriptedCheckout.projectI
 // and one of the repository skill's name turned on Everywhere, which the repository's overrides (ADR 0020).
 const skillsFolder = join(home, 'skills-project');
 const skillsLibrary = join(home, 'skills-library');
+const skillsHome = join(home, 'skills-home');
 const skillFile = (name: string, description: string, body: string) => `---\nname: ${name}\ndescription: ${description}\n---\n${body}\n`;
 for (const [folder, files] of [
   [skillsFolder, { '.agents/skills/repo-notes/SKILL.md': skillFile('repo-notes', 'How this repository writes notes', 'Write notes in plain sentences.') }],
@@ -413,8 +414,15 @@ for (const [folder, files] of [
     'lib-docs/SKILL.md': skillFile('lib-docs', 'Keep documentation current', 'Docs instructions.'),
     'shared-notes/SKILL.md': skillFile('repo-notes', 'Shared note conventions', 'Shared notes instructions.'),
   }],
+  // GLOSSARY: Home. A space's home for skills-panel.spec.ts, which puts skills-project in a space with it.
+  // Its lib-docs wins over the Profile one once they share a space.
+  [skillsHome, {
+    '.agents/skills/home-glossary/SKILL.md': skillFile('home-glossary', 'Use the space’s glossary terms', 'Glossary instructions.'),
+    '.claude/skills/lib-docs/SKILL.md': skillFile('lib-docs', 'The space’s documentation rules', 'Space docs instructions.'),
+  }],
 ] as const) await initRepo(folder, files, { author: BROWSER_AUTHOR, message: 'skills fixture' });
 const skillsCheckout = await client.call('checkouts.add', { path: skillsFolder, profileId: 'personal' });
+await client.call('checkouts.add', { path: skillsHome, profileId: 'personal' });
 await client.call('skills.addSource', { id: 'library', name: 'Library', url: skillsLibrary, ref: 'HEAD' });
 const docs = (await client.call('resources.get', {})).skills.find((skill) => skill.name === 'lib-docs')!;
 await client.call('skills.setScope', { id: docs.id, scope: { ...docs.scope, profileIds: ['personal'] } });
