@@ -7,6 +7,7 @@ import { useThreads } from '../threads/threads';
 import { useAppEvent } from './appEvents';
 import { PanelRight } from './icons';
 import { PanelResizer } from './Resizer';
+import { viewTransition } from '../ui/viewTransition';
 import { useThreadAvailability } from '../threads/useThreadAvailability';
 
 const KEY = 'accio.panelOpen';
@@ -17,10 +18,11 @@ export function usePanelOpen() {
   const [open, setOpen] = useState(() => localStorage.getItem(KEY) === '1');
   const toggle = () => setOpen((was) => { localStorage.setItem(KEY, was ? '0' : '1'); return !was; });
   // A request to show a tab opens the panel there; the panel itself also switches if already open.
+  // Opening narrows the thread, so the composer glides to its new width and the panel slides in.
   useAppEvent('panel.show', (tab) => {
     localStorage.setItem(TAB_KEY, tab);
     localStorage.setItem(KEY, '1');
-    setOpen(true);
+    if (!open) void viewTransition('panel-open', () => setOpen(true));
   });
   return [open, toggle] as const;
 }

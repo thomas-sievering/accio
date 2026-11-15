@@ -5,7 +5,7 @@ import { useClient, useConnectionStatus } from '../app/connection';
 import { Archive, Check, ChevronDown, Close, Play, Refresh, Ship, StopSquare, Undo } from '../app/icons';
 import { useAction } from '../app/useAction';
 import { StatusGlyphIcon } from './StatusMark';
-import { checkedAgo, deliveryStatus, statusText } from './status';
+import { checkedAgo, deliveryStatus, requestedStatus, statusText } from './status';
 import { useThreads } from './threads';
 import { formatDayTime } from '../ui/dates';
 import { useThreadAvailability } from './useThreadAvailability';
@@ -51,7 +51,21 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
     return () => { live = false; clearInterval(timer); };
   }, [client, connection, thread.id, thread.updatedAt, thread.workspace, thread.delivery, project?.previewCommand, attempt, unavailable, thread.status]);
 
-  const deliver = () => { void run(async () => { await client.call('threads.deliver', { threadId: thread.id, mode }); }); };
+  // Ship answers on the click: the pill shows the state the server is about to report
+  // while it checks the target, and gives way once that state arrives.
+  const [pending, setPending] = useState<Pending>();
+  const deliver = () => {
+    setPending({ from: thread.delivery?.id, running: thread.status === 'running', mode });
+    void run(async () => { await client.call('threads.deliver', { threadId: thread.id, mode }); });
+  };
+  const arrived = !!pending && thread.delivery?.id !== pending.from;
+  // An idle thread reports queued for a moment before shipping starts; the pill does not step back to it.
+  const passing = arrived && !pending.running && thread.status !== 'running' && thread.delivery?.status === 'queued';
+  useEffect(() => {
+    if (error || (arrived && !passing)) { setPending(undefined); return; }
+    // Should shipping never start, the server's own state shows after a moment.
+    if (passing) { const timer = setTimeout(() => setPending(undefined), 1500); return () => clearTimeout(timer); }
+  }, [error, arrived, passing]);
   // Choosing an option only sets the mode; the main button starts delivery.
   const choose = (choice: DeliveryMode) => { setMode(choice); menu.current?.hidePopover(); trigger.current?.focus(); };
   const openApp = () => {
@@ -83,7 +97,7 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
   const snoozedUntil = !settled && thread.snoozedUntil && new Date(thread.snoozedUntil) > now ? new Date(thread.snoozedUntil) : undefined;
   // A settled or snoozed thread always has its state row, even when it never had a workspace.
   if (!thread.workspace && !settled && !snoozedUntil) return null;
-  const status = thread.workspace ? deliveryStatus(thread) : undefined;
+  const status = !thread.workspace ? undefined : pending && (!arrived || passing) ? requestedStatus(pending.running, pending.mode, target) : deliveryStatus(thread);
   const call = (method: 'threads.cancelDelivery' | 'threads.checkDelivery' | 'threads.archive' | 'threads.reopen') =>
     void run(async () => { await client.call(method, { threadId: thread.id }); });
   // A fresh request is offered with no delivery, after new work, or when a person must act.
@@ -224,3 +238,6 @@ function DiffPill({ summary }: { summary: DeliverySummary }) {
     {modified > 0 && <span className="delivery-modified">~{modified}</span>}
   </span>;
 }
+
+/** A Ship click the server has not yet recorded: the delivery it replaces and what the new one will be. */
+type Pending = { from?: string; running: boolean; mode: DeliveryMode };
