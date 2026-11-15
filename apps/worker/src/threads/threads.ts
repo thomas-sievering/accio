@@ -645,6 +645,12 @@ export class Threads {
     return readThreadPage((await this.state.transcripts.get(threadId)).items, offset, limit);
   }
 
+  /** The thread's profile and working folder, for an accio tool acting for it; undefined once it is gone. */
+  toolContext(threadId: string): { profileId: string; cwd: string } | undefined {
+    const thread = this.state.get(threadId);
+    return thread && { profileId: thread.profileId, cwd: this.state.cwd(thread) };
+  }
+
   goalActive(threadId: string) {
     return this.state.get(threadId)?.goal?.status === 'active';
   }

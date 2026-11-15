@@ -159,6 +159,20 @@ curl -s -H "Authorization: Bearer <hat key>" $HAT/openai/models
 
 See [API.md](API.md#models) for where each list comes from.
 
+### Images
+
+With a hat key, `POST /openai/images/generations` and `/openai/images/edits`
+make images with the house's ChatGPT account in OpenAI's Images API shape (JSON
+bodies only), so an OpenAI client with the base address `<sorting hat>/openai/v1`
+can use them:
+
+```sh
+curl -s -H "Authorization: Bearer <hat key>" -H "content-type: application/json" \
+  -d '{"prompt":"A watercolor fox in the snow","quality":"low"}' $HAT/openai/images/generations
+```
+
+They use the ChatGPT account's limits. See [API.md](API.md#images).
+
 ### pi with pi-claude-bridge
 
 [pi-claude-bridge](https://www.npmjs.com/package/pi-claude-bridge) runs the

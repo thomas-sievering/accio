@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { usageTap, type Reported, type UsageFormat } from './usageTap.js';
-import { anthropicReply, responsesReply } from './testing/fakeProviders.js';
+import { anthropicReply, imageGenerationReply, responsesReply } from './testing/fakeProviders.js';
 
 /** Feeds the text in chunks of `size` bytes, so events and characters split anywhere. */
 function tapped(format: UsageFormat, contentType: string, text: string, size = 7, end = true) {
@@ -43,6 +43,10 @@ describe('reading usage from a response', () => {
 
   it('counts ChatGPT from response.completed, with cached input apart', () => {
     expect(tapped('openai', 'text/event-stream', responsesReply('Hi', 'gpt-5')).reported).toEqual({ model: 'gpt-5', tokens: { input: 6, output: 8, cacheRead: 4, cacheWrite: 0 } });
+  });
+
+  it('counts the image tool’s tokens with the response’s own', () => {
+    expect(tapped('openai', 'text/event-stream', imageGenerationReply('A fox', 'gpt-5')).reported).toEqual({ model: 'gpt-5', tokens: { input: 27, output: 303, cacheRead: 0, cacheWrite: 0 } });
   });
 
   it('counts a ChatGPT response that failed or stopped short from its event', () => {

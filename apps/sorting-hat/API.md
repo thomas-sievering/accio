@@ -275,7 +275,12 @@ What is counted:
   in a stream, or `usage` in a whole answer. Its `input_tokens` counts cached
   input too, so `inputTokens` is `input_tokens` less
   `input_tokens_details.cached_tokens`, which is `cacheReadTokens`.
-  `outputTokens` includes reasoning. ChatGPT reports no cache writes.
+  `outputTokens` includes reasoning. ChatGPT reports no cache writes. The
+  image tool's tokens, which it reports apart in `tool_usage.image_gen`, are
+  added to `inputTokens` and `outputTokens`.
+- **Images**: `POST /openai/images/generations` and `/openai/images/edits`, as
+  the ChatGPT request that made the image, under the text model that called the
+  image tool.
 - The model is the one the provider reported, otherwise the one the request
   asked for. The account is the one whose credential sent the request that
   answered.
@@ -313,7 +318,8 @@ its copy again, since refresh tokens rotate.
 
 With a hat key, the Sorting Hat swaps the key for the credential of the house's
 account in use and forwards the request unchanged otherwise. It changes no
-model, prompt or tool.
+model, prompt or tool. The [image routes](#images) are the one exception: the
+Sorting Hat answers them itself with a ChatGPT request of its own.
 
 - **Anthropic**: any path other than those above, the [model lists](#models) and
   the dashboard (`/` and `/dashboard/`), such as `POST /v1/messages`
@@ -356,3 +362,45 @@ signed-in account at the provider gets an empty list, and an unknown model 404.
 - **ChatGPT**: the account's model catalog, as its Codex app-server reports it:
   read at sign-in and again each time the Sorting Hat starts. `created` is 0,
   since ChatGPT reports no creation time.
+
+### Images
+
+OpenAI's Images API, answered with the house's ChatGPT account. ChatGPT's Codex
+backend has no Images API of its own; images come from the `image_generation`
+tool of its Responses API, as Codex makes them. So for each request the Sorting
+Hat sends one `POST /responses` that has a text model of the account in use
+call that tool exactly once with the prompt unchanged, reads the whole answer
+and replies in the Images API's shape. The text model only passes the prompt on;
+the image model is the same whichever calls it, so the Sorting Hat uses a small
+one (a `luna`, `nano` or `mini` model if the account has one, else its default)
+at its lowest effort.
+
+| Method and path | Body | Answer |
+| --- | --- | --- |
+| `POST /openai/images/generations`, `POST /openai/v1/images/generations` | `{ prompt, size?, quality?, background?, output_format?, output_compression? }` | `ImagesResponse` |
+| `POST /openai/images/edits`, `POST /openai/v1/images/edits` | the same, with `images: [{ image_url }]` (at least one) | `ImagesResponse` |
+
+```
+ImagesResponse = { created, data: [{ b64_json, revised_prompt? }], size?, quality?,
+                   background?, output_format?, usage? }
+```
+
+- Bodies are JSON, as OpenAI's API takes for its GPT image models; multipart form
+  data is refused. A reference image's `image_url` is a
+  `data:image/…;base64,` or https URL; file ids are not supported. `image`,
+  one such image or a list, is read the same as `images`. A generation may
+  have reference images too.
+- `model` is ignored. `n` may only be 1, `response_format` only `b64_json`;
+  `mask` is refused. `quality` is `auto`, `low`, `medium` or `high`,
+  `background` `auto`, `transparent` or `opaque`, `output_format` `png`
+  (the default), `jpeg` or `webp`, and `size` `auto` or `WIDTHxHEIGHT`.
+- ChatGPT treats `size` and `quality` as hints and may make another; the
+  answer's `size` and `quality` are what it made. `background` it follows. `usage` is the image tool's, as ChatGPT reported it.
+- They use the ChatGPT account's limits, as Codex's own images do. A house
+  without a signed-in ChatGPT account gets 401, and a 401 or 429 from ChatGPT is
+  handled as on the other ChatGPT routes. Any other refusal from ChatGPT is
+  passed on as it came. When ChatGPT answers without an image, such as for a
+  prompt it won't draw, the answer is 502 with
+  `{ error: { type: "server_error", code: "image_generation_failed", message } }`,
+  whose message holds what ChatGPT said. Other errors of these routes are in
+  OpenAI's shape too: `{ error: { type, message, param, code } }`.

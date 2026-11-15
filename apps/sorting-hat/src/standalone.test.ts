@@ -7,7 +7,7 @@ import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { startStandalone } from './standalone.js';
-import { FakeCodex, anthropicReply, fakeAnthropicApi, fakeAnthropicAuth, fakeChatGPT, responsesReply, testJWT } from './testing/fakeProviders.js';
+import { FAKE_IMAGE, FakeCodex, anthropicReply, fakeAnthropicApi, fakeAnthropicAuth, fakeChatGPT, responsesReply, testJWT } from './testing/fakeProviders.js';
 
 const cleanup: (() => Promise<unknown>)[] = [];
 afterEach(async () => { for (const c of cleanup.splice(0).reverse()) await c(); });
@@ -189,6 +189,45 @@ describe('the standalone Sorting Hat', () => {
     }
     expect(anthropic.seen).toHaveLength(1);
     expect(chatgpt.seen).toHaveLength(1);
+  });
+
+  it('makes images with the house’s ChatGPT account through OpenAI’s Images API, counting their tokens', async () => {
+    const { api, hat, chatgpt, codex } = await start();
+    const gpt = await api('POST', 'accounts', { name: 'My ChatGPT', providerId: 'openai' });
+    const device = await api('POST', `accounts/${gpt.id}/sign-in`, { flow: 'device' });
+    await codex.latest.complete('chatgpt-personal');
+    expect(await api('GET', `sign-ins/${device.signInId}`)).toMatchObject({ status: 'complete' });
+    const house = await api('POST', 'houses', { name: 'Personal', accounts: { openai: [gpt.id] } });
+    const key = await api('POST', 'hat-keys', { houseId: house.id, name: 'Accio' });
+    const claudeOnly = await api('POST', 'houses', { name: 'Claude only', accounts: {} });
+    const claudeKey = await api('POST', 'hat-keys', { houseId: claudeOnly.id, name: 'Accio' });
+    const post = (path: string, body: unknown, secret = key.secret) => fetch(`${hat.url}${path}`, {
+      method: 'POST', headers: { authorization: `Bearer ${secret}`, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+
+    const made = await post('/openai/v1/images/generations', { model: 'gpt-image-1', prompt: 'A fox', size: '1024x1024' });
+    expect(made.status).toBe(200);
+    expect(await made.json()).toMatchObject({ data: [{ b64_json: FAKE_IMAGE.toString('base64'), revised_prompt: 'A fox' }], size: '1024x1024', output_format: 'png' });
+    const sent = chatgpt.seen.at(-1)!;
+    expect(sent.url).toBe('https://chatgpt.test/backend-api/codex/responses');
+    expect(sent.headers.get('chatgpt-account-id')).toBe('chatgpt-personal');
+    expect(JSON.parse(sent.body)).toMatchObject({ model: 'gpt-test', tool_choice: { type: 'image_generation' }, tools: [{ type: 'image_generation', size: '1024x1024' }] });
+
+    const edited = await post('/openai/images/edits', { prompt: 'Make it green', images: [{ image_url: 'data:image/png;base64,AAAA' }] });
+    expect(edited.status).toBe(200);
+    expect(JSON.parse(chatgpt.seen.at(-1)!.body).input[0].content[0]).toEqual({ type: 'input_image', image_url: 'data:image/png;base64,AAAA' });
+
+    // ChatGPT answering without an image, a request it can't take, and a house without a ChatGPT account.
+    expect(await (await post('/openai/images/generations', { prompt: 'refuse' })).json()).toEqual({ error: {
+      type: 'server_error', code: 'image_generation_failed', param: null, message: 'ChatGPT made no image: I can’t make that image.' } });
+    const many = await post('/openai/images/generations', { prompt: 'A fox', n: 2 });
+    expect([many.status, (await many.json()).error.param]).toEqual([400, 'n']);
+    expect((await post('/openai/images/generations', { prompt: 'A fox' }, claudeKey.secret)).status).toBe(401);
+    expect(chatgpt.seen).toHaveLength(3);
+
+    await vi.waitFor(async () => expect((await api('GET', 'usage')).totals.requests).toBe(3));
+    expect((await api('GET', 'usage?groupBy=model')).rows).toEqual([
+      expect.objectContaining({ model: 'gpt-test', requests: 3, inputTokens: 27 * 2 + 6, outputTokens: 303 * 2 + 8, cacheReadTokens: 4 }),
+    ]);
   });
 
   it('switches a house to its next account when the provider answers 429, leaving other houses alone', async () => {

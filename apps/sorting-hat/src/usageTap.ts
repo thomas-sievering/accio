@@ -97,12 +97,21 @@ function readAnthropic(value: Record<string, any>, reported: Reported) {
   if ('cache_creation_input_tokens' in usage) reported.tokens.cacheWrite = count(usage.cache_creation_input_tokens);
 }
 
-/** A Responses event holds the response; a JSON body is the response itself. Its input counts cached input too. */
+/**
+ * A Responses event holds the response; a JSON body is the response itself. Its
+ * input counts cached input too. The image tool's tokens, reported apart in
+ * `tool_usage.image_gen`, count with the response's own.
+ */
 function readOpenAI(value: Record<string, any>, reported: Reported) {
   const response = value.response && typeof value.response === 'object' ? value.response : value;
   if (typeof response.model === 'string') reported.model = response.model;
   const usage = response.usage;
   if (!usage || typeof usage !== 'object') return;
   const cached = count(usage.input_tokens_details?.cached_tokens);
-  reported.tokens = { input: Math.max(0, count(usage.input_tokens) - cached), output: count(usage.output_tokens), cacheRead: cached, cacheWrite: 0 };
+  const image = response.tool_usage?.image_gen;
+  reported.tokens = {
+    input: Math.max(0, count(usage.input_tokens) - cached) + count(image?.input_tokens),
+    output: count(usage.output_tokens) + count(image?.output_tokens),
+    cacheRead: cached, cacheWrite: 0,
+  };
 }
