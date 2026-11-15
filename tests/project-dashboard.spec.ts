@@ -186,6 +186,11 @@ test('clicking an issue opens it in a reader whose Blocked by and Blocks links m
   await expect(sheet).toContainText('Machines stay offline.');
   await expect(page.getByRole('complementary', { name: 'Issue' })).toHaveCount(0);
   await page.screenshot({ path: info.outputPath('issue-reader-sheet.png') });
+  // Esc closes the sheet and leaves the dashboard; so does its Close button.
+  await page.keyboard.press('Escape');
+  await expect(sheet).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'scratch-project' })).toBeVisible();
+  await rows.first().getByRole('button').click();
   await sheet.getByRole('button', { name: 'Close' }).click();
   await expect(sheet).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'scratch-project' })).toBeVisible();

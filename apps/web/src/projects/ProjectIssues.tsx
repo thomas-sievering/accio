@@ -3,11 +3,10 @@ import type { IssueList, ProjectView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { ChevronDown } from '../app/icons';
 import { useProjects } from './projects';
-import { issueFilterGroups, issueGraph, type IssueRow } from './issueGraph';
+import { ISSUE_STATE_LABEL, issueFilterGroups, issueGraph, type IssueRow } from './issueGraph';
 
 const LANE = 14;
 const ROW = 34;
-const STATE = { ready: 'Ready', blocked: 'Blocked', claimed: 'Claimed' } as const;
 
 export type ProjectIssueList = { checkoutId?: string; list?: IssueList; error?: string; reread: () => void };
 
@@ -40,6 +39,13 @@ export function useProjectIssues(project: ProjectView): ProjectIssueList {
 export function ProjectIssues({ issues, selected, onSelect }: { issues: ProjectIssueList; selected?: string; onSelect: (ref: string) => void }) {
   const { checkoutId, list, error, reread } = issues;
   const [group, setGroup] = useState<string>();
+  // The reader moved to an issue the filter hides (a Blocked by in another parent): show all, so its row stays highlighted.
+  const [followed, setFollowed] = useState(selected);
+  if (selected !== followed) {
+    setFollowed(selected);
+    const issue = selected ? list?.issues.find((i) => i.ref === selected) : undefined;
+    if (issue && group !== undefined && issue.group !== group) setGroup(undefined);
+  }
   const groups = list ? issueFilterGroups(list) : [];
   const shownGroup = group !== undefined && groups.includes(group) ? group : undefined;
   const graph = list ? issueGraph(list, shownGroup) : undefined;
@@ -88,7 +94,7 @@ function IssueLine({ row, lanes, selected, onSelect }: { row: IssueRow; lanes: n
       <span className="issues-label">{issue.label}</span>
       <button type="button" className="issues-title">{issue.title}</button>
       {state === 'blocked' && <span className="issues-waits">waits on {issue.blockedBy.join(', ')}</span>}
-      <span className={`issue-pill issues-state ${state}`}>{STATE[state]}</span>
+      <span className={`issue-pill issues-state ${state}`}>{ISSUE_STATE_LABEL[state]}</span>
     </li>
   );
 }

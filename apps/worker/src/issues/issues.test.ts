@@ -157,13 +157,16 @@ describe('starting a thread from an issue', () => {
       if (args[0] === 'issue' && args[1] === 'view') {
         views.push(args);
         if (args[2] === '194') throw Object.assign(new Error('Command failed'), { stderr: 'GraphQL: Could not resolve to an issue\n' });
-        return JSON.stringify({ body: '## What to build\n\nRetry it.\n' });
+        if (args[2] === '150') return JSON.stringify({ body: 'Done long ago', state: 'CLOSED' });
+        return JSON.stringify({ body: '## What to build\n\nRetry it.\n', state: 'OPEN' });
       }
       throw new Error('signed out');
     });
     expect(await c.call('threads.issueBody', { checkoutId: checkout.id, ref: '#208' })).toEqual({ ref: '#208', body: '## What to build\n\nRetry it.\n' });
-    expect(views).toEqual([['issue', 'view', '208', '--json', 'body']]);
+    expect(views).toEqual([['issue', 'view', '208', '--json', 'body,state']]);
     await expect(c.call('threads.issueBody', { checkoutId: checkout.id, ref: '#194' })).rejects.toThrow('Couldn’t read #194 with gh: GraphQL: Could not resolve to an issue');
+    // Only open issues are read, as the list only has open ones; this one closed since.
+    await expect(c.call('threads.issueBody', { checkoutId: checkout.id, ref: '#150' })).rejects.toThrow('#150 is not an open issue');
     await expect(c.call('threads.issueBody', { checkoutId: checkout.id, ref: '.scratch/a/issues/01-a.md' })).rejects.toThrow('.scratch/a/issues/01-a.md is not a GitHub issue');
   });
 

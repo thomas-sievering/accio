@@ -34,7 +34,7 @@ const fixtureIssues = [
 const fixtureGh = async (args: string[], options?: { cwd?: string }) => {
   if (!options?.cwd?.startsWith(issuesFolder)) throw new Error('gh is not available in this fixture');
   if (args[0] === 'issue' && args[1] === 'list') return JSON.stringify(fixtureIssues);
-  if (args[0] === 'issue' && args[1] === 'view') return JSON.stringify({ body: `## What to build\n\nThe body of #${args[2]}, read through gh.\n` });
+  if (args[0] === 'issue' && args[1] === 'view') return JSON.stringify({ state: 'OPEN', body: `## What to build\n\nThe body of #${args[2]}, read through gh.\n` });
   if (args[0] === 'issue' && args[1] === 'edit') {
     const claims = JSON.parse(await readFile(issuesClaimFile, 'utf8').catch(() => '[]'));
     await writeFile(issuesClaimFile, JSON.stringify([...claims, args]));

@@ -85,9 +85,11 @@ export class Issues {
     if (tracker?.kind === 'github') {
       const number = /^#([1-9]\d*)$/.exec(ref)?.[1];
       if (!number) throw new Error(`${ref} is not a GitHub issue`);
-      const out = await this.gh(profileId, cwd, ['issue', 'view', number, '--json', 'body'])
+      const out = await this.gh(profileId, cwd, ['issue', 'view', number, '--json', 'body,state'])
         .catch((error) => { throw new Error(`Couldn’t read ${ref} with gh: ${firstLine(error)}`); });
-      return { ref, body: (JSON.parse(out) as { body?: string }).body ?? '' };
+      const issue = JSON.parse(out) as { body?: string; state?: string };
+      if (issue.state !== 'OPEN') throw new Error(`${ref} is not an open issue`);
+      return { ref, body: issue.body ?? '' };
     }
     if (tracker?.kind !== 'local') throw new Error('This project has no issue tracker Accio can read');
     if (!(await localIssues(cwd)).some((issue) => issue.ref === ref)) throw new Error(`${ref} is not an open issue`);

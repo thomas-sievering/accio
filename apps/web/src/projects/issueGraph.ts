@@ -17,6 +17,9 @@ export type IssueRow = {
 
 export type IssueGraph = { rows: IssueRow[]; lanes: number };
 
+/** How the fold and the reader name an issue's state. */
+export const ISSUE_STATE_LABEL: Record<IssueRow['state'], string> = { ready: 'Ready', blocked: 'Blocked', claimed: 'Claimed' };
+
 /**
  * GLOSSARY: Project dashboard. The Issues fold's rows: the open issues in dependency
  * order (no issue above one it waits on), each chain kept together, otherwise in the

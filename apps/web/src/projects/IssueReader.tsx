@@ -5,10 +5,9 @@ import type { IssueList, IssueView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { Close } from '../app/icons';
 import { Sheet } from '../app/Sheet';
+import { useEscapeClose } from '../app/useEscapeClose';
 import { issueState } from '../threads/offerRows';
-import { issueLinks } from './issueGraph';
-
-const STATE = { ready: 'Ready', blocked: 'Blocked', claimed: 'Claimed' } as const;
+import { ISSUE_STATE_LABEL, issueLinks } from './issueGraph';
 
 /**
  * GLOSSARY: Project dashboard. The Issues fold's reader: one open issue with its state,
@@ -20,18 +19,8 @@ export function IssueReader({ checkoutId, list, issue, narrow, onOpen, onClose }
   onOpen: (ref: string) => void; onClose: () => void;
 }) {
   const panel = useRef<HTMLElement>(null);
-  // In the panel, Escape closes the reader before it reaches the dashboard; a sheet's dialog handles its own.
-  useEffect(() => {
-    if (narrow) return;
-    const onKey = (e: KeyboardEvent) => {
-      const t = e.target;
-      if (e.key !== 'Escape' || e.defaultPrevented || document.querySelector(':popover-open, dialog[open]') || t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement) return;
-      e.preventDefault();
-      onClose();
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [narrow, onClose]);
+  // In the panel, Escape closes the reader before the dashboard; a sheet's dialog handles its own.
+  useEscapeClose(onClose, { first: true, enabled: !narrow });
   // Following a link from inside the reader keeps focus there, on the new issue's heading.
   const open = (ref: string) => {
     onOpen(ref);
@@ -65,7 +54,7 @@ function IssueDetails({ checkoutId, list, issue, onOpen, titled, close }: {
     <>
       <div className="issue-reader-meta">
         <span className="issue-reader-label">{issue.label}</span>
-        <span className={`issue-pill issues-state ${state}`}>{STATE[state]}</span>
+        <span className={`issue-pill issues-state ${state}`}>{ISSUE_STATE_LABEL[state]}</span>
         {triage && <span className="issue-triage">{triage}</span>}
         {close}
       </div>
@@ -116,9 +105,15 @@ function IssueBody({ checkoutId, issueRef }: { checkoutId: string; issueRef: str
   );
 }
 
-/** Only absolute web and mail links: a relative link in an issue file would resolve against the app. */
-function absoluteUrl(url: string) {
-  return /^(?:https?|mailto):/i.test(url) ? url : undefined;
+/**
+ * Only absolute web links, and mail links for anchors: a relative link in an issue file would
+ * resolve against the app. Parsed without a base, so `https:file.md` can't pass as absolute.
+ */
+function absoluteUrl(url: string, key: string) {
+  if (!URL.canParse(url)) return undefined;
+  const parsed = new URL(url);
+  const allowed = parsed.protocol === 'https:' || parsed.protocol === 'http:' || (key === 'href' && parsed.protocol === 'mailto:');
+  return allowed ? parsed.href : undefined;
 }
 
 const components: Components = {
