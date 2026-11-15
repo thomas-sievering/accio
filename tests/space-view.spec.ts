@@ -50,7 +50,7 @@ test('the space view opens from the project menu and Settings, lists its project
     // A project row leads to its dashboard.
     await deliveryRow.getByRole('button', { name: 'delivery-project dashboard' }).click();
     await expect(page.getByRole('heading', { name: 'delivery-project' })).toBeVisible();
-    await expect(page.locator('.app-card')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Recently shipped' })).toBeVisible();
 
     // Settings / Spaces opens the same view from the space's row.
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
