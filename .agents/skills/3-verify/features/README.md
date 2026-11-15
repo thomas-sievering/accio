@@ -26,7 +26,7 @@ Record feature IDs and entry points in `actions.json`. Pair the action trace wit
 - [Limits](limits.md): sidebar/composer/account-settings entries, profile scope, shared accounts, refresh, reset confirmation and connection states.
 - [Projects](projects.md): add folders through onboarding or toolbar, inspect duplicates, remote grouping, settings and removal.
 - [Spaces](spaces.md): Settings → Spaces, adding, renaming and deleting spaces, their projects and their home; the space view from the project-name menu or `Open`.
-- [Project dashboard](project-dashboard.md): Dashboard in the thread header's project menu, the project app's Start/Stop/Restart/Update and auto-update, threads, commits and logs.
+- [Project dashboard](project-dashboard.md): Dashboard in the thread header's project menu: the project's threads by state, recently shipped commits, Changelog and Settled.
 - [Built-in tools](harness-tools.md): per-harness tool switches under Settings → Harnesses, hub-wide, with reset.
 - [System prompt](system-prompt.md): read-only Settings page with each harness's delivery and the shared sections.
 - [Thread naming](thread-naming.md): automatic titles, model choice, instructions, preview, save and navigation with unsaved changes.

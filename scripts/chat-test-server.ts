@@ -11,7 +11,6 @@ import type { HarnessMessage } from '../apps/worker/src/threads/harness.js';
 import { DeliveryGit, DeliveryPending } from '../apps/worker/src/threads/delivery.js';
 import { git } from '../apps/worker/src/git.js';
 import { BROWSER_AUTHOR, cloneRepo, initRepo, initRepoWithOrigin } from '../apps/worker/src/testing/gitRepo.js';
-import { PROJECT_APP_TIMING } from '../apps/worker/src/projects/projectApps.js';
 import { lineCount, pastesIn, reactionsIn, typedText } from '../packages/protocol/src/pastes.js';
 import { reactionInfo } from '../packages/protocol/src/reactions.js';
 import { measurePrompt } from '../apps/worker/src/harnesses/promptMeasurement.js';
@@ -78,8 +77,6 @@ const subagentSteps: Record<string, [string, Record<string, string>][]> = {
   deliveries: [['Read', { file_path: 'delivery.ts' }], ['Bash', { command: 'pnpm test delivery' }]],
   review: [['Bash', { command: 'git diff' }], ['Read', { file_path: 'transcript.ts' }]],
 };
-// The project dashboard journey watches a branch advance within seconds.
-Object.assign(PROJECT_APP_TIMING, { pollMs: 1000, debounceMs: 200, graceMs: 3000 });
 const goalTurns = new Map<string, number>();
 const harness = new FakeHarness(async function* (run) {
   // GLOSSARY: Image attachment. Says how many images arrived with the message.

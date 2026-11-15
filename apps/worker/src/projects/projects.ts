@@ -92,15 +92,6 @@ export class Projects {
     this.removeThreads = remove;
   }
 
-  /** The project app's commands, from the settings form or a Project setup thread. */
-  async setApp(projectId: string, app: { startCommand: string; setupCommand: string }) {
-    const project = this.data.projects.find((p) => p.id === projectId);
-    if (!project) throw new UserError('No such project');
-    const updated = { ...project, startCommand: app.startCommand, setupCommand: app.setupCommand };
-    await this.commit({ ...this.data, projects: this.data.projects.map((p) => p.id === projectId ? updated : p) });
-    return updated;
-  }
-
   /** This machine's checkout of a repository, cloned under the profile's folder here (else home) when there is none. */
   private async clone(repoKey: string, url: string, profileId: string): Promise<Checkout> {
     const have = () => {
@@ -135,7 +126,6 @@ export class Projects {
         await this.commit({ ...this.data, projects: this.data.projects.map((p) => p.id === projectId ? updated : p) });
         return updated;
       })
-      .on('projects.setApp', ({ projectId, startCommand, setupCommand }) => this.setApp(projectId, { startCommand, setupCommand }))
       .on('checkouts.inspect', async ({ path }) => {
         const facts = await inspectFolder(path);
         return {

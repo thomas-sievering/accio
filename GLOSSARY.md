@@ -75,7 +75,7 @@ How hard a model thinks before it answers, such as low, medium or high. Each mod
 _Avoid_: Thinking level, reasoning effort, thinking budget
 
 **Accio tools**:
-Tools accio gives every harness, such as offer_choice. Each machine serves them to its own harnesses over MCP, under the name `accio`; each turn may use them only while it runs. Some are offered only to the turns that need them, such as shipped_note to a delivery turn or project_settings to a Project setup thread.
+Tools accio gives every harness, such as offer_choice. Each machine serves them to its own harnesses over MCP, under the name `accio`; each turn may use them only while it runs. Some are offered only to the turns that need them, such as shipped_note to a delivery turn.
 _Avoid_: Accio MCP, custom tools, plugins
 
 **Built-in tools**:
@@ -272,21 +272,13 @@ _Avoid_: Settle, delete (for releasing execution resources)
 The app a thread's harness starts from its owned worktree through the project's preview command, on its own port, opened by the **Open app** button. Accio stops it on Archive or shutdown. Processes started any other way are not previews.
 _Avoid_: Dev server, sandbox
 
-**Project app**:
-The app a project runs on one machine from its default branch, in a detached checkout of its own under `project-apps/`, apart from every thread's worktree. It uses the project's start command, with its own PORT, and its setup command after each change of commit. Start, Stop, Restart (same commit) and Update & restart (latest commit) control it. With auto-update on, it follows `origin`'s default branch and restarts shortly after the branch advances; an update that fails to set up or start restores the previous commit and is not retried until the branch moves again. It keeps running while the worker runs, and a restarted worker starts it again.
-_Avoid_: Owned preview (for a thread's app), dev server, deployment
-
 **Project dashboard**:
-A project's page, opened through Dashboard in the menu on the project name in a thread's header: the project app's controls with its logs, the project's threads grouped as Needs you, Working and Snoozed, Recently shipped (the default branch's newest commits, each joined to its Changelog entry and expanding to its things to try, thread and PR, the running commit marked), then its Changelog and its settled threads, both folded.
+A project's page, opened through Dashboard in the menu on the project name in a thread's header: the project's threads grouped as Needs you, Working and Snoozed, one line each, then Recently shipped (the default branch's newest commits, one line each, a pull request's merge commit shown by the PR's title, each joined to its Changelog entry and expanding to its shipped note, things to try, thread and PR), then its Changelog and its settled threads, both folded.
 _Avoid_: Project settings (for this page), overview
 
 **Space view**:
 A space's page, opened through Space in the menu on the project name in a thread's header (only for a project in a space) or through Open on the space's row in Settings / Spaces: the home pinned on top with New thread in home, then each other project with its profile, its checkout on this machine, its threads that need you or are working, its project dashboard and New thread.
 _Avoid_: Space dashboard, space settings (for this page)
-
-**Project setup thread**:
-A thread started by **Set up with agent** on a project dashboard without a start command. Its agent finds the project app's setup and start commands, tries them, and saves them through the project_settings accio tool, which only this thread's running turns are offered. Nothing starts afterwards until you press Start.
-_Avoid_: Onboarding, auto-config
 
 **Shelf**:
 A group of threads in the sidebar apart from the open list: Working, Snoozed and Settled. Working holds threads in progress without you: a running turn, a delivery GitHub is carrying, or a Wait. A thread comes back to the top of the open list when it finishes or needs you, such as for a secret, a review or a manual merge.
