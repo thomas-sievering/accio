@@ -23,12 +23,13 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     const offStatus = c.onStatus(load); const offHubs = c.onEvent('hubs.changed', setHubs); load();
     return () => { offStatus(); offHubs(); c.close(); };
   }, [token]);
+  const hubsLoaded = hubs !== undefined;
   useEffect(() => {
-    if (!token || !root || hubs === undefined) return;
+    if (!token || !root || !hubsLoaded) return;
     if (!selectedId) { setClient(root); return; }
     const c = new RpcClient(socketUrl(token, selectedId)); setClient(c);
     return () => c.close();
-  }, [token, root, selectedId, hubs === undefined]);
+  }, [token, root, selectedId, hubsLoaded]);
   if (!token) return <div className="center-screen"><h1>accio</h1><p>Open the link the server printed at startup (it ends in <code>#token=…</code>).</p></div>;
   if (!root || !client || hubs === undefined || selectedId && client.hubId !== selectedId) return null;
   const select = (id: string) => { localStorage.setItem(HUB_KEY, id); setSelection(id); };

@@ -49,7 +49,7 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
     void refresh();
     const timer = thread.status === 'running' ? setInterval(() => void refresh(), 3000) : undefined;
     return () => { live = false; clearInterval(timer); };
-  }, [client, connection, thread.id, thread.updatedAt, thread.workspace, thread.delivery, project?.previewCommand, attempt, unavailable]);
+  }, [client, connection, thread.id, thread.updatedAt, thread.workspace, thread.delivery, project?.previewCommand, attempt, unavailable, thread.status]);
 
   const deliver = () => { void run(async () => { await client.call('threads.deliver', { threadId: thread.id, mode }); }); };
   // Choosing an option only sets the mode; the main button starts delivery.

@@ -22,6 +22,8 @@ export function QueueTray({ thread }: { thread: ThreadView }) {
     if (thread.status === 'running' || !editing) return;
     setEdit(undefined);
     void action(editing, 'cancel').catch(() => {});
+    // Runs only when the turn ends or stops; Save and Cancel release the hold themselves.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [thread.status]);
   if (!thread.queuedMessages?.length) return null;
   return <section className="queue-tray" aria-label="Queued messages" title={unavailable}>

@@ -168,6 +168,8 @@ export function Composer({
   });
 
   // Picking an option is the start of a message: put the cursor there.
+  // Keyed on the label: a re-sent attachment for the same option must not take focus again.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (attachment) input.current?.focus(); }, [attachment?.label]);
 
   useLayoutEffect(() => {
