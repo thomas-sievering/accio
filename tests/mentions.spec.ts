@@ -108,3 +108,31 @@ test('typing @ lists recent threads under Threads, and a mentioned thread shows 
   await expect(message.locator('.mention')).toHaveText([threadTitle]);
   await message.screenshot({ path: testInfo.outputPath('thread-chip.png') });
 });
+
+test('typing / lists the thread\'s skills, typing after it filters them, and picking one puts /name in the message', async ({ page, baseURL }, testInfo) => {
+  await page.goto(`${baseURL}/#token=${token}`);
+  await page.locator('.sidebar').getByRole('button', { name: /Skills fixture/ }).click();
+  const input = page.locator('.composer textarea');
+  const menu = page.getByRole('listbox', { name: 'Use a skill' });
+
+  // A / inside a path is not a command.
+  await input.pressSequentially('see src/');
+  await expect(menu).toBeHidden();
+  await input.fill('');
+
+  await input.pressSequentially('/');
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('option', { name: /repo-notes/ })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('skill-menu.png') });
+  await input.press('Escape');
+  await expect(menu).toBeHidden();
+  await input.fill('');
+
+  await input.pressSequentially('then /repo');
+  await expect(menu.getByRole('option').first()).toContainText('repo-notes');
+  await input.press('Enter');
+  await expect(menu).toBeHidden();
+  await expect(input).toHaveValue('then /repo-notes ');
+  await input.pressSequentially('/zzz-nothing');
+  await expect(menu).toBeHidden();
+});

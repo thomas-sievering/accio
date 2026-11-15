@@ -1,24 +1,28 @@
 import { createContext, forwardRef, useContext } from 'react';
 import { splitMentions, type MachineView, type MentionPart, type ModelView, type ThreadView } from '@accio/protocol';
-import { ArrowLeft, Chevron, Layers, MessageSquare, Monitor, ProviderLogo } from '../app/icons';
+import { ArrowLeft, BookOpen, Chevron, Layers, MessageSquare, Monitor, ProviderLogo } from '../app/icons';
 import { PrettyName } from './ModelPicker';
 import type { MentionKind, MentionOption, ThreadGroup } from './mentionQuery';
 
 const GROUP_LABELS: Record<ThreadGroup, string> = { open: 'Open', working: 'Working', snoozed: 'Snoozed', settled: 'Settled' };
 const KIND_LABELS: Record<MentionKind, string> = { models: 'Models', machines: 'Machines', threads: 'Threads' };
-const kindOf = (o: MentionOption): MentionKind => 'model' in o ? 'models' : 'machine' in o ? 'machines' : 'thread' in o ? 'threads' : o.kind;
+const kindOf = (o: MentionOption): MentionKind | 'skills' => 'model' in o ? 'models' : 'machine' in o ? 'machines' : 'thread' in o ? 'threads' : 'skill' in o ? 'skills' : o.kind;
 
 /**
  * The menu that opens while typing `@`. With only @ typed it offers Models, Machines and
  * Threads, each opening its list; once you type it lists the matches of every kind, a divider
  * between kinds and threads under their sidebar group. The highlighted one is picked with
- * Enter or Tab. It sits above the composer, starting under the @.
+ * Enter or Tab. It sits above the composer, starting under the @. After `/` it lists skills
+ * instead, each with its description.
  */
-export function MentionMenu({ options, active, left, browsing, onPick, onHover, onBack }: {
-  options: MentionOption[]; active: number; left: number; browsing?: MentionKind;
+export function MentionMenu({ options, active, left, browsing, sigil = '@', onPick, onHover, onBack }: {
+  options: MentionOption[]; active: number; left: number; browsing?: MentionKind; sigil?: '@' | '/';
   onPick: (option: MentionOption) => void; onHover: (index: number) => void; onBack: () => void;
 }) {
-  return <div className="mention-menu" role="listbox" aria-label="Mention a model, machine or thread" style={{ left }}>
+  const skills = sigil === '/';
+  return <div className={`mention-menu${skills ? ' skills' : ''}`} role="listbox" aria-label={skills ? 'Use a skill' : 'Mention a model, machine or thread'} style={{ left }}
+    // Keep the highlighted row in view while arrowing through a long list.
+    ref={(el) => { el?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' }); }}>
     {browsing && <div className="mention-back" role="presentation" onMouseDown={(e) => e.preventDefault()} onClick={onBack}>
       <ArrowLeft />{KIND_LABELS[browsing]}<small>Backspace</small>
     </div>}
@@ -29,7 +33,7 @@ export function MentionMenu({ options, active, left, browsing, onPick, onHover, 
       const group = 'thread' in option && (!previous || !('thread' in previous) || previous.group !== option.group) ? GROUP_LABELS[option.group] : undefined;
       return <div key={option.handle} role="option" aria-selected={i === active} id={`mention-${option.handle}`}
         className={`mention-option${limited ? ' limited' : ''}${newKind ? ' new-kind' : ''}`}
-        title={limited ? `${limited.label} is used up` : 'kind' in option ? undefined : `@${option.handle}`}
+        title={limited ? `${limited.label} is used up` : 'kind' in option ? undefined : 'skill' in option ? option.skill.description || `/${option.handle}` : `@${option.handle}`}
         data-group={group}
         // The textarea keeps focus, and with it the caret.
         onMouseDown={(e) => e.preventDefault()} onMouseEnter={() => onHover(i)} onClick={() => onPick(option)}>
@@ -39,7 +43,9 @@ export function MentionMenu({ options, active, left, browsing, onPick, onHover, 
             ? <><Monitor /><span className="mention-machine">{option.machine.name}</span>{option.machine.thisMachine && <small>This machine</small>}</>
             : 'thread' in option
               ? <><MessageSquare /><span className="mention-thread">{option.thread.title || 'Untitled'}</span></>
-              : <><KindIcon kind={option.kind} />{option.label}<Chevron /></>}
+              : 'skill' in option
+                ? <><BookOpen /><span className="mention-skill">{option.skill.name}</span>{option.skill.description && <span className="mention-skill-desc">{option.skill.description}</span>}</>
+                : <><KindIcon kind={option.kind} />{option.label}<Chevron /></>}
       </div>;
     })}
   </div>;

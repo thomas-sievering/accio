@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent, type FormEvent, type ReactNode } from 'react';
-import { foldsPaste, IMAGES_PER_MESSAGE, imageRefusal, joinPastes, normalizePaste, readsImage, splitMentions, type ModelSelection } from '@accio/protocol';
+import { foldsPaste, IMAGES_PER_MESSAGE, imageRefusal, joinPastes, normalizePaste, readsImage, splitMentions, type ModelSelection, type SkillContext } from '@accio/protocol';
 import { ArrowUp, Close, Queue, StopSquare } from '../app/icons';
 import { useAppEvent } from '../app/appEvents';
 import { useAction } from '../app/useAction';
@@ -7,7 +7,8 @@ import { useClient } from '../app/connection';
 import { useLive } from '../app/useLive';
 import { useThreads } from './threads';
 import { caretLeft, MentionBackdrop, MentionMenu } from './Mentions';
-import { mentionAt, mentionOptions, type MentionKind, type MentionOption } from './mentionQuery';
+import { mentionAt, mentionOptions, skillCommandAt, skillOptions, type MentionKind, type MentionOption } from './mentionQuery';
+import { useWorkspaceSkills } from '../skills/workspaceSkills';
 import { shelveThreads } from './shelves';
 import { useModels } from './useModels';
 import { base64, pastedImages, prepareImage } from './pastedImage';
@@ -18,7 +19,8 @@ import { composerKey, useDraft } from './drafts';
 /**
  * Enter steers the running turn; Ctrl+Enter queues. Shift+Enter adds a line.
  * Typing @ offers the profile's models, the online machines and the profile's threads to mention, each mention
- * then drawn as a pill (GLOSSARY: Model mention, Machine mention, Thread mention).
+ * then drawn as a pill (GLOSSARY: Model mention, Machine mention, Thread mention). Typing / offers the skills
+ * the next turn gets, and picking one puts `/name` in the message.
  * Pasted images go above the message when the model reads them (GLOSSARY: Image attachment).
  * A long text paste becomes a chip that sends before the message; Ctrl+Shift+V keeps it in the box (GLOSSARY: Pasted text).
  * A reaction picked over transcript text is a chip too, sent after the pastes (GLOSSARY: Reaction).
@@ -35,6 +37,7 @@ export function Composer({
   target,
   draftId,
   profileId,
+  skills: skillContext,
   model,
   handsOffImages,
   imagesUnavailable,
@@ -58,6 +61,8 @@ export function Composer({
   draftId: string;
   /** Whose models `@` offers. */
   profileId?: string;
+  /** Whose skills `/` offers: the thread's, or a draft's checkout or profile. */
+  skills?: SkillContext;
   /** The model the message goes to, which must read any pasted image. */
   model?: ModelSelection;
   /** Sending hands the images' local copies to `onSend` to free, and each image travels into the sent message. */
@@ -89,9 +94,19 @@ export function Composer({
   const mentionable = useMemo(() => profileId && threads
     ? shelveThreads(threads.filter((t) => t.profileId === profileId && t.id !== target), now, placement)
     : undefined, [threads, profileId, target, now, placement]);
-  const mention = caret === undefined ? undefined : mentionAt(text, caret);
+  const atMention = caret === undefined ? undefined : mentionAt(text, caret);
+  const command = caret === undefined || atMention ? undefined : skillCommandAt(text, caret);
+  /** The @ or / the caret is in, which opens the menu. */
+  const mention = atMention ?? command;
+  // Skills load the first time / is typed, not for every composer.
+  const [skillsWanted, setSkillsWanted] = useState(false);
+  const commanding = !!command;
+  useEffect(() => { if (commanding) setSkillsWanted(true); }, [commanding]);
+  const { value: skillList } = useWorkspaceSkills(skillsWanted ? skillContext : undefined);
   const kind = browsing && browsing.start === mention?.start ? browsing.kind : undefined;
-  const options = mention && mention.start !== dismissed ? mentionOptions(models, mention.query, machines, mentionable, kind) : [];
+  const options = !mention || mention.start === dismissed ? []
+    : command ? skillOptions(skillList?.skills ?? [], command.query)
+    : mentionOptions(models, mention.query, machines, mentionable, kind);
   const active = Math.min(highlight, options.length - 1);
   const pills = useMemo(() => {
     if (!text.includes('@')) return undefined;
@@ -105,7 +120,7 @@ export function Composer({
     if ('kind' in option) { setBrowsing({ start: mention.start, kind: option.kind }); setHighlight(0); return; }
     const { handle } = option;
     const after = text.slice(caret);
-    const insert = `@${handle}${/^\s/.test(after) ? '' : ' '}`;
+    const insert = `${command ? '/' : '@'}${handle}${/^\s/.test(after) ? '' : ' '}`;
     const end = mention.start + insert.length;
     setText(text.slice(0, mention.start) + insert + after);
     setCaret(end);
@@ -115,7 +130,7 @@ export function Composer({
     const el = input.current;
     const at = el && document.activeElement === el && el.selectionStart === el.selectionEnd ? el.selectionStart : undefined;
     setCaret(at);
-    const next = at === undefined ? undefined : mentionAt(el!.value, at);
+    const next = at === undefined ? undefined : mentionAt(el!.value, at) ?? skillCommandAt(el!.value, at);
     if (next?.start !== mention?.start) { setHighlight(0); setBrowsing(undefined); }
     if (dismissed !== undefined && next?.start !== dismissed) setDismissed(undefined);
   };
@@ -297,9 +312,9 @@ export function Composer({
             onChange={(kind) => setReactions((current) => current.map((r, i) => i === index ? { ...r, kind } : r))}
             onRemove={() => { setReactions((current) => current.filter((_, i) => i !== index)); input.current?.focus(); }} />)}
         </div>}
-        {options.length > 0 && mention && <MentionMenu options={options} active={active} browsing={kind} onPick={pickMention} onHover={setHighlight}
+        {options.length > 0 && mention && <MentionMenu options={options} active={active} browsing={kind} sigil={command ? '/' : '@'} onPick={pickMention} onHover={setHighlight}
           onBack={() => { setBrowsing(undefined); setHighlight(0); }}
-          left={Math.min((input.current?.offsetLeft ?? 0) + (input.current ? caretLeft(input.current, mention.start) : 0), (input.current?.parentElement?.clientWidth ?? 0) - 240)} />}
+          left={Math.min((input.current?.offsetLeft ?? 0) + (input.current ? caretLeft(input.current, mention.start) : 0), (input.current?.parentElement?.clientWidth ?? 0) - (command ? 360 : 240))} />}
         <div className={`composer-input${pills ? ' pills' : ''}`}>
         {pills && <MentionBackdrop ref={backdrop} parts={pills} />}
         <textarea

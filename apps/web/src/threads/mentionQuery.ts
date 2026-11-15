@@ -1,4 +1,4 @@
-import { machineHandles, modelHandles, modelKey, threadHandle, type MachineView, type ModelsState, type ModelView, type ThreadView } from '@accio/protocol';
+import { machineHandles, modelHandles, modelKey, threadHandle, type MachineView, type ModelsState, type ModelView, type ThreadView, type WorkspaceSkill } from '@accio/protocol';
 import type { ThreadShelves } from './shelves';
 
 /** GLOSSARY: Model mention, Machine mention, Thread mention. The `@query` the caret is in, if any: an @ at the start or after a space. */
@@ -16,6 +16,8 @@ export type MentionOption =
   | { handle: string; model: ModelView }
   | { handle: string; machine: MachineView }
   | { handle: string; thread: ThreadView; group: ThreadGroup }
+  /** A skill to invoke, offered after `/` rather than `@`. */
+  | { handle: string; skill: WorkspaceSkill }
   /** A row that opens one kind's list, shown while only @ is typed. */
   | { handle: string; kind: MentionKind; label: string };
 
@@ -50,4 +52,31 @@ export function mentionOptions(state: ModelsState | undefined, query: string, ma
   const offered = KINDS.map((k) => ({ ...k, options: lists[k.kind]() })).filter((k) => k.options.length > 0);
   if (offered.length === 1) return offered[0]!.options;
   return offered.map(({ kind, label }) => ({ handle: `kind:${kind}`, kind, label }));
+}
+
+/** The `/query` the caret is in, if any: a / at the start or after a space, as `mentionAt` finds an @. */
+export function skillCommandAt(text: string, caret: number): { start: number; query: string } | undefined {
+  const match = /(?:^|\s)\/([a-z0-9._-]*)$/i.exec(text.slice(0, caret));
+  if (!match) return undefined;
+  return { start: caret - match[1]!.length - 1, query: match[1]!.toLowerCase() };
+}
+
+/**
+ * What the / menu lists: the skills turned on for the next turn, one per name, by name.
+ * Once you type, those whose name or any word of it starts with the query, name matches first,
+ * then those whose description has a word starting with it.
+ */
+export function skillOptions(skills: WorkspaceSkill[], query: string): MentionOption[] {
+  const named = new Map<string, WorkspaceSkill>();
+  for (const skill of skills) if (skill.enabled && !named.has(skill.name)) named.set(skill.name, skill);
+  const rank = (skill: WorkspaceSkill) => {
+    if (!query) return 0;
+    const name = skill.name.toLowerCase();
+    if (name.startsWith(query)) return 0;
+    if (name.split(/[^a-z0-9]+/).some((word) => word.startsWith(query))) return 1;
+    return skill.description.toLowerCase().split(/[^a-z0-9]+/).some((word) => word.startsWith(query)) ? 2 : undefined;
+  };
+  return [...named.values()].flatMap((skill) => { const r = rank(skill); return r === undefined ? [] : [{ skill, r }]; })
+    .sort((a, b) => a.r - b.r || a.skill.name.localeCompare(b.skill.name))
+    .map(({ skill }) => ({ handle: skill.name, skill }));
 }

@@ -93,6 +93,7 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
         target={thread.id}
         draftId={`thread:${thread.id}`}
         profileId={thread.profileId}
+        skills={{ threadId: thread.id }}
         stopDisabled={!!unavailable}
         onStop={running ? async () => void (await client.call('threads.stop', { threadId: thread.id })) : undefined}
         placeholder={running ? 'Enter steers · Ctrl+Enter queues' : thread.settledAt ? 'Send a message to reopen this thread…' : `Ask ${thread.model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}
@@ -165,6 +166,7 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
           target="draft"
           draftId={newThreadDraftId(checkoutId, profileId)}
           profileId={place.profile?.id}
+          skills={checkoutId ? { checkoutId, ...(place.profile ? { profileId: place.profile.id } : {}) } : place.profile ? { profileId: place.profile.id } : undefined}
           imagesUnavailable={machine && !machine.thisMachine ? remoteImagesReason : undefined}
           handsOffImages
           disabled={!!starting || !place.profile || !accountForModel(place.profile, model)?.signedIn || unavailable}

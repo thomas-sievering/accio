@@ -1075,6 +1075,10 @@ div.model-picker-empty b { color: var(--ink); font-weight: 500; }
 .mention-back:hover { color: var(--ink); }
 .mention-back small { margin-left: auto; font-size: 11px; }
 .mention.thread { max-width: 32ch; overflow: hidden; text-overflow: ellipsis; }
+/* After /, the menu lists skills with their descriptions, so it is wider and scrolls. */
+.mention-menu.skills { width: 360px; max-height: 320px; overflow-y: auto; }
+.mention-skill { flex: none; }
+.mention-skill-desc { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-size: 12px; }
 
 /* The composer's text redrawn behind a transparent textarea, so mentions show as pills.
    Pills keep the typed characters' widths: padding comes from a shadow, the @ gives way to an icon. */

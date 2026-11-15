@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { MachineView, ModelView, ThreadView } from '@accio/protocol';
-import { mentionAt, mentionOptions } from './mentionQuery';
+import type { MachineView, ModelView, ThreadView, WorkspaceSkill } from '@accio/protocol';
+import { mentionAt, mentionOptions, skillCommandAt, skillOptions } from './mentionQuery';
 
 const model = (id: string, name: string, harnessId = 'claudeCode'): ModelView => ({
   id, name, harnessId, harnessName: '', providerId: harnessId === 'codex' ? 'openai' : 'anthropic', providerName: '', description: '', efforts: [],
@@ -74,5 +74,31 @@ describe('thread mentions', () => {
     expect(mentionOptions(state, 'login', [], shelves).map((o) => 'thread' in o && o.thread.title)).toEqual(['Fix the login redirect', 'Snoozed login cleanup']);
     expect(mentionOptions(state, 'op', [], shelves).map((o) => o.handle).slice(0, 2)).toEqual(['opus', 'open-thread-0-000000']);
     expect(mentionOptions(state, 'op', [], shelves, 'threads').every((o) => 'thread' in o)).toBe(true);
+  });
+});
+
+describe('skill commands', () => {
+  const skill = (name: string, description = '', enabled = true): WorkspaceSkill => ({
+    id: `repository:${name}`, name, description, path: `/r/${name}/SKILL.md`, origin: 'repository', enabled, enabledBy: 'project',
+  });
+  const skills = [skill('tdd', 'Test-driven development'), skill('grill-me', 'A relentless interview'), skill('diagnosing-bugs', 'Diagnosis loop'),
+    skill('off', '', false), skill('tdd', 'A duplicate')];
+
+  it('finds the / the caret is in, at the start or after a space, never in a path', () => {
+    expect(skillCommandAt('/', 1)).toEqual({ start: 0, query: '' });
+    expect(skillCommandAt('then /Gri', 9)).toEqual({ start: 5, query: 'gri' });
+    expect(skillCommandAt('open src/app', 12)).toBeUndefined();
+    expect(skillCommandAt('/tdd now', 8)).toBeUndefined();
+  });
+
+  it('lists the enabled skills once each, by name', () => {
+    expect(skillOptions(skills, '').map((o) => o.handle)).toEqual(['diagnosing-bugs', 'grill-me', 'tdd']);
+  });
+
+  it('matches the name first, then any word of it, then the description', () => {
+    expect(skillOptions(skills, 'd').map((o) => o.handle)).toEqual(['diagnosing-bugs', 'tdd']);
+    expect(skillOptions(skills, 'bugs').map((o) => o.handle)).toEqual(['diagnosing-bugs']);
+    expect(skillOptions(skills, 'interview').map((o) => o.handle)).toEqual(['grill-me']);
+    expect(skillOptions(skills, 'off')).toEqual([]);
   });
 });
