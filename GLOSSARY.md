@@ -134,7 +134,7 @@ The project in a space that holds what applies to the whole space, such as its g
 _Avoid_: Home repo (in UI text), space repo
 
 **Checkout**:
-One machine's copy of a project's repository. A folder without a git remote is a project with a single checkout. Starting a thread on a machine without one clones the repository there and adds it, reusing a clone already in place.
+One machine's copy of a project's repository. A folder without a git remote is a project with a single checkout. Starting a thread on a machine without one clones the repository there and adds it, reusing a clone already in place. A project of a space is cloned the same way on a machine where a thread in the space runs, using the profile and remote URL of a machine that has it; one without a remote, or that no machine has recorded, is not available on that machine.
 _Avoid_: Clone, project folder
 
 **Owned worktree**:

@@ -1,6 +1,7 @@
 import { projectKey, type ProjectsState, type Space } from '@accio/protocol';
 import { UserError } from '../rpc/router.js';
-import { checkoutHere, nameOfKey } from './spaceContext.js';
+import type { Found } from './missingCheckouts.js';
+import { nameOfKey } from './spaceContext.js';
 
 export type SiblingThreadsDeps = {
   /** The spaces as the hub's shared settings hold them now. */
@@ -9,6 +10,8 @@ export type SiblingThreadsDeps = {
   projects: () => ProjectsState;
   /** Another machine's projects and checkouts, as the relay last heard them; undefined when it can't be reached. */
   projectsOn: (machineId: string) => ProjectsState | undefined;
+  /** This machine's checkout of the project by its key, cloned first when it has none. */
+  checkoutHere: (key: string) => Promise<Found>;
 };
 
 /** Where a thread started in another project of the space runs. */
@@ -54,16 +57,20 @@ export class SiblingThreads {
   }
 
   /**
-   * The member's checkout on the machine: this machine's first one still on disk, or the first one
-   * the other machine reported. A project without one there is refused (#195 clones it instead).
+   * The member's checkout on the machine: this machine's first one still on disk, cloned here when it
+   * has none, or the first one the other machine reported. Another machine without one is refused.
    */
   private async checkout(member: Member, machine?: { name: string; projects: ProjectsState }): Promise<SiblingTarget> {
-    const state = machine?.projects ?? this.deps.projects();
-    const project = state.projects.find((p) => projectKey(p) === member.key);
-    const checkout = machine
-      ? state.checkouts.find((c) => c.projectId === project?.id)
-      : await checkoutHere(state, project);
-    if (!project || !checkout) throw new UserError(`${member.name} has no checkout on ${machine?.name ?? 'this machine'}. Add one there first, or start the thread on a machine that has it.`);
+    if (!machine) {
+      const found = await this.deps.checkoutHere(member.key);
+      if ('unavailable' in found) throw new UserError(`${member.name} is not available on this machine: ${found.unavailable}.`);
+      const project = this.deps.projects().projects.find((p) => p.id === found.checkout.projectId);
+      if (!project) throw new UserError(`${member.name} is no longer on this machine.`);
+      return { name: project.name, checkoutId: found.checkout.id, profileId: project.profileId };
+    }
+    const project = machine.projects.projects.find((p) => projectKey(p) === member.key);
+    const checkout = machine.projects.checkouts.find((c) => c.projectId === project?.id);
+    if (!project || !checkout) throw new UserError(`${member.name} has no checkout on ${machine.name}. Add one there first, or start the thread on a machine that has it.`);
     return { name: project.name, checkoutId: checkout.id, profileId: project.profileId };
   }
 }

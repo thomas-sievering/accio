@@ -8,6 +8,7 @@ import { startHubService } from '@accio/hub';
 import type { ThreadView } from '@accio/protocol';
 import { callAccioTools, startTestApp, startTestSortingHat, TestClient } from '../testing/testApp.js';
 import { FakeHarness, gate, replyWith } from '../testing/fakeHarness.js';
+import { fetchFrom, forgetFetchFrom } from '../testing/gitRepo.js';
 
 /** GLOSSARY: Relay. Two machines on one hub: the PC reads and drives the MacBook's thread. */
 describe('thread relay between machines', () => {
@@ -235,17 +236,32 @@ describe('thread relay between machines', () => {
     const profile = await mac.client.signedIn('Personal');
     const work = await mac.client.signedIn('Work');
     const pcCheckout = await checkout(pc, 'accio', 'https://github.com/me/accio', profile.id);
-    const notes = await checkout(mac, 'notes', 'https://github.com/me/notes', work.id);
+    // The MacBook fetches notes over ssh, which only its URL says: the https address from the key would fail.
+    const notes = await checkout(mac, 'notes', 'git@github.com:me/notes.git', work.id);
+    fetchFrom(join(mac.app.home, 'notes.git'), 'git@github.com:me/notes.git');
+    cleanup.push(async () => forgetFetchFrom());
     const macView = await mac.client.thisMachine();
     macName = macView.name;
+    const pcId = (await pc.client.thisMachine()).id;
+    const folder = join(pc.app.home, 'work');
+    await pc.client.call('machines.setProfileFolders', { machineId: pcId, profileId: work.id, folders: [folder] });
     await pc.client.call('spaces.save', { name: 'accio', projectKeys: ['github.com/me/accio', 'github.com/me/notes'] });
     await pc.client.waitFor('machines.changed', (all) => !!all.find((m) => m.id === macView.id)?.relay?.repos.includes('github.com/me/notes'), 10_000);
 
     const caller = await pc.client.call('threads.start', { checkoutId: pcCheckout.id, text: 'start it' });
-    await pc.client.waitFor('threads.changed', (list) => list.some((t) => t.id === caller.id && t.status === 'idle'), 10_000);
-    expect(answers[0]).toBe('notes has no checkout on this machine. Add one there first, or start the thread on a machine that has it.');
+    await pc.client.waitFor('threads.changed', (list) => list.some((t) => t.id === caller.id && t.status === 'idle'), 30_000);
+    // Here, notes is cloned from the MacBook's URL into the Work profile's folder, then the thread starts in it.
+    expect(answers[0]).toContain(' in notes on this machine. It runs on its own');
+    const here = await pc.client.call('projects.get', {});
+    const cloned = here.checkouts.filter((c) => here.projects.find((p) => p.id === c.projectId)?.repoKey === 'github.com/me/notes');
+    // One clone, though the turn's Space section started one in the background at the same time.
+    expect(cloned.map((c) => c.path)).toEqual([join(folder, 'notes')]);
+    expect(here.projects.find((p) => p.id === cloned[0]!.projectId)?.profileId).toBe(work.id);
+    const childHere = answers[0]!.match(/\(([^)]+)\)/)![1]!;
+    expect((await pc.client.call('threads.list', {})).find((t) => t.id === childHere)).toMatchObject({ checkoutId: cloned[0]!.id, profileId: work.id });
+
     expect(answers[1]).toContain(` in notes on ${macName}. It runs on its own`);
     const childId = answers[1]!.match(/\(([^)]+)\)/)![1]!;
     await expect.poll(async () => remote(await mac.client.call('threads.list', {}), childId), { timeout: 10_000 }).toMatchObject({ checkoutId: notes.id, profileId: work.id });
-  }, 30_000);
+  }, 60_000);
 });

@@ -4,7 +4,7 @@ import { JsonFile } from '@accio/persistence';
 import { RelaySocket, type RelayRequest } from '@accio/hub';
 import { OFFLINE_SNOOZE_MS, RELAY_MACHINE_METHODS, RELAY_THREAD_METHODS, type CheckoutView, type OfflineSnooze, type Events, type MachineView, type ParamsOf, type ProjectsState, type ResultOf, type RelaySnapshot, type ThreadView } from '@accio/protocol';
 import { UserError, type Router } from '../rpc/router.js';
-import { CLONE_TIMEOUT_MS, remoteUrlOf } from '../projects/git.js';
+import { CLONE_TIMEOUT_MS, httpsUrlOf, remoteUrlOf } from '../projects/git.js';
 import type { RemoteMediaKey, ThreadAssets } from '../threads/assets.js';
 
 const RELAY_METHODS = new Set<string>(RELAY_THREAD_METHODS);
@@ -121,6 +121,34 @@ export class Relay {
     const snapshot = this.remote.get(machineId);
     if (machineId === this.deps.here || !this.online.has(machineId) || !snapshot?.checkouts) return undefined;
     return { projects: snapshot.projects, checkouts: snapshot.checkouts };
+  }
+
+  /**
+   * GLOSSARY: Checkout. How this machine can clone a repository another machine has recorded: that
+   * machine's profile for the project, preferring one on the relay with a checkout, and the URL that
+   * checkout fetches from. Without one to ask, the URL is an https address from the key. Undefined
+   * when no other machine has recorded the repository, even one offline whose threads are still listed.
+   */
+  cloneSource(repoKey: string): { profileId: string; url: () => Promise<string> } | undefined {
+    const holders = [...this.remote].flatMap(([machineId, snapshot]) => {
+      const project = this.deps.machineName(machineId) && snapshot.projects.find((p) => p.repoKey === repoKey);
+      if (!project) return [];
+      return [{ machineId, project, asked: this.online.has(machineId) && !!snapshot.checkouts?.some((c) => c.projectId === project.id) }];
+    });
+    const asked = holders.filter((h) => h.asked);
+    const first = asked[0] ?? holders[0];
+    if (!first) return undefined;
+    return {
+      profileId: first.project.profileId,
+      url: async () => {
+        for (const { machineId } of asked) {
+          // An earlier Accio there doesn't answer this; any failure moves on to the next machine.
+          const answer = await this.socket?.call(machineId, 'checkouts.cloneUrl', { machineId, repoKey }).catch(() => undefined) as ResultOf<'checkouts.cloneUrl'> | undefined;
+          if (answer?.url) return answer.url;
+        }
+        return httpsUrlOf(repoKey);
+      },
+    };
   }
 
   /** Sends a call about another machine's thread to that machine. Undefined: the thread is this machine's. */
