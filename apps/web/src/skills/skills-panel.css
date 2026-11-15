@@ -43,6 +43,14 @@
   min-height: 26px;
   padding-left: 6px;
 }
+/* A folding title brings its own padding and fills the row up to the action. */
+.skills-title-row:has(> .skills-title .skills-fold) {
+  gap: 4px;
+  padding-left: 0;
+}
+.skills-title-row > .skills-title:has(.skills-fold) {
+  flex: 1;
+}
 .skills-title {
   display: flex;
   align-items: center;

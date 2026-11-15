@@ -51,8 +51,16 @@ async function openSkills(page: Page, baseURL: string, thread: RegExp) {
   await expect(panel(page).getByText('Loading skills…')).toHaveCount(0);
 }
 
-test('Skills tab lists project and inherited skills, adds, references, edits, disables and jumps to loads', async ({ page, baseURL }, testInfo) => {
+test('Skills tab folds each skill level, adds, references, edits, disables and jumps to loads', async ({ page, baseURL }, testInfo) => {
   await openSkills(page, baseURL!, /Skills fixture/);
+
+  // Every level starts folded behind its counts; levels with nothing turned on are left out.
+  const projectFold = panel(page).getByRole('button', { name: /^Project/ });
+  await expect(projectFold).toHaveAttribute('aria-expanded', 'false');
+  await expect(projectFold.locator('.skills-count')).toHaveText('1 · 1 loaded');
+  await expect(skillRow(page, 'repo-notes')).toHaveCount(0);
+  await expect(panel(page).getByRole('button', { name: /^Everywhere/ })).toHaveCount(0);
+  await projectFold.click();
 
   // Project skills: the repository's own file, marked loaded by the turn that read it.
   const notes = skillRow(page, 'repo-notes');
@@ -60,8 +68,8 @@ test('Skills tab lists project and inherited skills, adds, references, edits, di
   const loaded = page.getByRole('button', { name: 'repo-notes: loaded this thread. Show in transcript' });
   await expect(loaded).toBeVisible();
 
-  // Inherited skills start folded behind their counts.
-  const fold = panel(page).getByRole('button', { name: /^Inherited/ });
+  // Profile skills have their own fold.
+  const fold = panel(page).getByRole('button', { name: /^Profile/ });
   await expect(fold).toHaveAttribute('aria-expanded', 'false');
   await expect(fold).toHaveAttribute('title', /^1 available · 0 loaded\./);
   await expect(fold.locator('.skills-count')).toHaveText('1');
@@ -94,8 +102,9 @@ test('Skills tab lists project and inherited skills, adds, references, edits, di
   await expect(review).not.toContainText('Library · Library');
   await expect(panel(page).getByRole('button', { name: 'Add skill', exact: true })).toBeFocused();
 
-  // The selection is the hub's: a fresh load shows it too.
+  // The selection is the hub's: a fresh load shows it too. The open level stays open.
   await openSkills(page, baseURL!, /Skills fixture/);
+  await expect(projectFold).toHaveAttribute('aria-expanded', 'true');
   await expect(projectList(page).locator('.skill-item').filter({ hasText: 'lib-review' })).toBeVisible();
 
   // Expanded rows show instructions, source and path, and reference the skill in the next message.
@@ -133,6 +142,11 @@ test('Skills tab lists project and inherited skills, adds, references, edits, di
   await expect(panel(page).getByText(/Project skills need a project/)).toBeVisible();
   await expect(panel(page).getByRole('button', { name: 'Add skill', exact: true })).toHaveCount(0);
   await expect(skillRow(page, 'repo-notes')).toHaveCount(0);
+
+  // An opened level stays open when switching back.
+  await page.locator('.sidebar').getByRole('button', { name: /Skills fixture/ }).click();
+  await expect(projectFold).toHaveAttribute('aria-expanded', 'true');
+  await expect(skillRow(page, 'repo-notes')).toBeVisible();
 });
 
 test('MCP tab lists every MCP server, flags sign-in and opens settings', async ({ page, baseURL }, testInfo) => {

@@ -8,24 +8,33 @@ import { useProjects } from '../projects/projects';
 import { shortRevision } from '../resources/resources';
 import { byName, isAddable, isInherited, isProjectSkill, originLabel, skillReference, useWorkspaceSkills } from './workspaceSkills';
 
+type SectionKey = 'project' | 'profile' | 'global';
+/** Which sections are open, kept while the app runs so switching threads doesn't fold them again. */
+const openSections = new Set<SectionKey>();
+
 /**
- * The skills the open thread (or draft) gets on its next turn: the project's
- * own (repository files plus library skills it turned on) first, then what the
- * profile or everything passes down. Changes apply from the next turn.
+ * The skills the open thread (or draft) gets on its next turn, one folded
+ * section per skill level, narrowest first: the project's own (repository files
+ * plus library skills it turned on), then the profile's, then everywhere's.
+ * Changes apply from the next turn.
  */
 export function SkillsPanel({ context, composer }: { context: SkillContext; composer: string }) {
   const { value, error, loading, reload } = useWorkspaceSkills(context);
   const { state: projects } = useProjects();
-  const [inheritedOpen, setInheritedOpen] = useState(false);
   const [announce, setAnnounce] = useState('');
-  const inheritedId = useId();
+  const [open, setOpen] = useState(() => new Set(openSections));
   const skills = useMemo(() => value?.skills ?? [], [value]);
   const own = useMemo(() => skills.filter(isProjectSkill).sort(byName), [skills]);
-  const inherited = useMemo(() => skills.filter(isInherited).sort(byName), [skills]);
+  const profile = useMemo(() => skills.filter((s) => isInherited(s) && s.enabledBy === 'profile').sort(byName), [skills]);
+  const everywhere = useMemo(() => skills.filter((s) => isInherited(s) && s.enabledBy === 'global').sort(byName), [skills]);
   const addable = useMemo(() => skills.filter(isAddable).sort(byName), [skills]);
   const project = value?.projectId ? projects?.projects.find((p) => p.id === value.projectId) : undefined;
-  const loadedInherited = inherited.filter((s) => s.loaded).length;
   const row = { context, composer, onChanged: reload, onAnnounce: setAnnounce };
+  const toggle = (key: SectionKey, next = !open.has(key)) => {
+    if (next) openSections.add(key); else openSections.delete(key);
+    setOpen(new Set(openSections));
+  };
+  const fold = (key: SectionKey) => ({ open: open.has(key), onToggle: () => toggle(key), threadId: context.threadId });
 
   if (!value) {
     return <div className="skills-panel">
@@ -45,33 +54,52 @@ export function SkillsPanel({ context, composer }: { context: SkillContext; comp
       {value.unavailable && <p className="note skills-message" role="status">{value.unavailable}</p>}
       <p className="skills-live" role="status" aria-live="polite">{announce}</p>
 
-      <section className="skills-section" aria-labelledby={`${inheritedId}-project`}>
-        {value.projectId
-          ? <AddSkill candidates={addable} context={context} onChanged={reload} onAnnounce={setAnnounce}
-            title={<h3 id={`${inheritedId}-project`} className="skills-title">Project <span className="skills-count">{own.length}</span></h3>} />
-          : <>
-            <div className="skills-title-row"><h3 id={`${inheritedId}-project`} className="skills-title">Project</h3></div>
-            <p className="hint skills-message">Project skills need a project. Start the thread in a project to add any.</p>
-          </>}
-        {value.projectId && own.length === 0 && <p className="hint skills-message">No skills in this repository’s <code>.agents/skills</code> or <code>.claude/skills</code> and none added from the library.</p>}
-        <ul className="skill-list">{own.map((s) => <SkillItem key={s.id} skill={s} {...row} />)}</ul>
-      </section>
-
-      <section className="skills-section">
-        <h3 className="skills-title">
-          <button type="button" className="skills-fold" aria-expanded={inheritedOpen} aria-controls={inheritedId} onClick={() => setInheritedOpen(!inheritedOpen)}
-            title={`${inherited.length} available${context.threadId ? ` · ${loadedInherited} loaded` : ''}. From the profile or everywhere; change these in Settings → Skills.`}>
-            <span>Inherited</span>
-            <span className="skills-count">{inherited.length}{loadedInherited > 0 && ` · ${loadedInherited} loaded`}</span>
-            <Chevron />
-          </button>
-        </h3>
-        {inheritedOpen && <div id={inheritedId}>
-          {inherited.length === 0 && <p className="hint skills-message">Nothing is turned on for this profile or everywhere.</p>}
-          <ul className="skill-list">{inherited.map((s) => <SkillItem key={s.id} skill={s} {...row} />)}</ul>
-        </div>}
-      </section>
+      {value.projectId
+        ? <SkillsSection title="Project" skills={own} {...fold('project')} where="In this repository or turned on for this project."
+          head={(title) => <AddSkill candidates={addable} context={context} title={title} onAnnounce={setAnnounce}
+            onChanged={() => { toggle('project', true); reload(); }} />}
+          empty={<p className="hint skills-message">No skills in this repository’s <code>.agents/skills</code> or <code>.claude/skills</code> and none added from the library.</p>}>
+          {own.map((s) => <SkillItem key={s.id} skill={s} {...row} />)}
+        </SkillsSection>
+        : <section className="skills-section">
+          <div className="skills-title-row"><h3 className="skills-title">Project</h3></div>
+          <p className="hint skills-message">Project skills need a project. Start the thread in a project to add any.</p>
+        </section>}
+      {profile.length > 0 && <SkillsSection title="Profile" skills={profile} {...fold('profile')} where="Turned on for this profile; change these in Settings → Skills.">
+        {profile.map((s) => <SkillItem key={s.id} skill={s} {...row} />)}
+      </SkillsSection>}
+      {everywhere.length > 0 && <SkillsSection title="Everywhere" skills={everywhere} {...fold('global')} where="Turned on for every profile and project; change these in Settings → Skills.">
+        {everywhere.map((s) => <SkillItem key={s.id} skill={s} {...row} />)}
+      </SkillsSection>}
     </div>
+  );
+}
+
+/** One skill level, folded behind how many skills it has and how many this thread loaded. `head` can wrap the title, for Add skill. */
+function SkillsSection({ title, skills, open, onToggle, threadId, where, head, empty, children }: {
+  title: string; skills: WorkspaceSkill[]; open: boolean; onToggle: () => void; threadId?: string; where: string;
+  head?: (title: ReactNode) => ReactNode; empty?: ReactNode; children: ReactNode;
+}) {
+  const id = useId();
+  const loaded = skills.filter((s) => s.loaded).length;
+  const heading = (
+    <h3 className="skills-title">
+      <button type="button" className="skills-fold" aria-expanded={open} aria-controls={id} onClick={onToggle}
+        title={`${skills.length} available${threadId ? ` · ${loaded} loaded` : ''}. ${where}`}>
+        <span>{title}</span>
+        <span className="skills-count">{skills.length}{loaded > 0 && ` · ${loaded} loaded`}</span>
+        <Chevron />
+      </button>
+    </h3>
+  );
+  return (
+    <section className="skills-section">
+      {head ? head(heading) : heading}
+      {open && <div id={id}>
+        {skills.length === 0 && empty}
+        <ul className="skill-list">{children}</ul>
+      </div>}
+    </section>
   );
 }
 
