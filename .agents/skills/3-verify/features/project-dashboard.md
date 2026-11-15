@@ -11,7 +11,8 @@ A project's page, opened through `Dashboard` in the menu on the project name in 
 
 ## How to get to it (user POV)
 
-- Open any thread of a project, click the project name before the `/` in its header, then `Dashboard`.
+- Open any thread of a project, click the project name before the `/` in its header, then `Dashboard`. For a project in a space the same menu also has `Space` ([Spaces](spaces.md)).
+- A project's card in a space view has `<project> dashboard`.
 
 ## Driving it with Playwright
 

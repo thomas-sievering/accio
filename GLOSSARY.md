@@ -276,6 +276,10 @@ _Avoid_: Owned preview (for a thread's app), dev server, deployment
 A project's page, opened through Dashboard in the menu on the project name in a thread's header: the project app's controls with its logs, the project's threads grouped as Needs you, Working and Snoozed, Recently shipped (the default branch's newest commits, each joined to its Changelog entry and expanding to its things to try, thread and PR, the running commit marked), then its Changelog and its settled threads, both folded.
 _Avoid_: Project settings (for this page), overview
 
+**Space view**:
+A space's page, opened through Space in the menu on the project name in a thread's header (only for a project in a space) or through Open on the space's row in Settings / Spaces: the home pinned on top with New thread in home, then each other project with its profile, its checkout on this machine, its threads that need you or are working, its project dashboard and New thread.
+_Avoid_: Space dashboard, space settings (for this page)
+
 **Project setup thread**:
 A thread started by **Set up with agent** on a project dashboard without a start command. Its agent finds the project app's setup and start commands, tries them, and saves them through the project_settings accio tool, which only this thread's running turns are offered. Nothing starts afterwards until you press Start.
 _Avoid_: Onboarding, auto-config

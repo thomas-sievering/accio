@@ -21,6 +21,8 @@ export type AppEvents = {
   'project.open': { id: string };
   /** Open a project's dashboard, such as from the thread header's project name. */
   'project.dashboard': { id: string };
+  /** GLOSSARY: Space. Open a space's view, such as from the project name's menu or Settings / Spaces. */
+  'space.open': { id: string };
   /** A thread was snoozed until a time (ISO); the sidebar says so briefly. */
   'thread.snoozed': { threadId: string; until: string; untilOnline?: string };
   /** Open the side panel at a tab, such as Delivery after pressing Ship. */

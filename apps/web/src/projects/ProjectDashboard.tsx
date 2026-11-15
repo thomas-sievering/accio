@@ -4,6 +4,7 @@ import { useClient } from '../app/connection';
 import { emitAppEvent } from '../app/appEvents';
 import { ChevronDown, Close, Play, Refresh, Settings, StopSquare } from '../app/icons';
 import { useAction } from '../app/useAction';
+import { useEscapeClose } from '../app/useEscapeClose';
 import { useLive } from '../app/useLive';
 import { formatDayTime, formatRelative } from '../ui/dates';
 import { ThreadMenuProvider } from '../threads/ThreadMenu';
@@ -29,14 +30,7 @@ export function ProjectDashboard({ project, onClose }: { project: ProjectView; o
   const entries = useLive(() => client.call('changelog.list', {}), 'changelog.changed');
   const heading = useRef<HTMLElement>(null);
   useEffect(() => { heading.current?.focus(); }, [project.id]);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const t = e.target;
-      if (e.key === 'Escape' && !e.defaultPrevented && !document.querySelector(':popover-open') && !(t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement)) onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  useEscapeClose(onClose);
 
   return (
     <>
