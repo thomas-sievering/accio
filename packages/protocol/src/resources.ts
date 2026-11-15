@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import { method } from './rpc.js';
 
-export const ResourceScope = z.object({ global: z.boolean().default(false), profileIds: z.array(z.string()).default([]), projectKeys: z.array(z.string()).default([]) });
+export const ResourceScope = z.object({ global: z.boolean().default(false), profileIds: z.array(z.string()).default([]), projectKeys: z.array(z.string()).default([]),
+  /** GLOSSARY: Space. Spaces it is turned on for, by space id (ADR 0020). */
+  spaceIds: z.array(z.string()).default([]) });
 export type ResourceScope = z.infer<typeof ResourceScope>;
 const Id = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/);
 export const ToolDefinition = z.object({ id: Id, name: z.string().trim().min(1).max(120), package: z.string().regex(/^(@[a-zA-Z0-9_-]+\/)?[a-zA-Z0-9_.-]+$/), version: z.string().regex(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/, 'Use an exact version, such as 1.2.3'), executable: Id, checkArgs: z.array(z.string()).default(['--version']), repairProfileId: z.string().optional() });

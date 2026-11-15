@@ -196,7 +196,7 @@ export class HubConnections {
     router.on('machines.list', async () => { await machines.refresh(); await machines.reportGitHub().catch(() => {}); return relay.machines(); });
     void machines.reportGitHub().catch(() => {});
     router.forward = (method, params) => relay.forward(method, params);
-    const resources = new ResourceManager(record.home, this.here.id, remoteResources(client), remoteMcp(client), profiles, projects, broadcast, async (tool, detail) => {
+    const resources = new ResourceManager(record.home, this.here.id, remoteResources(client), remoteMcp(client), profiles, projects, () => spaces.list(), broadcast, async (tool, detail) => {
       const candidates = tool.repairProfileId ? [profiles.require(tool.repairProfileId)] : profiles.all();
       const profile = candidates.find(p => models.list(p.id).models.length > 0);
       if (!profile) throw new Error('Sign in to a provider and select its account in a profile to start a repair thread.');

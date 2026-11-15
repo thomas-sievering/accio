@@ -1,6 +1,6 @@
 import { SECRET_MCP_SERVER } from '../secrets/secrets.js';
 import { join } from 'node:path';
-import { projectKey, type McpDefinition, type ResourcesState, type ToolDefinition, type WorkspaceSkill, type SkillEntry } from '@accio/protocol';
+import { projectKey, type McpDefinition, type ProjectView, type ResourcesState, type SkillSpace, type Space, type ToolDefinition, type WorkspaceSkill, type SkillEntry } from '@accio/protocol';
 import type { McpAccess, ResourceAccess } from '@accio/hub';
 import type { Router, Broadcast } from '../rpc/router.js';
 import type { Profiles } from '../profiles/profiles.js';
@@ -13,6 +13,11 @@ import type { HarnessMcp, TurnResources } from '../threads/harness.js';
 import { ACCIO_MCP_SERVER } from '../tools/tools.js';
 import { readSkillFile, repositorySkills } from './workspaceSkills.js';
 import { enabledLevel, resolveLevels } from './skillLevels.js';
+import { checkoutHere } from '../projects/project.js';
+import { nameOfKey } from '../spaces/spaceContext.js';
+
+/** GLOSSARY: Skill level. Every skill a thread here could get, and the space its project is in. */
+export type LevelSkills = { skills: WorkspaceSkill[]; space?: SkillSpace };
 
 export class ResourceManager {
   readonly skills: SkillFiles;
@@ -22,34 +27,53 @@ export class ResourceManager {
   private closing = false;
   private localSources = new Map<string, Promise<SkillEntry[]>>();
   constructor(private home: string, private machineId: string, private store: ResourceAccess, private gateway: McpAccess,
-    private profiles: Profiles, private projects: Projects, private broadcast: Broadcast,
+    private profiles: Profiles, private projects: Projects, private spaces: () => readonly Space[], private broadcast: Broadcast,
     repair: (tool: ToolDefinition, detail: string) => Promise<string>, run?: CommandRunner) {
     this.skills = new SkillFiles(home, run);
     this.tools = new ManagedTools(home, machineId, store, () => this.announce(), repair, run);
   }
   state(): ResourcesState { return this.store.state(); }
   /**
-   * GLOSSARY: Skill level. Every skill a thread here could get: the repository's (Project),
-   * then each library skill at the narrowest level that turns it on, resolved by ADR 0020.
+   * GLOSSARY: Skill level. Every skill a thread here could get: the repository's (Project), its space's
+   * home's (Space), then each library skill at the narrowest level that turns it on, resolved by ADR 0020.
    */
-  async workspaceSkills(profileId?: string, projectId?: string, cwd?: string): Promise<WorkspaceSkill[]> {
+  async workspaceSkills(profileId?: string, projectId?: string, cwd?: string): Promise<LevelSkills> {
     return this.levelSkills(this.state(), profileId, projectId, cwd);
   }
   /** One state for the whole resolution. Only skills a thread gets need their files here, so a wider source that is overridden can't block a turn. */
-  private async levelSkills(state: ResourcesState, profileId?: string, projectId?: string, cwd?: string): Promise<WorkspaceSkill[]> {
+  private async levelSkills(state: ResourcesState, profileId?: string, projectId?: string, cwd?: string): Promise<LevelSkills> {
     const project = this.projects.state().projects.find(p => p.id === projectId);
-    const context = { profileId, projectKey: project ? projectKey(project) : undefined };
+    const { space, files } = await this.spaceSkills(project);
+    const context = { profileId, projectKey: project ? projectKey(project) : undefined, spaceId: space?.id };
     const library: WorkspaceSkill[] = state.skills.map(skill => {
       const enabledBy = enabledLevel(skill.scope, context);
       return { id: skill.id, name: skill.name, description: skill.description, path: join(skill.path, 'SKILL.md'), origin: 'library' as const, enabled: enabledBy !== null, enabledBy, sourceName: state.sources.find(source => source.id === skill.sourceId)?.name, revision: skill.revision };
     });
-    const skills = resolveLevels([...(cwd ? await repositorySkills(cwd) : []), ...library]);
+    const skills = resolveLevels([...(cwd ? await repositorySkills(cwd) : []), ...files, ...library]);
     const entries = new Map(state.skills.map(entry => [entry.id, entry]));
     await Promise.all(skills.map(async skill => {
       const entry = skill.origin === 'library' && skill.enabled && !skill.overriddenBy ? entries.get(skill.id) : undefined;
       if (entry) skill.path = join((await this.localSkill(entry)).path, 'SKILL.md');
     }));
-    return skills;
+    return { skills, space };
+  }
+  /**
+   * GLOSSARY: Space, Home. The space the project is in, and its home's skill files from the home's checkout
+   * on this machine. A thread in the home already has them as its own Project skills, so they aren't repeated.
+   */
+  private async spaceSkills(project?: ProjectView): Promise<{ space?: SkillSpace; files: WorkspaceSkill[] }> {
+    const key = project && projectKey(project);
+    const space = key ? this.spaces().find(s => s.projectKeys.includes(key)) : undefined;
+    if (!space) return { files: [] };
+    const found = { id: space.id, name: space.name };
+    const homeKey = space.homeProjectKey;
+    if (!homeKey || homeKey === key) return { space: found, files: [] };
+    const projects = this.projects.state();
+    const home = projects.projects.find(p => projectKey(p) === homeKey);
+    const checkout = await checkoutHere(projects, home);
+    if (!checkout) return { space: { ...found, homeUnavailable: `${home?.name ?? nameOfKey(homeKey)}, the space’s home, isn’t on this machine, so its skill files are missing.` }, files: [] };
+    const files = (await repositorySkills(checkout.path)).map(skill => ({ ...skill, id: skill.id.replace(/^repository:/, 'home:'), origin: 'home' as const, enabledBy: 'space' as const }));
+    return { space: found, files };
   }
   async skillContent(id: string) {
     const skill = this.state().skills.find(skill => skill.id === id);
@@ -57,23 +81,30 @@ export class ResourceManager {
     const local = await this.localSkill(skill);
     return readSkillFile(join(local.path, 'SKILL.md'));
   }
-  async setProjectSkill(id: string, projectId: string, on: boolean) {
+  /** Turns a library skill on or off for a project, or for the space that project is in. */
+  async setLevelSkill(id: string, projectId: string, level: 'project' | 'space', on: boolean) {
     const project = this.projects.state().projects.find(project => project.id === projectId);
     if (!project) throw new Error('No such project');
     const skill = this.state().skills.find(skill => skill.id === id);
     if (!skill) throw new Error('Only library skills can be enabled or disabled');
     const key = projectKey(project);
-    await this.store.setSkillProject(id, { projectKey: key, enabled: on });
+    if (level === 'space') {
+      const space = this.spaces().find(s => s.projectKeys.includes(key));
+      if (!space) throw new Error('This project is in no space');
+      await this.store.setSkillSpace(id, { spaceId: space.id, enabled: on });
+    } else await this.store.setSkillProject(id, { projectKey: key, enabled: on });
     this.announce();
   }
   skillsChanged() { this.announce(); }
   private announce() { this.broadcast('resources.changed', this.state()); }
   private tool(id: string) { const tool = this.state().tools.find(t => t.id === id); if (!tool) throw new Error('No such tool'); return tool; }
   private local(machineId?: string) { if (machineId && machineId !== this.machineId) throw new Error('This machine must be online locally; remote execution is not available yet'); }
-  private checkScope(scope: { profileIds: string[]; projectKeys: string[] }) {
+  private checkScope(scope: { profileIds: string[]; projectKeys: string[]; spaceIds: string[] }) {
     for (const id of scope.profileIds) this.profiles.require(id);
     const keys = new Set(this.projects.state().projects.map(projectKey));
     if (scope.projectKeys.some(key => !keys.has(key))) throw new Error('No such project');
+    const spaces = new Set(this.spaces().map(space => space.id));
+    if (scope.spaceIds.some(id => !spaces.has(id))) throw new Error('No such space');
   }
   register(router: Router) {
     router.on('resources.get', () => this.state())
@@ -147,7 +178,7 @@ export class ResourceManager {
     if (options.repair) return { env: this.tools.env(state.tools, env), instructions: '', mcps: {}, snapshot: { tools: [], skills: [], mcps: [] }, release: () => {} };
     await this.requireToolsReady();
     // ADR 0020: the turn gets each name's winner; overridden skills stay out, a clash refuses the turn.
-    const catalog = (await this.levelSkills(state, profileId, projectId, options.cwd)).filter(skill => skill.enabled && !skill.overriddenBy);
+    const catalog = (await this.levelSkills(state, profileId, projectId, options.cwd)).skills.filter(skill => skill.enabled && !skill.overriddenBy);
     const clash = catalog.find(skill => skill.conflict);
     if (clash) throw new Error(clash.conflict);
     const skills = state.skills.filter(entry => catalog.some(skill => skill.origin === 'library' && skill.id === entry.id));

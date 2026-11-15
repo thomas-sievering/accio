@@ -51,7 +51,7 @@ export function registerThreadSkills(router: Router, deps: SkillDeps) {
     ]);
     const harness: WorkspaceSkill[] = (shipped ?? []).map(skill => ({ id: `harness:${scope.harnessId}:${skill.name}`, name: skill.name, description: skill.description,
       path: skill.path ?? '', origin: 'harness', enabled: true, enabledBy: null }));
-    const skills = [...levels, ...harness.sort((a, b) => a.name.localeCompare(b.name))];
+    const skills = [...levels.skills, ...harness.sort((a, b) => a.name.localeCompare(b.name))];
     if (scope.thread) {
       const live = await state.transcripts.get(scope.thread.id);
       for (const item of live.items) if (item.kind === 'tool' && item.status === 'done') {
@@ -61,15 +61,15 @@ export function registerThreadSkills(router: Router, deps: SkillDeps) {
         }
       }
     }
-    return { skills, projectId: scope.projectId, ...(shipped ? { harnessId: scope.harnessId } : {}), unavailable: scope.unavailable };
+    return { skills, projectId: scope.projectId, ...(levels.space ? { space: levels.space } : {}), ...(shipped ? { harnessId: scope.harnessId } : {}), unavailable: scope.unavailable };
   };
 
   const workspaceSkill = async (input: SkillContext & { skillId: string }) => {
     const scope = skillContext(input);
-    const { skills } = await workspaceSkills(input);
-    const skill = skills.find(skill => skill.id === input.skillId);
+    const listed = await workspaceSkills(input);
+    const skill = listed.skills.find(skill => skill.id === input.skillId);
     if (!skill) throw new UserError('No such skill in this workspace');
-    return { scope, skill };
+    return { scope, skill, space: listed.space };
   };
 
   router
@@ -77,6 +77,8 @@ export function registerThreadSkills(router: Router, deps: SkillDeps) {
     .on('threads.skillContent', async input => {
       const { scope, skill } = await workspaceSkill(input);
       if (skill.origin === 'library') return { content: await resources().skillContent(skill.id), path: skill.path, editable: false };
+      // GLOSSARY: Home. Its skill files change through a thread in the home, not from another project.
+      if (skill.origin === 'home') return { content: await readSkillFile(skill.path), path: skill.path, editable: false };
       if (skill.origin === 'harness') {
         if (!skill.path) throw new UserError('This harness doesn’t share the instructions of its own skills');
         return { content: await readSkillFile(skill.path), path: skill.path, editable: false };
@@ -98,12 +100,14 @@ export function registerThreadSkills(router: Router, deps: SkillDeps) {
       return input.threadId ? deps.withLifecycle(input.threadId, save) : save();
     })
     .on('threads.setSkillEnabled', async input => {
-      const { scope, skill } = await workspaceSkill(input);
+      const { scope, skill, space } = await workspaceSkill(input);
       if (!scope.projectId) throw new UserError('Choose a project to enable skills');
       if (skill.origin === 'harness') throw new UserError('Skills that ship with the harness are always on');
       if (skill.origin !== 'library') throw new UserError('Repository skills are managed in the repository');
-      if (!input.enabled && (skill.enabledBy === 'global' || skill.enabledBy === 'profile')) throw new UserError('This skill is inherited. Change its selection in Settings.');
-      await resources().setProjectSkill(skill.id, scope.projectId, input.enabled);
+      if (input.level === 'space' && !space) throw new UserError('This project is in no space');
+      // Off at a level only where it is on: a skill on for the space is turned off for the space.
+      if (!input.enabled && skill.enabledBy !== input.level) throw new UserError(skill.enabledBy === 'space' ? 'This skill is on for the space. Turn it off for the space.' : 'This skill is inherited. Change its selection in Settings.');
+      await resources().setLevelSkill(skill.id, scope.projectId, input.level, input.enabled);
       return null;
     });
 }
