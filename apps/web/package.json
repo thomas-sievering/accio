@@ -7,11 +7,12 @@
     "dev": "vite"
   },
   "dependencies": {
+    "@accio/protocol": "workspace:*",
+    "motion": "^14.14.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-markdown": "^10.1.0",
-    "remark-gfm": "^4.0.1",
-    "@accio/protocol": "workspace:*"
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@types/react": "^19.3.0",

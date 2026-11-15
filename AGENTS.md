@@ -22,6 +22,16 @@ under `docs/plans` record scope and history and may predate the implementation.
 
 Worker thread paths above are relative to `apps/worker/src/` unless fully qualified.
 
+## Motion
+
+Plain CSS owns fades, hovers, presses and popover open/close (`apps/web/src/ui/motion.css`,
+whose `--ease-settle` and timings are the house curve); view transitions own handoffs between
+screens and the composer. Reach for `motion` (`motion/react`) only when CSS can't do it well:
+springs that must stay interruptible, layout animations (rows sliding into place, height to
+`auto`), exit animations of React-removed elements, and drag or gesture-driven values. Every
+animation honours `prefers-reduced-motion`. For motion work see the `animate`,
+`review-animations` and `smooth-ui` skills; for any new UI dependency use `pick-ui-library`.
+
 ## Concurrent work
 
 Before editing, identify the existing owner and consumers of the behavior. Keep
