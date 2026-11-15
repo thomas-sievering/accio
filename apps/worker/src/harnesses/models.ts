@@ -39,6 +39,11 @@ export function mentionedModel(models: ModelView[], handle: string, inheritedEff
   return { model, selection };
 }
 
+/** Another profile's thread keeps `selection` where that profile offers it; undefined starts it on the profile's default. */
+export function inheritedModel(models: ModelView[], selection: ModelSelection): ModelSelection | undefined {
+  return models.some((m) => m.harnessId === selection.harnessId && m.id === selection.modelId) ? selection : undefined;
+}
+
 /** Choices are scoped to one profile and the machine that will execute the turn. */
 export class Models {
   constructor(private profiles: Profiles, private settings: SettingsAccess, private machineId: string, private claude: ClaudeModels) {}
