@@ -9,11 +9,23 @@ import { secretHttpTool } from '../secrets/httpTool.js';
 import { ACCIO_MCP_SERVER } from '../tools/tools.js';
 import { SUBAGENT_TIMEOUT_SEC } from './subagents.js';
 import { summarizeTool } from './transcript.js';
+import { CodexSkills, disabledSkillsConfig } from './codexSkills.js';
 import { CodexItems, CodexItemType, CodexMessageDelta, CodexRouting, CodexThreadResult, CodexTokenUsage, CodexTurnCompleted, CodexTurnResult, parseCodex } from './codexMessages.js';
 
 /** Codex runs on this machine. Only the profile's scoped proxy key reaches it. */
 export function codexHarness(factory: CodexFactory = startCodex): Harness {
+  const discovered = new CodexSkills();
   return measuredHarness('codex', {
+    async skills({ cwd, env, signal }) {
+      const home = env.CODEX_HOME;
+      if (!home) return [];
+      const known = discovered.harness(home);
+      if (known) return known;
+      await mkdir(home, { recursive: true });
+      const client = await factory({ home, cwd, env, signal });
+      try { await discovered.discover(client, home, cwd ?? home); } finally { await client.close(); }
+      return discovered.harness(home) ?? [];
+    },
     async generateText({ prompt, model, effort, env, signal }) {
       // A Responses request avoids starting an agent with shell or repository access.
       const response = await fetch(`${env.ACCIO_OPENAI_URL}/responses`, {
@@ -59,7 +71,7 @@ export function codexHarness(factory: CodexFactory = startCodex): Harness {
       if (!home || !baseUrl || !env.ACCIO_OPENAI_KEY) throw new Error('Codex profile configuration is missing');
       await mkdir(home, { recursive: true });
       const endpoint = sessionId && requestSecret ? await secretHttpTool(requestSecret) : undefined;
-      const client = await factory({ home, cwd, env: endpoint ? { ...env, ACCIO_TOOL_TOKEN: endpoint.token } : env, signal, experimental: !!requestSecret, config: [
+      const config = [
         'model_provider="accio"', 'model_providers.accio.name="accio hub"',
         `model_providers.accio.base_url=${JSON.stringify(baseUrl)}`,
         'model_providers.accio.env_key="ACCIO_OPENAI_KEY"', 'model_providers.accio.wire_api="responses"',
@@ -74,7 +86,17 @@ export function codexHarness(factory: CodexFactory = startCodex): Harness {
           return mcp.type === 'http' ? [`${prefix}.url=${JSON.stringify(mcp.url)}`, ...Object.entries(mcp.headers).map(([key, value]) => `${prefix}.http_headers.${key}=${JSON.stringify(value)}`)] : [`${prefix}.command=${JSON.stringify(mcp.command)}`, `${prefix}.args=${JSON.stringify(mcp.args)}`];
         }),
         ...(endpoint ? [`mcp_servers.${SECRET_MCP_SERVER}.url=${JSON.stringify(endpoint.url)}`, `mcp_servers.${SECRET_MCP_SERVER}.bearer_token_env_var="ACCIO_TOOL_TOKEN"`] : []),
-      ] }).catch(async error => { await endpoint?.close(); throw error; });
+      ];
+      const launch = () => factory({ home, cwd, env: endpoint ? { ...env, ACCIO_TOOL_TOKEN: endpoint.token } : env, signal, experimental: !!requestSecret,
+        config: [...config, ...disabledSkillsConfig(discovered.known(home))] });
+      // ADR 0020: skills installed on this machine are no skill level. Codex reads them at
+      // launch, so a launch that still finds one enabled is replaced by one with it disabled.
+      const client = await (async () => {
+        const first = await launch();
+        try { if (!await discovered.discover(first, home, cwd)) return first; } catch (error) { await first.close(); throw error; }
+        await first.close();
+        return launch();
+      })().catch(async error => { await endpoint?.close(); throw error; });
       const events: CodexNotification[] = [];
       let wake = () => {};
       let failure: Error | undefined;

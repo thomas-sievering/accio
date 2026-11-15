@@ -3,6 +3,7 @@ import type { SkillContext } from '@accio/protocol';
 import { McpPanel } from '../mcp/McpPanel';
 import { DeliveryPanel, deliveryNeedsYou } from '../threads/DeliveryPanel';
 import { SkillsPanel } from '../skills/SkillsPanel';
+import { useDraftHarness } from '../skills/draftHarness';
 import { useThreads } from '../threads/threads';
 import { useAppEvent } from './appEvents';
 import { PanelRight } from './icons';
@@ -66,8 +67,11 @@ export function SidePanel({ overlay = false }: { overlay?: boolean }) {
   const { reason } = useThreadAvailability(thread);
   const skillsUnavailable = !draft && thread ? reason('threads.skills') : undefined;
   // A draft has no thread yet: its skills come from the checkout (or the profile, without one).
+  // GLOSSARY: Harness skill. A draft lists the skills of the harness its model picker is on.
+  const draftHarness = useDraftHarness();
+  const harness = draftHarness ? { harnessId: draftHarness } : {};
   const context: SkillContext | undefined = draft
-    ? draft.checkoutId ? { checkoutId: draft.checkoutId, ...(draft.profileId ? { profileId: draft.profileId } : {}) } : draft.profileId ? { profileId: draft.profileId } : undefined
+    ? draft.checkoutId ? { checkoutId: draft.checkoutId, ...(draft.profileId ? { profileId: draft.profileId } : {}), ...harness } : draft.profileId ? { profileId: draft.profileId, ...harness } : undefined
     : thread ? { threadId: thread.id } : undefined;
   const key = context ? JSON.stringify(context) : '';
   // An overlay takes focus with it when it opens.

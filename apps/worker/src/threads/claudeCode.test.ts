@@ -1,3 +1,6 @@
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { claudeCode } from './claudeCode.js';
 
@@ -214,4 +217,18 @@ it.each([
   for await (const message of claudeCode.run({ cwd: '.', prompt: 'hi', sessionId: null, env: {}, signal: new AbortController().signal })) messages.push(message);
   expect(messages).toEqual([...before, result]);
   expect(q.getContextUsage).toHaveBeenCalledWith({ detail: 'summary' });
+});
+
+it('learns the skills Claude Code ships with from a turn, without the repository’s own', async () => {
+  const cwd = await mkdtemp(join(tmpdir(), 'accio-claude-skills-'));
+  try {
+    await mkdir(join(cwd, '.claude', 'skills', 'notes'), { recursive: true });
+    await writeFile(join(cwd, '.claude', 'skills', 'notes', 'SKILL.md'), '---\nname: notes\n---\n');
+    const q = Object.assign(query(), { initializationResult: vi.fn(async () => ({ commands: [{ name: 'simplify', description: 'Review the changed code' }, { name: 'compact', description: 'Free up context' }] })) });
+    q.next.mockResolvedValueOnce({ done: false, value: { type: 'system', subtype: 'init', session_id: 's', skills: ['simplify', 'notes'] } })
+      .mockResolvedValueOnce({ done: false, value: { type: 'result', subtype: 'success', is_error: false, session_id: 's' } });
+    queryMock.mockReturnValue(q);
+    for await (const _ of claudeCode.run({ cwd, prompt: 'hello', sessionId: null, env: {}, signal: new AbortController().signal })) { /* drain */ }
+    expect(await claudeCode.skills!({ cwd, env: {} })).toEqual([{ name: 'simplify', description: 'Review the changed code' }]);
+  } finally { await rm(cwd, { recursive: true, force: true }); }
 });
