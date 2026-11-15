@@ -151,6 +151,41 @@ describe('starting a thread from an issue', () => {
     expect(Object.fromEntries(threads.map((t) => [t.id, t.issue]))).toEqual({ [typed.id]: '#196', [plain.id]: undefined });
   });
 
+  it('reads one GitHub issue’s body through gh, and says why one can’t be read', async () => {
+    const views: string[][] = [];
+    const { c, checkout } = await start({}, async (args) => {
+      if (args[0] === 'issue' && args[1] === 'view') {
+        views.push(args);
+        if (args[2] === '194') throw Object.assign(new Error('Command failed'), { stderr: 'GraphQL: Could not resolve to an issue\n' });
+        if (args[2] === '150') return JSON.stringify({ body: 'Done long ago', state: 'CLOSED' });
+        return JSON.stringify({ body: '## What to build\n\nRetry it.\n', state: 'OPEN' });
+      }
+      throw new Error('signed out');
+    });
+    expect(await c.call('threads.issueBody', { checkoutId: checkout.id, ref: '#208' })).toEqual({ ref: '#208', body: '## What to build\n\nRetry it.\n' });
+    expect(views).toEqual([['issue', 'view', '208', '--json', 'body,state']]);
+    await expect(c.call('threads.issueBody', { checkoutId: checkout.id, ref: '#194' })).rejects.toThrow('Couldn’t read #194 with gh: GraphQL: Could not resolve to an issue');
+    // Only open issues are read, as the list only has open ones; this one closed since.
+    await expect(c.call('threads.issueBody', { checkoutId: checkout.id, ref: '#150' })).rejects.toThrow('#150 is not an open issue');
+    await expect(c.call('threads.issueBody', { checkoutId: checkout.id, ref: '.scratch/a/issues/01-a.md' })).rejects.toThrow('.scratch/a/issues/01-a.md is not a GitHub issue');
+  });
+
+  it('reads a local issue’s body from its file in the checkout, and only open issue files', async () => {
+    const ref = '.scratch/relay/issues/02-chip.md';
+    const { c, checkout } = await start({
+      [ref]: '# Reconnecting chip\n\nStatus: needs-triage\n**Blocked by:** 01\nOwner: relay team\n\n## What to build\n\nA chip.\n\nBlocked by: this line is body, not header\n',
+      '.scratch/relay/issues/03-done.md': '# Old\n\nStatus: done\n',
+      'secret.md': '# Not an issue\n',
+    }, async () => { throw new Error('no gh'); });
+    // The title, Status and Blocked by lines show in the reader already; the rest is the body.
+    const read = await c.call('threads.issueBody', { checkoutId: checkout.id, ref });
+    expect({ ...read, body: read.body.replace(/\r/g, '') })
+      .toEqual({ ref, body: 'Owner: relay team\n\n## What to build\n\nA chip.\n\nBlocked by: this line is body, not header\n' });
+    for (const other of ['.scratch/relay/issues/03-done.md', '.scratch/relay/issues/04-missing.md', 'secret.md', '.scratch/relay/issues/../../../secret.md']) {
+      await expect(c.call('threads.issueBody', { checkoutId: checkout.id, ref: other })).rejects.toThrow(`${other} is not an open issue`);
+    }
+  });
+
   it('marks a local issue claimed in the thread’s worktree, leaving the checkout alone', async () => {
     const ref = '.scratch/relay/issues/01-retry.md';
     const { c, folder, checkout } = await start({ [ref]: '# Retry\n\nStatus: ready-for-agent\n' }, async () => { throw new Error('no gh'); });

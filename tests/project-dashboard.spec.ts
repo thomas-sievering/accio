@@ -91,9 +91,14 @@ test('all settled project threads remain reachable beyond the first page', async
   }
 });
 
-/** Opens the project dashboard from the header of the thread just started with `text`, once its first message shows. */
+/**
+ * Opens the project dashboard from the header of the thread just started with `text`, once
+ * it is the open thread: the draft shows the message before the thread starts, and opens
+ * the thread when it has, which would close a dashboard opened in between.
+ */
 async function openDashboard(page: Page, text: string, project: string) {
   await expect(page.locator('.msg.user', { hasText: text })).toBeVisible();
+  await expect(page.locator('.row-main[aria-current="page"]', { hasText: text }).filter({ hasNotText: 'Draft' })).toBeVisible({ timeout: 20_000 });
   await expect(async () => {
     await page.locator('.thread-project-link', { hasText: project }).click();
     await page.getByRole('menuitem', { name: 'Dashboard', exact: true }).click({ timeout: 2_000 });
@@ -134,6 +139,78 @@ test('the Issues fold lists open issues in dependency order with a graph, narrow
   await expect(rows.locator('.issues-label')).toHaveText(['01', '02']);
   await expect(rows.nth(1)).toContainText('waits on 01');
   await expect(rows.locator('.issues-state')).toHaveText(['Ready', 'Blocked']);
+});
+
+test('clicking an issue opens it in a reader whose Blocked by and Blocks links move it, a sheet in narrow windows', async ({ page, baseURL }, info) => {
+  test.setTimeout(60_000);
+  await chatFixture(baseURL!);
+  await page.setViewportSize({ width: 1400, height: 800 });
+  await startProjectThread(page, baseURL!, /scratch-project/, 'Read the local issues');
+  await openDashboard(page, 'Read the local issues', 'scratch-project');
+  const fold = page.locator('.dashboard-fold').filter({ has: page.locator('summary', { hasText: 'Issues' }) });
+  await fold.locator('summary').click();
+  await fold.getByRole('combobox', { name: 'Feature folder' }).selectOption('relay-reconnect');
+  const rows = fold.getByRole('list', { name: 'Open issues' }).locator('.issues-row');
+
+  // Wide: the reader sits beside the dashboard, and the row stays highlighted.
+  await rows.filter({ hasText: 'Show a reconnecting state' }).getByRole('button').click();
+  const reader = page.getByRole('complementary', { name: 'Issue' });
+  await expect(reader.getByRole('heading', { name: 'Show a reconnecting state on the machine chip' })).toBeVisible();
+  await expect(reader).toContainText('The machine chip says Reconnecting while the relay retries.');
+  await expect(reader.locator('.issue-pill')).toHaveText('Blocked');
+  await expect(rows.nth(1)).toHaveAttribute('aria-current', 'true');
+  await expect(rows.nth(0)).not.toHaveAttribute('aria-current', 'true');
+  await page.screenshot({ path: info.outputPath('issue-reader.png') });
+
+  // Blocked by moves the reader and the highlight to 01, whose Blocks leads back.
+  await reader.getByRole('button', { name: /01 Retry the relay handshake/ }).click();
+  await expect(reader.getByRole('heading', { name: 'Retry the relay handshake after the hub restarts' })).toBeVisible();
+  await expect(reader).toContainText('Machines stay offline.');
+  await expect(reader.locator('.issue-pill')).toHaveText('Ready');
+  await expect(reader.locator('.issue-triage')).toHaveText('ready-for-agent');
+  await expect(rows.nth(0)).toHaveAttribute('aria-current', 'true');
+  await expect(reader.getByRole('link', { name: /GitHub/ })).toHaveCount(0);
+  await reader.getByRole('button', { name: /02 Show a reconnecting state/ }).click();
+  await expect(reader.getByRole('heading', { name: 'Show a reconnecting state on the machine chip' })).toBeVisible();
+
+  // Esc closes the reader before the dashboard.
+  await page.keyboard.press('Escape');
+  await expect(reader).toHaveCount(0);
+  await expect(rows.nth(1)).not.toHaveAttribute('aria-current', 'true');
+  await expect(page.getByRole('heading', { name: 'scratch-project' })).toBeVisible();
+
+  // Narrow: the reader is a sheet over the dashboard, and closes.
+  await page.setViewportSize({ width: 900, height: 760 });
+  await rows.first().getByRole('button').click();
+  const sheet = page.getByRole('dialog', { name: /Retry the relay handshake/ });
+  await expect(sheet).toContainText('Machines stay offline.');
+  await expect(page.getByRole('complementary', { name: 'Issue' })).toHaveCount(0);
+  await page.screenshot({ path: info.outputPath('issue-reader-sheet.png') });
+  // Esc closes the sheet and leaves the dashboard; so does its Close button.
+  await page.keyboard.press('Escape');
+  await expect(sheet).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'scratch-project' })).toBeVisible();
+  await rows.first().getByRole('button').click();
+  await sheet.getByRole('button', { name: 'Close' }).click();
+  await expect(sheet).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'scratch-project' })).toBeVisible();
+});
+
+test('a GitHub issue’s reader shows the body read through gh and links to GitHub', async ({ page, baseURL }) => {
+  test.setTimeout(60_000);
+  await chatFixture(baseURL!);
+  await page.setViewportSize({ width: 1400, height: 800 });
+  await startProjectThread(page, baseURL!, /issues-project/, 'Read the GitHub issues');
+  await openDashboard(page, 'Read the GitHub issues', 'issues-project');
+  const fold = page.locator('.dashboard-fold').filter({ has: page.locator('summary', { hasText: 'Issues' }) });
+  await fold.locator('summary').click();
+  await fold.locator('.issues-row', { hasText: '#194' }).getByRole('button').click();
+  const reader = page.getByRole('complementary', { name: 'Issue' });
+  await expect(reader).toContainText('The body of #194, read through gh.');
+  await expect(reader.getByRole('link', { name: /GitHub/ })).toHaveAttribute('href', 'https://github.com/test/accio-issues/issues/194');
+  await reader.getByRole('button', { name: /#205 Snoozed threads/ }).click();
+  await expect(reader).toContainText('The body of #205, read through gh.');
+  await expect(reader.getByRole('button', { name: /#194 Settle threads/ })).toBeVisible();
 });
 
 test('the Issues fold says why it is empty when the project has no tracker', async ({ page, baseURL }) => {

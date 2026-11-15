@@ -26,14 +26,15 @@ const reviewHostFile = join(home, 'review-host.json');
 const issuesFolder = join(home, 'issues-project');
 const issuesClaimFile = join(home, 'issue-claims.json');
 const fixtureIssues = [
-  { number: 208, title: 'Retry the relay handshake after the hub restarts', labels: [{ name: 'ready-for-agent' }], assignees: [], blockedBy: { nodes: [] }, parent: null },
-  { number: 205, title: 'Snoozed threads lose their goal on restart', labels: [{ name: 'ready-for-agent' }, { name: 'bug' }], assignees: [], blockedBy: { nodes: [] }, parent: { number: 190, title: 'Threads survive restarts' } },
-  { number: 201, title: 'Limits indicator flickers when switching profiles', labels: [{ name: 'needs-triage' }], assignees: [], blockedBy: { nodes: [] }, parent: null },
-  { number: 194, title: 'Settle threads once their delivery merges', labels: [], assignees: [], blockedBy: { nodes: [{ number: 205, state: 'OPEN' }] }, parent: { number: 190, title: 'Threads survive restarts' } },
+  { number: 208, title: 'Retry the relay handshake after the hub restarts', url: 'https://github.com/test/accio-issues/issues/208', labels: [{ name: 'ready-for-agent' }], assignees: [], blockedBy: { nodes: [] }, parent: null },
+  { number: 205, title: 'Snoozed threads lose their goal on restart', url: 'https://github.com/test/accio-issues/issues/205', labels: [{ name: 'ready-for-agent' }, { name: 'bug' }], assignees: [], blockedBy: { nodes: [] }, parent: { number: 190, title: 'Threads survive restarts' } },
+  { number: 201, title: 'Limits indicator flickers when switching profiles', url: 'https://github.com/test/accio-issues/issues/201', labels: [{ name: 'needs-triage' }], assignees: [], blockedBy: { nodes: [] }, parent: null },
+  { number: 194, title: 'Settle threads once their delivery merges', url: 'https://github.com/test/accio-issues/issues/194', labels: [], assignees: [], blockedBy: { nodes: [{ number: 205, state: 'OPEN' }] }, parent: { number: 190, title: 'Threads survive restarts' } },
 ];
 const fixtureGh = async (args: string[], options?: { cwd?: string }) => {
   if (!options?.cwd?.startsWith(issuesFolder)) throw new Error('gh is not available in this fixture');
   if (args[0] === 'issue' && args[1] === 'list') return JSON.stringify(fixtureIssues);
+  if (args[0] === 'issue' && args[1] === 'view') return JSON.stringify({ state: 'OPEN', body: `## What to build\n\nThe body of #${args[2]}, read through gh.\n` });
   if (args[0] === 'issue' && args[1] === 'edit') {
     const claims = JSON.parse(await readFile(issuesClaimFile, 'utf8').catch(() => '[]'));
     await writeFile(issuesClaimFile, JSON.stringify([...claims, args]));
@@ -364,7 +365,7 @@ for (const [folder, files] of [
   [issuesFolder, { 'README.md': '# Issues fixture\n' }],
   [localIssuesFolder, {
     '.scratch/relay-reconnect/issues/01-retry.md': '# Retry the relay handshake after the hub restarts\n\nStatus: ready-for-agent\n\nMachines stay offline.\n',
-    '.scratch/relay-reconnect/issues/02-chip.md': '# Show a reconnecting state on the machine chip\n\nBlocked by: 01\n',
+    '.scratch/relay-reconnect/issues/02-chip.md': '# Show a reconnecting state on the machine chip\n\nBlocked by: 01\n\n## What to build\n\nThe machine chip says Reconnecting while the relay retries.\n',
     '.scratch/issue-picker/issues/01-detect.md': '# Detect the project issue tracker\n\nStatus: ready-for-agent\n',
   }],
 ] as const) await initRepo(folder, files, { author: BROWSER_AUTHOR, message: 'issues fixture' });

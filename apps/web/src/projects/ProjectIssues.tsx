@@ -3,40 +3,56 @@ import type { IssueList, ProjectView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { ChevronDown } from '../app/icons';
 import { useProjects } from './projects';
-import { issueFilterGroups, issueGraph, type IssueRow } from './issueGraph';
+import { ISSUE_STATE_LABEL, issueFilterGroups, issueGraph, type IssueRow } from './issueGraph';
 
 const LANE = 14;
 const ROW = 34;
-const STATE = { ready: 'Ready', blocked: 'Blocked', claimed: 'Claimed' } as const;
+
+export type ProjectIssueList = { checkoutId?: string; list?: IssueList; error?: string; reread: () => void };
 
 /**
- * GLOSSARY: Project dashboard. The Issues fold: the project's open issues in dependency
- * order with a git-log style graph in the gutter, each with Ready, Blocked or Claimed and
- * what a blocked one waits on. Read again each time it opens; narrows to one parent
- * issue or feature folder.
+ * A project's open issues, read from its first checkout here, for the Issues fold and its
+ * reader. `reread` reads the tracker again, as the fold does each time it opens.
  */
-export function ProjectIssues({ project }: { project: ProjectView }) {
+export function useProjectIssues(project: ProjectView): ProjectIssueList {
   const client = useClient();
   const { checkoutsOf } = useProjects();
   const checkoutId = checkoutsOf(project.id)[0]?.id;
   const [read, setRead] = useState<{ checkoutId: string; list?: IssueList; error?: string }>();
-  const [group, setGroup] = useState<string>();
-  const readIssues = useCallback(() => {
+  const reread = useCallback(() => {
     if (!checkoutId) return;
     client.call('threads.issues', { checkoutId }).then(
       (list) => setRead({ checkoutId, list }),
       (error: Error) => setRead({ checkoutId, error: error.message }));
   }, [client, checkoutId]);
-  useEffect(readIssues, [readIssues]);
+  useEffect(reread, [reread]);
   const current = read?.checkoutId === checkoutId ? read : undefined;
-  const list = current?.list;
+  return { checkoutId, list: current?.list, error: current?.error, reread };
+}
+
+/**
+ * GLOSSARY: Project dashboard. The Issues fold: the project's open issues in dependency
+ * order with a git-log style graph in the gutter, each with Ready, Blocked or Claimed and
+ * what a blocked one waits on. Read again each time it opens; narrows to one parent
+ * issue or feature folder. Clicking an issue opens it in the reader; `selected` is its ref.
+ */
+export function ProjectIssues({ issues, selected, onSelect }: { issues: ProjectIssueList; selected?: string; onSelect: (ref: string) => void }) {
+  const { checkoutId, list, error, reread } = issues;
+  const [group, setGroup] = useState<string>();
+  // The reader moved to an issue the filter hides (a Blocked by in another parent): show all, so its row stays highlighted.
+  const [followed, setFollowed] = useState(selected);
+  if (selected !== followed) {
+    setFollowed(selected);
+    const issue = selected ? list?.issues.find((i) => i.ref === selected) : undefined;
+    if (issue && group !== undefined && issue.group !== group) setGroup(undefined);
+  }
   const groups = list ? issueFilterGroups(list) : [];
   const shownGroup = group !== undefined && groups.includes(group) ? group : undefined;
   const graph = list ? issueGraph(list, shownGroup) : undefined;
   const source = list?.tracker?.kind === 'github' ? list.tracker.repository : list?.tracker?.folder;
 
   const empty = !checkoutId ? 'This project has no checkout on this machine to read issues from.'
-    : current?.error ? `Couldn’t read issues: ${current.error}`
+    : error ? `Couldn’t read issues: ${error}`
     : !list ? 'Loading…'
     : list.unavailable ? list.unavailable
     : !list.tracker ? 'No issue tracker. Name one in the project’s agent skills, or add issue files under .scratch/<feature>/issues/.'
@@ -44,7 +60,7 @@ export function ProjectIssues({ project }: { project: ProjectView }) {
     : undefined;
 
   return (
-    <details className="dashboard-section dashboard-fold" aria-label="Issues" onToggle={(e) => { if (e.currentTarget.open) readIssues(); }}>
+    <details className="dashboard-section dashboard-fold" aria-label="Issues" onToggle={(e) => { if (e.currentTarget.open) reread(); }}>
       <summary className="dashboard-heading"><ChevronDown />Issues {!!list?.issues.length && <span className="dashboard-count">{list.issues.length}</span>}</summary>
       <div className="issues-page">
         {list?.tracker && (groups.length > 0 || source) && (
@@ -61,7 +77,7 @@ export function ProjectIssues({ project }: { project: ProjectView }) {
         )}
         {empty ? <p className="dashboard-empty">{empty}</p> : graph && (
           <ol className="issues-graph" aria-label="Open issues">
-            {graph.rows.map((row) => <IssueLine key={row.issue.ref} row={row} lanes={graph.lanes} />)}
+            {graph.rows.map((row) => <IssueLine key={row.issue.ref} row={row} lanes={graph.lanes} selected={row.issue.ref === selected} onSelect={onSelect} />)}
           </ol>
         )}
       </div>
@@ -69,18 +85,16 @@ export function ProjectIssues({ project }: { project: ProjectView }) {
   );
 }
 
-function IssueLine({ row, lanes }: { row: IssueRow; lanes: number }) {
+function IssueLine({ row, lanes, selected, onSelect }: { row: IssueRow; lanes: number; selected: boolean; onSelect: (ref: string) => void }) {
   const { issue, state } = row;
-  const title = issue.url
-    ? <a className="issues-title" href={issue.url} target="_blank" rel="noreferrer">{issue.title}</a>
-    : <span className="issues-title">{issue.title}</span>;
+  // The whole row opens the issue; its title is the button keyboards reach.
   return (
-    <li className={`issues-row ${state}`}>
+    <li className={`issues-row ${state}`} aria-current={selected || undefined} onClick={() => onSelect(issue.ref)}>
       <Gutter row={row} lanes={lanes} />
       <span className="issues-label">{issue.label}</span>
-      {title}
+      <button type="button" className="issues-title">{issue.title}</button>
       {state === 'blocked' && <span className="issues-waits">waits on {issue.blockedBy.join(', ')}</span>}
-      <span className={`issue-pill issues-state ${state}`}>{STATE[state]}</span>
+      <span className={`issue-pill issues-state ${state}`}>{ISSUE_STATE_LABEL[state]}</span>
     </li>
   );
 }

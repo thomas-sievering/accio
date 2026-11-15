@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { threadPlace, type ChangelogEntry, type ProjectChangelog, type ProjectView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { emitAppEvent } from '../app/appEvents';
@@ -13,7 +13,9 @@ import { ProjectMark } from './ProjectMark';
 import { ProfileLabel } from '../profiles/ProfileLabel';
 import { entryForCommit } from '../changelog/changelog';
 import { ProjectChangelog as ChangelogFold } from '../changelog/ProjectChangelog';
-import { ProjectIssues } from './ProjectIssues';
+import { ProjectIssues, useProjectIssues } from './ProjectIssues';
+import { IssueReader } from './IssueReader';
+import { useNarrow } from '../app/SidePanel';
 
 const SETTLED_SHOWN = 10;
 const SHIPPED_SHOWN = 8;
@@ -21,7 +23,8 @@ const SHIPPED_SHOWN = 8;
 /**
  * GLOSSARY: Project dashboard. Opened from the project name in a thread's header:
  * its threads by state, then what recently landed on its default branch, then its
- * open issues, Changelog and settled threads, folded.
+ * open issues, Changelog and settled threads, folded. An opened issue reads beside it
+ * in wide windows, over it in narrow ones.
  */
 export function ProjectDashboard({ project, onClose }: { project: ProjectView; onClose: () => void }) {
   const client = useClient();
@@ -29,6 +32,12 @@ export function ProjectDashboard({ project, onClose }: { project: ProjectView; o
   const heading = useRef<HTMLElement>(null);
   useEffect(() => { heading.current?.focus(); }, [project.id]);
   useEscapeClose(onClose);
+  const issues = useProjectIssues(project);
+  const [reading, setReading] = useState<string>();
+  const closeReader = useCallback(() => setReading(undefined), []);
+  const narrow = useNarrow();
+  // The reader closes once its issue is no longer open in the list.
+  const readingIssue = reading ? issues.list?.issues.find((issue) => issue.ref === reading) : undefined;
 
   return (
     <>
@@ -43,16 +52,21 @@ export function ProjectDashboard({ project, onClose }: { project: ProjectView; o
           onClick={() => emitAppEvent('settings.open', { section: 'projects', projectId: project.id, fromDashboard: true })}><Settings /></button>
         <button type="button" className="side-icon" title="Close (Esc)" aria-label="Close dashboard" onClick={onClose}><Close /></button>
       </header>
-      <div className="settings-scroll">
-        <div className="dashboard-page">
-          <ThreadMenuProvider>
-            <Threads project={project} />
-            <Shipped project={project} entries={entries} />
-            <ProjectIssues key={project.id} project={project} />
-            <ChangelogFold projectId={project.id} entries={entries} />
-            <Settled key={project.id} project={project} />
-          </ThreadMenuProvider>
+      <div className="dashboard-body">
+        <div className="settings-scroll">
+          <div className="dashboard-page">
+            <ThreadMenuProvider>
+              <Threads project={project} />
+              <Shipped project={project} entries={entries} />
+              <ProjectIssues issues={issues} selected={readingIssue?.ref} onSelect={setReading} />
+              <ChangelogFold projectId={project.id} entries={entries} />
+              <Settled key={project.id} project={project} />
+            </ThreadMenuProvider>
+          </div>
         </div>
+        {readingIssue && issues.checkoutId && issues.list && (
+          <IssueReader checkoutId={issues.checkoutId} list={issues.list} issue={readingIssue} narrow={narrow} onOpen={setReading} onClose={closeReader} />
+        )}
       </div>
     </>
   );

@@ -17,6 +17,9 @@ export type IssueRow = {
 
 export type IssueGraph = { rows: IssueRow[]; lanes: number };
 
+/** How the fold and the reader name an issue's state. */
+export const ISSUE_STATE_LABEL: Record<IssueRow['state'], string> = { ready: 'Ready', blocked: 'Blocked', claimed: 'Claimed' };
+
 /**
  * GLOSSARY: Project dashboard. The Issues fold's rows: the open issues in dependency
  * order (no issue above one it waits on), each chain kept together, otherwise in the
@@ -27,11 +30,8 @@ export type IssueGraph = { rows: IssueRow[]; lanes: number };
  */
 export function issueGraph(list: IssueList, group?: string): IssueGraph {
   const issues = group === undefined ? list.issues : list.issues.filter((issue) => issue.group === group);
-  const local = list.tracker?.kind === 'local';
-  // Local issues name their blockers by number within their feature folder; GitHub ones by label.
-  const blockerOf = (issue: IssueView, label: string) => issues.findIndex((other) => other !== issue && (local
-    ? other.group === issue.group && /^\d+$/.test(label) && Number(other.label) === Number(label)
-    : other.label === label));
+  const names = namesBlocker(list);
+  const blockerOf = (issue: IssueView, label: string) => issues.findIndex((other) => other !== issue && names(issue, label, other));
   const waitsOn = issues.map((issue) => [...new Set(issue.blockedBy.map((label) => blockerOf(issue, label)).filter((i) => i >= 0))]);
   const unblocks = issues.map((_, i) => waitsOn.flatMap((blockers, j) => blockers.includes(i) ? [j] : []));
 
@@ -74,6 +74,27 @@ export function issueGraph(list: IssueList, group?: string): IssueGraph {
     return { issue, state: issueState(issue), lane, through, incoming, outgoing };
   });
   return { rows, lanes: width };
+}
+
+/** Whether `issue` means `other` by `label` in its Blocked by: local issues by number within their feature folder, GitHub ones by label. */
+function namesBlocker(list: IssueList) {
+  const local = list.tracker?.kind === 'local';
+  return (issue: IssueView, label: string, other: IssueView) => local
+    ? other.group === issue.group && /^\d+$/.test(label) && Number(other.label) === Number(label)
+    : other.label === label;
+}
+
+/**
+ * GLOSSARY: Issue. The open issues one issue waits on (its Blocked by) and those waiting
+ * on it (its Blocks), across the whole list whatever the fold is narrowed to.
+ */
+export function issueLinks(list: IssueList, ref: string): { blockedBy: IssueView[]; blocks: IssueView[] } {
+  const issue = list.issues.find((i) => i.ref === ref);
+  if (!issue) return { blockedBy: [], blocks: [] };
+  const names = namesBlocker(list);
+  const blockedBy = list.issues.filter((other) => other !== issue && issue.blockedBy.some((label) => names(issue, label, other)));
+  const blocks = list.issues.filter((other) => other !== issue && other.blockedBy.some((label) => names(other, label, issue)));
+  return { blockedBy, blocks };
 }
 
 /** The parent issues or feature folders the fold can narrow to, in tracker order. */
