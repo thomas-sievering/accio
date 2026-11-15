@@ -149,6 +149,42 @@ test('Skills tab folds each skill level, adds, references, edits, disables and j
   await expect(skillRow(page, 'repo-notes')).toBeVisible();
 });
 
+test('Skills tab shows the harness’s own skills read-only and overridden skills apart, dimmed and tagged', async ({ page, baseURL }, testInfo) => {
+  await openSkills(page, baseURL!, /Skills fixture/);
+
+  // The Everywhere repo-notes loses to the repository's: it is not an Everywhere skill here.
+  await expect(panel(page).getByRole('button', { name: /^Everywhere/ })).toHaveCount(0);
+  const overriddenFold = panel(page).getByRole('button', { name: /^Overridden/ });
+  await expect(overriddenFold).toHaveAttribute('aria-expanded', 'false');
+  await expect(overriddenFold.locator('.skills-count')).toHaveText('1');
+  await overriddenFold.click();
+  const overridden = panel(page).locator('.skill-item.overridden');
+  await expect(overridden).toHaveCount(1);
+  await expect(overridden).toContainText('repo-notes');
+  await expect(overridden.locator('.tag')).toHaveText('Overridden by Project');
+  await expect(overridden.locator('.tag')).toHaveAttribute('title', /^Turned on: Everywhere · Library./);
+  await expect(overridden.locator('.skill-name')).toHaveJSProperty('scrollWidth', await overridden.locator('.skill-name').evaluate((el) => el.clientWidth));
+  await expect(overridden.getByRole('button', { name: /loaded this thread/ })).toHaveCount(0);
+  expect(Number(await overridden.locator('.skill-name').evaluate((el) => getComputedStyle(el).opacity))).toBeLessThan(1);
+
+  // The harness's own skills: a fold after the levels, titled with the harness, read-only.
+  const titles = await panel(page).locator('.skills-title').allTextContents();
+  expect(titles.map((t) => t.replace(/[\d·]|loaded/g, '').trim())).toEqual(['Project', 'Profile', 'Claude', 'Overridden']);
+  const harnessFold = panel(page).getByRole('button', { name: /^Claude/ });
+  await expect(harnessFold).toHaveAttribute('aria-expanded', 'false');
+  await expect(harnessFold).toHaveAttribute('title', /Ships with Claude\./);
+  await expect(harnessFold.locator('.skills-count')).toHaveText('2');
+  await harnessFold.click();
+  const simplify = skillRow(page, 'fixture-simplify');
+  await expect(simplify).toContainText('Built in');
+  await simplify.getByRole('button', { name: /^fixture-simplify/ }).click();
+  await expect(simplify).toContainText('Ships with Claude');
+  await expect(simplify.getByText(/doesn’t share this skill’s instructions/)).toBeVisible();
+  await expect(simplify.getByRole('button', { name: /Disable|Edit instructions/ })).toHaveCount(0);
+  await expect(simplify.getByRole('switch')).toHaveCount(0);
+  await panel(page).screenshot({ path: testInfo.outputPath('skills-harness-overridden.png') });
+});
+
 test('MCP tab lists every MCP server, flags sign-in and opens settings', async ({ page, baseURL }, testInfo) => {
   await openSkills(page, baseURL!, /Skills fixture/);
   await page.getByRole('tab', { name: 'MCP', exact: true }).click();

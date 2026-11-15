@@ -50,7 +50,7 @@ import { changeHarness, readThreadPage } from './handoff.js';
 import { Issues } from '../issues/issues.js';
 import { findIssue, implementable, issueOfferTool, offeredIssues } from './issueOffer.js';
 import type { SpaceContext } from '../spaces/spaceContext.js';
-import { cleanExecutionEnv } from './harnessEnv.js';
+import { cleanExecutionEnv, harnessHomeEnv } from './harnessEnv.js';
 import { Waits, waitForTool } from './waits.js';
 
 /** Threads on this machine, their transcripts, and the turns running in them. */
@@ -89,7 +89,7 @@ export class Threads {
     home: string,
     private profiles: Profiles,
     private projects: Projects,
-    harnesses: Record<string, Harness>,
+    private harnesses: Record<string, Harness>,
     private broadcast: Broadcast,
     private models: Models,
     private machines: Machines,
@@ -261,6 +261,10 @@ export class Threads {
     const { transcripts } = state;
     this.secrets.register(router, this.profiles, this.projects, this.broadcast);
     registerThreadSkills(router, { state, profiles: this.profiles, projects: this.projects, resources: () => this.resources,
+      harnessSkills: async (profileId, harnessId, cwd) => {
+        const harness = this.harnesses[harnessId];
+        return harness?.skills ? harness.skills({ cwd, env: harnessHomeEnv(state.home, profileId, harnessId) }) : undefined;
+      },
       withLifecycle: (threadId, action) => this.withLifecycle(threadId, action) });
     const organize = (threadId: string, change: (t: Thread) => Thread) =>
       state.update(threadId, t => change({ ...t, organizationVersion: (t.organizationVersion ?? 0) + 1 })).then(toView);

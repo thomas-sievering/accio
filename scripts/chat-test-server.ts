@@ -324,6 +324,8 @@ Object.assign(harness, { generateText: async ({ prompt }: { prompt: string }) =>
 } });
 const hat = await startTestSortingHat(home, { claudeFetch: (url, init) => String(url).endsWith('/api/oauth/usage')
   ? Promise.resolve(Response.json({ rate_limits_available: false })) : fakeClaudeFetch(url, init) });
+// GLOSSARY: Harness skill. What the fake Claude harness ships with, for the Skills panel.
+Object.assign(harness, { skills: async () => [{ name: 'fixture-simplify', description: 'Review changed code for reuse' }, { name: 'fixture-debug', description: 'Turn on debug logging' }] });
 const app = await startApp({ home, host: '127.0.0.1', port: Number(process.env.ACCIO_CHAT_TEST_PORT ?? 47481), hubPort: 0, token, webRoot: resolve(process.env.ACCIO_CHAT_TEST_WEB_ROOT ?? 'apps/web/dist') }, {
   harness,
   github: fixtureGh,
@@ -398,7 +400,8 @@ await git(scriptedFolder, 'commit', '--quiet', '-m', 'test command');
 await git(scriptedFolder, 'push', '--quiet', 'origin', 'HEAD:refs/heads/main');
 const scriptedCheckout = await client.call('checkouts.add', { path: scriptedFolder, profileId: 'personal' });
 await client.call('projects.setDelivery', { projectId: scriptedCheckout.projectId, deliveryPolicy: 'direct', previewCommand: '', testCommand: 'node check.cjs' });
-// Skills panel: a project with one repository skill, and a library source with one profile skill and one optional.
+// Skills panel: a project with one repository skill, and a library source with one profile skill, one optional,
+// and one of the repository skill's name turned on Everywhere, which the repository's overrides (ADR 0020).
 const skillsFolder = join(home, 'skills-project');
 const skillsLibrary = join(home, 'skills-library');
 const skillFile = (name: string, description: string, body: string) => `---\nname: ${name}\ndescription: ${description}\n---\n${body}\n`;
@@ -407,12 +410,15 @@ for (const [folder, files] of [
   [skillsLibrary, {
     'lib-review/SKILL.md': skillFile('lib-review', 'Review a change before shipping', 'Review instructions.'),
     'lib-docs/SKILL.md': skillFile('lib-docs', 'Keep documentation current', 'Docs instructions.'),
+    'shared-notes/SKILL.md': skillFile('repo-notes', 'Shared note conventions', 'Shared notes instructions.'),
   }],
 ] as const) await initRepo(folder, files, { author: BROWSER_AUTHOR, message: 'skills fixture' });
 const skillsCheckout = await client.call('checkouts.add', { path: skillsFolder, profileId: 'personal' });
 await client.call('skills.addSource', { id: 'library', name: 'Library', url: skillsLibrary, ref: 'HEAD' });
 const docs = (await client.call('resources.get', {})).skills.find((skill) => skill.name === 'lib-docs')!;
 await client.call('skills.setScope', { id: docs.id, scope: { ...docs.scope, profileIds: ['personal'] } });
+const sharedNotes = (await client.call('resources.get', {})).skills.find((skill) => skill.name === 'repo-notes')!;
+await client.call('skills.setScope', { id: sharedNotes.id, scope: { ...sharedNotes.scope, global: true } });
 const skillsThread = await client.call('threads.start', { checkoutId: skillsCheckout.id, text: 'Skills fixture' });
 await client.waitFor('threads.changed', (threads) => threads.some((entry) => entry.id === skillsThread.id && entry.status === 'idle'));
 const thread = await client.call('threads.start', { profileId: 'personal', text: 'Inline chat fixture' });

@@ -88,8 +88,16 @@ export type HarnessTurn = {
 export type HarnessMcp = { type: 'http'; url: string; headers: Record<string, string> } | { type: 'stdio'; command: string; args: string[] };
 export type TurnResources = { env: Record<string, string>; instructions: string; mcps: Record<string, HarnessMcp>; skills?: WorkspaceSkill[]; snapshot: { tools: { id: string; version: string }[]; skills: { id: string; revision: string }[]; mcps: string[] }; release: () => void };
 
+/** GLOSSARY: Harness skill. One that ships with the harness; Claude reports names without a path. */
+export type HarnessSkill = { name: string; description: string; path?: string };
+
 export interface Harness {
   run(run: HarnessTurn): AsyncIterable<HarnessMessage>;
+  /**
+   * GLOSSARY: Harness skill. The skills this harness ships with, for a profile's
+   * environment (as a turn's, without hub access). Empty until the harness can tell.
+   */
+  skills?: (input: { cwd?: string; env: Record<string, string>; signal?: AbortSignal }) => Promise<HarnessSkill[]>;
   /** Isolated text generation: no session resume, tools, project instructions or transcript writes. */
   generateText?: (input: { cwd: string; prompt: string; model: string; effort?: string; env: Record<string, string>; signal: AbortSignal }) => Promise<string>;
 }

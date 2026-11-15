@@ -1,5 +1,6 @@
 import type { CheckoutView, ChoicePick, MachineView, ProjectView, RemoteMachine, ThreadView } from '@accio/protocol';
 import { issueMessage, type IssueList, type IssueView, type ModelSelection } from '@accio/protocol';
+import { useShareDraftHarness } from '../skills/draftHarness';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useClient } from '../app/connection';
 import { useLive } from '../app/useLive';
@@ -129,6 +130,7 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
   const place = usePlace(checkoutId, profileId);
   const [choice, setChoice] = useState<{ checkoutId: string; profileId?: string; model: ModelSelection }>();
   const model = choice?.checkoutId === checkoutId && choice.profileId === place.profile?.id ? choice.model : defaultModel(place.profile);
+  useShareDraftHarness(model.harnessId);
   const machines = useLive(() => client.call('machines.list', {}), 'machines.changed');
   const [chosenMachineId, setChosenMachineId] = useState<string>();
   // GLOSSARY: Relay. Another machine on the relay can run it; one without a checkout of the repository clones it first.
@@ -179,7 +181,7 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
           target="draft"
           draftId={newThreadDraftId(checkoutId, profileId)}
           profileId={place.profile?.id}
-          skills={checkoutId ? { checkoutId, ...(place.profile ? { profileId: place.profile.id } : {}) } : place.profile ? { profileId: place.profile.id } : undefined}
+          skills={checkoutId ? { checkoutId, ...(place.profile ? { profileId: place.profile.id } : {}), harnessId: model.harnessId } : place.profile ? { profileId: place.profile.id, harnessId: model.harnessId } : undefined}
           imagesUnavailable={machine && !machine.thisMachine ? remoteImagesReason : undefined}
           handsOffImages
           disabled={!!starting || !place.profile || !accountForModel(place.profile, model)?.signedIn || unavailable}

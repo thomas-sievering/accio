@@ -69,7 +69,8 @@ export function skillCommandAt(text: string, caret: number): { start: number; qu
  */
 export function skillOptions(skills: WorkspaceSkill[], query: string): MentionOption[] {
   const named = new Map<string, WorkspaceSkill>();
-  for (const skill of skills) if (skill.enabled && !named.has(skill.name)) named.set(skill.name, skill);
+  // An overridden skill isn't the one a thread gets by that name.
+  for (const skill of skills) if (skill.enabled && !skill.overriddenBy && !named.has(skill.name)) named.set(skill.name, skill);
   const rank = (skill: WorkspaceSkill) => {
     if (!query) return 0;
     const name = skill.name.toLowerCase();

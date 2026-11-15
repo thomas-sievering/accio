@@ -307,3 +307,8 @@
   flex: none;
   white-space: nowrap;
 }
+/* ADR 0020: on at a wider level, but not what the thread gets. */
+.skill-item.overridden > .skill-line .skill-name,
+.skill-item.overridden > .skill-desc {
+  opacity: 0.55;
+}
