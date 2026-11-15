@@ -188,7 +188,27 @@
   background: var(--side);
   border-inline-start: 1px solid var(--line);
   font-size: 13px;
+  view-transition-name: side-panel;
 }
+/* Opened for the user (Ship opens Delivery): the composer glides to its narrower place
+   while the panel slides in beside it. Both composer halves keep their own size and hang
+   from the bottom right, where the delivery pill sits, so the pill travels unstretched.
+   The delivery row above the box is see-through, so the old half fades out rather than
+   showing through when the delivery moves on mid-glide. */
+html:active-view-transition-type(panel-open) {
+  &::view-transition-group(*) { animation-duration: 340ms; animation-timing-function: var(--ease-settle); }
+  &::view-transition-old(root),
+  &::view-transition-new(root) { animation-duration: 160ms; }
+  &::view-transition-group(composer) { overflow: clip; }
+  &::view-transition-old(composer),
+  &::view-transition-new(composer) { inset: auto 0 0 auto; width: auto; height: auto; }
+  &::view-transition-old(composer) { animation: panel-out 160ms ease both; }
+  &::view-transition-new(composer) { animation: panel-in 160ms ease both; }
+  &::view-transition-new(side-panel) { animation: panel-slide 340ms var(--ease-settle) both; }
+}
+@keyframes panel-in { from { opacity: 0; } }
+@keyframes panel-out { to { opacity: 0; } }
+@keyframes panel-slide { from { opacity: 0; translate: 32px 0; } }
 .side-panel-top {
   display: flex;
   flex: none;

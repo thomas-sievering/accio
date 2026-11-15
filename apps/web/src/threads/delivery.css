@@ -12,6 +12,14 @@
 /* Disabled shows at once to the pointer; the dimming waits, so a quick request does not flash the row grey. */
 .delivery-row button { transition: opacity .15s ease, scale 420ms var(--ease-settle); }
 .delivery-row button:disabled { cursor: default; opacity: .5; transition-delay: .3s; }
+/* A button that arrives disabled mid-request starts bright too, so it never flashes grey. */
+@starting-style { .delivery-row button:disabled { opacity: 1; } }
+/* Ship is felt at once: the whole pill sinks while held, then settles back as it becomes the in-flight pill. */
+.delivery-split { transition: scale 420ms var(--ease-settle); }
+.delivery-split:has(> button:first-child:active:not(:disabled)) { scale: .94; transition-duration: 120ms; }
+/* Actions that join the row mid-delivery, such as Cancel delivery, fade in rather than pop. */
+.delivery-row > .delivery-pill { transition: opacity 160ms ease, translate 220ms var(--ease-settle); }
+@starting-style { .delivery-row > .delivery-pill { opacity: 0; translate: 0 3px; } }
 .delivery-split > button:first-child { color: var(--ink); }
 .delivery-queued { border-color: var(--blue); color: var(--ink); }
 .delivery-queued .row-working { width: 12px; height: 12px; }
@@ -67,7 +75,7 @@
   from { opacity: 0; filter: blur(2px); transform: translateY(3px); }
 }
 /* Shipping is the same celebration, livelier: faster stars, a shimmer passing through, and a bloom as it starts. */
-.delivery-sparkly { transition: border-color .5s ease, box-shadow .5s ease; }
+.delivery-sparkly { transition: border-color .5s ease, box-shadow .5s ease, scale 420ms var(--ease-settle); }
 .delivery-shipping {
   border-color: color-mix(in srgb, #c4b5fd 85%, var(--line-2));
   box-shadow: 0 0 16px #c4b5fd24, inset 0 0 10px #c4b5fd10;
@@ -95,6 +103,7 @@
 @media (prefers-reduced-motion: reduce) {
   .delivery-sparkles i { animation: none; opacity: .6; }
   .delivery-swap, .delivery-shipping, .delivery-shipping::before { animation: none; }
+  @starting-style { .delivery-row > .delivery-pill { translate: none; } }
 }
 .delivery-added, .delivery-complete > svg { color: var(--green); }
 .delivery-removed { color: var(--red); }

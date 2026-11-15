@@ -1,4 +1,4 @@
-import { deliveryPhase, deliveryWaitsOn, observedPhase, type DeliveryPhase, type ThreadDelivery, type ThreadView } from '@accio/protocol';
+import { deliveryPhase, deliveryWaitsOn, observedPhase, type DeliveryMode, type DeliveryPhase, type ThreadDelivery, type ThreadView } from '@accio/protocol';
 import { ciSummary } from './DeliveryProgress';
 
 /**
@@ -65,6 +65,18 @@ function pullRequestOf(d: ThreadDelivery): { number: number; url: string } | und
   return match && d.pullRequestUrl ? { number: Number(match[1]), url: d.pullRequestUrl } : undefined;
 }
 
+function inFlight(phase: 'queued' | 'shipping', review: boolean, running: boolean): Pick<DeliveryStatus, 'phase' | 'label' | 'tone' | 'glyph' | 'badge'> {
+  return phase === 'queued'
+    ? { phase, label: review ? 'Prepares review when done' : 'Ships when done', tone: 'working', glyph: running ? 'spinner' : 'ship', badge: 'Queued' }
+    : { phase, label: review ? 'Preparing review' : 'Shipping', tone: 'working', glyph: 'spinner', badge: review ? 'Preparing' : 'Shipping' };
+}
+
+/** What a request just made will report once the server records it: queued behind a running turn, otherwise shipping. */
+export function requestedStatus(running: boolean, mode: DeliveryMode, target: string): DeliveryStatus {
+  return { ...inFlight(running ? 'queued' : 'shipping', mode === 'review', running), target, published: false, followUpsStopped: false,
+    canCancel: false, canStopFollowUps: false, canCheck: false, canShip: false };
+}
+
 /** The delivery as the composer row presents it, or undefined when nothing was requested. */
 export function deliveryStatus(t: ThreadView): DeliveryStatus | undefined {
   const d = t.delivery;
@@ -104,14 +116,7 @@ export function deliveryStatus(t: ThreadView): DeliveryStatus | undefined {
     const label = review ? 'Review paused' : 'Ship paused';
     return { ...base, phase: 'paused', label, tone: 'interrupted', glyph: 'dot', badge: label, detail: 'Resume the thread to continue delivery' };
   }
-  if (phase === 'queued') {
-    const label = review ? 'Prepares review when done' : 'Ships when done';
-    return { ...base, phase: 'queued', label, tone: 'working', glyph: t.status === 'running' ? 'spinner' : 'ship', badge: 'Queued' };
-  }
-  if (phase === 'shipping') {
-    const label = review ? 'Preparing review' : 'Shipping';
-    return { ...base, phase: 'shipping', label, tone: 'working', glyph: 'spinner', badge: review ? 'Preparing' : 'Shipping' };
-  }
+  if (phase === 'queued' || phase === 'shipping') return { ...base, ...inFlight(phase, review, t.status === 'running') };
 
   // Published, ready or blocked: what the last observation established.
   const merged = d.pullRequest?.state === 'merged';
