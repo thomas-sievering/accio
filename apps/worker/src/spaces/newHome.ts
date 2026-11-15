@@ -47,6 +47,9 @@ export class NewHomes {
     await this.deps.requireThreadsStart(profileId).catch((error: Error) => {
       throw new UserError(`The home's first thread can't start in this profile: ${error.message}`);
     });
+    // The repo belongs to the account the home's threads push as: the profile's chosen login, never gh's active one.
+    const login = location === 'github' ? this.deps.githubLogin(profileId) : undefined;
+    if (location === 'github' && !login) throw new UserError("Choose a GitHub account for this profile on this machine in Settings / Machines first. The home's repo is created under it.");
     const base = this.deps.profileFolder(profileId) ?? homedir();
     const path = join(base, name);
     await mkdir(base, { recursive: true });
@@ -61,7 +64,7 @@ export class NewHomes {
     try {
       await writeTemplate(path, homeTemplate(space.name, members));
       await commitAll(path, `Start the ${space.name} home`);
-      if (location === 'github') await this.publish(path, name, profileId);
+      if (login) await this.publish(path, name, profileId, login);
       checkout = await this.deps.addFolder(path, profileId);
     } catch (error) {
       await discard();
@@ -93,13 +96,12 @@ export class NewHomes {
   }
 
   /**
-   * A new private GitHub repo for the home, created and pushed by gh as the profile's GitHub account:
-   * under its chosen login, else gh's active one. Only this call needs GitHub; tests fake gh here.
+   * A new private GitHub repo for the home under the profile's chosen GitHub login, created and pushed
+   * by gh as that account. Only this call needs GitHub; tests fake gh here.
    */
-  private async publish(path: string, name: string, profileId: string) {
-    const login = this.deps.githubLogin(profileId);
+  private async publish(path: string, name: string, profileId: string, login: string) {
     try {
-      await this.deps.gh(profileId, path, ['repo', 'create', login ? `${login}/${name}` : name, '--private', '--source', path, '--remote', 'origin', '--push']);
+      await this.deps.gh(profileId, path, ['repo', 'create', `${login}/${name}`, '--private', '--source', path, '--remote', 'origin', '--push']);
     } catch (error) {
       const lines = String((error as { stderr?: string }).stderr ?? (error as Error).message ?? '').trim().split(/\r?\n/).filter(Boolean);
       throw new UserError(`Could not create the GitHub repo ${name}${lines.length ? `: ${lines[lines.length - 1]}` : '.'}`);

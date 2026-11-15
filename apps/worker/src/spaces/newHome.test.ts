@@ -178,12 +178,26 @@ describe('creating a new home for a space', () => {
   it('explains when gh could not create the repo, and leaves no project or home behind', async () => {
     const gh: GhRunner = async (args) => {
       if (args[1] === 'create') throw Object.assign(new Error('failed'), { stderr: 'GraphQL: Name already exists on this account (createRepository)\n' });
+      if (args[1] === 'token') return 'token\n';
       throw new Error('unexpected');
     };
-    const { c } = await app(gh);
+    const { c, folder, machineId } = await app(gh);
+    await c.call('machines.setProfileGitHub', { machineId, profileId: 'personal', login: 'me' });
     await expect(c.call('spaces.createHome', { space: { name: 'hrc', projectKeys: [] }, name: 'hrc-home', profileId: 'personal', location: 'github' }))
       .rejects.toThrow('Could not create the GitHub repo hrc-home: GraphQL: Name already exists on this account (createRepository)');
+    await expect(readdir(join(folder, 'hrc-home'))).rejects.toThrow();
     expect((await c.call('projects.get', {})).projects).toEqual([]);
+    expect(await c.call('spaces.list', {})).toEqual([]);
+  });
+
+  it("refuses a GitHub repo for a profile without a chosen GitHub account, rather than using gh's active one", async () => {
+    const calls: string[][] = [];
+    const gh: GhRunner = async (args) => { calls.push(args); throw new Error('unexpected'); };
+    const { c, folder } = await app(gh);
+    await expect(c.call('spaces.createHome', { space: { name: 'hrc', projectKeys: [] }, name: 'hrc-home', profileId: 'personal', location: 'github' }))
+      .rejects.toThrow("Choose a GitHub account for this profile on this machine in Settings / Machines first. The home's repo is created under it.");
+    expect(calls.filter((args) => args[0] === 'repo')).toEqual([]);
+    await expect(readdir(join(folder, 'hrc-home'))).rejects.toThrow();
     expect(await c.call('spaces.list', {})).toEqual([]);
   });
 });

@@ -29,8 +29,8 @@ const SpaceId = z.object({ id: z.string().min(1).max(128) });
 
 /**
  * GLOSSARY: Home. Creates a new project from Accio's built-in home template, in the profile's folder
- * on this machine (else the home folder), as a local folder or a new GitHub repo under that profile's
- * GitHub login. It saves `space` as given with the new project added as its home, then starts the
+ * on this machine (else the home folder), as a local folder or a new GitHub repo under the GitHub login
+ * chosen for that profile on this machine (refused without one). It saves `space` as given with the new project added as its home, then starts the
  * home's first thread with the starter prompt.
  */
 export const CreateHome = z.object({
