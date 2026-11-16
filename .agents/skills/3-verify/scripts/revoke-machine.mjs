@@ -67,14 +67,17 @@ export default async function revokeMachine({ page, context, runDir, action, cap
       await expect(confirm).toHaveCount(0);
       await expect(page.getByRole('textbox', { name: /^Machine name/ })).toHaveValue('Spare machine');
     });
-    await action('machines/revoke: confirming unpairs it; it shows Offline and stays out', async () => {
+    await action('machines/revoke: confirming unpairs it; it shows Revoked and stays out', async () => {
       await button('Revoke').click();
       await confirm.getByRole('button', { name: 'Revoke Spare machine', exact: true }).click();
       await button('Add machine').waitFor();
-      await expect(row('Spare machine')).toContainText('Offline');
+      await expect(row('Spare machine')).toContainText('Revoked');
       await capture('revoked-list');
       await page.waitForTimeout(3_000); // the revoked worker keeps retrying its saved token
-      await expect(row('Spare machine')).toContainText('Offline');
+      await expect(row('Spare machine')).toContainText('Revoked');
+      await button('Spare machine').click();
+      await page.getByText('Spare machine no longer has access to Local dev. To use it again, pair it with a new code.', { exact: true }).waitFor();
+      assert.equal(await button('Revoke').count(), 0);
       await other.locator('.sidebar nav').getByRole('button', { name: /^Hub: / }).click();
       await other.getByRole('menuitem', { name: 'Manage hubs' }).click();
       await other.getByRole('menu', { name: 'Choose hub', exact: true }).waitFor({ state: 'hidden' });

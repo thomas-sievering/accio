@@ -20,17 +20,20 @@ import { formatDayTime } from '../ui/dates';
 export function MachineSettings({ machineId, onOpen, onBack, onOpenThread }: { machineId?: string; onOpen: (id: string) => void; onBack: () => void; onOpenThread: (threadId: string) => void }) {
   const client = useClient();
   const [onboarding, setOnboarding] = useState(false);
+  // Machines revoked here: the hub keeps their records, so until one is paired again it shows as Revoked rather than Offline.
+  const [revokedIds, setRevokedIds] = useState<string[]>([]);
+  const revoked = (m: MachineView) => !m.connected && revokedIds.includes(m.id);
   const machines = useLive(() => client.call('machines.list', {}), 'machines.changed');
   if (!machines) return <p className="note">Loading machines…</p>;
   const machine = machines.find((m) => m.id === machineId);
-  if (machine) return <MachineDetail key={machine.id} machine={machine} onBack={onBack} onOpenThread={onOpenThread} />;
+  if (machine) return <MachineDetail key={machine.id} machine={machine} revoked={revoked(machine)} onRevoked={() => { setRevokedIds((ids) => [...ids, machine.id]); onBack(); }} onBack={onBack} onOpenThread={onOpenThread} />;
   return (
     <>
       <p className="note">Workers connected to this hub run coding turns. Open a machine to manage its name, tools and what each profile uses there.</p>
       <HubRow />
       <SettingsSection add={!onboarding ? { label: 'Add machine', onClick: () => setOnboarding(true) } : undefined}>
         {machines.length === 0 && <SettingRow title="No machines connected yet" />}
-        {machines.map((m) => <MachineRow key={m.id} machine={m} onOpen={() => onOpen(m.id)} />)}
+        {machines.map((m) => <MachineRow key={m.id} machine={m} revoked={revoked(m)} onOpen={() => onOpen(m.id)} />)}
       </SettingsSection>
       {onboarding && <OnboardMachine onClose={() => { setOnboarding(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.settings-add')?.focus()); }} />}
     </>
@@ -53,7 +56,7 @@ function HubRow() {
 }
 
 /** One machine: opens its settings, and updates its Accio when main is ahead. */
-function MachineRow({ machine: m, onOpen }: { machine: MachineView; onOpen: () => void }) {
+function MachineRow({ machine: m, revoked, onOpen }: { machine: MachineView; revoked: boolean; onOpen: () => void }) {
   const { view, canUpdate, start, busy, error } = useMachineUpdate(m);
   const progress = error ?? (view?.state === 'updating' ? `${view.detail ?? 'Updating'}…` : view?.state === 'restarting' ? 'Restarting…' : view?.state === 'failed' ? 'Update failed' : view?.state === 'blocked' ? `Can’t update: ${view.detail}` : undefined);
   const details = [m.platform, `${m.harnesses.length} harness${m.harnesses.length === 1 ? '' : 'es'}`, m.version, progress].filter(Boolean);
@@ -65,13 +68,13 @@ function MachineRow({ machine: m, onOpen }: { machine: MachineView; onOpen: () =
         <small>{details.join(' · ')}</small>
       </span>
       {canUpdate && <button type="button" className="ghost machine-row-action" disabled={busy} title={`${view!.behind} commit${view!.behind === 1 ? '' : 's'} behind main`} onClick={start}>Update</button>}
-      <StatusPill tone={m.connected ? 'ok' : undefined}>{m.connected ? 'Connected' : 'Offline'}</StatusPill>
+      <StatusPill tone={m.connected ? 'ok' : undefined}>{m.connected ? 'Connected' : revoked ? 'Revoked' : 'Offline'}</StatusPill>
       <Chevron />
     </div>
   );
 }
 
-function MachineDetail({ machine, onBack, onOpenThread }: { machine: MachineView; onBack: () => void; onOpenThread: (threadId: string) => void }) {
+function MachineDetail({ machine, revoked, onRevoked, onBack, onOpenThread }: { machine: MachineView; revoked: boolean; onRevoked: () => void; onBack: () => void; onOpenThread: (threadId: string) => void }) {
   const client = useClient();
   const { profiles = [] } = useProfiles();
   const { state: resources } = useResources();
@@ -109,7 +112,7 @@ function MachineDetail({ machine, onBack, onOpenThread }: { machine: MachineView
           </Field>
         </div>
         <SettingRow title="Status" description={machine.thisMachine ? 'The computer this window is talking to.' : undefined}>
-          <StatusPill tone={machine.connected ? 'ok' : undefined}>{machine.connected ? 'Connected' : 'Offline'}</StatusPill>
+          <StatusPill tone={machine.connected ? 'ok' : undefined}>{machine.connected ? 'Connected' : revoked ? 'Revoked' : 'Offline'}</StatusPill>
         </SettingRow>
         <SettingRow title="Platform"><code>{machine.platform}</code></SettingRow>
         <MachineUpdate machine={machine} />
@@ -153,7 +156,7 @@ function MachineDetail({ machine, onBack, onOpenThread }: { machine: MachineView
           </div>
         ))}
       </SettingsSection>
-      {!machine.thisMachine && <RevokeMachine machine={machine} onRevoked={onBack} />}
+      {!machine.thisMachine && <RevokeMachine machine={machine} revoked={revoked} onRevoked={onRevoked} />}
       {error && <p className="error" role="alert">{error}</p>}
       <SettingsFooter busy={busy} onCancel={onBack} saveLabel="Save" saveDisabled={busy || !dirty} dirty={!busy && dirty} />
     </form>

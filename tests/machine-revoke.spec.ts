@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { TestClient } from '../apps/worker/src/testing/testApp.js';
 
-test('revoking a paired machine from Settings → Machines asks first, and the machine goes offline', async ({ page, baseURL }, info) => {
+test('revoking a paired machine from Settings → Machines asks first, and the machine shows as revoked', async ({ page, baseURL }, info) => {
   await page.goto(`${baseURL}/#token=relay-test-token`);
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await page.locator('.sidebar nav').getByRole('button', { name: 'Machines', exact: true }).click();
@@ -29,7 +29,11 @@ test('revoking a paired machine from Settings → Machines asks first, and the m
   await page.getByRole('button', { name: 'Revoke', exact: true }).click();
   await confirm.getByRole('button', { name: 'Revoke Old laptop', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Add machine', exact: true })).toBeVisible();
-  await expect(row('Old laptop')).toContainText('Offline');
+  await expect(row('Old laptop')).toContainText('Revoked');
+  await page.getByRole('button', { name: 'Old laptop', exact: true }).click();
+  await expect(page.getByText('Old laptop no longer has access to Home. To use it again, pair it with a new code.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Revoke', exact: true })).toHaveCount(0);
+  await page.locator('.settings-actions').getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(row('MacBook')).toContainText('Connected');
 
   // A second observation: the hub no longer counts it as connected, and it stays out after its reconnect attempts.
