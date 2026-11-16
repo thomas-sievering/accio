@@ -19,7 +19,7 @@ export type StoredHouse = {
  * done with it can still be told apart.
  */
 export type StoredHatKey = { id: string; houseId: string; name: string; createdAt: string; hash: string; revokedAt: string | null };
-export type StoredAccount = { id: string; name: string; providerId?: ProviderId; account: ClaudeAccount | null; openai?: OpenAIAccount | null };
+type StoredAccount = { id: string; name: string; providerId?: ProviderId; account: ClaudeAccount | null; openai?: OpenAIAccount | null };
 export type HatState = { version: 1; houses: StoredHouse[]; hatKeys: StoredHatKey[]; accounts: StoredAccount[] };
 
 export const emptyState = (): HatState => ({ version: 1, houses: [], hatKeys: [], accounts: [] });

@@ -191,7 +191,7 @@ export function imageGenerationReply(prompt: string, model = 'gpt-test') {
   return events.map((e) => `event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join('');
 }
 
-export function testJWT(who: string) {
+function testJWT(who: string) {
   return `header.${Buffer.from(JSON.stringify({ sub: who, exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url')}.signature`;
 }
 
