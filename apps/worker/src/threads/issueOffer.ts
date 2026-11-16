@@ -8,18 +8,18 @@ import { ACCIO_MCP_SERVER, accioTool } from '../tools/tools.js';
  * picker does. The call checks the references against the project's tracker; Accio
  * then shows the offer in place of the tool row.
  */
-export const ISSUE_OFFER_TOOL = 'offer_issues';
+const ISSUE_OFFER_TOOL = 'offer_issues';
 
-export const MAX_OFFERED = 20;
+const MAX_OFFERED = 20;
 
-export const issueOfferInput = {
+const issueOfferInput = {
   refs: z.array(z.string().trim().min(1).max(4096)).min(1).max(MAX_OFFERED)
     .describe("The issues to implement, in the order to do them: GitHub issues as '#207', local issues by their path in the checkout, such as '.scratch/search/issues/01-index.md'. Leave out a parent spec that its tickets cover."),
 };
 
 const IssueOfferInput = z.object(issueOfferInput);
 
-export const ISSUE_OFFER_DESCRIPTION = 'Offer issues you just published to the project\'s issue tracker, so the user can start a thread that implements each one. '
+const ISSUE_OFFER_DESCRIPTION = 'Offer issues you just published to the project\'s issue tracker, so the user can start a thread that implements each one. '
   + 'Call it once after creating the tickets, with every issue meant to be implemented; Accio shows which are ready and which wait on others. '
   + 'Afterwards don\'t list the issues again in full; a short summary is enough.';
 

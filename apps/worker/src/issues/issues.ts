@@ -131,7 +131,7 @@ function trackerKind(text: string) {
   return text.split('\n')[0]!.replace(/[.`*]/g, '').slice(0, 60) || 'this tracker';
 }
 
-export function githubRepository(origin: string) {
+function githubRepository(origin: string) {
   return /github\.com[/:]([^/\s]+\/[^/\s]+?)(?:\.git)?\/?$/i.exec(origin.trim())?.[1];
 }
 

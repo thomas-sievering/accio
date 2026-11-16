@@ -38,13 +38,13 @@ export function useProfiles(): ProfilesState {
  * The account a profile's turns use at a provider: its first signed-in one, or
  * else its first, signed out, so notices can name it. Null when none is selected.
  */
-export function profileAccount(profile: ProfileView, providerId: ProviderId) {
+function profileAccount(profile: ProfileView, providerId: ProviderId) {
   const provider = profile.providers.find((p) => p.id === providerId);
   return accountInUse(provider) ?? provider?.accounts[0] ?? null;
 }
 
 /** The account Claude Code uses for this profile. */
-export function claudeAccount(profile: ProfileView) {
+function claudeAccount(profile: ProfileView) {
   return profileAccount(profile, 'anthropic');
 }
 

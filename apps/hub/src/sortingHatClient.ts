@@ -12,9 +12,9 @@ export type RemoteHouse = {
   accounts: Record<ProviderId, string[]>;
   inUse: Record<ProviderId, string | null>;
 };
-export type RemoteHatKey = { id: string; houseId: string; name: string; createdAt: string; revokedAt: string | null };
+type RemoteHatKey = { id: string; houseId: string; name: string; createdAt: string; revokedAt: string | null };
 
-export type SignInStatus = { status: 'pending' } | { status: 'complete'; account: AccountView };
+type SignInStatus = { status: 'pending' } | { status: 'complete'; account: AccountView };
 
 export type Fetch = typeof fetch;
 

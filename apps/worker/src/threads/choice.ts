@@ -8,11 +8,11 @@ import { ACCIO_MCP_SERVER, accioTool } from '../tools/tools.js';
  * message. The tool itself only records the offer: the turn ends and the
  * thread waits for you like after any other reply.
  */
-export const CHOICE_TOOL = 'offer_choice';
+const CHOICE_TOOL = 'offer_choice';
 
-export const MAX_OPTIONS = 6;
+const MAX_OPTIONS = 6;
 
-export const choiceInput = {
+const choiceInput = {
   question: z.string().trim().min(1).max(300).describe('What the user is choosing, as a short question, such as "Which empty state?"'),
   options: z.array(z.object({
     path: z.string().trim().min(1).max(4096).describe('Absolute path, or path relative to the working directory, of a PNG, JPEG, GIF, WebP or AVIF screenshot'),
@@ -23,11 +23,11 @@ export const choiceInput = {
 const ChoiceInput = z.object(choiceInput);
 export type ChoiceInput = z.infer<typeof ChoiceInput>;
 
-export const CHOICE_DESCRIPTION = 'Show the user two or more screenshots of UI variants side by side so they can pick one. '
+const CHOICE_DESCRIPTION = 'Show the user two or more screenshots of UI variants side by side so they can pick one. '
   + 'Use it instead of embedding the images when the user is choosing between options. '
   + 'Afterwards end your turn without repeating the images; the pick and any feedback arrive as the next user message.';
 
-export const CHOICE_RESULT = 'The user sees the options now. End your turn; their pick arrives as their next message.';
+const CHOICE_RESULT = 'The user sees the options now. End your turn; their pick arrives as their next message.';
 
 /** The Accio tool. Accio reads the call from the transcript and shows it; the tool only acknowledges. */
 export const offerChoice = accioTool({ name: CHOICE_TOOL, description: CHOICE_DESCRIPTION, input: choiceInput, call: () => CHOICE_RESULT });

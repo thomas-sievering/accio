@@ -14,8 +14,6 @@ export type StatusTone = 'working' | 'ready' | 'waiting' | 'attention' | 'unavai
 /** The mark beside the status: a spinner for running turns only, otherwise a static glyph or dot. */
 export type StatusGlyph = 'spinner' | 'dot' | 'pr' | 'merge' | 'ship' | 'push' | 'alert';
 
-export type { DeliveryPhase };
-
 export type DeliveryStatus = {
   phase: DeliveryPhase;
   /** Readable status without the PR number, e.g. "Waiting for merge". */

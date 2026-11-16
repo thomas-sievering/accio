@@ -28,7 +28,7 @@ export const fakeClaudeFetch: typeof fetch = async (url, init) => {
   });
 };
 
-export const TEST_TOKEN = 'test-token';
+const TEST_TOKEN = 'test-token';
 
 /** What a test's Sorting Hat sends to the providers; Claude sign-in is faked unless given. */
 export type TestHatDeps = { claudeFetch?: typeof fetch; anthropicUrl?: string; openaiUrl?: string; openaiFetch?: typeof fetch; codexFactory?: CodexFactory };

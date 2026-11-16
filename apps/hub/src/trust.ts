@@ -9,7 +9,7 @@ const digest = (text: string) => createHash('sha256').update(text).digest('hex')
 const pairingFile = (home: string) => new JsonFile(join(home, 'hub', 'pairing.json'), () => ({ hash: '', expiresAt: 0 }));
 
 /** Constant-time comparison of two secrets. */
-export function safeEqual(a: string, b: string): boolean {
+function safeEqual(a: string, b: string): boolean {
   const x = Buffer.from(a); const y = Buffer.from(b);
   return x.length === y.length && timingSafeEqual(x, y);
 }

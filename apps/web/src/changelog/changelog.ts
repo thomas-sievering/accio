@@ -21,7 +21,7 @@ export function landedText(e: ChangelogEntry): string {
 }
 
 /** "Today", "Yesterday", or a date such as "Mon 3 Nov": the day a change shipped. */
-export function shippedDay(iso: string, now: Date): string {
+function shippedDay(iso: string, now: Date): string {
   const day = formatDay(iso, now);
   return day.charAt(0).toUpperCase() + day.slice(1);
 }

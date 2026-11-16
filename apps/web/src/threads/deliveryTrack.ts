@@ -8,9 +8,9 @@ import { deliveryStatus } from './status';
  */
 
 /** done: behind us. active: work is happening now. waiting: on a person or GitHub. failed: needs attention. todo: not reached. */
-export type StationState = 'done' | 'active' | 'waiting' | 'failed' | 'todo';
+type StationState = 'done' | 'active' | 'waiting' | 'failed' | 'todo';
 
-export type Station = {
+type Station = {
   id: 'prepare' | 'publish' | 'checks' | 'merge' | 'target';
   label: string;
   state: StationState;

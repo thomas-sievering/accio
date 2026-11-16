@@ -104,7 +104,7 @@ export async function fakeAnthropicApi() {
 }
 
 /** What every fake Claude reply used, whole: the stream reports output 1 at its start and 8 at its end. */
-export const ANTHROPIC_USAGE = { input_tokens: 10, cache_creation_input_tokens: 4, cache_read_input_tokens: 6, output_tokens: 8 };
+const ANTHROPIC_USAGE = { input_tokens: 10, cache_creation_input_tokens: 4, cache_read_input_tokens: 6, output_tokens: 8 };
 
 export function anthropicReply(model: string, id: string, text: string) {
   const events = [

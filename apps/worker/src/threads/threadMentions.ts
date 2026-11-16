@@ -2,7 +2,7 @@ import { findMentionedThread, MENTION, threadHandle, threadPlace, type ThreadVie
 import { READ_THREAD_TOOL, readThreadPage } from './handoff.js';
 
 /** The threads a message mentions with @ that its thread may read: the same profile's, other than itself, in order of mention. */
-export function mentionedThreads(text: string, threads: readonly ThreadView[], caller: { id: string; profileId: string }): ThreadView[] {
+function mentionedThreads(text: string, threads: readonly ThreadView[], caller: { id: string; profileId: string }): ThreadView[] {
   const readable = threads.filter((t) => t.profileId === caller.profileId && t.id !== caller.id);
   const found: ThreadView[] = [];
   for (const match of text.matchAll(MENTION)) {
