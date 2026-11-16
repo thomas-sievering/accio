@@ -69,7 +69,8 @@ test('keyboard focus visibly reveals a complete title without moving adjacent ro
   const tip = page.getByRole('tooltip');
   await expect(tip).toHaveText(title);
   await expect(tip).toBeInViewport();
-  expect((await renamed.boundingBox())?.height).toBe(before?.height);
+  // Sub-pixel layout rounding differs between renderers; a moved row changes height by whole pixels.
+  expect((await renamed.boundingBox())?.height).toBeCloseTo(before!.height, 1);
   // Composer controls carry no tooltip.
   await effort(page).hover();
   await expect(tip.filter({ hasText: 'Effort' })).toHaveCount(0);
