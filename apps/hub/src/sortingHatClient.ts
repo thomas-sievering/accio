@@ -55,12 +55,12 @@ export class SortingHatClient {
   limits() { return this.request<AccountLimitsView[]>('GET', 'limits'); }
   refreshLimits(accountIds?: string[], force = false) { return this.request<AccountLimitsView[]>('POST', 'limits/refresh', { ...(accountIds ? { accountIds } : {}), force }); }
 
-  private async request<T>(method: string, path: string, body?: unknown, timeoutMs = 15_000): Promise<T> {
+  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     const host = new URL(this.url).host;
     let response: Response;
     try {
       response = await this.fetchImpl(`${this.url}/api/${path}`, {
-        method, redirect: 'manual', signal: AbortSignal.timeout(timeoutMs),
+        method, redirect: 'manual', signal: AbortSignal.timeout(15_000),
         headers: { authorization: `Bearer ${this.token}`, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
         body: body === undefined ? undefined : JSON.stringify(body),
       });

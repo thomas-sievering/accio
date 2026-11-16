@@ -22,7 +22,7 @@ Before starting the service, provision `.secrets.env` beside `compose.yaml`, mod
 
 The hub keeps no accounts; its Sorting Hat ([deploy/sorting-hat](../sorting-hat/README.md)) holds them. In Accio open Settings / Hubs and link it with the address `http://sorting-hat:47330`, the address for threads `https://sortinghat.mediatom.cc` and the admin token. The hub reaches the Sorting Hat on the Docker network; threads on other machines get the public address. Until it is linked, no thread can run. Then link each profile to a house. Each thread's next turn gets a hat key and the address for threads from the hub.
 
-Hubs no longer move accounts they kept themselves before ADR 0018. If `/data/configs/accio/hub` still has a `profiles.json` with accounts, a `sorting-hat.json`, a `sorting-hat-move.json` or a `codex/` folder, run a hub image from commit `0f8364b` or earlier first and link it, so it moves them, before updating past it.
+Hubs no longer move accounts they kept themselves before ADR 0018. If `/data/configs/accio/hub` still has a `profiles.json` with accounts, a `sorting-hat.json`, a `sorting-hat-move.json` or a `codex/` folder, the hub hasn't moved them yet. Back up `/data/configs/accio`, run the hub image `ghcr.io/thomas-sievering/accio-hub:0f8364b7522672086ea69b9bf37a0aba81275106` and link it: linking moves the accounts and removes those files. Update only then. Don't restore that backup onto a running hub afterwards, since it would bring back a second live copy of the moved refresh tokens.
 
 ## Automatic updates
 
