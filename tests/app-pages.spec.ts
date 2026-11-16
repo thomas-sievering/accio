@@ -43,6 +43,15 @@ test('one page at a time over a thread that stays mounted, and the page comes ba
     await button('Close limits').click();
     await expect(composer).toHaveValue('An unsent follow-up');
 
+    // Limits opened from Settings over Limits replace the first Limits: after closing them, Back leads to the thread.
+    await button('Limits').click();
+    await button('Settings').click();
+    await page.locator('.sidebar nav').getByRole('button', { name: 'Limits', exact: true }).click();
+    await button('Close limits').click();
+    await button('Back').click();
+    await expect(button('Close limits')).toHaveCount(0);
+    await expect(composer).toHaveValue('An unsent follow-up');
+
     // Settings come back on reload at the section they were on.
     await button('Settings').click();
     const nav = page.locator('.sidebar nav');

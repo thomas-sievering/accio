@@ -22,9 +22,12 @@ export function settingsPage(current: Page, route: SettingsRoute): Page {
   return current.kind === 'thread' ? { kind: 'settings', route } : { kind: 'settings', route, back: current };
 }
 
-/** Limits at `scope`. Opened from Settings, closing it returns there. */
+/**
+ * Limits at `scope`. Opened from Settings, closing it returns to the same route; the page
+ * those Settings returned to is replaced, so Back from them then leads to the thread.
+ */
 export function limitsPage(current: Page, scope: LimitsScope): Page {
-  return current.kind === 'settings' ? { kind: 'limits', scope, back: current } : { kind: 'limits', scope };
+  return current.kind === 'settings' ? { kind: 'limits', scope, back: { kind: 'settings', route: current.route } } : { kind: 'limits', scope };
 }
 
 /** Where closing `page` leads. */

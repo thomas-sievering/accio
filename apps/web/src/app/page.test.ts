@@ -21,6 +21,9 @@ describe('app page', () => {
     const settings = settingsPage(THREAD_PAGE, { section: 'accounts', accountId: 'a1' });
     expect(closePage(limitsPage(settings, 'p1'))).toEqual(settings);
     expect(closePage(limitsPage(dashboard, 'p1'))).toEqual(THREAD_PAGE);
+    // Limits replace what those Settings returned to: Back from them then leads to the thread.
+    const overLimits = settingsPage({ kind: 'limits', scope: 'all' }, { section: 'accounts' });
+    expect(closePage(closePage(limitsPage(overLimits, 'all')))).toEqual(THREAD_PAGE);
   });
 
   it('restores the saved page, Settings at their section', () => {
