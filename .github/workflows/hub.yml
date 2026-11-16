@@ -10,6 +10,7 @@ on:
       - scripts/**
       - playwright*.config.ts
       - .agents/skills/3-verify/**
+      - .agents/skills/smooth-ui/**
       - package.json
       - pnpm-lock.yaml
       - pnpm-workspace.yaml
@@ -28,6 +29,7 @@ on:
       - scripts/**
       - playwright*.config.ts
       - .agents/skills/3-verify/**
+      - .agents/skills/smooth-ui/**
       - package.json
       - pnpm-lock.yaml
       - pnpm-workspace.yaml
