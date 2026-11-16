@@ -5,9 +5,9 @@ import { ACCESS_COOKIE, ACCESS_JWT_HEADER, AccessVerifier, type AccessConfig } f
 import type { Fetch } from './types.js';
 
 /** Paths the dashboard owns: `/` and everything under this prefix. No provider's model path starts so. */
-export const DASHBOARD_PREFIX = '/dashboard/';
+const DASHBOARD_PREFIX = '/dashboard/';
 /** The header the dashboard's own API calls carry. A cross-origin page cannot send it without a CORS preflight, which is never granted. */
-export const DASHBOARD_HEADER = 'x-sorting-hat-dashboard';
+const DASHBOARD_HEADER = 'x-sorting-hat-dashboard';
 
 /** The dashboard's files, next to `src` and `dist` alike, so both the built and the tsx-run server find them. */
 const ROOT = fileURLToPath(new URL('../dashboard/', import.meta.url));

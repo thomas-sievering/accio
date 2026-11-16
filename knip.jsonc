@@ -1,0 +1,38 @@
+{
+  // Entry points knip cannot follow: files that are spawned, forked or loaded by path rather than imported.
+  "$schema": "https://unpkg.com/knip@6/schema-jsonc.json",
+  "ignoreIssues": {
+    // DesktopMessage is used by apps/desktop through @accio/worker/dist/machine/desktop.js, a built path knip does not map back to this source.
+    "apps/worker/src/machine/desktop.ts": ["types"]
+  },
+  "workspaces": {
+    ".": {
+      "entry": [
+        // Fixture servers: tests/servers.ts forks scripts/<project>-test-server.ts, and journeys fork them too.
+        "scripts/*-test-server.ts",
+        // Run by hand after changing the favicon.
+        "scripts/desktop-icon.mjs",
+        // The Electron shell tests/chat.ts launches by path.
+        "tests/electron-shell.cjs",
+        // Journeys the verify runner loads by path (smoke.mjs by default); the runner itself is a package script.
+        ".agents/skills/3-verify/scripts/{smoke,hubs,link-hub,real-turn,resources,sorting-hat}.mjs",
+        // The smooth-ui recorders, run with node.
+        ".agents/skills/smooth-ui/scripts/*.mjs"
+      ],
+      // verify.mjs requires ws through apps/worker/package.json (createRequire), so it uses the worker's copy.
+      "ignoreDependencies": ["ws"]
+    },
+    "apps/desktop": {
+      // The BrowserWindow preload, loaded by path from src/main.ts.
+      "entry": ["preload.cjs"]
+    },
+    "apps/sorting-hat": {
+      // Its start (node dist/main.js) and the dashboard's script, served by src/dashboard.ts and loaded by dashboard/index.html.
+      "entry": ["src/main.ts", "dashboard/app.js"]
+    },
+    "apps/worker": {
+      // Forked by path from src/threads/previews.ts.
+      "entry": ["src/threads/previewRunner.ts"]
+    }
+  }
+}

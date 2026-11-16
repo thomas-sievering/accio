@@ -16,7 +16,7 @@ const MIME: Record<string, string> = {
   '.woff2': 'font/woff2',
 };
 
-export function tokenMatches(expected: string, given: string | null): boolean {
+function tokenMatches(expected: string, given: string | null): boolean {
   if (!given) return false;
   const a = Buffer.from(expected);
   const b = Buffer.from(given);

@@ -5,7 +5,7 @@ import { PromptUsage } from './PromptUsage';
 import './context-meter.css';
 
 /** "106k", "1m", "1.5m". */
-export function shortTokens(n: number) {
+function shortTokens(n: number) {
   if (n >= 1_000_000) return `${+(n / 1_000_000).toFixed(1)}m`;
   if (n >= 1000) return `${Math.round(n / 1000)}k`;
   return String(n);
@@ -16,7 +16,7 @@ export function shortTokens(n: number) {
  * reported. Claude reports its window when a turn ends, so a running turn's requests
  * use the previous turn's; turns that predate the report have no window.
  */
-export function contextFill(items: TranscriptItem[]): { usedTokens: number; windowTokens?: number; compactAtTokens?: number } | undefined {
+function contextFill(items: TranscriptItem[]): { usedTokens: number; windowTokens?: number; compactAtTokens?: number } | undefined {
   let usedTokens: number | undefined;
   for (const item of items.toReversed()) {
     if (item.kind === 'context') return { usedTokens: usedTokens ?? item.usedTokens, windowTokens: item.windowTokens, compactAtTokens: item.compactAtTokens };

@@ -6,7 +6,7 @@ import type { Harness, HarnessTurn } from '../threads/harness.js';
 import { systemPromptText } from './systemPrompt.js';
 
 /** Unicode characters, rather than UTF-16 code units. This is deliberately not a tokenizer. */
-export function promptSize(text: string): PromptSize {
+function promptSize(text: string): PromptSize {
   const characters = Array.from(text).length;
   return { characters, estimatedTokens: Math.ceil(characters / 4) };
 }

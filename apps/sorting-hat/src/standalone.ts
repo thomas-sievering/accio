@@ -9,7 +9,7 @@ import type { CodexFactory } from './codex.js';
 import type { Fetch } from './types.js';
 
 /** In the state directory: the admin token, readable only by its owner. */
-export const ADMIN_TOKEN_FILE = 'admin-token';
+const ADMIN_TOKEN_FILE = 'admin-token';
 
 export type StandaloneOptions = {
   /** The state directory: sorting-hat.json, admin-token and each ChatGPT account's credential home. */

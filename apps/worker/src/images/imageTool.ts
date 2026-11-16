@@ -4,7 +4,7 @@ import { z } from 'zod';
 import type { HubAccess } from '../profiles/claudeConfigFolder.js';
 import { accioTool } from '../tools/tools.js';
 
-export const GENERATE_IMAGE_TOOL = 'generate_image';
+const GENERATE_IMAGE_TOOL = 'generate_image';
 
 const REFERENCE_TYPES: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif' };
 /** Each reference image's limit; the Sorting Hat takes 32 MB in all, and base64 adds a third. */

@@ -5,7 +5,7 @@ import { UserError } from '../rpc/router.js';
 import type { Projects } from './projects.js';
 
 /** git log format for parseCommits: commits split by record separators, fields by unit separators. */
-export const COMMIT_FORMAT = '%H%x1f%s%x1f%an%x1f%aI%x1f%b%x1e';
+const COMMIT_FORMAT = '%H%x1f%s%x1f%an%x1f%aI%x1f%b%x1e';
 
 /**
  * A GitHub merge commit reads as its pull request: the title GitHub puts in the body

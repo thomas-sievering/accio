@@ -7,7 +7,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 
-export const devicePath = resolve(process.env.ACCIO_VERIFY_DEVICE ?? join(homedir(), '.accio-verify', 'device.json'));
+const devicePath = resolve(process.env.ACCIO_VERIFY_DEVICE ?? join(homedir(), '.accio-verify', 'device.json'));
 const lockPath = devicePath + '.lock';
 const json = async (file) => JSON.parse(await readFile(file, 'utf8'));
 const save = (file, value) => writeFile(file, JSON.stringify(value, null, 2) + '\n');

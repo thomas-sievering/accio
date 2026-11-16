@@ -8,13 +8,6 @@ export function listening(port: number): Promise<boolean> {
   });
 }
 
-export async function portFree(port: number): Promise<boolean> {
-  const server = createServer();
-  const ok = await new Promise<boolean>((resolve) => { server.once('error', () => resolve(false)); server.listen(port, '127.0.0.1', () => resolve(true)); });
-  if (ok) await new Promise<void>((resolve) => server.close(() => resolve()));
-  return ok;
-}
-
 export async function freePort(): Promise<number> {
   const server = createServer();
   await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });

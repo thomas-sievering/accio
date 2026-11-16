@@ -14,7 +14,7 @@ export function configFolderOf(home: string, profileId: string): string {
   return join(home, 'profiles', profileId, 'claude');
 }
 
-export function settingsFor(access: HubAccess) {
+function settingsFor(access: HubAccess) {
   return { env: { ANTHROPIC_BASE_URL: access.baseUrl, ANTHROPIC_AUTH_TOKEN: access.accessKey } };
 }
 

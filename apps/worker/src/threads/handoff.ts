@@ -14,7 +14,7 @@ export type PendingHandoff = { from: string; after: string | null };
 export type LeftHarness = { sessionId: string | null; seenThrough: string | null };
 
 /** About 12k tokens of history: enough for the gist of a long thread, small beside any context window. */
-export const HANDOFF_BUDGET = 48_000;
+const HANDOFF_BUDGET = 48_000;
 const ITEM_CAP = 6_000;
 const OUTPUT_CAP = 600;
 
@@ -27,7 +27,7 @@ function clip(text: string, max: number) {
 }
 
 /** One transcript item as plain text, or null for items that carry no conversation. */
-export function renderItem(item: TranscriptItem): string | null {
+function renderItem(item: TranscriptItem): string | null {
   switch (item.kind) {
     case 'user': return `[User]\n${item.text}`;
     case 'assistant': return item.text ? `[Assistant]\n${item.text}` : null;

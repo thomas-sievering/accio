@@ -2,7 +2,7 @@ import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { CodexClient, CodexFactory, CodexNotification } from '@accio/codex';
 
-export const fakeModels = [
+const fakeModels = [
   { id: 'test-codex', model: 'test-codex', displayName: 'Test Codex', description: 'A test model', isDefault: true,
     supportedReasoningEfforts: [{ reasoningEffort: 'low', description: 'Fast' }, { reasoningEffort: 'medium', description: 'Balanced' }, { reasoningEffort: 'high', description: 'Deep' }], defaultReasoningEffort: 'medium', inputModalities: ['text', 'image'] },
   { id: 'test-fast', model: 'test-fast', displayName: 'Test Fast', description: 'Another test model', isDefault: false,

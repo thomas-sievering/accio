@@ -4,7 +4,7 @@
  * - Any launch: close when the parent process is gone.
  * - Standalone (no IPC): also close after ACCIO_FIXTURE_TTL_MINUTES (default 60).
  */
-export function closeWhenOrphaned(name: string, close: () => void) {
+function closeWhenOrphaned(name: string, close: () => void) {
   process.on('disconnect', close);
   const parent = process.ppid;
   setInterval(() => {

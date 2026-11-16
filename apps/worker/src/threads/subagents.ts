@@ -12,7 +12,7 @@ import { TurnTranscript } from './transcript.js';
  * step shows on the parent's tool row while it works. Sub-agents get no accio
  * tools, so they cannot start sub-agents of their own.
  */
-export const AGENT_TOOL = 'agent';
+const AGENT_TOOL = 'agent';
 /**
  * How long a harness waits on one accio tool call, so a sub-agent can work for a
  * while. Codex's default is 60 seconds; Claude Code's is about 28 hours in total
@@ -23,14 +23,14 @@ export const SUBAGENT_TIMEOUT_SEC = 2 * 60 * 60;
 /** How the parent's transcript names the call, whichever harness made it. */
 export const AGENT_TOOL_LABEL = 'Agent';
 
-export const agentInput = {
+const agentInput = {
   description: z.string().trim().min(1).max(80).describe('A few words naming the task, such as "Find where deliveries retry"'),
   prompt: z.string().trim().min(1).max(20_000).describe('The complete task. The sub-agent sees nothing else: include the goal, relevant paths and what to report back.'),
   model: z.string().trim().min(1).max(80).optional().describe("A model the user mentioned with @, such as '@sol', to run the sub-agent on instead of this thread's model. Omit to use this thread's model."),
 };
 export type AgentInput = z.infer<z.ZodObject<typeof agentInput>>;
 
-export const AGENT_DESCRIPTION = 'Start a sub-agent with a fresh context for one self-contained task, and get back only its final reply. '
+const AGENT_DESCRIPTION = 'Start a sub-agent with a fresh context for one self-contained task, and get back only its final reply. '
   + 'It works in the same folder with the same shell and file tools. '
   + 'Use it for independent research or for a black-box check of finished work; call it several times in parallel for independent tasks. '
   + 'Do the work yourself when it needs this conversation\'s context or is quick.';

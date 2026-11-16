@@ -8,7 +8,7 @@ import { inside } from '../paths.js';
 import { now } from '../time.js';
 
 /** What decides the installed files and the check; levels, name and description don't. */
-export const installIdentity = (tool: ToolDefinition) => JSON.stringify([tool.id, tool.package, tool.version, tool.executable, tool.checkArgs]);
+const installIdentity = (tool: ToolDefinition) => JSON.stringify([tool.id, tool.package, tool.version, tool.executable, tool.checkArgs]);
 
 export class ManagedTools {
   /** The identity each CLI was last checked with here, so a hub change rechecks only what changed. */

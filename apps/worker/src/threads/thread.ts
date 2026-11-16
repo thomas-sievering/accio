@@ -10,7 +10,7 @@ import type { LeftHarness, PendingHandoff } from './handoff.js';
  */
 export type Thread = ThreadView & { sessionId: string | null; leftHarnesses?: Record<string, LeftHarness>; handoff?: PendingHandoff; organizationVersion?: number; resumeAfterRestart?: boolean; titleManual?: boolean; titleNeedsRefinement?: boolean };
 
-export const NEW_THREAD_TITLE = 'New thread';
+const NEW_THREAD_TITLE = 'New thread';
 
 export function toView({ sessionId: _s, leftHarnesses: _l, handoff: _h, organizationVersion: _o, resumeAfterRestart: _r, titleManual: _m, titleNeedsRefinement: _n, ...view }: Thread): ThreadView {
   return view;

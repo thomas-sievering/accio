@@ -15,12 +15,12 @@ import type { Thread } from './thread.js';
  * snapshots, pull requests through gh, timers, and commands it runs) and starts the
  * next turn with what happened. No harness's own background or scheduling feature is used.
  */
-export const WAIT_FOR_TOOL = 'wait_for';
+const WAIT_FOR_TOOL = 'wait_for';
 
 /** How often a pull request is read while a Wait needs it; failures back off to 15 minutes, as delivery's do. */
-export const PULL_REQUEST_POLL_MS = 30_000;
+const PULL_REQUEST_POLL_MS = 30_000;
 /** A pull request with no checks after this long counts as having none. */
-export const NO_CHECKS_AFTER_MS = 15 * 60_000;
+const NO_CHECKS_AFTER_MS = 15 * 60_000;
 const OUTPUT_TAIL = 2_000;
 const MAX_TIMER = 2 ** 31 - 1;
 
@@ -35,7 +35,7 @@ export type WaitHost = {
   command: (thread: Thread) => Promise<{ cwd: string; env: Record<string, string> }>;
 };
 
-export const waitForInput = {
+const waitForInput = {
   started_threads: z.boolean().optional().describe('Wait for every thread you started with start_thread that has not yet reached thread_state.'),
   threads: z.array(z.string().trim().min(1).max(200)).max(20).optional().describe("Threads to wait for, by handle (such as '@fix-login-redirect-3f2a9c') or id."),
   thread_state: z.enum(['stopped', 'pr_open', 'delivered']).optional().describe('What those threads must reach: "stopped" (no turn left to run; the default), "pr_open" (a pull request is open) or "delivered". A thread that fails or is interrupted also counts.'),
@@ -106,7 +106,7 @@ export function pullRequestReached(pr: GhPullRequest, until: WaitPullRequestStat
 }
 
 /** What a condition waits for, in the words the harness and the Wait bar use. */
-export function describeCondition(c: WaitCondition): string {
+function describeCondition(c: WaitCondition): string {
   switch (c.kind) {
     case 'thread': return `thread "${c.title}" (@${threadHandle({ id: c.threadId, title: c.title })}) ${c.until === 'stopped' ? 'to stop' : c.until === 'pr_open' ? 'to open a PR' : 'to be delivered'}`;
     case 'pullRequest': return `PR ${c.ref} ${c.until === 'merged' ? 'to merge' : 'to finish its checks'}`;
@@ -115,7 +115,7 @@ export function describeCondition(c: WaitCondition): string {
   }
 }
 
-export function waitSatisfied(wait: ThreadWait): boolean {
+function waitSatisfied(wait: ThreadWait): boolean {
   return wait.wakeWhen === 'all' ? wait.conditions.every(c => c.metAt) : wait.conditions.some(c => c.metAt);
 }
 

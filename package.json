@@ -24,6 +24,7 @@
     "verify:link-hub": "pnpm build && node .agents/skills/3-verify/scripts/verify.mjs .agents/skills/3-verify/scripts/link-hub.mjs",
     "verify:real": "pnpm build && node .agents/skills/3-verify/scripts/verify.mjs .agents/skills/3-verify/scripts/real-turn.mjs",
     "lint": "eslint",
+    "knip": "knip",
     "typecheck": "tsc -b && tsc -p apps/web",
     "postinstall": "node scripts/ensure-electron.mjs"
   },
@@ -36,6 +37,7 @@
     "electron": "^45.2.1",
     "eslint": "^10.15.0",
     "eslint-plugin-react-hooks": "^7.1.1",
+    "knip": "^6.45.1",
     "playwright": "^1.64.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",

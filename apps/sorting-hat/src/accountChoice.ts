@@ -1,7 +1,7 @@
 import type { LimitWindow, LimitsSnapshot } from './types.js';
 
 /** An account is set aside once any general window has this much allowance left or less. */
-export const SWITCH_AT_REMAINING_PERCENT = 5;
+const SWITCH_AT_REMAINING_PERCENT = 5;
 
 export type Candidate = { id: string; snapshot: LimitsSnapshot | null };
 

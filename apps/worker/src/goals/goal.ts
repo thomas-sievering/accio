@@ -8,8 +8,8 @@ import { UserError } from '../rpc/router.js';
  * harness about it each turn, starts the next turn itself, and offers
  * `finish_goal` only while a goal is active. No harness's own goal feature is used.
  */
-export const MAX_OBJECTIVE = 4000;
-export const FINISH_GOAL_TOOL = 'finish_goal';
+const MAX_OBJECTIVE = 4000;
+const FINISH_GOAL_TOOL = 'finish_goal';
 
 export type GoalCommand = { type: 'set'; objective: string } | { type: 'pause' | 'resume' | 'clear' };
 
@@ -79,7 +79,7 @@ Start working toward it.`;
 /** The prompt of a turn accio starts itself. */
 export const CONTINUE_PROMPT = 'Continue working toward the goal.';
 
-export const finishGoalInput = {
+const finishGoalInput = {
   outcome: z.enum(['achieved', 'blocked']).describe('"achieved" once the goal is met and verified; "blocked" when you need the user to continue'),
   summary: z.string().trim().min(1).max(2000).describe('The evidence it is achieved, or what you need from the user'),
 };

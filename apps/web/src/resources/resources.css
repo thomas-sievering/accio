@@ -228,7 +228,6 @@
   font-size: 13px;
 }
 .preset code,
-.section-note code,
 .update-preview code,
 .note code,
 .hint code {
@@ -322,9 +321,6 @@
 }
 .tag.bad {
   color: var(--red);
-}
-.section-note {
-  margin: 0 0 10px;
 }
 .skill-row + .skill-row {
   border-top: 1px solid var(--line);

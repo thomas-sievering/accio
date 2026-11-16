@@ -21,7 +21,7 @@ export function threadClis(tools: ToolEntry[], at: LevelContext): ThreadCli[] {
 }
 
 /** Your own description, else the one the installed package declares. */
-export function cliDescription(tool: ToolEntry, status?: ToolStatus) {
+function cliDescription(tool: ToolEntry, status?: ToolStatus) {
   return tool.description?.trim() || status?.description?.trim() || '';
 }
 

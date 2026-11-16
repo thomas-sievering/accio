@@ -4,10 +4,10 @@ import { inheritedModel, mentionedModel } from '../harnesses/models.js';
 import type { SiblingTarget } from '../spaces/siblingThreads.js';
 import { accioTool } from '../tools/tools.js';
 
-export const START_THREAD_TOOL = 'start_thread';
+const START_THREAD_TOOL = 'start_thread';
 
 /** What a new thread takes from the thread that starts it. */
-export type StartingThread = { checkoutId: string; projectId: string; profileId: string; model: ModelSelection };
+type StartingThread = { checkoutId: string; projectId: string; profileId: string; model: ModelSelection };
 
 export type StartThreadDeps = {
   /** This machine's id, recorded on the started thread with the caller's. */

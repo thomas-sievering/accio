@@ -15,6 +15,7 @@ on:
       - pnpm-workspace.yaml
       - tsconfig*.json
       - eslint.config.js
+      - knip.jsonc
       - vitest.config.ts
       - Dockerfile.hub
       - .dockerignore
@@ -32,6 +33,7 @@ on:
       - pnpm-workspace.yaml
       - tsconfig*.json
       - eslint.config.js
+      - knip.jsonc
       - vitest.config.ts
       - Dockerfile.hub
       - .dockerignore
@@ -76,6 +78,20 @@ jobs:
           cache: pnpm
       - run: pnpm --config.minimumReleaseAge=0 install --frozen-lockfile --ignore-scripts
       - run: pnpm lint
+  knip:
+    # Unused files, exports, types and dependencies; knip.jsonc lists the entry points it cannot follow.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.16.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm --config.minimumReleaseAge=0 install --frozen-lockfile --ignore-scripts
+      - run: pnpm knip
   browser:
     runs-on: ubuntu-latest
     steps:
@@ -104,7 +120,7 @@ jobs:
   image:
     # Deploys pull only main's images, so pull requests skip the build.
     if: github.event_name != 'pull_request'
-    needs: [verify, lint, browser]
+    needs: [verify, lint, knip, browser]
     runs-on: ubuntu-latest
     permissions:
       contents: read
