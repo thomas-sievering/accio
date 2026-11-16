@@ -1,8 +1,6 @@
 import { startTransport } from './rpc/transport.js';
 import { loadMachineId, machineInfo } from './machine/machine.js';
-import { SharedSettings, startHubService, type Fetch } from '@accio/hub';
-import { moveProfilesToHub } from './store/moveProfilesToHub.js';
-import { renameAccountsToProfiles } from './store/renameAccountsToProfiles.js';
+import { startHubService, type Fetch } from '@accio/hub';
 import type { Harness } from './threads/harness.js';
 import { claudeCode, claudeCodeInstall } from './threads/claudeCode.js';
 import { codexHarness } from './threads/codex.js';
@@ -23,7 +21,6 @@ export type AppDeps = { resourceCommand: CommandRunner; mcpFetch: Fetch; harness
 /** The local machine hosts clients and work; all hubs use the standalone service protocol. */
 export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
   let send: (event: any, data: any, hubId?: string) => void = () => {};
-  await renameAccountsToProfiles(opts.home);
   // GLOSSARY: Update. Tests pass their own checkout; nothing else looks for one.
   const root = deps.updates ? deps.updates.root : await appCheckout();
   // The version this Accio started on, here and for its local hub.
@@ -40,8 +37,6 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
   let local: Awaited<ReturnType<typeof startHubService>> | undefined;
   try {
     if (shouldStartLocal) {
-      const settings = new SharedSettings(opts.home);
-      await moveProfilesToHub(opts.home, here, settings); await settings.close();
       local = await startHubService({ home: opts.home, host: '127.0.0.1', port: opts.hubPort, mcpFetch: deps.mcpFetch, ...(version ? { version } : {}) });
       const saved = connections.saved.find((s) => s.managed);
       if (saved) { if (saved.id !== local.trust.id) throw new Error('The managed local hub identity has changed. Restore its state before reconnecting.'); saved.url = local.url; }
