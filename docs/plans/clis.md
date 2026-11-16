@@ -1,24 +1,28 @@
 # CLIs: listed to threads, at the skill levels
 
-[ADR 0021](../adr/0021-clis-are-listed-to-threads-at-the-skill-levels.md) records the decisions. Today a tool in Settings → Tools is installed with npm on every machine and put on the PATH, but `ResourceManager.prepare` (`apps/worker/src/resources/resources.ts`) never mentions it in the turn's instructions, every tool is global, and one failed check blocks every turn on that machine (`requireToolsReady`, also called from `threads/threads.ts`).
+[ADR 0021](../adr/0021-clis-are-listed-to-threads-at-the-skill-levels.md) records the decisions. Before this, a tool in Settings → Tools was installed with npm on every machine and put on the PATH, but no turn was told about it, every tool was global, and one failed check blocked every turn on that machine.
 
-## Steps
+## Shipped
 
-Each step ships and is verifiable on its own. The first fixes "I can't do that" without anything else.
+- **Listed in every turn.** `ToolDefinition` has an optional `description`; a machine records the installed package's own description in its `ToolStatus`. `ResourceManager.prepare` (`apps/worker/src/resources/resources.ts`) adds the CLI section built by `cliInstructions` (`resources/clis.ts`) to the turn's `resourceInstructions`, next to the skills.
+- **Broken CLIs don't block.** `requireToolsReady` is gone. A turn waits up to 15 s for a running check of its CLIs (`ManagedTools.settled`), puts only ready ones on the PATH and lists the rest as unavailable with the reason and repair state.
+- **pnpm.** `ManagedTools` installs with `pnpm add --dir <folder> --ignore-workspace --config.dangerously-allow-all-builds=true`, located by `pnpmCli` (`resources/process.ts`) without a shell. Folders already installed with npm keep working; they pass the version check and are not reinstalled.
+- **Levels.** `ResourceScope` has `spaceIds`. The hub keeps CLI levels in `toolSelections` (`apps/hub/src/resources.ts`); a CLI without one, including every CLI saved before levels, is on Everywhere. `threadClis` picks one CLI per executable, the narrowest level first (`narrowestLevel` in `packages/protocol/src/resources.ts`). `tools.setScope` changes levels; `tools.save` takes optional levels.
+- **Every machine installs right away.** On every hub change, `ManagedTools.sync` checks the CLIs whose installation identity (`installIdentity`: package, version, executable, check arguments) changed since this machine last checked them. Levels, names and descriptions don't trigger a reinstall.
+- **`add_cli`** (`resources/addCli.ts`). Saves at the thread's project (default), space or profile, merging levels into an existing CLI of the same package, version and executable; another version becomes its own CLI. It waits for this machine's install and check and returns the result, with the executable's full path for use within the same turn. Everywhere first waits on a **Confirmation** card (`threads/confirmations.ts`, `confirmations.answer`, web `threads/ConfirmationCard.tsx`), which ends with its turn or after ten minutes.
+- **Settings → CLIs** (`apps/web/src/tools/ToolsSettings.tsx`): description, levels through `ScopeEditor` with its Space list (`withSpaces`), level summary in the list, and a note when another CLI provides the same executable.
 
-1. **List CLIs in every turn.** Add `description` to `ToolDefinition` (`packages/protocol/src/resources.ts`), filled from the installed package's `package.json` when left empty and editable in Settings. `prepare` adds a "CLIs available in this turn" section next to the skills list: name, executable, description and "run `<executable> --help` before first use". It lands in the same `resourceInstructions` both harnesses already receive (`threads/claudeCode.ts`, `threads/codex.ts`) and shows under Settings → System prompt. Rename the UI label from Tools to CLIs and use the glossary term in copy.
-2. **Don't block on a broken CLI.** Remove `requireToolsReady` from turn start. `prepare` puts only ready CLIs on the PATH and lists the others as "unavailable on this machine: <detail>; a repair thread is running" (or the repair precondition). Repair behaviour in `ManagedTools` stays as it is.
-3. **Install with pnpm.** `ManagedTools.perform` (`resources/tools.ts`) runs `pnpm add --dir <folder>` with install scripts allowed for that install (pnpm 10+ skips them by default). Keep the per-machine folder under the Accio home so worktrees share one install. Existing npm installs fail the version check once and reinstall.
-4. **Levels.** Add `spaceIds` to `ResourceScope`. Space membership comes from the spaces shared setting, so a project's thread is in a space's level when its project is in that space. Bring back selections for tools in the hub store (`apps/hub/src/resources.ts`: it discards them on load today, and the test "loads legacy tools and MCPs without profile or project scopes" asserts that). `prepare` filters CLIs by level. Same package at several levels: the narrowest wins (Project, Space, Profile, Everywhere), and the others are marked overridden. Settings reuses the skills picker (`apps/web/src/resources/ResourcePicker.tsx`, `ScopeEditor.tsx`) and its overridden display. Space skills need the same `spaceIds`, so coordinate this with ADR 0020's Space level rather than building it twice.
-5. **Install right away everywhere.** On a `resources.changed` from the hub (`hub/connections.ts`, `client.onChanged`), each machine checks CLIs whose definition changed, not only the machine that saved it. Reconnecting already runs `reconcile`. Install every CLI regardless of level, so a thread moved or handed off to another machine finds it.
-6. **`add_cli` accio tool** (`apps/worker/src/tools`). Inputs: package, exact version, executable, optional check arguments and description, and the level (`project`, `space`, `profile`, `everywhere`), defaulting to the thread's project. It saves through the hub, waits for the install and check on the thread's machine, and returns ready or the error so the agent can retry with other check arguments. `everywhere` first shows a confirmation card in the thread, the pattern of the private secret card. No removal or level change through the tool.
-7. **Adopt the hand-installed CLIs.** Once the above has shipped, add agent-desktop, surf, playwright-cli, tldraw-cli, gmcli, lumos, imp, pi-puck and vercel at their levels with `add_cli` or Settings, then uninstall the global npm copies so threads only see Accio's.
+## Open
+
+- **Adopt the hand-installed CLIs.** Add agent-desktop, surf, playwright-cli, tldraw-cli, gmcli, lumos, imp, pi-puck and vercel at their levels with `add_cli` or Settings, then uninstall the global npm copies so threads only see Accio's.
+- **Space level for skills** (#199). `ResourceScope.spaceIds` and `ResourceManager.levelContext` exist for CLIs; skill levels (`resources/skillLevels.ts`) still match only project, profile and Everywhere, and the skills `ScopeEditor` doesn't offer spaces.
+- **Sidebar attention.** A pending Confirmation shows "Waiting for your answer" in the thread but doesn't flag the thread in the sidebar the way a pending secret does.
+- **Project and profile pages.** CLI levels are edited on the CLI's own page only, not in the project and profile settings pickers.
 
 ## Verification
 
-- Unit: the CLI section of `prepare` (listed, unavailable, filtered by level, narrowest wins); hub store keeps tool selections and `spaceIds`; `ManagedTools` builds the pnpm command with scripts allowed.
-- UI through the `3-verify` skill: add a CLI at a space level, start threads in and outside the space, and check Settings → System prompt and the turn's transcript snapshot.
-- Two machines: save on one, see the other report installing then ready without a turn.
+- Unit: `resources/clis.test.ts`, `resources/managedTools.test.ts`, `resources/addCli.test.ts` (with `Confirmations`), `resources/resources.test.ts` (listing, levels, narrowest wins, not blocking), `apps/hub/src/resources.test.ts` (levels persisted, legacy CLIs on Everywhere).
+- UI: `node .agents/skills/3-verify/scripts/verify.mjs .agents/skills/3-verify/scripts/resources.mjs` installs a real CLI with pnpm and saves one at a profile level.
 
 ## Out of scope
 

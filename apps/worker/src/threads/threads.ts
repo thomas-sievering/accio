@@ -52,12 +52,15 @@ import { findIssue, implementable, issueOfferTool, offeredIssues } from './issue
 import type { SpaceContext } from '../spaces/spaceContext.js';
 import { cleanExecutionEnv, harnessHomeEnv } from './harnessEnv.js';
 import { Waits, waitForTool } from './waits.js';
+import { Confirmations } from './confirmations.js';
 
 /** Threads on this machine, their transcripts, and the turns running in them. */
 export class Threads {
   get runningCount() { return this.state.running.size; }
   /** This machine's threads, as clients see them. */
   views() { return this.state.views(); }
+  /** The turn running in a thread on this machine, for an accio tool that records items in it. */
+  runningTurn(threadId: string) { return this.turns.runningTurn(threadId); }
   profileReferences() { return this.state.list.map((thread) => thread.profileId); }
   resources?: ResourceManager;
   onRepairFinished?: (toolId: string) => void;
@@ -70,6 +73,8 @@ export class Threads {
   readonly assets: ThreadAssets;
   private readonly uploads: Uploads;
   readonly secrets: SecretRequests;
+  /** GLOSSARY: Confirmation. */
+  readonly confirmations: Confirmations;
   private state: ThreadState;
   private content: ThreadContent;
   private previews: Previews;
@@ -109,6 +114,10 @@ export class Threads {
       await this.state.transcripts.add(threadId, item);
       this.state.announce();
     });
+    this.confirmations = new Confirmations(async (threadId, item) => {
+      await this.state.transcripts.add(threadId, item);
+      this.state.announce();
+    });
     this.deliveries = new Deliveries(this.state, projects, this.previews, {
       beginTurn: (threadId, text, options) => this.turns.begin(threadId, text, options),
       withLifecycle: (threadId, action) => this.withLifecycle(threadId, action),
@@ -116,7 +125,7 @@ export class Threads {
       describeShip: (threadId, files, signal) => this.naming.describeShip(threadId, files, signal),
       githubEnv: (profileId, cwd) => machines.github.env(profileId, cwd),
     }, deliveryHosting);
-    this.turns = new Turns(this.state, { profiles, projects, models, machines, harnesses, secrets: this.secrets, content: this.content, deliveries: this.deliveries, tools,
+    this.turns = new Turns(this.state, { profiles, projects, models, machines, harnesses, secrets: this.secrets, confirmations: this.confirmations, content: this.content, deliveries: this.deliveries, tools,
       images: { claim: (threadId, ids) => this.uploads.claim(threadId, ids, this.assets), file: (threadId, asset) => this.assets.harnessFile(threadId, asset) },
       resources: () => this.resources, spaceContext: () => this.spaceContext, toolsOff: (harnessId) => builtinToolsOff(harnessId, this.toolOverrides?.()[harnessId]), onWorkFinished: id => this.naming.refine(id), onRepairFinished: (toolId) => this.onRepairFinished?.(toolId), knownThreads: () => this.knownThreads?.() ?? this.views(),
       offeredIssues: (threadId, refs) => this.offeredIssues(threadId, refs) });
@@ -260,6 +269,7 @@ export class Threads {
     const { state, turns, deliveries } = this;
     const { transcripts } = state;
     this.secrets.register(router, this.profiles, this.projects, this.broadcast);
+    this.confirmations.register(router);
     registerThreadSkills(router, { state, profiles: this.profiles, projects: this.projects, resources: () => this.resources,
       harnessSkills: async (profileId, harnessId, cwd) => {
         const harness = this.harnesses[harnessId];
@@ -472,8 +482,6 @@ export class Threads {
         await this.profiles.hubAccess(profileId, providerOf(choice.harnessId));
         state.assertOpen();
         const selected = model ? this.models.requireExact(profileId, choice) : this.models.require(profileId, choice);
-        if (!options.repairToolId) await this.resources?.requireToolsReady();
-        state.assertOpen();
         // GLOSSARY: a thread keeps the profile it started with for its whole life.
         const thread = newThread({ checkoutId: checkout?.id ?? '', projectId: project?.id ?? '', profileId, hubId: this.profiles.client.id, model: selected }, now());
         const goal = parseGoalCommand(text);

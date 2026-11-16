@@ -8,6 +8,7 @@ import type { ResourceManager } from '../resources/resources.js';
 import { observedSkillLoads } from '../resources/workspaceSkills.js';
 import { UserError } from '../rpc/router.js';
 import type { SecretRequests } from '../secrets/secrets.js';
+import type { Confirmations } from './confirmations.js';
 import type { SpaceContext } from '../spaces/spaceContext.js';
 import { now } from '../time.js';
 import type { AccioTools } from '../tools/tools.js';
@@ -45,6 +46,7 @@ export type TurnDeps = {
   machines: Machines;
   harnesses: Record<string, Harness>;
   secrets: SecretRequests;
+  confirmations?: Confirmations;
   content: ThreadContent;
   deliveries: Deliveries;
   tools?: AccioTools;
@@ -77,6 +79,7 @@ export class Turns {
   constructor(private state: ThreadState, private deps: TurnDeps) {}
 
   /** Whether a turn can take steering input right now. */
+  runningTurn(threadId: string) { return this.liveInputs.get(threadId)?.turnId; }
   canSteer(threadId: string) { return !!this.liveInputs.get(threadId)?.send; }
 
   /** The queued message whose turn is starting, if any. */
@@ -314,6 +317,7 @@ export class Turns {
       this.liveInputs.delete(thread.id);
       try {
         await deps.secrets.endTurn(turnId);
+        await deps.confirmations?.endTurn(turnId);
         // Shutdown, not Stop: the turn continues when accio starts again (see `Threads.close`).
         const restarting = outcome === 'interrupted' && state.closing && !!state.require(thread.id).resumeAfterRestart;
         if (delivering && restarting) {

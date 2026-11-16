@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { access } from 'node:fs/promises';
 import { JsonFile } from '@accio/persistence';
 import { HubClient, hubAddress, remoteSettings, remoteResources, remoteMcp, remoteSecrets, type SecretsAccess, type HubSnapshot, type HarnessInstall } from '@accio/hub';
-import type { Events, HubConnectionView, MachineInfo, ThreadView, TranscriptItem } from '@accio/protocol';
+import { projectKey, type Events, type HubConnectionView, type MachineInfo, type ThreadView, type TranscriptItem } from '@accio/protocol';
 import { Router, UserError, type Broadcast } from '../rpc/router.js';
 import { Profiles } from '../profiles/profiles.js';
 import { Machines } from '../machine/machine.js';
@@ -26,6 +26,7 @@ import type { Harness } from '../threads/harness.js';
 import { AccioTools } from '../tools/tools.js';
 import { offerChoice } from '../threads/choice.js';
 import { ResourceManager } from '../resources/resources.js';
+import { addCliTool } from '../resources/addCli.js';
 import type { CommandRunner } from '../resources/process.js';
 import type { DeliveryHosting } from '../threads/delivery.js';
 import { GitHubAccounts, type GhRunner } from '../github/accounts.js';
@@ -201,8 +202,23 @@ export class HubConnections {
       const profile = candidates.find(p => models.list(p.id).models.length > 0);
       if (!profile) throw new Error('Sign in to a provider and select its account in a profile to start a repair thread.');
       const folder = resources.tools.folder(tool);
-      return (await threads.start({ profileId: profile.id, machineId: this.here.id, text: `Repair ${tool.name} on this machine\n\nDiagnose the failure, fix the installation, test it and verify the result. Work on this machine only.\nPackage: ${tool.package}@${tool.version}\nExecutable: ${tool.executable}\nManaged installation folder: ${folder}\nInstall with npm install --prefix <that folder> ${tool.package}@${tool.version}. Keep the installation inside that folder.\nHealth check arguments: ${JSON.stringify(tool.checkArgs)}\nFailure:\n${detail}\n\nAccio will rerun the health check after this thread completes. Report what you changed and the commands and results that prove it works.` }, { repairToolId: tool.id })).id;
+      return (await threads.start({ profileId: profile.id, machineId: this.here.id, text: `Repair ${tool.name} on this machine\n\nDiagnose the failure, fix the installation, test it and verify the result. Work on this machine only.\nPackage: ${tool.package}@${tool.version}\nExecutable: ${tool.executable}\nManaged installation folder: ${folder}\nInstall with pnpm add --dir <that folder> --ignore-workspace --config.dangerously-allow-all-builds=true ${tool.package}@${tool.version}. Keep the installation inside that folder.\nHealth check arguments: ${JSON.stringify(tool.checkArgs)}\nFailure:\n${detail}\n\nAccio will rerun the health check after this thread completes. Report what you changed and the commands and results that prove it works.` }, { repairToolId: tool.id })).id;
     }, this.resourceCommand);
+    resources.spaces = () => spaces.list();
+    tools.add(addCliTool({
+      caller: (id) => threads.views().find((t) => t.id === id),
+      levelContext: (profileId, projectId) => resources.levelContext(profileId, projectId),
+      names: (at) => ({ profile: profiles.all().find((p) => p.id === at.profileId)?.name, space: spaces.list().find((s) => s.id === at.spaceId)?.name,
+        project: projects.state().projects.find((p) => at.projectKey && projectKey(p) === at.projectKey)?.name }),
+      tools: () => resources.state().tools,
+      save: async (tool) => (await resources.saveTool(tool)).check,
+      bin: (tool) => resources.tools.bin(tool),
+      confirm: async (threadId, request, signal) => {
+        const turnId = threads.runningTurn(threadId);
+        if (!turnId) return 'cancelled';
+        return threads.confirmations.ask(threadId, turnId, request, signal);
+      },
+    }));
     resources.register(router); threads.resources = resources; threads.toolOverrides = () => settings.harnessTools(); threads.onRepairFinished = id => resources.tools.afterRepair(id); threads.knownThreads = () => relay.merged(); threads.spaceContext = new SpaceContext({ spaces: () => spaces.list(), projects: () => projects.state(), checkouts: spaceCheckouts });
     profiles.setReferenceSource(() => [...projects.state().projects.map((p) => p.profileId), ...threads.profileReferences()]);
     let reconciliation: Promise<unknown> = Promise.resolve();
@@ -215,7 +231,7 @@ export class HubConnections {
       close: async () => { stopUpdates?.(); await relay.close(); await threads.close(); await secrets.close(); await resources.close(); await reconciliation; await profiles.close(); await projects.close(); await client.close(); } };
     relay.setAsleep(this.asleep);
     this.workspaces.set(record.id, workspace);
-    client.onChanged(() => { this.announce(); broadcast('resources.changed', resources.state()); relay.announce(); continueAfterRestart(); });
+    client.onChanged(() => { this.announce(); broadcast('resources.changed', resources.state()); if (initialized && client.status === 'connected') resources.syncTools(); relay.announce(); continueAfterRestart(); });
     if (client.status === 'connected') { await profiles.load(); await profiles.syncReferences(); }
     if (this.origin) workspace.initialize(this.origin);
     return workspace;

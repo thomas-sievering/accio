@@ -59,8 +59,8 @@ function layoutTurn(items: TranscriptItem[], running: boolean): TranscriptBlock[
   // A choice is what the turn asks of you, so it stays out of the fold with the reply.
   while (answer > prompt && (body[answer - 1]!.kind === 'assistant' || body[answer - 1]!.kind === 'choice')) answer--;
   const beforeAnswer = body.slice(prompt, answer);
-  // Private entry and its usage records stay visible even when other work is folded, and so do issue offers, which ask something of you.
-  const kept = (item: TranscriptItem) => item.kind === 'secret' || item.kind === 'issueOffer';
+  // Private entry and its usage records stay visible even when other work is folded, and so do issue offers and confirmations, which ask something of you.
+  const kept = (item: TranscriptItem) => item.kind === 'secret' || item.kind === 'issueOffer' || item.kind === 'confirmation';
   const secrets = beforeAnswer.filter(kept);
   const work = beforeAnswer.filter((item) => !kept(item));
   if (finished && !work.length) return groupTools([...body.slice(0, prompt), finished, ...body.slice(prompt)]);
@@ -84,12 +84,13 @@ function layoutRunningTurn(body: TranscriptItem[], prompt: number): TranscriptBl
   const calls = body.slice(tail) as ToolItem[];
   const current = calls.findLast((item) => item.status === 'running');
   const waiting = body.some((item) => item.kind === 'secret' && item.status === 'pending');
+  const confirming = body.some((item) => item.kind === 'confirmation' && item.status === 'pending');
   return [
     ...groupTools(body.slice(0, tail)),
     {
       kind: 'work', id: `${body[0]!.turnId}:work`, live: true, blocks: groupTools(calls),
       failed: calls.filter((item) => item.status === 'error').length,
-      activity: waiting ? 'Waiting for secret' : current ? describeLive(current) : 'Thinking',
+      activity: waiting ? 'Waiting for secret' : confirming ? 'Waiting for your answer' : current ? describeLive(current) : 'Thinking',
       startedAt: prompt ? (body[0] as Extract<TranscriptItem, { kind: 'user' }>).at : undefined,
     },
   ];
