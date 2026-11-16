@@ -181,7 +181,7 @@ describe('standalone hub trust and network boundary', () => {
   it('updates project skill selections through paired machines without losing other scopes', async () => {
     const { service, pair } = await fixture();
     const first = await pair('first'); const second = await pair('second');
-    const scope = { global: false, profileIds: ['personal'], projectKeys: ['existing'], spaceIds: [] };
+    const scope = { global: false, profileIds: ['personal'], projectKeys: ['existing'] };
     await service.resources.saveSource({ id: 'library', name: 'Library', url: 'https://example.test/skills.git', ref: 'HEAD' }, [
       { id: 'library:review', sourceId: 'library', name: 'review', description: 'Review changes', path: '/hub/skills/review', revision: 'abc', scope },
     ]);

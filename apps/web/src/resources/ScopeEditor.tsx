@@ -5,20 +5,22 @@ import { useSpaces } from '../spaces/spaces';
 import { isOptional, projectKey, toggled } from './resources';
 
 /**
- * Where a skill is enabled: everywhere, for chosen profiles, spaces or projects,
- * or nowhere (optional, picked per project, space or profile).
+ * Where a skill or CLI is enabled: everywhere, for chosen profiles, spaces or projects,
+ * or nowhere (optional, picked per project or profile). `withSpaces` adds the Space level.
  */
-export function ScopeEditor({ scope, onChange, disabled, name }: {
+export function ScopeEditor({ scope, onChange, disabled, name, withSpaces }: {
   scope: ResourceScope;
   onChange: (s: ResourceScope) => void;
   disabled?: boolean;
   /** Names the group for assistive technology, e.g. "Playwright CLI". */
   name: string;
+  withSpaces?: boolean;
 }) {
+  const { spaces = [] } = useSpaces();
+  const spaceIds = scope.spaceIds ?? [];
   const { profiles = [] } = useProfiles();
   const { state } = useProjects();
   const projects = [...(state?.projects ?? [])].sort((a, b) => a.name.localeCompare(b.name));
-  const spaces = [...(useSpaces().spaces ?? [])].sort((a, b) => a.name.localeCompare(b.name));
   return (
     <fieldset className="scope-editor" disabled={disabled} aria-label={`Where ${name} is enabled`}>
       <legend>Enabled for</legend>
@@ -40,18 +42,21 @@ export function ScopeEditor({ scope, onChange, disabled, name }: {
             </label>
           ))}
         </div>
-        {spaces.length > 0 && <div className="scope-list" role="group" aria-label="Spaces">
-          <span className="scope-list-label">Spaces</span>
-          {spaces.map((s) => (
-            <label key={s.id} className="check">
-              <input type="checkbox" checked={scope.global || scope.spaceIds.includes(s.id)} disabled={scope.global} onChange={(e) => onChange({ ...scope, spaceIds: toggled(scope.spaceIds, s.id, e.target.checked) })} />
-              <span>
-                {s.name}
-                <small>{s.projectKeys.length} project{s.projectKeys.length === 1 ? '' : 's'}</small>
-              </span>
-            </label>
-          ))}
-        </div>}
+        {withSpaces && (
+          <div className="scope-list" role="group" aria-label="Spaces">
+            <span className="scope-list-label">Spaces</span>
+            {spaces.length === 0 && <small className="hint">No spaces yet.</small>}
+            {[...spaces].sort((a, b) => a.name.localeCompare(b.name)).map((s) => (
+              <label key={s.id} className="check">
+                <input type="checkbox" checked={scope.global || spaceIds.includes(s.id)} disabled={scope.global} onChange={(e) => onChange({ ...scope, spaceIds: toggled(spaceIds, s.id, e.target.checked) })} />
+                <span>
+                  {s.name}
+                  <small>{s.projectKeys.length === 1 ? '1 project' : `${s.projectKeys.length} projects`}</small>
+                </span>
+              </label>
+            ))}
+          </div>
+        )}
         <div className="scope-list" role="group" aria-label="Projects">
           <span className="scope-list-label">Projects</span>
           {projects.length === 0 && <small className="hint">No projects yet.</small>}
@@ -68,10 +73,10 @@ export function ScopeEditor({ scope, onChange, disabled, name }: {
       </div>
       <small className="hint" role="status">
         {scope.global
-          ? 'On everywhere. Profile, space and project choices are kept for when you turn this off.'
+          ? `On everywhere. ${withSpaces ? 'Profile, space' : 'Profile'} and project choices are kept for when you turn this off.`
           : isOptional(scope)
             ? 'Optional: off everywhere until you select it here, in a profile, or in a project’s settings.'
-            : 'On only for the selected profiles, spaces and projects.'}
+            : withSpaces ? 'On only for the selected profiles, spaces and projects. Where one name is on at several levels, the narrowest wins: project, then space, then profile.' : 'On only for the selected profiles and projects.'}
       </small>
     </fieldset>
   );

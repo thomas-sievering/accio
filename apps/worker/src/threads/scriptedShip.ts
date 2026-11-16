@@ -28,7 +28,7 @@ export type ScriptedShip = {
 export type ScriptedShipResult = { kind: 'published' } | { kind: 'handover'; detail: string };
 
 /** Each retry is a fetch, a clean rebase and a push, so a busy target rarely exhausts them. */
-export const PUSH_ATTEMPTS = 10;
+const PUSH_ATTEMPTS = 10;
 const TEST_TIMEOUT = 30 * 60_000;
 const OUTPUT_TAIL = 3000;
 
@@ -119,7 +119,7 @@ async function gitIn(cwd: string, signal: AbortSignal, ...args: string[]): Promi
 }
 
 /** Runs the project's command in a shell; Stop or a timeout kills its whole process tree. */
-export function runCommand(command: string, cwd: string, env: Record<string, string>, signal: AbortSignal, timeout = TEST_TIMEOUT): Promise<{ ok: boolean; output: string }> {
+function runCommand(command: string, cwd: string, env: Record<string, string>, signal: AbortSignal, timeout = TEST_TIMEOUT): Promise<{ ok: boolean; output: string }> {
   signal.throwIfAborted();
   return new Promise((resolve, reject) => {
     const child = spawn(command, { cwd, env, shell: true, windowsHide: true, detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'] });

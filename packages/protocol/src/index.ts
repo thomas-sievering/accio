@@ -1,4 +1,5 @@
 import type { z } from 'zod';
+import { confirmationMethods } from './confirmations.js';
 import { hubMethods, type HubEvents } from './hub.js';
 import { issueMethods } from './issues.js';
 import { limitsMethods, type LimitsEvents } from './limits.js';
@@ -13,6 +14,7 @@ import { threadMethods, type ThreadEvents } from './threads.js';
 import { updateMethods, type UpdateEvents } from './update.js';
 import { workspaceSkillMethods } from './workspaceSkills.js';
 
+export * from './confirmations.js';
 export * from './hub.js';
 export * from './issues.js';
 export * from './limits.js';
@@ -47,6 +49,7 @@ export const methods = {
   ...projectMethods,
   ...threadMethods,
   ...secretMethods,
+  ...confirmationMethods,
   ...spaceMethods,
   ...updateMethods,
 };

@@ -74,6 +74,7 @@ const write = <M extends typeof RESOURCE_WRITES[number], A extends [z.ZodType, .
 const ResourceWrite = z.discriminatedUnion('method', [
   write('saveTool', methods['tools.save'].params),
   write('deleteTool', ShortId),
+  write('setToolScope', ShortId, ResourceScope),
   write('saveSource', methods['skills.addSource'].params, Skills),
   write('stageSkills', ShortId, Skills),
   write('applySkills', ShortId, ShortId),
@@ -85,7 +86,7 @@ const ResourceWrite = z.discriminatedUnion('method', [
   write('deleteMcp', ShortId),
   write('setCredential', ShortId, z.object({ accessToken: z.string(), refreshToken: z.string().optional(), expiresAt: z.number().optional(), tokenEndpoint: z.string().optional(), clientId: z.string().optional(), clientSecret: z.string().optional() })),
   write('setToolStatus', z.object({ toolId: ShortId, machineId: z.string(), status: z.enum(['pending', 'installing', 'ready', 'error']), version: z.string().optional(), detail: z.string().optional(),
-    checkedAt: z.string().optional(), repairThreadId: z.string().optional(), repairError: z.string().optional() })),
+    checkedAt: z.string().optional(), description: z.string().max(1000).optional(), repairThreadId: z.string().optional(), repairError: z.string().optional() })),
 ]);
 /** A machine's local browser callback, the only redirect address a sign-in may name. */
 function isBrowserCallback(value: string) {

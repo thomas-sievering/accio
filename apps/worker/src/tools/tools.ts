@@ -9,7 +9,7 @@ import { z } from 'zod';
  * to and stops working when the turn ends.
  */
 export const ACCIO_MCP_SERVER = 'accio';
-export const MCP_PATH = '/mcp';
+const MCP_PATH = '/mcp';
 
 export type AccioTool<Shape extends z.ZodRawShape = z.ZodRawShape> = {
   name: string;

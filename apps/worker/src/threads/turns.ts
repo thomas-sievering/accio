@@ -8,6 +8,7 @@ import type { ResourceManager } from '../resources/resources.js';
 import { observedSkillLoads } from '../resources/workspaceSkills.js';
 import { UserError } from '../rpc/router.js';
 import type { SecretRequests } from '../secrets/secrets.js';
+import type { Confirmations } from './confirmations.js';
 import type { SpaceContext } from '../spaces/spaceContext.js';
 import { now } from '../time.js';
 import type { AccioTools } from '../tools/tools.js';
@@ -45,6 +46,7 @@ export type TurnDeps = {
   machines: Machines;
   harnesses: Record<string, Harness>;
   secrets: SecretRequests;
+  confirmations?: Confirmations;
   content: ThreadContent;
   deliveries: Deliveries;
   tools?: AccioTools;
@@ -77,6 +79,7 @@ export class Turns {
   constructor(private state: ThreadState, private deps: TurnDeps) {}
 
   /** Whether a turn can take steering input right now. */
+  runningTurn(threadId: string) { return this.liveInputs.get(threadId)?.turnId; }
   canSteer(threadId: string) { return !!this.liveInputs.get(threadId)?.send; }
 
   /** The queued message whose turn is starting, if any. */
@@ -209,10 +212,11 @@ export class Turns {
       // Reserve the turn above, but publish it only after its tools are ready.
       // GLOSSARY: GitHub account. The agent's gh commands act as the profile's account, like Accio's own reads.
       const env = { ...turnEnv(state.home, thread.profileId, thread.model.harnessId, access), ...await deps.machines.github.env(thread.profileId, cwd).catch(() => ({})) };
+      // GLOSSARY: Home. Like the Space section below, a first turn waits for the home's clone to have its skill files.
+      resources = await deps.resources()?.prepare(thread.profileId, thread.projectId, env, { repair: !!thread.repairToolId, cwd, waitForHome: !delivering && !thread.workVersion });
       const project = deps.projects.state().projects.find((p) => p.id === thread.projectId);
-      // GLOSSARY: Space. A thread's first turn waits for its space's home to be cloned here, so the home's skill files are there for the resources too.
+      // GLOSSARY: Space. A thread's first turn waits for its space's home to be cloned here.
       const space = project && await deps.spaceContext()?.section({ project, cwd, firstTurn: !delivering && !thread.workVersion });
-      resources = await deps.resources()?.prepare(thread.profileId, thread.projectId, env, { repair: !!thread.repairToolId, cwd });
       if (controller.signal.aborted || state.closing) throw new UserError('Turn interrupted before starting');
       if (!delivering) {
         if (!options.resume && !options.retry) thread = { ...thread, workVersion: (thread.workVersion ?? 0) + 1 };
@@ -314,6 +318,7 @@ export class Turns {
       this.liveInputs.delete(thread.id);
       try {
         await deps.secrets.endTurn(turnId);
+        await deps.confirmations?.endTurn(turnId);
         // Shutdown, not Stop: the turn continues when accio starts again (see `Threads.close`).
         const restarting = outcome === 'interrupted' && state.closing && !!state.require(thread.id).resumeAfterRestart;
         if (delivering && restarting) {

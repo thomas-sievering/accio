@@ -7,7 +7,7 @@ export type LimitsScope = 'all' | (string & {});
  * The hub treats a snapshot as fresh for five minutes (longer after the provider
  * rate-limited it); the client asks no more often.
  */
-export const FRESH_MS = 5 * 60_000;
+const FRESH_MS = 5 * 60_000;
 /** How often the client looks for snapshots that have gone stale. */
 export const CHECK_MS = 60_000;
 /** The hub ignores attempts closer together than this. */
@@ -24,7 +24,7 @@ type Named = { id: string; name: string };
  * With several accounts at a provider, whether the profile's turns use this one
  * ('inUse') or it waits ('standby'); 'only' when it is the provider's single account.
  */
-export type AccountRole = 'only' | 'inUse' | 'standby';
+type AccountRole = 'only' | 'inUse' | 'standby';
 type EntryBase = { provider: ProfileProviderView; account: AccountView; role: AccountRole; sharedWith: Named[] };
 export type LimitsEntry =
   /** Meters are drawn here. `sharedWith` lists the other profiles selecting this account. */

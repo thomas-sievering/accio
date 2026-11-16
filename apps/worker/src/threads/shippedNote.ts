@@ -7,11 +7,11 @@ import { accioTool } from '../tools/tools.js';
  * what changed and what to try. Accio shows it in the thread and the Changelog once
  * the delivery is verified; it never affects what Accio checks or publishes.
  */
-export const SHIPPED_NOTE_TOOL = 'shipped_note';
+const SHIPPED_NOTE_TOOL = 'shipped_note';
 
 export const SHIPPED_NOTE_INSTRUCTIONS = `Before you finish, call the ${SHIPPED_NOTE_TOOL} accio tool once with a one-line summary of what changed for the user and up to five short things they can try to see it working. Write for the person who will use the change, not for a reviewer: no file names or test counts. Call it again if a later fix changes that.`;
 
-export const shippedNoteInput = {
+const shippedNoteInput = {
   summary: z.string().trim().min(1).max(200).describe('One line on what changed for the user, e.g. "Running threads sit on Working below the inbox"'),
   test: z.array(z.string().trim().min(1).max(200)).max(5).describe('Short things to try, each one sentence, e.g. "Start a turn and watch the thread move to Working"'),
 };

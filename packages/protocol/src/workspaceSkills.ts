@@ -13,11 +13,8 @@ export type SkillContext = { threadId?: string; checkoutId?: string; profileId?:
 export type LoadedSkill = { id: string; name: string; path: string };
 export type WorkspaceSkill = LoadedSkill & {
   description: string;
-  /**
-   * `repository` ones are the project's own skill files; `home` ones are its space's home's (GLOSSARY: Home).
-   * GLOSSARY: Harness skill. `harness` ones ship with the thread's harness and can't be turned off.
-   */
-  origin: 'repository' | 'home' | 'library' | 'harness';
+  /** GLOSSARY: Harness skill. `harness` ones ship with the thread's harness and can't be turned off. */
+  origin: 'repository' | 'library' | 'harness';
   enabled: boolean;
   /** The narrowest level that turns it on; null when nothing does, and for harness skills. */
   enabledBy: SkillLevel | null;
@@ -28,15 +25,13 @@ export type WorkspaceSkill = LoadedSkill & {
   conflict?: string;
   loaded?: { itemId: string; turnId: string };
 };
-/** GLOSSARY: Space. The space a project is in; `homeUnavailable` says why its home's skill files are missing here. */
-export type SkillSpace = { id: string; name: string; homeUnavailable?: string };
-/** `harnessId` is whose harness skills are listed. */
-export type WorkspaceSkills = { skills: WorkspaceSkill[]; projectId?: string; space?: SkillSpace; harnessId?: string; unavailable?: string };
+/** `harnessId` is whose harness skills are listed; `space` is the space the project is in, if any. */
+export type WorkspaceSkills = { skills: WorkspaceSkill[]; projectId?: string; space?: { id: string; name: string }; harnessId?: string; unavailable?: string };
 
 const Context = z.object({ threadId: z.string().min(1).optional(), checkoutId: z.string().min(1).optional(), profileId: z.string().min(1).optional(), harnessId: z.string().min(1).optional() });
 const Skill = Context.extend({ skillId: z.string().min(1) });
 const Save = Skill.extend({ content: z.string().max(1_000_000) });
-/** Turns a library skill on or off for the draft's or thread's project, or for the space it is in. */
+/** Turns a library skill on or off for the context's project, or with `level: 'space'` for the space it is in. */
 const Enable = Skill.extend({ enabled: z.boolean(), level: z.enum(['project', 'space']).default('project') });
 export const workspaceSkillMethods = {
   'threads.skills': method<typeof Context, WorkspaceSkills>(Context),

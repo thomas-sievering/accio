@@ -6,12 +6,9 @@ import { Chevron, Plus, Refresh } from '../app/icons';
 import { useAction } from '../app/useAction';
 import { useProjects } from '../projects/projects';
 import { shortRevision } from '../resources/resources';
-import { byName, harnessName, isAddable, isHarnessSkill, isInherited, isOverridden, isProjectSkill, isSpaceSkill, LEVEL_NAMES, originLabel, skillReference, useWorkspaceSkills } from './workspaceSkills';
+import { byName, harnessName, isAddable, isAddableToSpace, isHarnessSkill, isInherited, isOverridden, isProjectSkill, isSpaceSkill, LEVEL_NAMES, originLabel, skillReference, useWorkspaceSkills } from './workspaceSkills';
 
 type SectionKey = 'project' | 'space' | 'profile' | 'global' | 'harness' | 'overridden';
-/** The levels a library skill can be turned on at from the panel. */
-type PanelLevel = 'project' | 'space';
-const LEVEL_TARGET: Record<PanelLevel, string> = { project: 'this project', space: 'this space' };
 /** Which sections are open, kept while the app runs so switching threads doesn't fold them again. */
 const openSections = new Set<SectionKey>();
 
@@ -30,10 +27,11 @@ export function SkillsPanel({ context, composer }: { context: SkillContext; comp
   const [open, setOpen] = useState(() => new Set(openSections));
   const skills = useMemo(() => value?.skills ?? [], [value]);
   const own = useMemo(() => skills.filter(isProjectSkill).sort(byName), [skills]);
-  const spaceWide = useMemo(() => skills.filter(isSpaceSkill).sort(byName), [skills]);
+  const inSpace = useMemo(() => skills.filter(isSpaceSkill).sort(byName), [skills]);
   const profile = useMemo(() => skills.filter((s) => isInherited(s) && s.enabledBy === 'profile').sort(byName), [skills]);
   const everywhere = useMemo(() => skills.filter((s) => isInherited(s) && s.enabledBy === 'global').sort(byName), [skills]);
   const addable = useMemo(() => skills.filter(isAddable).sort(byName), [skills]);
+  const addableToSpace = useMemo(() => skills.filter(isAddableToSpace).sort(byName), [skills]);
   const shipped = useMemo(() => skills.filter(isHarnessSkill).sort(byName), [skills]);
   const overridden = useMemo(() => skills.filter(isOverridden).sort(byName), [skills]);
   const harness = value?.harnessId ? harnessName(value.harnessId) : undefined;
@@ -65,7 +63,7 @@ export function SkillsPanel({ context, composer }: { context: SkillContext; comp
 
       {value.projectId
         ? <SkillsSection title="Project" skills={own} {...fold('project')} where="In this repository or turned on for this project."
-          head={(title) => <AddSkill level="project" candidates={addable} context={context} title={title} onAnnounce={setAnnounce}
+          head={(title) => <AddSkill candidates={addable} context={context} title={title} onAnnounce={setAnnounce}
             onChanged={() => { toggle('project', true); reload(); }} />}
           empty={<p className="hint skills-message">No skills in this repository’s <code>.agents/skills</code> or <code>.claude/skills</code> and none added from the library.</p>}>
           {own.map((s) => <SkillItem key={s.id} skill={s} {...row} />)}
@@ -74,12 +72,11 @@ export function SkillsPanel({ context, composer }: { context: SkillContext; comp
           <div className="skills-title-row"><h3 className="skills-title">Project</h3></div>
           <p className="hint skills-message">Project skills need a project. Start the thread in a project to add any.</p>
         </section>}
-      {value.space && <SkillsSection title="Space" skills={spaceWide} {...fold('space')} where={`In the home of ${value.space.name} or turned on for this space.`}
-        head={(title) => <AddSkill level="space" candidates={addable} context={context} title={title} onAnnounce={setAnnounce}
+      {value.space && <SkillsSection title="Space" skills={inSpace} {...fold('space')} where={`In the home of ${value.space.name} or turned on for that space.`}
+        head={(title) => <AddSkill candidates={addableToSpace} context={context} title={title} level="space" onAnnounce={setAnnounce}
           onChanged={() => { toggle('space', true); reload(); }} />}
-        empty={<p className="hint skills-message">{value.space.homeUnavailable ?? <>No skills in the home’s <code>.agents/skills</code> or <code>.claude/skills</code> and none added from the library for {value.space.name}.</>}</p>}>
-        {value.space.homeUnavailable && spaceWide.length > 0 && <li><p className="hint skills-message">{value.space.homeUnavailable}</p></li>}
-        {spaceWide.map((s) => <SkillItem key={s.id} skill={s} {...row} />)}
+        empty={<p className="hint skills-message">No skills in the home’s <code>.agents/skills</code> or <code>.claude/skills</code> and none turned on for {value.space.name}.</p>}>
+        {inSpace.map((s) => <SkillItem key={s.id} skill={s} {...row} />)}
       </SkillsSection>}
       {profile.length > 0 && <SkillsSection title="Profile" skills={profile} {...fold('profile')} where="Turned on for this profile; change these in Settings → Skills.">
         {profile.map((s) => <SkillItem key={s.id} skill={s} {...row} />)}
@@ -132,8 +129,9 @@ function SkillItem({ skill, context, composer, onChanged, onAnnounce, harness }:
   const [open, setOpen] = useState(false);
   const bodyId = useId();
   const disable = useAction();
-  // A library skill turned on here, at the project or its space, can be turned off here at that level.
-  const own: PanelLevel | undefined = skill.origin === 'library' && (skill.enabledBy === 'project' || skill.enabledBy === 'space') ? skill.enabledBy : undefined;
+  // A library skill turned on here can be turned off here, for the project or for its space.
+  const own = skill.origin === 'library' && (skill.enabledBy === 'project' || skill.enabledBy === 'space') ? skill.enabledBy : undefined;
+  const ownName = own === 'space' ? 'space' : 'project';
   const threadId = context.threadId;
   const winner = skill.overriddenBy && LEVEL_NAMES[skill.overriddenBy];
 
@@ -161,7 +159,7 @@ function SkillItem({ skill, context, composer, onChanged, onAnnounce, harness }:
         {skill.conflict && <p className="warn" role="note">{skill.conflict}</p>}
         <dl className="skill-facts">
           <dt>Source</dt>
-          <dd>{skill.origin === 'repository' ? 'This repository' : skill.origin === 'home' ? 'The space’s home' : skill.origin === 'harness' ? `Ships with ${harness ?? 'the harness'}` : skill.sourceName ?? 'Library'}{skill.revision && <> · <code title={skill.revision}>{shortRevision(skill.revision)}</code></>}</dd>
+          <dd>{skill.origin === 'repository' ? (skill.enabledBy === 'space' ? 'The space’s home' : 'This repository') : skill.origin === 'harness' ? `Ships with ${harness ?? 'the harness'}` : skill.sourceName ?? 'Library'}{skill.revision && <> · <code title={skill.revision}>{shortRevision(skill.revision)}</code></>}</dd>
           {skill.path && <><dt>Path</dt>
           <dd><code className="skill-path" title={skill.path}>{skill.path}</code></dd></>}
         </dl>
@@ -173,8 +171,8 @@ function SkillItem({ skill, context, composer, onChanged, onAnnounce, harness }:
           {own && (
             <button type="button" className="ghost" disabled={disable.busy} onClick={async () => {
               const done = await disable.run(async () => (await client.call('threads.setSkillEnabled', { ...context, skillId: skill.id, enabled: false, level: own }), true));
-              if (done) { onAnnounce(`${skill.name} disabled for ${LEVEL_TARGET[own]}. Applies from the next turn.`); onChanged(); }
-            }}>{disable.busy ? 'Disabling…' : `Disable for ${LEVEL_TARGET[own]}`}</button>
+              if (done) { onAnnounce(`${skill.name} disabled for this ${ownName}. Applies from the next turn.`); onChanged(); }
+            }}>{disable.busy ? 'Disabling…' : `Disable for this ${ownName}`}</button>
           )}
         </div>
         {disable.error && <p className="error" role="alert">{disable.error}</p>}
@@ -246,7 +244,7 @@ function Instructions({ skill, context, onAnnounce }: { skill: WorkspaceSkill; c
 }
 
 /** Search every library skill not yet on here and turn one on for this project, or for its space. */
-function AddSkill({ level, candidates, context, onChanged, onAnnounce, title }: { level: PanelLevel; candidates: WorkspaceSkill[]; context: SkillContext; onChanged: () => void; onAnnounce: (text: string) => void; title: ReactNode }) {
+function AddSkill({ candidates, context, onChanged, onAnnounce, title, level = 'project' }: { candidates: WorkspaceSkill[]; context: SkillContext; onChanged: () => void; onAnnounce: (text: string) => void; title: ReactNode; level?: 'project' | 'space' }) {
   const client = useClient();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -267,7 +265,7 @@ function AddSkill({ level, candidates, context, onChanged, onAnnounce, title }: 
   const enable = async (skill: WorkspaceSkill) => {
     const done = await run(async () => (await client.call('threads.setSkillEnabled', { ...context, skillId: skill.id, enabled: true, level }), true));
     if (!done) return;
-    onAnnounce(`${skill.name} added to ${LEVEL_TARGET[level]}. Applies from the next turn.`);
+    onAnnounce(`${skill.name} added to this ${level}. Applies from the next turn.`);
     onChanged();
     close();
   };
@@ -275,7 +273,7 @@ function AddSkill({ level, candidates, context, onChanged, onAnnounce, title }: 
   const head = (
     <div className="skills-title-row">
       {title}
-      <button ref={opener} type="button" className="side-icon" title={`Add skill to ${LEVEL_TARGET[level]}`} aria-label={`Add skill to ${LEVEL_TARGET[level]}`} aria-pressed={open}
+      <button ref={opener} type="button" className="side-icon" title={level === 'space' ? 'Add skill to the space' : 'Add skill'} aria-label={level === 'space' ? 'Add skill to the space' : 'Add skill'} aria-pressed={open}
         onMouseDown={(e) => { if (open) e.preventDefault(); }} onClick={() => (open ? close() : setOpen(true))}><Plus /></button>
     </div>
   );

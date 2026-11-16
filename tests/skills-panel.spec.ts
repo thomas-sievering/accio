@@ -90,7 +90,7 @@ test('Skills tab folds each skill level, adds, references, edits, disables and j
   await expect(read).toBeInViewport();
 
   // Add skill searches the library skills not on here yet and turns one on for the project.
-  await panel(page).getByRole('button', { name: 'Add skill to this project' }).click();
+  await panel(page).getByRole('button', { name: 'Add skill', exact: true }).click();
   const search = page.getByRole('combobox', { name: 'Search library skills' });
   await expect(search).toBeFocused();
   await expect(panel(page).getByRole('option')).toHaveText([/lib-review/]);
@@ -102,7 +102,7 @@ test('Skills tab folds each skill level, adds, references, edits, disables and j
   const review = projectList(page).locator('.skill-item').filter({ hasText: 'lib-review' });
   await expect(review).toContainText('Library');
   await expect(review).not.toContainText('Library · Library');
-  await expect(panel(page).getByRole('button', { name: 'Add skill to this project' })).toBeFocused();
+  await expect(panel(page).getByRole('button', { name: 'Add skill', exact: true })).toBeFocused();
 
   // The selection is the hub's: a fresh load shows it too. The open level stays open.
   await openSkills(page, baseURL!, /Skills fixture/);
@@ -142,7 +142,7 @@ test('Skills tab folds each skill level, adds, references, edits, disables and j
   await page.locator('.sidebar').getByRole('button', { name: /Inline chat fixture/ }).click();
   await expect(panel(page).getByText('No project', { exact: true })).toBeVisible();
   await expect(panel(page).getByText(/Project skills need a project/)).toBeVisible();
-  await expect(panel(page).getByRole('button', { name: 'Add skill to this project' })).toHaveCount(0);
+  await expect(panel(page).getByRole('button', { name: 'Add skill', exact: true })).toHaveCount(0);
   await expect(skillRow(page, 'repo-notes')).toHaveCount(0);
 
   // An opened level stays open when switching back.
@@ -187,6 +187,74 @@ test('Skills tab shows the harness’s own skills read-only and overridden skill
   await panel(page).screenshot({ path: testInfo.outputPath('skills-harness-overridden.png') });
 });
 
+// GLOSSARY: Skill level, Space, Home. A project in a space gets the home's skill files and the space's selections.
+test('Skills tab shows a Space level between Project and Profile, and Settings turns skills on for a space', async ({ page, baseURL }, testInfo) => {
+  test.setTimeout(60_000);
+  const client = await chatClient(baseURL!);
+  try {
+    for (const space of await client.call('spaces.list', {})) await client.call('spaces.delete', { id: space.id });
+    // No space yet: no Space section.
+    await openSkills(page, baseURL!, /Skills fixture/);
+    await expect(panel(page).getByRole('button', { name: /^Space/ })).toHaveCount(0);
+
+    const { projects } = await client.call('projects.get', {});
+    const key = (name: string) => projectKey(projects.find((p) => p.name === name)!);
+    const space = await client.call('spaces.save', { name: 'hrc', projectKeys: [key('skills-project'), key('skills-home')], homeProjectKey: key('skills-home') });
+    const spaceFold = panel(page).getByRole('button', { name: /^Space/ });
+    await expect(spaceFold).toHaveAttribute('aria-expanded', 'false');
+    await expect(spaceFold).toHaveAttribute('title', /In the home of hrc or turned on for that space\./);
+    await expect(spaceFold.locator('.skills-count')).toHaveText('2');
+    // The home's lib-docs wins over the profile's, so Profile has nothing left and the library copy is overridden by Space.
+    const titles = await panel(page).locator('.skills-title').allTextContents();
+    expect(titles.map((t) => t.replace(/[\d·]|loaded/g, '').trim())).toEqual(['Project', 'Space', 'Claude', 'Overridden']);
+    await spaceFold.click();
+    const section = panel(page).locator('section.skills-section').filter({ has: page.getByRole('button', { name: /^Space/ }) });
+    await expect(section.locator('.skill-item .skill-name')).toHaveText(['home-guide', 'lib-docs']);
+    await expect(skillRow(page, 'home-guide').locator('.skill-origin')).toHaveText('Home');
+
+    // The home's files are read here, not edited: a thread in the home changes them.
+    await skillRow(page, 'home-guide').getByRole('button', { name: /^home-guide/ }).click();
+    await expect(skillRow(page, 'home-guide')).toContainText('The space’s home');
+    await expect(skillRow(page, 'home-guide').locator('.skill-content')).toContainText('Space-wide instructions.');
+    await expect(skillRow(page, 'home-guide').getByRole('button', { name: 'Edit instructions' })).toHaveCount(0);
+
+    // + turns a library skill on for the space.
+    await panel(page).getByRole('button', { name: 'Add skill to the space', exact: true }).click();
+    const search = page.getByRole('combobox', { name: 'Search library skills' });
+    await search.fill('review');
+    await search.press('Enter');
+    await expect(panel(page).getByRole('status').filter({ hasText: 'lib-review added to this space' })).toBeAttached();
+    const review = section.locator('.skill-item').filter({ hasText: 'lib-review' });
+    await expect(review.locator('.skill-origin')).toHaveText('Space · Library');
+    await expect(spaceFold.locator('.skills-count')).toHaveText('3');
+    await skillRow(page, 'home-guide').getByRole('button', { name: /^home-guide/ }).click();
+    await panel(page).screenshot({ path: testInfo.outputPath('skills-space.png') });
+    const overridden = panel(page).getByRole('button', { name: /^Overridden/ });
+    await overridden.click();
+    await expect(panel(page).locator('.skill-item.overridden').filter({ hasText: 'lib-docs' }).locator('.tag')).toHaveText('Overridden by Space');
+    await review.getByRole('button', { name: /^lib-review/ }).click();
+    await review.getByRole('button', { name: 'Disable for this space' }).click();
+    await expect(section.locator('.skill-item').filter({ hasText: 'lib-review' })).toHaveCount(0);
+
+    // Settings → Skills offers the space as a target next to profiles and projects.
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.locator('.sidebar nav').getByRole('button', { name: 'Skills', exact: true }).click();
+    await page.locator('.settings-page').getByRole('button', { name: /^Library/ }).click();
+    const row = page.locator('.skill-row').filter({ hasText: 'lib-review' });
+    await row.getByRole('button', { name: 'Enable for…' }).click();
+    const spaces = row.getByRole('group', { name: 'Spaces' });
+    await spaces.getByRole('checkbox', { name: /hrc/ }).check();
+    await row.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(row).toContainText('On for hrc');
+    const saved = (await client.call('resources.get', {})).skills.find((s) => s.name === 'lib-review')!;
+    expect(saved.scope.spaceIds).toEqual([space.id]);
+    await client.call('skills.setScope', { id: saved.id, scope: { ...saved.scope, spaceIds: [] } });
+  } finally {
+    for (const space of await client.call('spaces.list', {})) await client.call('spaces.delete', { id: space.id });
+    client.close();
+  }
+});
+
 test('MCP tab lists every MCP server, flags sign-in and opens settings', async ({ page, baseURL }, testInfo) => {
   await openSkills(page, baseURL!, /Skills fixture/);
   await page.getByRole('tab', { name: 'MCP', exact: true }).click();
@@ -214,69 +282,4 @@ test('MCP tab lists every MCP server, flags sign-in and opens settings', async (
   await page.getByRole('tabpanel', { name: 'MCP' }).getByRole('button', { name: 'docs-search Remote', exact: true }).click();
   await expect(page.locator('.layout.with-panel')).toBeHidden();
   await expect(page.getByText('docs-search').first()).toBeVisible();
-});
-
-// GLOSSARY: Space, Home, Skill level. A space's skills sit between Project and Profile: the home's skill files and library skills turned on for the space.
-test('Skills tab shows a Space level for a project in a space, adds to it, and Settings selects the space', async ({ page, baseURL }, testInfo) => {
-  const client = await chatClient(baseURL!);
-  const review = (await client.call('resources.get', {})).skills.find((skill) => skill.name === 'lib-review')!;
-  try {
-    for (const space of await client.call('spaces.list', {})) await client.call('spaces.delete', { id: space.id });
-    const { projects } = await client.call('projects.get', {});
-    const byName = (name: string) => projectKey(projects.find((p) => p.name === name)!);
-    // Fixture: the space is arranged directly; Settings / Spaces is covered by spaces.spec.ts.
-    await client.call('spaces.save', { name: 'Docs space', projectKeys: [byName('skills-project'), byName('skills-home')], homeProjectKey: byName('skills-home') });
-    await openSkills(page, baseURL!, /Skills fixture/);
-
-    // The Space level comes between Project and Profile; the home's lib-docs overrides the Profile one.
-    const spaceFold = panel(page).getByRole('button', { name: /^Space/ });
-    await expect(spaceFold).toHaveAttribute('aria-expanded', 'false');
-    await expect(spaceFold.locator('.skills-count')).toHaveText('2');
-    const titles = await panel(page).locator('.skills-title').allTextContents();
-    expect(titles.map((t) => t.replace(/[\d·]|loaded/g, '').trim())).toEqual(['Project', 'Space', 'Claude', 'Overridden']);
-    await spaceFold.click();
-    const spaceList = panel(page).locator('section').nth(1);
-    await expect(spaceList.locator('.skill-item')).toHaveCount(2);
-    await expect(spaceList.locator('.skill-item').filter({ hasText: 'home-glossary' })).toContainText('Home');
-    await panel(page).getByRole('button', { name: /^Overridden/ }).click();
-    await expect(panel(page).locator('.skill-item.overridden').filter({ hasText: 'lib-docs' }).locator('.tag')).toHaveText('Overridden by Space');
-
-    // Its + turns a library skill on for the space.
-    await panel(page).getByRole('button', { name: 'Add skill to this space' }).click();
-    const search = page.getByRole('combobox', { name: 'Search library skills' });
-    await search.fill('review');
-    await search.press('Enter');
-    await expect(panel(page).getByRole('status').filter({ hasText: 'lib-review added to this space' })).toBeAttached();
-    const added = spaceList.locator('.skill-item').filter({ hasText: 'lib-review' });
-    await expect(added).toContainText('Space · Library');
-    expect((await client.call('resources.get', {})).skills.find((skill) => skill.id === review.id)?.scope.spaceIds).toHaveLength(1);
-    await spaceList.getByRole('button', { name: /^home-glossary/ }).click();
-    await expect(spaceList.locator('.skill-item.open')).toContainText('The space’s home');
-    await expect(spaceList.locator('.skill-item.open .skill-content')).toContainText('Glossary instructions.');
-    await expect(spaceList.locator('.skill-item.open').getByRole('button', { name: 'Edit instructions' })).toHaveCount(0);
-    await spaceList.getByRole('button', { name: /^home-glossary/ }).click();
-    await spaceList.screenshot({ path: testInfo.outputPath('skills-space.png') });
-    await panel(page).screenshot({ path: testInfo.outputPath('skills-space-panel.png') });
-
-    // Disable for this space takes it off the space, not the project.
-    await added.getByRole('button', { name: /^lib-review/ }).click();
-    await added.getByRole('button', { name: 'Disable for this space' }).click();
-    await expect(spaceList.locator('.skill-item').filter({ hasText: 'lib-review' })).toHaveCount(0);
-
-    // Settings / Skills offers the space next to profiles and projects.
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    await page.locator('.sidebar nav').getByRole('button', { name: 'Skills', exact: true }).click();
-    await page.getByRole('button', { name: /^Library/ }).click();
-    const row = page.locator('.skill-row').filter({ hasText: 'lib-review' });
-    await row.getByRole('button', { name: 'Enable for…' }).click();
-    await row.getByRole('group', { name: 'Spaces' }).getByRole('checkbox', { name: /Docs space/ }).check();
-    await row.getByRole('button', { name: 'Save', exact: true }).click();
-    await expect(row).toContainText('On for Docs space');
-    const checkoutId = (await client.call('projects.get', {})).checkouts.find((c) => c.projectId === projects.find((p) => p.name === 'skills-project')!.id)!.id;
-    await expect.poll(async () => (await client.call('threads.skills', { checkoutId })).skills.find((skill) => skill.id === review.id)?.enabledBy).toBe('space');
-  } finally {
-    await client.call('skills.setScope', { id: review.id, scope: review.scope }).catch(() => {});
-    for (const space of await client.call('spaces.list', {})) await client.call('spaces.delete', { id: space.id });
-    client.close();
-  }
 });

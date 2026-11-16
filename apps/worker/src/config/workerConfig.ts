@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { DEFAULT_PORT } from '@accio/protocol';
 
-export const DEFAULT_HUB_PORT = 47322;
+const DEFAULT_HUB_PORT = 47322;
 
 /** Where this machine keeps everything accio owns. Never ~/.claude (ADR 0003). */
 export function accioHome(): string {

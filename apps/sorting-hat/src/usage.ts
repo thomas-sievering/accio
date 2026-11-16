@@ -39,8 +39,8 @@ export type UsageQuery = {
   /** Only usage that matches every one given. */
   where?: Partial<Record<UsageDimension, string | null>>;
 };
-export type UsageTotals = { requests: number; inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number };
-export type UsageRow = UsageTotals & { start?: string; houseId?: string; hatKeyId?: string | null; accountId?: string; model?: string | null; providerId?: ProviderId };
+type UsageTotals = { requests: number; inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number };
+type UsageRow = UsageTotals & { start?: string; houseId?: string; hatKeyId?: string | null; accountId?: string; model?: string | null; providerId?: ProviderId };
 export type UsageReport = { from: string | null; to: string | null; bucket: 'hour' | 'day' | null; groupBy: UsageDimension[]; rows: UsageRow[]; totals: UsageTotals };
 
 const FIELD: Record<UsageDimension, { index: number; name: 'houseId' | 'hatKeyId' | 'accountId' | 'model' | 'providerId' }> = {

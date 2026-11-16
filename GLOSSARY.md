@@ -86,6 +86,10 @@ _Avoid_: Image attachment (an image you send), DALL·E
 A harness's own tools, such as Claude Code's WebSearch or Codex's goals, grouped into switches under Settings → Harnesses. The switches are shared settings for the whole hub. By default only a shell and file reading and editing are on; other capabilities come as accio tools that work the same on every harness. Changes apply from each thread's next turn.
 _Avoid_: Default tools, native tools, harness tools
 
+**CLI**:
+A command-line program that Accio installs at a pinned version on every machine and tells threads about, such as agent-desktop. It is turned on at the same levels as skills: Everywhere, Profile, Space or Project, and where two CLIs share a command the narrower level wins. A program you installed on a machine yourself is not a CLI until you add it to Accio, in Settings → CLIs or by asking a thread, which uses the add_cli accio tool. A CLI that is broken on a machine never holds a turn up; the turn is told it is unavailable there.
+_Avoid_: Tool (on its own), managed tool, binary
+
 **System prompt**:
 What accio adds to a harness's own instructions for every turn: titled sections that describe accio's chat, such as how to show images inline. Each harness receives it in its own way. Claude Code gets it after its built-in system prompt and Codex as developer instructions. It is read-only and shown under Settings → System prompt.
 _Avoid_: Instructions, preamble, custom prompt
@@ -193,6 +197,10 @@ _Avoid_: Cancelled, failed (for this case)
 **Failed**:
 The state of a thread whose last turn ended in an error. You can send it another message.
 _Avoid_: Errored, crashed
+
+**Confirmation**:
+A card in a thread on which an accio tool waits until you allow or decline its action, such as add_cli turning a CLI on Everywhere. It ends unanswered when its turn ends or after ten minutes, and then counts as declined.
+_Avoid_: Approval, permission prompt, dialog
 
 **Choice**:
 Two or more screenshots a harness shows side by side, through the offer_choice accio tool, when you ask it to prototype, try or mock up UI for a feature. You pick one in your next message and add feedback if you like; the harness reads the pick on the message's first line.
@@ -315,7 +323,7 @@ A git repository of skills that the hub pulls and hands out, such as spellbook. 
 _Avoid_: Skill pack, plugin
 
 **Skill level**:
-Where a thread's skills come from, widest first: Everywhere, Profile, Space and Project. Everywhere means every machine, profile and project on the hub, never one machine. A project's skills are its repository's skill files plus library skills turned on for it; a space's are its home's skill files plus library skills turned on for it, and a thread in the home gets the home's files once, as Project skills. When two levels have a skill of the same name, the narrowest wins and the other is overridden. Skills installed on a machine, such as in `~/.agents/skills`, are no level and never reach a thread. See ADR 0020.
+Where a thread's skills come from, widest first: Everywhere, Profile, Space and Project. Everywhere means every machine, profile and project on the hub, never one machine. A project's skills are its repository's skill files plus library skills turned on for it; a space's are its home's skill files plus library skills turned on for it. A thread in the home gets the home's skill files as Project skills. When two levels have a skill of the same name, the narrowest wins and the other is overridden. Skills installed on a machine, such as in `~/.agents/skills`, are no level and never reach a thread. See ADR 0020.
 _Avoid_: Global (for one machine), scope, tier
 
 **Harness skill**:

@@ -1,7 +1,4 @@
-import { SKILL_LEVELS, type ResourceScope, type SkillLevel, type WorkspaceSkill } from '@accio/protocol';
-
-/** Where a thread stands: its profile, its project's key and the id of the space that project is in. */
-export type LevelContext = { profileId?: string; projectKey?: string; spaceId?: string };
+import { SKILL_LEVELS, type LevelContext, type ResourceScope, type SkillLevel, type WorkspaceSkill } from '@accio/protocol';
 
 /**
  * GLOSSARY: Skill level. The narrowest level a library skill's selection turns it on
@@ -31,9 +28,8 @@ export function resolveLevels(skills: WorkspaceSkill[]): WorkspaceSkill[] {
     for (const skill of named) {
       if (rank(skill) > best) skill.overriddenBy = SKILL_LEVELS[best];
       const level = named.filter(other => rank(other) === rank(skill));
-      const files = level.find(other => other.origin === 'repository' || other.origin === 'home')?.origin;
-      if (level.length > 1) skill.conflict = files && level.some(other => other.origin === 'library')
-        ? `${files === 'home' ? 'This space’s home' : 'This project'} already has a skill named ${name}. Choose either its copy or the synced skill in settings.`
+      if (level.length > 1) skill.conflict = level.some(other => other.origin === 'repository') && level.some(other => other.origin === 'library')
+        ? `${skill.enabledBy === 'space' ? 'The space’s home' : 'This project'} already has a skill named ${name}. Choose either the ${skill.enabledBy === 'space' ? 'home’s' : 'project'} copy or the synced skill in settings.`
         : `More than one enabled skill is named ${name}. Choose one source before the next turn.`;
     }
   }

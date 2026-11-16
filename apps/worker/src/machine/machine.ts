@@ -8,7 +8,7 @@ import { UserError } from '../rpc/router.js';
 import { JsonFile } from '@accio/persistence';
 import { GitHubAccounts } from '../github/accounts.js';
 
-export const WORKER_VERSION = '0.1.0';
+const WORKER_VERSION = '0.1.0';
 
 /** This machine's stable id, created on first start. The hub knows the machine by it. */
 export async function loadMachineId(home: string): Promise<string> {

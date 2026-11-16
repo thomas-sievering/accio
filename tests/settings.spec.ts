@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 for (const [sectionName, addName] of [
   ['Profiles', 'Add profile'], ['Accounts', 'Add ChatGPT account'], ['Secrets', 'Add secret'],
-  ['Tools', 'Add tool'], ['MCP servers', 'Add MCP server'], ['Skills', 'Add skill source'], ['Hubs', 'Add hub'],
+  ['CLIs', 'Add CLI'], ['MCP servers', 'Add MCP server'], ['Skills', 'Add skill source'], ['Hubs', 'Add hub'],
 ]) {
   test(`new ${sectionName} form guards typed input on Escape, section and breadcrumb navigation`, async ({ page, baseURL }) => {
     await page.goto(`${baseURL}/#token=isolated-chat-test-token`);

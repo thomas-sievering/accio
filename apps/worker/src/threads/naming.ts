@@ -43,7 +43,7 @@ function namingText(text: string): string {
   return splitPastes(text).map(part => part.kind === 'text' ? part.text : part.kind === 'paste' ? `[Pasted text: ${pasteGist(part.text).slice(0, 200)}]` : `[${reactionLabel(part.reaction, 200)}]`).join('\n\n');
 }
 
-export function namingPrompt(context: string, instructions: string, previousTitle?: string) {
+function namingPrompt(context: string, instructions: string, previousTitle?: string) {
   return `Name this conversation so the user can recognize it weeks later.
 Return JSON only: {"title":"...","needsRefinement":false}.
 Use 3–8 words, preferably under 40 characters. Capture the durable subject and intended outcome.
@@ -58,7 +58,7 @@ ${instructions ? `Additional naming preferences:\n${instructions}\n` : ''}
 <conversation>\n${context}\n</conversation>`;
 }
 
-export function shipPrompt(context: string, files: string) {
+function shipPrompt(context: string, files: string) {
   return `Write the commit message and the shipped note for this finished change.
 Return JSON only: {"commit":"...","summary":"...","test":["..."]}.
 commit: one imperative subject line under 72 characters, such as "Show model versions in the picker".

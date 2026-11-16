@@ -6,6 +6,8 @@ Definitions, skill selections, source revisions and machine tool reports live in
 
 ## Tools execute on machines
 
+Amended by ADR 0021: tools are now called CLIs, are listed in each turn's instructions, have the skill levels again, install with pnpm and no longer block turns when broken.
+
 The first installer supports npm packages at exact versions. Each machine installs them under its Accio home, checks the declared executable and arguments, and adds all managed tools to the PATH passed to every turn on that machine. Tools and MCP servers have no profile or project selections; existing selections for them are discarded when loaded. Saving a tool, machine startup and turn preparation reconcile the installation. Tool health describes the configured check; a version check alone does not establish browser or other external dependency readiness.
 
 A failed installation or check automatically starts one repair thread on the affected machine. Its profile is chosen explicitly when configured, otherwise from a profile with an available signed-in model. Its prompt includes the managed installation directory and the failure. Repair threads bypass resource readiness so a broken tool cannot prevent its own repair. A completed repair triggers the original health check again; the model's report alone does not mark the tool ready. Repeated failures reuse the existing repair thread. When sign-in is missing, the check remains failed with the repair precondition displayed.

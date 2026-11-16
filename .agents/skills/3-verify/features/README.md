@@ -34,4 +34,4 @@ Record feature IDs and entry points in `actions.json`. Pair the action trace wit
 - [Threads](threads.md): project/profile picker, models, messages, stop/resume, search/filter, shelves and deletion.
 - [Changelog](changelog.md): delivered changes with their shipped notes, the project dashboard's fold, search and opening a change's thread.
 - [Secrets](secrets.md): private entry, automatic saved reuse, one-time delivery, project access, replacement and deletion; includes the isolated scripted-harness journey.
-- [Tools, MCP servers and skills](resources.md): shared library, scopes, machine readiness, repair threads, MCP sign-in, Git updates and project copies.
+- [CLIs, MCP servers and skills](resources.md): shared library, levels and scopes, machine readiness, repair threads, MCP sign-in, Git updates and project copies.

@@ -6,12 +6,12 @@ import { SettingLink, SettingRow, SettingsFooter, SettingsSection } from '../app
 import { useAction } from '../app/useAction';
 import { useProfiles } from '../profiles/profiles';
 import { useProjects } from '../projects/projects';
+import { useSpaces } from '../spaces/spaces';
 import { isOptional, LoadError, scopeSummary, shortRevision, slugId, useResources } from '../resources/resources';
 import { ScopeEditor } from '../resources/ScopeEditor';
 import { Field, focusFirstInvalid } from '../resources/Field';
 import { MidPath } from '../projects/MidPath';
 import { MenuSelect } from '../ui/MenuSelect';
-import { useSpaces } from '../spaces/spaces';
 
 const activeRevision = (state: ResourcesState, sourceId: string) => state.skills.find((s) => s.sourceId === sourceId)?.revision;
 
@@ -26,7 +26,7 @@ export function SkillsSettings({ sourceId, onOpen, onBack }: { sourceId?: string
   return (
     <>
       <p className="note">
-        Skills come from Git repositories. A new skill is optional until you enable it for everything, a profile, a space or a project. Enabled skills are synced: threads read them from the hub’s copy at the revision you applied.
+        Skills come from Git repositories. A new skill is optional until you enable it for everything, a profile, a space, or a project. Enabled skills are synced: threads read them from the hub’s copy at the revision you applied.
       </p>
       <SettingsSection add={{ label: 'Add skill source', onClick: () => onOpen('new') }}>
         {[...state.sources].sort((a, b) => a.name.localeCompare(b.name)).map((s) => {
@@ -222,7 +222,7 @@ function SkillRow({ skill }: { skill: SkillEntry }) {
       </div>
       {open === 'scope' && (
         <div className="setting-form skill-panel">
-          <ScopeEditor name={skill.name} scope={scope} onChange={setDraft} disabled={save.busy} />
+          <ScopeEditor name={skill.name} scope={scope} onChange={setDraft} disabled={save.busy} withSpaces />
           {save.error && <p className="error" role="alert">{save.error}</p>}
           <div className="update-row">
             <span className="spacer" />

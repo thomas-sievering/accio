@@ -8,7 +8,7 @@ import './pasted-text.css';
 const encoder = new TextEncoder();
 
 /** "412 lines · 18 KB". */
-export function pasteSize(text: string): string {
+function pasteSize(text: string): string {
   const lines = lineCount(text);
   const bytes = encoder.encode(text).byteLength;
   const size = bytes < 1024 ? `${bytes} B` : bytes < 1024 * 1024 ? `${Math.round(bytes / 1024)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
@@ -49,7 +49,7 @@ export function PasteChip({ text, onEdit, onRemove }: { text: string; onEdit: ()
 }
 
 /** GLOSSARY: Pasted text. In a message: folded to its size and first line; it opens in place and copies whole. */
-export function PasteCard({ text }: { text: string }) {
+function PasteCard({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const body = useRevealOnFind(open, () => setOpen(true));

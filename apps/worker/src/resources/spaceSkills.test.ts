@@ -2,125 +2,122 @@ import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FakeCodex } from '../testing/fakeCodex.js';
-import { FakeHarness, replyWith } from '../testing/fakeHarness.js';
-import { startTestApp, type TestClient } from '../testing/testApp.js';
+import { FakeHarness } from '../testing/fakeHarness.js';
+import { startTestApp } from '../testing/testApp.js';
 import { runCommand } from './process.js';
 
-const instructions = (name: string) => `---\nname: ${name}\ndescription: Helpful ${name}\n---\nFollow these instructions.\n`;
-async function put(path: string, name: string) { await mkdir(path, { recursive: true }); await writeFile(join(path, 'SKILL.md'), instructions(name)); }
+const instructions = (name: string, from: string) => `---\nname: ${name}\ndescription: ${name} from ${from}\n---\nFollow these instructions.\n`;
+async function put(path: string, name: string, from: string) { await mkdir(path, { recursive: true }); await writeFile(join(path, 'SKILL.md'), instructions(name, from)); }
 async function commit(cwd: string) {
   await runCommand('git', ['init', '--quiet', '-b', 'main'], { cwd });
   await runCommand('git', ['add', '.'], { cwd });
   await runCommand('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.test', 'commit', '--quiet', '-m', 'initial'], { cwd });
 }
-const idle = (c: TestClient, threadId: string) => c.waitFor('threads.changed', threads => threads.some(t => t.id === threadId && t.status === 'idle'));
 
-/** GLOSSARY: Skill level, Space, Home. A space's skills sit between Project and Profile (ADR 0020). */
+/** GLOSSARY: Skill level, Space, Home. A space's skills: its home's skill files plus library skills turned on for it (ADR 0020). */
 describe('space skills', () => {
   let stop: (() => Promise<void>) | undefined;
-  afterEach(async () => { await stop?.(); stop = undefined; });
+  const folders: string[] = [];
+  afterEach(async () => { await stop?.(); stop = undefined; for (const folder of folders.splice(0)) await rm(folder, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); });
 
   /**
-   * A project and its space's home, both with skill files, and a library with `review` and a
-   * profile-wide `docs`. The home has `notes` (the project has one too), `docs` and `glossary`.
+   * A project (its own `notes`) and a home (`guide`, `notes`, `docs`) in the space "hrc";
+   * a library with `docs` turned on for the profile, `wide` everywhere and `review` optional.
    */
-  async function space(deps: Parameters<typeof startTestApp>[0], signIn: (c: TestClient) => Promise<unknown>) {
-    const t = await startTestApp(deps); stop = t.stop;
+  async function fixture(options: { codex?: FakeCodex } = {}) {
+    const harness = new FakeHarness();
+    const codexHarness = new FakeHarness();
+    const t = await startTestApp({ harness, codexHarness, ...(options.codex ? { codexFactory: options.codex.factory } : {}) }); stop = t.stop;
     const c = await t.connect();
-    await signIn(c);
-    const folder = join(t.home, 'project'); const homeFolder = join(t.home, 'home'); const source = join(t.home, 'library');
-    await put(join(folder, '.agents', 'skills', 'notes'), 'notes');
-    await put(join(homeFolder, '.agents', 'skills', 'notes'), 'notes');
-    await put(join(homeFolder, '.claude', 'skills', 'docs'), 'docs');
-    await put(join(homeFolder, '.agents', 'skills', 'glossary'), 'glossary');
-    await put(join(source, 'review'), 'review'); await put(join(source, 'docs'), 'docs');
-    for (const cwd of [folder, homeFolder, source]) await commit(cwd);
-    const checkout = await c.call('checkouts.add', { path: folder, profileId: 'personal' });
-    const home = await c.call('checkouts.add', { path: homeFolder, profileId: 'personal' });
-    const saved = await c.call('spaces.save', { name: 'hrc', projectKeys: [`local:${checkout.projectId}`, `local:${home.projectId}`], homeProjectKey: `local:${home.projectId}` });
+    let profile = await c.signedIn('Personal');
+    if (options.codex) profile = await c.withChatGpt(profile, options.codex);
+    const project = join(t.home, 'project'); const home = join(t.home, 'home'); const source = join(t.home, 'library');
+    await put(join(project, '.agents', 'skills', 'notes'), 'notes', 'project');
+    await put(join(home, '.agents', 'skills', 'guide'), 'guide', 'home');
+    await put(join(home, '.agents', 'skills', 'notes'), 'notes', 'home');
+    await put(join(home, '.claude', 'skills', 'docs'), 'docs', 'home');
+    for (const name of ['docs', 'wide', 'review']) await put(join(source, name), name, 'library');
+    for (const cwd of [project, home, source]) await commit(cwd);
+    const checkout = await c.call('checkouts.add', { path: project, profileId: profile.id });
+    const homeCheckout = await c.call('checkouts.add', { path: home, profileId: profile.id });
     await c.call('skills.addSource', { id: 'library', name: 'Library', url: source, ref: 'HEAD' });
     const library = (await c.call('resources.get', {})).skills;
-    const review = library.find(skill => skill.name === 'review')!;
-    const docs = library.find(skill => skill.name === 'docs')!;
-    await c.call('skills.setScope', { id: docs.id, scope: { global: false, profileIds: ['personal'], projectKeys: [], spaceIds: [] } });
-    return { t, c, homeFolder, checkout, home, saved, review, docs };
+    const skill = (name: string) => library.find(entry => entry.name === name)!;
+    await c.call('skills.setScope', { id: skill('docs').id, scope: { global: false, profileIds: [profile.id], projectKeys: [], spaceIds: [] } });
+    await c.call('skills.setScope', { id: skill('wide').id, scope: { global: true, profileIds: [], projectKeys: [], spaceIds: [] } });
+    const space = await c.call('spaces.save', { name: 'hrc', projectKeys: [`local:${checkout.projectId}`, `local:${homeCheckout.projectId}`], homeProjectKey: `local:${homeCheckout.projectId}` });
+    return { t, c, profile, harness, codexHarness, checkout, homeCheckout, space, skill };
   }
 
-  it('puts the home’s skill files and the space’s library skills between Project and Profile', async () => {
-    const harness = new FakeHarness();
-    const { c, homeFolder, checkout, saved, review, docs } = await space({ harness }, c => c.signedIn('Personal'));
+  it('lists the home’s skill files and space selections at the Space level, between Project and Profile', async () => {
+    const { c, checkout, space, skill, harness } = await fixture();
     const context = { checkoutId: checkout.id };
-    await c.call('threads.setSkillEnabled', { ...context, skillId: review.id, enabled: true, level: 'space' });
-    expect((await c.call('resources.get', {})).skills.find(skill => skill.id === review.id)?.scope).toMatchObject({ spaceIds: [saved.id], projectKeys: [] });
-    const listed = await c.call('threads.skills', context);
-    expect(listed.space).toEqual({ id: saved.id, name: 'hrc' });
-    const named = (name: string) => listed.skills.filter(skill => skill.name === name).map(skill => [skill.origin, skill.enabledBy, skill.overriddenBy]);
-    // Project over Space: the project's notes win over the home's.
-    expect(named('notes')).toEqual([['repository', 'project', undefined], ['home', 'space', 'project']]);
-    // Space over Profile: the home's docs win over the profile's library docs.
-    expect(named('docs')).toEqual([['home', 'space', undefined], ['library', 'profile', 'space']]);
-    expect(named('glossary')).toEqual([['home', 'space', undefined]]);
-    expect(named('review')).toEqual([['library', 'space', undefined]]);
-    const glossary = listed.skills.find(skill => skill.name === 'glossary')!;
-    expect(glossary.path).toBe(join(homeFolder, '.agents', 'skills', 'glossary', 'SKILL.md'));
-    expect(await c.call('threads.skillContent', { ...context, skillId: glossary.id })).toMatchObject({ editable: false, content: expect.stringContaining('Helpful glossary') });
-    await expect(c.call('threads.saveSkillContent', { ...context, skillId: glossary.id, content: 'changed' })).rejects.toThrow('Only repository');
-    // Turned on for the space, it's turned off for the space, not for the project.
-    await expect(c.call('threads.setSkillEnabled', { ...context, skillId: review.id, enabled: false })).rejects.toThrow('space');
+    await c.call('threads.setSkillEnabled', { ...context, skillId: skill('review').id, enabled: true, level: 'space' });
+    const state = await c.call('threads.skills', context);
+    expect(state.space).toEqual({ id: space.id, name: 'hrc' });
+    const on = (name: string) => state.skills.filter(entry => entry.name === name && entry.enabled && entry.origin !== 'harness')
+      .map(entry => [entry.origin, entry.enabledBy, entry.overriddenBy ?? null, entry.description]);
+    // Project over Space: the project's own notes win.
+    expect(on('notes')).toEqual([['repository', 'project', null, 'notes from project'], ['repository', 'space', 'project', 'notes from home']]);
+    // Space over Profile: the home's docs win.
+    expect(on('docs')).toEqual([['repository', 'space', null, 'docs from home'], ['library', 'profile', 'space', 'docs from library']]);
+    expect(on('guide')).toEqual([['repository', 'space', null, 'guide from home']]);
+    expect(on('review')).toEqual([['library', 'space', null, 'review from library']]);
+    expect(on('wide')).toEqual([['library', 'global', null, 'wide from library']]);
+    expect((await c.call('resources.get', {})).skills.find(entry => entry.id === skill('review').id)?.scope.spaceIds).toEqual([space.id]);
+
     const thread = await c.call('threads.start', { ...context, text: 'work' });
-    await idle(c, thread.id);
+    await c.waitFor('threads.changed', threads => threads.some(t => t.id === thread.id && t.status === 'idle'));
     const delivered = harness.runs[0]!.resourceInstructions!;
-    for (const name of ['notes', 'docs', 'glossary', 'review']) expect(delivered.match(new RegExp(`- ${name}:`, 'g'))).toHaveLength(1);
-    expect(delivered).toContain(join(homeFolder, '.claude', 'skills', 'docs', 'SKILL.md'));
-    expect(delivered).not.toContain(join(homeFolder, '.agents', 'skills', 'notes', 'SKILL.md'));
-    expect(delivered).not.toContain(docs.path);
-    await c.call('threads.setSkillEnabled', { ...context, skillId: review.id, enabled: false, level: 'space' });
-    expect((await c.call('threads.skills', context)).skills.find(skill => skill.id === review.id)).toMatchObject({ enabled: false, enabledBy: null });
+    for (const name of ['notes', 'docs', 'guide', 'review', 'wide']) expect(delivered.match(new RegExp(`- ${name}:`, 'g'))).toHaveLength(1);
+    expect(delivered).toContain('notes from project');
+    expect(delivered).toContain('docs from home');
+    expect(delivered).not.toContain('docs from library');
+
+    // Turning it off for the space leaves it off everywhere here; the project can't turn off what the space turned on.
+    await expect(c.call('threads.setSkillEnabled', { ...context, skillId: skill('review').id, enabled: false })).rejects.toThrow('inherited');
+    await c.call('threads.setSkillEnabled', { ...context, skillId: skill('review').id, enabled: false, level: 'space' });
+    expect((await c.call('threads.skills', context)).skills.find(entry => entry.id === skill('review').id)).toMatchObject({ enabled: false, enabledBy: null });
   });
 
-  it('gives a thread in the home its skill files once, as Project skills', async () => {
-    const harness = new FakeHarness();
-    const { c, home } = await space({ harness }, c => c.signedIn('Personal'));
-    const listed = await c.call('threads.skills', { checkoutId: home.id });
-    expect(listed.skills.filter(skill => skill.origin === 'home')).toEqual([]);
-    expect(listed.skills.filter(skill => skill.origin === 'repository').map(skill => [skill.name, skill.enabledBy])).toEqual([['docs', 'project'], ['glossary', 'project'], ['notes', 'project']]);
-    const thread = await c.call('threads.start', { checkoutId: home.id, text: 'work' });
-    await idle(c, thread.id);
-    expect(harness.runs[0]!.resourceInstructions!.match(/- glossary:/g)).toHaveLength(1);
+  it('gives a thread in the home its skill files once, as Project skills, and its space’s selections at the Space level', async () => {
+    const { c, homeCheckout, skill, harness } = await fixture();
+    await c.call('threads.setSkillEnabled', { checkoutId: homeCheckout.id, skillId: skill('review').id, enabled: true, level: 'space' });
+    const thread = await c.call('threads.start', { checkoutId: homeCheckout.id, text: 'work' });
+    await c.waitFor('threads.changed', threads => threads.some(t => t.id === thread.id && t.status === 'idle'));
+    const { skills, space } = await c.call('threads.skills', { threadId: thread.id });
+    expect(space?.name).toBe('hrc');
+    const levels = (name: string) => skills.filter(entry => entry.name === name && entry.origin !== 'harness').map(entry => [entry.origin, entry.enabledBy, entry.overriddenBy ?? null]);
+    expect(levels('guide')).toEqual([['repository', 'project', null]]);
+    expect(levels('notes')).toEqual([['repository', 'project', null]]);
+    expect(levels('docs')).toEqual([['repository', 'project', null], ['library', 'profile', 'project']]);
+    expect(levels('review')).toEqual([['library', 'space', null]]);
+    const delivered = harness.runs[0]!.resourceInstructions!;
+    for (const name of ['guide', 'notes', 'docs', 'review']) expect(delivered.match(new RegExp(`- ${name}:`, 'g'))).toHaveLength(1);
   });
 
-  it('lists no home skill files when the home isn’t on this machine', async () => {
-    const { c, homeFolder, checkout, saved } = await space({}, c => c.signedIn('Personal'));
-    await rm(homeFolder, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
-    const listed = await c.call('threads.skills', { checkoutId: checkout.id });
-    expect(listed.space).toMatchObject({ id: saved.id, name: 'hrc', homeUnavailable: expect.stringContaining('home') });
-    expect(listed.skills.filter(skill => skill.origin === 'home')).toEqual([]);
+  it('refuses to list or deliver skills when the home’s skill files can’t be read, rather than letting wider ones win', async () => {
+    const { t, c, checkout } = await fixture();
+    await writeFile(join(t.home, 'home', '.agents', 'skills', 'guide', 'SKILL.md'), 'x'.repeat(1_000_001));
+    await expect(c.call('threads.skills', { checkoutId: checkout.id })).rejects.toThrow('The skills in the space’s home can’t be read');
+    await expect(c.call('threads.start', { checkoutId: checkout.id, text: 'work' })).rejects.toThrow('space’s home');
   });
 
-  it('keeps a deleted space’s selection without blocking other changes to the skill', async () => {
-    const { c, checkout, saved, review } = await space({}, c => c.signedIn('Personal'));
-    await c.call('threads.setSkillEnabled', { checkoutId: checkout.id, skillId: review.id, enabled: true, level: 'space' });
-    await c.call('spaces.delete', { id: saved.id });
-    const { scope } = (await c.call('resources.get', {})).skills.find(skill => skill.id === review.id)!;
-    await c.call('skills.setScope', { id: review.id, scope: { ...scope, profileIds: ['personal'] } });
-    expect((await c.call('threads.skills', { checkoutId: checkout.id })).skills.find(skill => skill.id === review.id)).toMatchObject({ enabledBy: 'profile' });
-  });
-
-  it('delivers a space’s library skills to Claude and Codex threads alike, chosen in Settings', async () => {
-    const claude = new FakeHarness();
-    const codex = new FakeHarness((_run, n) => replyWith(`codex says ${n}`, 'codex-thread'));
-    const fake = new FakeCodex();
-    const { c, checkout, saved, review } = await space({ harness: claude, codexHarness: codex, codexFactory: fake.factory }, async c => c.withChatGpt(await c.signedIn('Personal'), fake));
-    await expect(c.call('skills.setScope', { id: review.id, scope: { global: false, profileIds: [], projectKeys: [], spaceIds: ['no-such-space'] } })).rejects.toThrow('No such space');
-    await c.call('skills.setScope', { id: review.id, scope: { global: false, profileIds: [], projectKeys: [], spaceIds: [saved.id] } });
+  it('delivers a space selection made in Settings and the home’s files to Claude and Codex threads alike', async () => {
+    const codex = new FakeCodex();
+    const { c, profile, checkout, space, skill, harness, codexHarness } = await fixture({ codex });
+    await expect(c.call('skills.setScope', { id: skill('review').id, scope: { global: false, profileIds: [], projectKeys: [], spaceIds: ['no-such-space'] } })).rejects.toThrow('No such space');
+    await c.call('skills.setScope', { id: skill('review').id, scope: { global: false, profileIds: [], projectKeys: [], spaceIds: [space.id] } });
     for (const model of [{ harnessId: 'claudeCode', modelId: 'opus' }, { harnessId: 'codex', modelId: 'test-codex' }]) {
-      const thread = await c.call('threads.start', { checkoutId: checkout.id, model, text: 'work' });
-      await idle(c, thread.id);
+      const thread = await c.call('threads.start', { checkoutId: checkout.id, profileId: profile.id, model, text: 'work' });
+      await c.waitFor('threads.changed', threads => threads.some(t => t.id === thread.id && t.status === 'idle'));
     }
-    for (const runs of [claude.runs, codex.runs]) {
-      expect(runs).toHaveLength(1);
-      expect(runs[0]!.resourceInstructions).toContain('- review: Helpful review');
-      expect(runs[0]!.resourceInstructions).toContain('- glossary: Helpful glossary');
+    for (const run of [harness.runs[0], codexHarness.runs[0]]) {
+      expect(run?.resourceInstructions).toContain('review from library');
+      expect(run?.resourceInstructions).toContain('guide from home');
     }
+    // A space deleted since stays in a selection without blocking other changes to it.
+    await c.call('spaces.delete', { id: space.id });
+    await c.call('skills.setScope', { id: skill('review').id, scope: { global: true, profileIds: [], projectKeys: [], spaceIds: [space.id] } });
   });
 });

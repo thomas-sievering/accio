@@ -1,7 +1,7 @@
 export { SecretsVault, SecretStoreError, checkValue, type SecretScope, type SecretsAccess } from './secrets.js';
 export { remoteSecrets } from './secretClient.js';
 export type { McpAccess } from './mcp.js';
-export { Resources, enabled, optionalScope, type McpCredential, type ResourceAccess } from './resources.js';
+export { Resources, enabled, everywhere, optionalScope, type McpCredential, type ResourceAccess } from './resources.js';
 export type { Fetch, CodexModel } from './sortingHatClient.js';
 export { startHubService, type HubSnapshot } from './service.js';
 export { HubClient, hubAddress, remoteSettings, type SettingsAccess } from './client.js';

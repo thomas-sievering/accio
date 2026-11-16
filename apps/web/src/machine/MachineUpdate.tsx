@@ -35,7 +35,7 @@ export function MachineUpdate({ machine }: { machine: MachineView }) {
   );
 }
 
-export function describeUpdate(view?: UpdateView) {
+function describeUpdate(view?: UpdateView) {
   if (!view) return undefined;
   const commits = `${view.behind} commit${view.behind === 1 ? '' : 's'} behind main`;
   switch (view.state) {

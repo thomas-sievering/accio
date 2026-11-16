@@ -28,7 +28,7 @@ export function WaitBar({ thread }: { thread: ThreadView }) {
   );
 }
 
-export function conditionLabel(c: WaitCondition, now = new Date()): string {
+function conditionLabel(c: WaitCondition, now = new Date()): string {
   switch (c.kind) {
     case 'thread': return `“${c.title}” ${c.until === 'stopped' ? 'to stop' : c.until === 'pr_open' ? 'to open a PR' : 'to be delivered'}`;
     case 'pullRequest': {

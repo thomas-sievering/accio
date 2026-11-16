@@ -33,7 +33,7 @@ const PR_FIELDS = 'number,url,state,headRefOid,baseRefName,isDraft,mergeCommit,m
  * Git records no edits, only removals and additions. With no context lines each
  * hunk is one contiguous change, so its paired removed and added lines count as modified.
  */
-export function modifiedLines(patch: string): number {
+function modifiedLines(patch: string): number {
   let modified = 0;
   for (const [, removed, added] of patch.matchAll(/^@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@/gm))
     modified += Math.min(removed === undefined ? 1 : Number(removed), added === undefined ? 1 : Number(added));

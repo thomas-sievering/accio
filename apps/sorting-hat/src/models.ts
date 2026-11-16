@@ -13,7 +13,7 @@ const RETRY_AFTER_MS = 5 * 60_000;
  * account. Claude Code resolves them itself, and Claude subscriptions are only
  * used through Claude Code, so they always name a model it can run.
  */
-export const CLAUDE_ALIASES: AnthropicModel[] = [
+const CLAUDE_ALIASES: AnthropicModel[] = [
   { type: 'model', id: 'opus', display_name: 'Claude Opus', created_at: '1970-01-01T00:00:00Z' },
   { type: 'model', id: 'sonnet', display_name: 'Claude Sonnet', created_at: '1970-01-01T00:00:00Z' },
   { type: 'model', id: 'haiku', display_name: 'Claude Haiku', created_at: '1970-01-01T00:00:00Z' },

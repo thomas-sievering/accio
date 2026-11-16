@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
 import { onShutdown } from './fixtureLifetime.js';
 import { startApp } from '../apps/worker/src/app.js';
+import { runCommand } from '../apps/worker/src/resources/process.js';
 import { FakeHarness, SESSION, replyWith, toolCall } from '../apps/worker/src/testing/fakeHarness.js';
 import { fakeClaudeFetch, linkSortingHat, startTestSortingHat, TestClient } from '../apps/worker/src/testing/testApp.js';
 import type { HarnessMessage } from '../apps/worker/src/threads/harness.js';
@@ -117,6 +118,12 @@ const harness = new FakeHarness(async function* (run) {
     yield { type: 'result', subtype: 'success', is_error: false, session_id: SESSION,
       modelUsage: { [run.model ?? 'claude']: { inputTokens: 100, cacheReadInputTokens: 800, cacheCreationInputTokens: 100, contextWindow: 200_000 } } };
     return;
+  }
+  // GLOSSARY: Confirmation. "CLI fixture: <name>" asks add_cli to add <name> everywhere and replies with the first line of its result.
+  if (run.prompt.startsWith('CLI fixture: ')) {
+    const name = run.prompt.slice('CLI fixture: '.length).trim();
+    const result = await callAccioTool(run, 'add_cli', { package: name, version: '1.0.0', executable: name, level: 'everywhere' });
+    yield* replyWith(result.split('\n').slice(0, 2).join(' ')); return;
   }
   // GLOSSARY: Wait. "Wait fixture: long" waits on a command that never exits on its own; "Wait fixture: short" on one that exits at once.
   if (run.prompt.startsWith('Wait fixture: ')) {
@@ -330,6 +337,17 @@ Object.assign(harness, { skills: async () => [{ name: 'fixture-simplify', descri
 const app = await startApp({ home, host: '127.0.0.1', port: Number(process.env.ACCIO_CHAT_TEST_PORT ?? 47481), hubPort: 0, token, webRoot: resolve(process.env.ACCIO_CHAT_TEST_WEB_ROOT ?? 'apps/web/dist') }, {
   harness,
   github: fixtureGh,
+  // GLOSSARY: CLI. Installs land as a stub package instead of reaching the registry.
+  resourceCommand: async (command, args, options) => {
+    const dir = args.indexOf('--dir');
+    if (dir < 0) return runCommand(command, args, options);
+    const name = args.at(-1)!.replace(/@[^@]+$/, '');
+    const folder = join(args[dir + 1]!, 'node_modules', name);
+    await mkdir(folder, { recursive: true });
+    await writeFile(join(folder, 'package.json'), JSON.stringify({ name, version: '1.0.0', description: 'A fixture CLI', bin: { [name]: 'cli.js' } }));
+    await writeFile(join(folder, 'cli.js'), '');
+    return '';
+  },
   // Hosting is the external boundary under test. Git publication and thread state stay real.
   deliveryHosting: async (_cwd, args) => {
     const host = JSON.parse(await readFile(reviewHostFile, 'utf8'));
@@ -403,22 +421,21 @@ const scriptedCheckout = await client.call('checkouts.add', { path: scriptedFold
 await client.call('projects.setDelivery', { projectId: scriptedCheckout.projectId, deliveryPolicy: 'direct', previewCommand: '', testCommand: 'node check.cjs' });
 // Skills panel: a project with one repository skill, and a library source with one profile skill, one optional,
 // and one of the repository skill's name turned on Everywhere, which the repository's overrides (ADR 0020).
+// skills-home is a home for skills-panel.spec.ts to put in a space with it: its lib-docs overrides the profile's.
 const skillsFolder = join(home, 'skills-project');
-const skillsLibrary = join(home, 'skills-library');
 const skillsHome = join(home, 'skills-home');
+const skillsLibrary = join(home, 'skills-library');
 const skillFile = (name: string, description: string, body: string) => `---\nname: ${name}\ndescription: ${description}\n---\n${body}\n`;
 for (const [folder, files] of [
   [skillsFolder, { '.agents/skills/repo-notes/SKILL.md': skillFile('repo-notes', 'How this repository writes notes', 'Write notes in plain sentences.') }],
+  [skillsHome, {
+    '.agents/skills/home-guide/SKILL.md': skillFile('home-guide', 'How the space works', 'Space-wide instructions.'),
+    '.claude/skills/lib-docs/SKILL.md': skillFile('lib-docs', 'The space’s documentation rules', 'Home docs instructions.'),
+  }],
   [skillsLibrary, {
     'lib-review/SKILL.md': skillFile('lib-review', 'Review a change before shipping', 'Review instructions.'),
     'lib-docs/SKILL.md': skillFile('lib-docs', 'Keep documentation current', 'Docs instructions.'),
     'shared-notes/SKILL.md': skillFile('repo-notes', 'Shared note conventions', 'Shared notes instructions.'),
-  }],
-  // GLOSSARY: Home. A space's home for skills-panel.spec.ts, which puts skills-project in a space with it.
-  // Its lib-docs wins over the Profile one once they share a space.
-  [skillsHome, {
-    '.agents/skills/home-glossary/SKILL.md': skillFile('home-glossary', 'Use the space’s glossary terms', 'Glossary instructions.'),
-    '.claude/skills/lib-docs/SKILL.md': skillFile('lib-docs', 'The space’s documentation rules', 'Space docs instructions.'),
   }],
 ] as const) await initRepo(folder, files, { author: BROWSER_AUTHOR, message: 'skills fixture' });
 const skillsCheckout = await client.call('checkouts.add', { path: skillsFolder, profileId: 'personal' });
@@ -438,6 +455,8 @@ const goalThread = await client.call('threads.start', { profileId: 'personal', t
 await client.waitFor('threads.changed', (threads) => threads.some((entry) => entry.id === goalThread.id && entry.status === 'idle'));
 const waitThread = await client.call('threads.start', { profileId: 'personal', text: 'Wait fixture' });
 await client.waitFor('threads.changed', (threads) => threads.some((entry) => entry.id === waitThread.id && entry.status === 'idle'));
+const cliThread = await client.call('threads.start', { profileId: 'personal', text: 'CLI fixture' });
+await client.waitFor('threads.changed', (threads) => threads.some((entry) => entry.id === cliThread.id && entry.status === 'idle'));
 // MCP tab: a remote server that still needs signing in, and a local one.
 await client.call('mcp.save', { id: 'docs-search', name: 'docs-search', transport: 'http', url: 'https://mcp.example.test/docs', args: [], auth: 'oauth' });
 await client.call('mcp.save', { id: 'local-db', name: 'local-db', transport: 'stdio', command: 'db-mcp', args: ['--readonly'], auth: 'none' });

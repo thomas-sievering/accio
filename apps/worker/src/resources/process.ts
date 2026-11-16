@@ -14,11 +14,29 @@ export const runCommand: CommandRunner = (command, args, options = {}) => new Pr
   child.once('close', code => { clearTimeout(timer); if (code === 0 && !timedOut) resolve(output.trim()); else reject(new Error(timedOut ? 'Command timed out' : `Command exited ${code}: ${output.trim()}`)); });
 });
 
-export async function npmCli(): Promise<string> {
-  for (const folder of [dirname(process.execPath), ...(process.env.PATH ?? '').split(delimiter)]) {
-    for (const path of [join(folder, 'node_modules/npm/bin/npm-cli.js'), join(folder, '../lib/node_modules/npm/bin/npm-cli.js')]) {
-      if (await access(path).then(() => true, () => false)) return path;
-    }
+export type PnpmCommand = { command: string; args: string[]; env?: NodeJS.ProcessEnv };
+const exists = (path: string) => access(path).then(() => true, () => false);
+
+/**
+ * How to run pnpm without a shell, so paths with spaces stay single arguments: the pnpm that
+ * started Accio, else a standalone pnpm, else pnpm's or Corepack's script run by this Node
+ * (Electron runs as Node through ELECTRON_RUN_AS_NODE).
+ */
+export async function pnpmCli(env: NodeJS.ProcessEnv = process.env, platform = process.platform, execPath = process.execPath): Promise<PnpmCommand> {
+  const asNode = (script: string): PnpmCommand => ({ command: execPath, args: [script], env: { ...env, ELECTRON_RUN_AS_NODE: '1' } });
+  const started = env.npm_execpath;
+  if (started && /pnpm/i.test(started) && await exists(started)) {
+    if (/\.[cm]?js$/.test(started)) return asNode(started);
+    if (platform !== 'win32' || /\.exe$/i.test(started)) return { command: started, args: [] };
   }
-  throw new Error('npm is required to install managed tools; install Node.js with npm on this machine.');
+  const folders = [dirname(execPath), ...(env.PATH ?? env.Path ?? '').split(delimiter).filter(Boolean)];
+  for (const folder of folders) {
+    const standalone = join(folder, platform === 'win32' ? 'pnpm.exe' : 'pnpm');
+    if (platform === 'win32' && await exists(standalone)) return { command: standalone, args: [] };
+    for (const script of ['node_modules/pnpm/bin/pnpm.cjs', '../lib/node_modules/pnpm/bin/pnpm.cjs', 'node_modules/corepack/dist/pnpm.js', '../lib/node_modules/corepack/dist/pnpm.js']) {
+      if (await exists(join(folder, script))) return asNode(join(folder, script));
+    }
+    if (platform !== 'win32' && await exists(standalone)) return { command: standalone, args: [] };
+  }
+  throw new Error('pnpm is required to install CLIs; install pnpm or enable Corepack on this machine.');
 }

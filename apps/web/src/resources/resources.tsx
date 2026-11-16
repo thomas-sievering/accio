@@ -43,7 +43,7 @@ export function LoadError({ error, retry }: { error: string; retry: () => void }
 /** The key the hub selects a project by: its remote, so every checkout of it shares the selection. */
 export { projectKey };
 
-export const isOptional = (scope: ResourceScope) => !scope.global && scope.profileIds.length === 0 && scope.projectKeys.length === 0 && scope.spaceIds.length === 0;
+export const isOptional = (scope: ResourceScope) => !scope.global && scope.profileIds.length === 0 && (scope.spaceIds ?? []).length === 0 && scope.projectKeys.length === 0;
 
 export function toggled(list: string[], id: string, on: boolean) {
   return on ? (list.includes(id) ? list : [...list, id]) : list.filter((x) => x !== id);
@@ -55,7 +55,7 @@ export function scopeSummary(scope: ResourceScope, profiles: ProfileView[] = [],
   if (isOptional(scope)) return 'Optional · not enabled anywhere';
   const names = [
     ...scope.profileIds.map((id) => profiles.find((p) => p.id === id)?.name ?? 'Deleted profile'),
-    ...scope.spaceIds.map((id) => spaces.find((s) => s.id === id)?.name ?? 'Deleted space'),
+    ...(scope.spaceIds ?? []).map((id) => spaces.find((s) => s.id === id)?.name ?? 'Deleted space'),
     ...scope.projectKeys.map((key) => projects.find((p) => projectKey(p) === key)?.name ?? key),
   ];
   return names.length <= 3 ? names.join(', ') : `${names.slice(0, 3).join(', ')} +${names.length - 3}`;

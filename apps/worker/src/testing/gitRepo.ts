@@ -5,7 +5,7 @@ import { git } from '../git.js';
 export type GitAuthor = { name: string; email: string };
 
 /** Who commits in worker tests' disposable repositories. */
-export const TEST_AUTHOR: GitAuthor = { name: 'Accio Test', email: 'accio@example.test' };
+const TEST_AUTHOR: GitAuthor = { name: 'Accio Test', email: 'accio@example.test' };
 /** Who commits in the browser fixtures' disposable repositories. */
 export const BROWSER_AUTHOR: GitAuthor = { name: 'Accio Browser Test', email: 'browser@example.test' };
 
