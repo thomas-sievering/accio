@@ -1,11 +1,12 @@
 import type { ResourceScope } from '@accio/protocol';
 import { useProfiles } from '../profiles/profiles';
 import { useProjects } from '../projects/projects';
+import { useSpaces } from '../spaces/spaces';
 import { isOptional, projectKey, toggled } from './resources';
 
 /**
  * Where a skill is enabled: everywhere, for chosen
- * profiles, for chosen projects, or nowhere (optional, picked per project or profile).
+ * profiles, spaces or projects, or nowhere (optional, picked per project or profile).
  */
 export function ScopeEditor({ scope, onChange, disabled, name }: {
   scope: ResourceScope;
@@ -17,6 +18,7 @@ export function ScopeEditor({ scope, onChange, disabled, name }: {
   const { profiles = [] } = useProfiles();
   const { state } = useProjects();
   const projects = [...(state?.projects ?? [])].sort((a, b) => a.name.localeCompare(b.name));
+  const spaces = [...(useSpaces().spaces ?? [])].sort((a, b) => a.name.localeCompare(b.name));
   return (
     <fieldset className="scope-editor" disabled={disabled} aria-label={`Where ${name} is enabled`}>
       <legend>Enabled for</legend>
@@ -38,6 +40,19 @@ export function ScopeEditor({ scope, onChange, disabled, name }: {
             </label>
           ))}
         </div>
+        {/* GLOSSARY: Space. Shown once there is one, so a hub without spaces sees no empty list. */}
+        {spaces.length > 0 && <div className="scope-list" role="group" aria-label="Spaces">
+          <span className="scope-list-label">Spaces</span>
+          {spaces.map((s) => (
+            <label key={s.id} className="check">
+              <input type="checkbox" checked={scope.global || scope.spaceIds.includes(s.id)} disabled={scope.global} onChange={(e) => onChange({ ...scope, spaceIds: toggled(scope.spaceIds, s.id, e.target.checked) })} />
+              <span>
+                {s.name}
+                <small>{s.projectKeys.length} project{s.projectKeys.length === 1 ? '' : 's'}</small>
+              </span>
+            </label>
+          ))}
+        </div>}
         <div className="scope-list" role="group" aria-label="Projects">
           <span className="scope-list-label">Projects</span>
           {projects.length === 0 && <small className="hint">No projects yet.</small>}
@@ -54,10 +69,10 @@ export function ScopeEditor({ scope, onChange, disabled, name }: {
       </div>
       <small className="hint" role="status">
         {scope.global
-          ? 'On everywhere. Profile and project choices are kept for when you turn this off.'
+          ? 'On everywhere. Profile, space and project choices are kept for when you turn this off.'
           : isOptional(scope)
             ? 'Optional: off everywhere until you select it here, in a profile, or in a project’s settings.'
-            : 'On only for the selected profiles and projects.'}
+            : 'On only for the selected profiles, spaces and projects.'}
       </small>
     </fieldset>
   );

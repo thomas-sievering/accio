@@ -6,7 +6,7 @@ export type WorkspaceSkillsState = { value?: WorkspaceSkills; error?: string; lo
 
 /**
  * The skills a thread (or draft) would get on its next turn. Reloaded when the
- * context changes, the connection reopens, the hub's resources change, or this
+ * context changes, the connection reopens, the hub's resources or spaces change, or this
  * thread's transcript reports a skill it loaded. A reload keeps the last list on
  * screen; a different context starts empty.
  */
@@ -36,6 +36,7 @@ export function useWorkspaceSkills(context: SkillContext | undefined): Workspace
     };
     const offStatus = client.onStatus(load);
     const offResources = client.onEvent('resources.changed', load);
+    const offSpaces = client.onEvent('spaces.changed', load);
     const offItem = client.onEvent('thread.item', ({ threadId, item }) => {
       if (params.threadId && threadId === params.threadId && item.kind === 'tool' && item.loadedSkills?.length) load();
     });
@@ -44,6 +45,7 @@ export function useWorkspaceSkills(context: SkillContext | undefined): Workspace
       active = false;
       offStatus();
       offResources();
+      offSpaces();
       offItem();
     };
   }, [client, key, attempt]);
@@ -51,21 +53,23 @@ export function useWorkspaceSkills(context: SkillContext | undefined): Workspace
   return state.key === key ? { ...state, reload } : { loading: !!key, reload };
 }
 
-/** GLOSSARY: Skill level. How each level is named; a Space level joins with #199. */
-export const LEVEL_NAMES: Record<SkillLevel, string> = { project: 'Project', profile: 'Profile', global: 'Everywhere' };
+/** GLOSSARY: Skill level. How each level is named. */
+export const LEVEL_NAMES: Record<SkillLevel, string> = { project: 'Project', space: 'Space', profile: 'Profile', global: 'Everywhere' };
 
 /** GLOSSARY: Harness skill. The harness a section of its skills is titled with. */
 export const harnessName = (harnessId: string) => (harnessId === 'codex' ? 'Codex' : 'Claude');
 
 /** Where a skill comes from, as a short label. */
 export function originLabel(skill: WorkspaceSkill): string {
-  if (skill.origin === 'repository') return 'Repository';
-  const via = skill.enabledBy === 'global' ? 'Everywhere' : skill.enabledBy === 'profile' ? 'Profile' : 'Library';
+  if (skill.origin === 'repository') return skill.enabledBy === 'space' ? 'Home' : 'Repository';
+  const via = skill.enabledBy === 'global' || skill.enabledBy === 'profile' || skill.enabledBy === 'space' ? LEVEL_NAMES[skill.enabledBy] : 'Library';
   return skill.sourceName && skill.sourceName !== via ? `${via} · ${skill.sourceName}` : via;
 }
 
 /** Shown in the project list: files in the repository, and library skills this project turned on, unless a narrower one of the same name wins. */
-export const isProjectSkill = (skill: WorkspaceSkill) => !skill.overriddenBy && (skill.origin === 'repository' || (skill.origin === 'library' && skill.enabled && skill.enabledBy === 'project'));
+export const isProjectSkill = (skill: WorkspaceSkill) => !skill.overriddenBy && skill.origin !== 'harness' && skill.enabled && skill.enabledBy === 'project';
+/** GLOSSARY: Space. Files in the space's home, and library skills the space turned on, unless a narrower one of the same name wins. */
+export const isSpaceSkill = (skill: WorkspaceSkill) => !skill.overriddenBy && skill.origin !== 'harness' && skill.enabled && skill.enabledBy === 'space';
 /** Turned on for every project of the profile, or for everything, and not overridden by a narrower level. */
 export const isInherited = (skill: WorkspaceSkill) => skill.origin === 'library' && skill.enabled && !skill.overriddenBy && (skill.enabledBy === 'profile' || skill.enabledBy === 'global');
 /** ADR 0020: on at a level, but a narrower level has a skill of its name, which the thread gets instead. */

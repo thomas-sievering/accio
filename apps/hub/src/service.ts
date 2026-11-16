@@ -80,6 +80,7 @@ const ResourceWrite = z.discriminatedUnion('method', [
   write('deleteSource', ShortId),
   write('setSkillScope', ShortId, ResourceScope),
   write('setSkillProject', ShortId, z.object({ projectKey: ShortId, enabled: z.boolean() })),
+  write('setSkillSpace', ShortId, z.object({ spaceId: ShortId, enabled: z.boolean() })),
   write('saveMcp', methods['mcp.save'].params),
   write('deleteMcp', ShortId),
   write('setCredential', ShortId, z.object({ accessToken: z.string(), refreshToken: z.string().optional(), expiresAt: z.number().optional(), tokenEndpoint: z.string().optional(), clientId: z.string().optional(), clientSecret: z.string().optional() })),

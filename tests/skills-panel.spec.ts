@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
+import { projectKey } from '../packages/protocol/src/spaces.js';
+import { chatClient } from './chat.js';
 
 const token = 'isolated-chat-test-token';
 const panel = (page: Page) => page.getByRole('tabpanel', { name: 'Skills' });
@@ -183,6 +185,74 @@ test('Skills tab shows the harness’s own skills read-only and overridden skill
   await expect(simplify.getByRole('button', { name: /Disable|Edit instructions/ })).toHaveCount(0);
   await expect(simplify.getByRole('switch')).toHaveCount(0);
   await panel(page).screenshot({ path: testInfo.outputPath('skills-harness-overridden.png') });
+});
+
+// GLOSSARY: Skill level, Space, Home. A project in a space gets the home's skill files and the space's selections.
+test('Skills tab shows a Space level between Project and Profile, and Settings turns skills on for a space', async ({ page, baseURL }, testInfo) => {
+  test.setTimeout(60_000);
+  const client = await chatClient(baseURL!);
+  try {
+    for (const space of await client.call('spaces.list', {})) await client.call('spaces.delete', { id: space.id });
+    // No space yet: no Space section.
+    await openSkills(page, baseURL!, /Skills fixture/);
+    await expect(panel(page).getByRole('button', { name: /^Space/ })).toHaveCount(0);
+
+    const { projects } = await client.call('projects.get', {});
+    const key = (name: string) => projectKey(projects.find((p) => p.name === name)!);
+    const space = await client.call('spaces.save', { name: 'hrc', projectKeys: [key('skills-project'), key('skills-home')], homeProjectKey: key('skills-home') });
+    const spaceFold = panel(page).getByRole('button', { name: /^Space/ });
+    await expect(spaceFold).toHaveAttribute('aria-expanded', 'false');
+    await expect(spaceFold).toHaveAttribute('title', /In the home of hrc or turned on for that space\./);
+    await expect(spaceFold.locator('.skills-count')).toHaveText('2');
+    // The home's lib-docs wins over the profile's, so Profile has nothing left and the library copy is overridden by Space.
+    const titles = await panel(page).locator('.skills-title').allTextContents();
+    expect(titles.map((t) => t.replace(/[\d·]|loaded/g, '').trim())).toEqual(['Project', 'Space', 'Claude', 'Overridden']);
+    await spaceFold.click();
+    const section = panel(page).locator('section.skills-section').filter({ has: page.getByRole('button', { name: /^Space/ }) });
+    await expect(section.locator('.skill-item .skill-name')).toHaveText(['home-guide', 'lib-docs']);
+    await expect(skillRow(page, 'home-guide').locator('.skill-origin')).toHaveText('Home');
+
+    // The home's files are read here, not edited: a thread in the home changes them.
+    await skillRow(page, 'home-guide').getByRole('button', { name: /^home-guide/ }).click();
+    await expect(skillRow(page, 'home-guide')).toContainText('The space’s home');
+    await expect(skillRow(page, 'home-guide').locator('.skill-content')).toContainText('Space-wide instructions.');
+    await expect(skillRow(page, 'home-guide').getByRole('button', { name: 'Edit instructions' })).toHaveCount(0);
+
+    // + turns a library skill on for the space.
+    await panel(page).getByRole('button', { name: 'Add skill to the space', exact: true }).click();
+    const search = page.getByRole('combobox', { name: 'Search library skills' });
+    await search.fill('review');
+    await search.press('Enter');
+    await expect(panel(page).getByRole('status').filter({ hasText: 'lib-review added to this space' })).toBeAttached();
+    const review = section.locator('.skill-item').filter({ hasText: 'lib-review' });
+    await expect(review.locator('.skill-origin')).toHaveText('Space · Library');
+    await expect(spaceFold.locator('.skills-count')).toHaveText('3');
+    await skillRow(page, 'home-guide').getByRole('button', { name: /^home-guide/ }).click();
+    await panel(page).screenshot({ path: testInfo.outputPath('skills-space.png') });
+    const overridden = panel(page).getByRole('button', { name: /^Overridden/ });
+    await overridden.click();
+    await expect(panel(page).locator('.skill-item.overridden').filter({ hasText: 'lib-docs' }).locator('.tag')).toHaveText('Overridden by Space');
+    await review.getByRole('button', { name: /^lib-review/ }).click();
+    await review.getByRole('button', { name: 'Disable for this space' }).click();
+    await expect(section.locator('.skill-item').filter({ hasText: 'lib-review' })).toHaveCount(0);
+
+    // Settings → Skills offers the space as a target next to profiles and projects.
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.locator('.sidebar nav').getByRole('button', { name: 'Skills', exact: true }).click();
+    await page.locator('.settings-page').getByRole('button', { name: /^Library/ }).click();
+    const row = page.locator('.skill-row').filter({ hasText: 'lib-review' });
+    await row.getByRole('button', { name: 'Enable for…' }).click();
+    const spaces = row.getByRole('group', { name: 'Spaces' });
+    await spaces.getByRole('checkbox', { name: /hrc/ }).check();
+    await row.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(row).toContainText('On for hrc');
+    const saved = (await client.call('resources.get', {})).skills.find((s) => s.name === 'lib-review')!;
+    expect(saved.scope.spaceIds).toEqual([space.id]);
+    await client.call('skills.setScope', { id: saved.id, scope: { ...saved.scope, spaceIds: [] } });
+  } finally {
+    for (const space of await client.call('spaces.list', {})) await client.call('spaces.delete', { id: space.id });
+    client.close();
+  }
 });
 
 test('MCP tab lists every MCP server, flags sign-in and opens settings', async ({ page, baseURL }, testInfo) => {

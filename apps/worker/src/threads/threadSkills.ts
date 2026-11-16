@@ -61,7 +61,8 @@ export function registerThreadSkills(router: Router, deps: SkillDeps) {
         }
       }
     }
-    return { skills, projectId: scope.projectId, ...(shipped ? { harnessId: scope.harnessId } : {}), unavailable: scope.unavailable };
+    const space = resources().spaceOf(scope.projectId);
+    return { skills, projectId: scope.projectId, ...(space ? { space: { id: space.id, name: space.name } } : {}), ...(shipped ? { harnessId: scope.harnessId } : {}), unavailable: scope.unavailable };
   };
 
   const workspaceSkill = async (input: SkillContext & { skillId: string }) => {
@@ -81,6 +82,8 @@ export function registerThreadSkills(router: Router, deps: SkillDeps) {
         if (!skill.path) throw new UserError('This harness doesn’t share the instructions of its own skills');
         return { content: await readSkillFile(skill.path), path: skill.path, editable: false };
       }
+      // GLOSSARY: Home. Its skill files change through a thread in the home, which ships them.
+      if (skill.enabledBy === 'space') return { content: await readSkillFile(skill.path), path: skill.path, editable: false };
       if (!scope.cwd) throw new UserError('This workspace is unavailable');
       const file = await repositorySkillTarget(scope.cwd, skill);
       return { content: await readSkillFile(file), path: skill.path, editable: true };
@@ -88,6 +91,7 @@ export function registerThreadSkills(router: Router, deps: SkillDeps) {
     .on('threads.saveSkillContent', async input => {
       const save = async () => {
         const { scope, skill } = await workspaceSkill(input);
+        if (skill.origin === 'repository' && skill.enabledBy === 'space') throw new UserError('The space’s home skills are edited in a thread in the home');
         if (!scope.cwd || skill.origin !== 'repository') throw new UserError('Only repository skills can be edited here');
         if (scope.thread?.status === 'running') throw new UserError('Wait for this turn to finish before editing its skills');
         const release = scope.checkoutId ? projects.useCheckout(scope.checkoutId) : undefined;
@@ -102,7 +106,13 @@ export function registerThreadSkills(router: Router, deps: SkillDeps) {
       if (!scope.projectId) throw new UserError('Choose a project to enable skills');
       if (skill.origin === 'harness') throw new UserError('Skills that ship with the harness are always on');
       if (skill.origin !== 'library') throw new UserError('Repository skills are managed in the repository');
-      if (!input.enabled && (skill.enabledBy === 'global' || skill.enabledBy === 'profile')) throw new UserError('This skill is inherited. Change its selection in Settings.');
+      if (input.level === 'space') {
+        const space = resources().spaceOf(scope.projectId);
+        if (!space) throw new UserError('This project is in no space');
+        await resources().setSpaceSkill(skill.id, space.id, input.enabled);
+        return null;
+      }
+      if (!input.enabled && skill.enabledBy && skill.enabledBy !== 'project') throw new UserError('This skill is inherited. Change its selection in Settings.');
       await resources().setProjectSkill(skill.id, scope.projectId, input.enabled);
       return null;
     });

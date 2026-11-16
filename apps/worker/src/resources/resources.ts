@@ -1,6 +1,6 @@
 import { SECRET_MCP_SERVER } from '../secrets/secrets.js';
 import { join } from 'node:path';
-import { projectKey, type McpDefinition, type ResourcesState, type ToolDefinition, type WorkspaceSkill, type SkillEntry } from '@accio/protocol';
+import { projectKey, type McpDefinition, type ResourceScope, type ResourcesState, type Space, type ToolDefinition, type WorkspaceSkill, type SkillEntry } from '@accio/protocol';
 import type { McpAccess, ResourceAccess } from '@accio/hub';
 import type { Router, Broadcast } from '../rpc/router.js';
 import type { Profiles } from '../profiles/profiles.js';
@@ -13,6 +13,9 @@ import type { HarnessMcp, TurnResources } from '../threads/harness.js';
 import { ACCIO_MCP_SERVER } from '../tools/tools.js';
 import { readSkillFile, repositorySkills } from './workspaceSkills.js';
 import { enabledLevel, resolveLevels } from './skillLevels.js';
+
+/** GLOSSARY: Space, Home. The hub's spaces, and the path of this machine's checkout of a home by its project key, if it has one. */
+export type SpaceLevelSource = { spaces(): readonly Space[]; home(key: string, wait: boolean): Promise<string | undefined> };
 
 export class ResourceManager {
   readonly skills: SkillFiles;
@@ -28,22 +31,46 @@ export class ResourceManager {
     this.tools = new ManagedTools(home, machineId, store, () => this.announce(), repair, run);
   }
   state(): ResourcesState { return this.store.state(); }
+  /** GLOSSARY: Space, Home. Set once spaces are known; without it no project is in a space. */
+  spaceLevel?: SpaceLevelSource;
   /**
    * GLOSSARY: Skill level. Every skill a thread here could get: the repository's (Project),
-   * then each library skill at the narrowest level that turns it on, resolved by ADR 0020.
+   * its space's home's (Space), then each library skill at the narrowest level that turns it on, resolved by ADR 0020.
    */
   async workspaceSkills(profileId?: string, projectId?: string, cwd?: string): Promise<WorkspaceSkill[]> {
     return this.levelSkills(this.state(), profileId, projectId, cwd);
   }
-  /** One state for the whole resolution. Only skills a thread gets need their files here, so a wider source that is overridden can't block a turn. */
-  private async levelSkills(state: ResourcesState, profileId?: string, projectId?: string, cwd?: string): Promise<WorkspaceSkill[]> {
+  /** GLOSSARY: Space. The space the project is in, if any. */
+  spaceOf(projectId?: string): Space | undefined {
     const project = this.projects.state().projects.find(p => p.id === projectId);
-    const context = { profileId, projectKey: project ? projectKey(project) : undefined };
+    if (!project) return undefined;
+    const key = projectKey(project);
+    return this.spaceLevel?.spaces().find(space => space.projectKeys.includes(key));
+  }
+  /**
+   * GLOSSARY: Home. The skill files of the home of the project's space, at the Space level. A thread in the home
+   * has them as its own Project skills already, and a home not on this machine yet has none here: one missing is
+   * cloned in the background, or waited for with `waitForHome`.
+   */
+  private async homeSkills(key: string | undefined, space: Space | undefined, waitForHome: boolean): Promise<WorkspaceSkill[]> {
+    if (!space?.homeProjectKey || space.homeProjectKey === key || !this.spaceLevel) return [];
+    const home = await this.spaceLevel.home(space.homeProjectKey, waitForHome).catch(() => undefined);
+    // A home this machine can't scan leaves the space with its library skills only, rather than refusing the turn.
+    const files = home ? await repositorySkills(home).catch(() => []) : [];
+    return files.map(skill => ({ ...skill, id: skill.id.replace(/^repository:/, 'home:'), enabledBy: 'space' as const }));
+  }
+  /** One state for the whole resolution. Only skills a thread gets need their files here, so a wider source that is overridden can't block a turn. */
+  private async levelSkills(state: ResourcesState, profileId?: string, projectId?: string, cwd?: string, waitForHome = false): Promise<WorkspaceSkill[]> {
+    const project = this.projects.state().projects.find(p => p.id === projectId);
+    const key = project ? projectKey(project) : undefined;
+    const space = this.spaceOf(projectId);
+    const context = { profileId, projectKey: key, spaceId: space?.id };
     const library: WorkspaceSkill[] = state.skills.map(skill => {
       const enabledBy = enabledLevel(skill.scope, context);
       return { id: skill.id, name: skill.name, description: skill.description, path: join(skill.path, 'SKILL.md'), origin: 'library' as const, enabled: enabledBy !== null, enabledBy, sourceName: state.sources.find(source => source.id === skill.sourceId)?.name, revision: skill.revision };
     });
-    const skills = resolveLevels([...(cwd ? await repositorySkills(cwd) : []), ...library]);
+    const [own, home] = await Promise.all([cwd ? repositorySkills(cwd) : [], this.homeSkills(key, space, waitForHome)]);
+    const skills = resolveLevels([...own, ...home, ...library]);
     const entries = new Map(state.skills.map(entry => [entry.id, entry]));
     await Promise.all(skills.map(async skill => {
       const entry = skill.origin === 'library' && skill.enabled && !skill.overriddenBy ? entries.get(skill.id) : undefined;
@@ -66,12 +93,22 @@ export class ResourceManager {
     await this.store.setSkillProject(id, { projectKey: key, enabled: on });
     this.announce();
   }
+  /** GLOSSARY: Space. Turns a library skill on or off for one space. */
+  async setSpaceSkill(id: string, spaceId: string, on: boolean) {
+    if (!this.spaceLevel?.spaces().some(space => space.id === spaceId)) throw new Error('No such space');
+    if (!this.state().skills.some(skill => skill.id === id)) throw new Error('Only library skills can be enabled or disabled');
+    await this.store.setSkillSpace(id, { spaceId, enabled: on });
+    this.announce();
+  }
   skillsChanged() { this.announce(); }
   private announce() { this.broadcast('resources.changed', this.state()); }
   private tool(id: string) { const tool = this.state().tools.find(t => t.id === id); if (!tool) throw new Error('No such tool'); return tool; }
   private local(machineId?: string) { if (machineId && machineId !== this.machineId) throw new Error('This machine must be online locally; remote execution is not available yet'); }
-  private checkScope(scope: { profileIds: string[]; projectKeys: string[] }) {
+  /** A space deleted since stays selected harmlessly; only newly chosen ones must exist. */
+  private checkScope(scope: ResourceScope, before?: ResourceScope) {
     for (const id of scope.profileIds) this.profiles.require(id);
+    const spaces = new Set(this.spaceLevel?.spaces().map(space => space.id));
+    if (scope.spaceIds.some(id => !spaces.has(id) && !before?.spaceIds.includes(id))) throw new Error('No such space');
     const keys = new Set(this.projects.state().projects.map(projectKey));
     if (scope.projectKeys.some(key => !keys.has(key))) throw new Error('No such project');
   }
@@ -97,7 +134,7 @@ export class ResourceManager {
         await this.store.applySkills(id, revision); this.announce(); return this.state().skills.filter(s => s.sourceId === id);
       }))
       .on('skills.deleteSource', ({ id }) => this.sourceOperation(id, async () => { await this.store.deleteSource(id); this.announce(); return null; }))
-      .on('skills.setScope', async ({ id, scope }) => { this.checkScope(scope); await this.store.setSkillScope(id, scope); this.announce(); return this.state().skills.find(s => s.id === id)!; })
+      .on('skills.setScope', async ({ id, scope }) => { this.checkScope(scope, this.state().skills.find(s => s.id === id)?.scope); await this.store.setSkillScope(id, scope); this.announce(); return this.state().skills.find(s => s.id === id)!; })
       .on('skills.copy', async ({ id, checkoutId }) => { const skill = this.state().skills.find(s => s.id === id); if (!skill) throw new Error('No such skill'); const release = this.projects.useCheckout(checkoutId); try { return await this.skills.copy(await this.localSkill(skill), this.projects.checkout(checkoutId).path); } finally { release(); } })
       .on('mcp.save', async mcp => { this.validateMcp(mcp); const old = this.state().mcps.find(m => m.id === mcp.id); if (old && (old.url !== mcp.url || old.auth !== mcp.auth || old.oauthClientId !== mcp.oauthClientId)) await this.gateway.signOut(mcp.id); await this.store.saveMcp(mcp); this.announce(); return this.state().mcps.find(m => m.id === mcp.id)!; })
       .on('mcp.delete', async ({ id }) => { await this.gateway.signOut(id); await this.store.deleteMcp(id); this.announce(); return null; })
@@ -139,7 +176,7 @@ export class ResourceManager {
       if (status.status !== 'ready') throw new Error(`${tool.name} is not ready. ${status.repairThreadId ? 'A repair thread was started.' : status.repairError ?? status.detail}`);
     }
   }
-  async prepare(profileId: string, projectId: string, env: Record<string, string>, options: { repair?: boolean; cwd?: string } = {}): Promise<TurnResources> {
+  async prepare(profileId: string, projectId: string, env: Record<string, string>, options: { repair?: boolean; cwd?: string; waitForHome?: boolean } = {}): Promise<TurnResources> {
     const project = this.projects.state().projects.find(p => p.id === projectId);
     const key = project ? projectKey(project) : undefined;
     const state = this.state();
@@ -147,7 +184,7 @@ export class ResourceManager {
     if (options.repair) return { env: this.tools.env(state.tools, env), instructions: '', mcps: {}, snapshot: { tools: [], skills: [], mcps: [] }, release: () => {} };
     await this.requireToolsReady();
     // ADR 0020: the turn gets each name's winner; overridden skills stay out, a clash refuses the turn.
-    const catalog = (await this.levelSkills(state, profileId, projectId, options.cwd)).filter(skill => skill.enabled && !skill.overriddenBy);
+    const catalog = (await this.levelSkills(state, profileId, projectId, options.cwd, options.waitForHome)).filter(skill => skill.enabled && !skill.overriddenBy);
     const clash = catalog.find(skill => skill.conflict);
     if (clash) throw new Error(clash.conflict);
     const skills = state.skills.filter(entry => catalog.some(skill => skill.origin === 'library' && skill.id === entry.id));

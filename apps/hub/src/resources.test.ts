@@ -38,3 +38,20 @@ it('loads legacy tools and MCPs without profile or project scopes', async () => 
     expect(store.state().mcps).toEqual([{ ...mcp, signedIn: false }]);
   } finally { await store.close(); await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); }
 });
+
+it('loads skill selections saved before spaces as selected for no space, and keeps concurrent space selections', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'accio-resources-'));
+  const legacy = { global: false, profileIds: ['personal'], projectKeys: ['local:old'] };
+  const skill = { id: 'library:review', sourceId: 'library', name: 'review', description: '', path: '/cache/review', revision: 'abc', scope: legacy };
+  const store = new Resources(home);
+  try {
+    await mkdir(join(home, 'hub'), { recursive: true });
+    await writeFile(join(home, 'hub', 'resources.json'), JSON.stringify({ tools: [], mcps: [], sources: [], skills: [skill], toolStatuses: [], skillSelections: { [skill.id]: legacy } }));
+    await store.load();
+    expect(store.state().skills[0]?.scope).toEqual({ ...legacy, spaceIds: [] });
+    await Promise.all([store.setSkillSpace(skill.id, { spaceId: 'hrc', enabled: true }), store.setSkillSpace(skill.id, { spaceId: 'copilot', enabled: true })]);
+    expect(store.state().skills[0]?.scope.spaceIds.sort()).toEqual(['copilot', 'hrc']);
+    await store.setSkillSpace(skill.id, { spaceId: 'hrc', enabled: false });
+    expect(store.state().skills[0]?.scope).toEqual({ ...legacy, spaceIds: ['copilot'] });
+  } finally { await store.close(); await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); }
+});

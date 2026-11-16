@@ -204,6 +204,8 @@ export class HubConnections {
       return (await threads.start({ profileId: profile.id, machineId: this.here.id, text: `Repair ${tool.name} on this machine\n\nDiagnose the failure, fix the installation, test it and verify the result. Work on this machine only.\nPackage: ${tool.package}@${tool.version}\nExecutable: ${tool.executable}\nManaged installation folder: ${folder}\nInstall with npm install --prefix <that folder> ${tool.package}@${tool.version}. Keep the installation inside that folder.\nHealth check arguments: ${JSON.stringify(tool.checkArgs)}\nFailure:\n${detail}\n\nAccio will rerun the health check after this thread completes. Report what you changed and the commands and results that prove it works.` }, { repairToolId: tool.id })).id;
     }, this.resourceCommand);
     resources.register(router); threads.resources = resources; threads.toolOverrides = () => settings.harnessTools(); threads.onRepairFinished = id => resources.tools.afterRepair(id); threads.knownThreads = () => relay.merged(); threads.spaceContext = new SpaceContext({ spaces: () => spaces.list(), projects: () => projects.state(), checkouts: spaceCheckouts });
+    // GLOSSARY: Home. Its skill files are the Space level; a missing home is cloned like the Space section's.
+    resources.spaceLevel = { spaces: () => spaces.list(), home: async (key, wait) => { const found = wait ? await spaceCheckouts.checkout(key) : await spaceCheckouts.lookup(key); return 'checkout' in found ? found.checkout.path : undefined; } };
     profiles.setReferenceSource(() => [...projects.state().projects.map((p) => p.profileId), ...threads.profileReferences()]);
     let reconciliation: Promise<unknown> = Promise.resolve();
     let initialized = false;

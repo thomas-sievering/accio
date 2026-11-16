@@ -1,9 +1,9 @@
 import { join } from 'node:path';
 import { JsonFile, JsonStore } from '@accio/persistence';
-import { McpDefinition, ToolDefinition } from '@accio/protocol';
+import { McpDefinition, ResourceScope as ResourceScopeInput, ToolDefinition } from '@accio/protocol';
 import type { ResourceScope, ResourcesState, SkillEntry, SkillSource, ToolStatus } from '@accio/protocol';
 
-export const optionalScope = (): ResourceScope => ({ global: false, profileIds: [], projectKeys: [] });
+export const optionalScope = (): ResourceScope => ({ global: false, profileIds: [], projectKeys: [], spaceIds: [] });
 export function enabled(scope: ResourceScope, profileId?: string, projectKey?: string): boolean {
   return scope.global || !!profileId && scope.profileIds.includes(profileId) || !!projectKey && scope.projectKeys.includes(projectKey);
 }
@@ -26,6 +26,9 @@ export class Resources {
     // Parsing strips legacy tool/MCP scopes; only skills still have selections.
     data.tools = data.tools.map(tool => ToolDefinition.parse(tool));
     data.mcps = data.mcps.map(mcp => McpDefinition.parse(mcp));
+    // Selections saved before spaces had skills have no `spaceIds`.
+    data.skills = data.skills.map(skill => ({ ...skill, scope: ResourceScopeInput.parse(skill.scope) }));
+    if (data.skillSelections) data.skillSelections = Object.fromEntries(Object.entries(data.skillSelections).map(([id, scope]) => [id, ResourceScopeInput.parse(scope)]));
     this.secrets = await this.secretsFile.read();
   }
   state(): ResourcesState { const { skillSnapshots = [], skillSelections: _selections, ...data } = this.data; return structuredClone({ ...data, skillVersions: skillSnapshots.map(s => ({ sourceId: s.sourceId, revision: s.revision, active: this.data.skills.some(skill => skill.sourceId === s.sourceId && skill.revision === s.revision) })), mcps: this.data.mcps.map(m => ({ ...m, signedIn: !!this.secrets[m.id] })) }); }
@@ -51,6 +54,17 @@ export class Resources {
       const projectKeys = skill.scope.projectKeys.filter(key => key !== selection.projectKey);
       if (selection.enabled) projectKeys.push(selection.projectKey);
       const scope = { ...skill.scope, projectKeys };
+      return { ...d, skillSelections: { ...d.skillSelections, [id]: scope }, skills: d.skills.map(skill => skill.id === id ? { ...skill, scope } : skill) };
+    });
+  }
+  /** GLOSSARY: Space. The same for one space, by its id. */
+  setSkillSpace(id: string, selection: { spaceId: string; enabled: boolean }) {
+    return this.save(d => {
+      const skill = d.skills.find(skill => skill.id === id);
+      if (!skill) throw new Error('No such skill');
+      const spaceIds = skill.scope.spaceIds.filter(key => key !== selection.spaceId);
+      if (selection.enabled) spaceIds.push(selection.spaceId);
+      const scope = { ...skill.scope, spaceIds };
       return { ...d, skillSelections: { ...d.skillSelections, [id]: scope }, skills: d.skills.map(skill => skill.id === id ? { ...skill, scope } : skill) };
     });
   }
