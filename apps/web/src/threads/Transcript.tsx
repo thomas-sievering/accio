@@ -4,6 +4,7 @@ import { ShippedNote } from '../changelog/ShippedNote';
 import type { TranscriptItem } from '@accio/protocol';
 import { AssistantMarkdown } from './AssistantMarkdown';
 import { SecretRequestCard } from '../secrets/SecretRequestCard';
+import { ConfirmationCard } from './ConfirmationCard';
 import { ToolGroup } from './ToolGroup';
 import { Chevron } from '../app/icons';
 import { useAppEvent } from '../app/appEvents';
@@ -118,7 +119,7 @@ export function Transcript({ threadId, items, working, onOpenSecrets }: { thread
         // Only a reader more than a viewport above the end needs the shortcut.
         setAway(!pinned.current && el.scrollHeight - el.scrollTop - el.clientHeight > el.clientHeight);
         const top = el.getBoundingClientRect().top;
-        const visible = [...(content.current?.querySelectorAll<HTMLElement>(':scope .msg:not(.assistant), :scope .turn-work-toggle, :scope .tool-group-toggle, :scope .tool, :scope .choice, :scope .secret, :scope .notice, :scope .turn-finished, :scope .msg.assistant > *') ?? [])]
+        const visible = [...(content.current?.querySelectorAll<HTMLElement>(':scope .msg:not(.assistant), :scope .turn-work-toggle, :scope .tool-group-toggle, :scope .tool, :scope .choice, :scope .secret, :scope .confirmation, :scope .notice, :scope .turn-finished, :scope .msg.assistant > *') ?? [])]
           .find((node) => node.getBoundingClientRect().bottom > top);
         anchor.current = visible ? { element: visible, offset: visible.getBoundingClientRect().top - top } : undefined;
       }}>
@@ -236,6 +237,8 @@ const Item = memo(function Item({ threadId, item, preparing, picked, pickName }:
       return <div className={`notice ${item.tone}`} data-item-id={item.id}>{item.text}</div>;
     case 'secret':
       return <SecretRequestCard threadId={threadId} item={item} onOpenSecrets={onOpenSecrets} />;
+    case 'confirmation':
+      return <ConfirmationCard threadId={threadId} item={item} />;
     case 'finished':
       return <div className="turn-finished">Worked for {formatDuration(item.ms)}</div>;
     case 'shipped':

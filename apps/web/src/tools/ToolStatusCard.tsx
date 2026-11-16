@@ -7,7 +7,7 @@ import { formatDayTime } from '../ui/dates';
 
 export type Readiness = { label: 'Ready' | 'Installing' | 'Needs attention' | 'Offline' | 'Pending'; tone: 'ok' | 'busy' | 'bad' | 'idle' };
 
-/** What one machine's copy of a managed tool looks like right now. */
+/** What one machine's copy of a CLI looks like right now. */
 export function readiness(machine: MachineView | undefined, status: ToolStatus | undefined): Readiness {
   if (machine && !machine.connected) return { label: 'Offline', tone: 'idle' };
   if (status?.status === 'ready') return { label: 'Ready', tone: 'ok' };
@@ -42,7 +42,7 @@ export function ToolStatusCard({ tool, machine, status, heading, onOpenThread }:
   const remoteReason = `Checks and repairs run on ${machine.name} itself. Starting them from another machine isn’t available yet.`;
 
   let text: string;
-  if (r.label === 'Offline') text = status ? `Last known: ${status.status === 'ready' ? `ready (${status.version ?? tool.version})` : status.status === 'error' ? 'needs attention' : status.status}${status.checkedAt ? `, ${when(status.checkedAt)}` : ''}.` : `${machine.name} hasn’t reported on this tool.`;
+  if (r.label === 'Offline') text = status ? `Last known: ${status.status === 'ready' ? `ready (${status.version ?? tool.version})` : status.status === 'error' ? 'needs attention' : status.status}${status.checkedAt ? `, ${when(status.checkedAt)}` : ''}.` : `${machine.name} hasn’t reported on this CLI.`;
   else if (r.label === 'Ready') text = `${status?.version ?? tool.version} · checked ${when(status?.checkedAt) ?? 'just now'}`;
   else if (r.label === 'Installing') text = status?.detail ?? 'Installing and checking…';
   else if (r.label === 'Needs attention') text = `Couldn’t install ${tool.package} ${tool.version}. Check the package and version, then retry.`;

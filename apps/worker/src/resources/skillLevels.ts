@@ -1,7 +1,4 @@
-import { SKILL_LEVELS, type ResourceScope, type SkillLevel, type WorkspaceSkill } from '@accio/protocol';
-
-/** Where a thread stands: its profile, its project's key and the id of the space that project is in. */
-export type LevelContext = { profileId?: string; projectKey?: string; spaceId?: string };
+import { SKILL_LEVELS, type LevelContext, type ResourceScope, type SkillLevel, type WorkspaceSkill } from '@accio/protocol';
 
 /**
  * GLOSSARY: Skill level. The narrowest level a library skill's selection turns it on

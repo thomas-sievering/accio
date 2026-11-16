@@ -45,7 +45,7 @@ const GROUPS: { label: string; items: { id: Exclude<Section, 'hub'> | 'limits'; 
     { id: 'naming', label: 'Thread naming', icon: <ScrollText /> },
   ] },
   { label: 'Tools and skills', items: [
-    { id: 'tools', label: 'Tools', icon: <Wrench /> },
+    { id: 'tools', label: 'CLIs', icon: <Wrench /> },
     { id: 'mcps', label: 'MCP servers', icon: <Plug /> },
     { id: 'skills', label: 'Skills', icon: <BookOpen /> },
   ] },

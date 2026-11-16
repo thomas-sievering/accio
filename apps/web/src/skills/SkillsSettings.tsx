@@ -222,7 +222,7 @@ function SkillRow({ skill }: { skill: SkillEntry }) {
       </div>
       {open === 'scope' && (
         <div className="setting-form skill-panel">
-          <ScopeEditor name={skill.name} scope={scope} onChange={setDraft} disabled={save.busy} />
+          <ScopeEditor name={skill.name} scope={scope} onChange={setDraft} disabled={save.busy} withSpaces />
           {save.error && <p className="error" role="alert">{save.error}</p>}
           <div className="update-row">
             <span className="spacer" />

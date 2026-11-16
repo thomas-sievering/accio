@@ -1,12 +1,15 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
-import { ToolDefinition, type MachineView, type ToolStatus } from '@accio/protocol';
+import { ToolDefinition, type MachineView, type ResourceScope, type ToolEntry, type ToolStatus } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { Wrench } from '../app/icons';
 import { SettingLink, SettingsFooter, SettingsSection } from '../app/Settings';
 import { useAction } from '../app/useAction';
 import { useLive } from '../app/useLive';
 import { hasSignedInAccount, useProfiles } from '../profiles/profiles';
-import { LoadError, slugId, useDraft, useResources } from '../resources/resources';
+import { LoadError, scopeSummary, slugId, useDraft, useResources } from '../resources/resources';
+import { ScopeEditor } from '../resources/ScopeEditor';
+import { useProjects } from '../projects/projects';
+import { useSpaces } from '../spaces/spaces';
 import { Field, focusFirstInvalid } from '../resources/Field';
 import { readiness, ToolStatusCard } from './ToolStatusCard';
 import { MenuSelect } from '../ui/MenuSelect';
@@ -14,34 +17,39 @@ import { MenuSelect } from '../ui/MenuSelect';
 /** `npm view @playwright/cli version` on 2026-11-03. Editable before saving. */
 const PLAYWRIGHT_CLI = { name: 'Playwright CLI', package: '@playwright/cli', version: '0.1.23', executable: 'playwright-cli', checkArgs: ['--version'] };
 
-type Draft = Omit<ToolDefinition, 'id'> & { id: string };
-const blank = (): Draft => ({ id: '', name: '', package: '', version: '', executable: '', checkArgs: ['--version'], repairProfileId: undefined });
+type Draft = Omit<ToolDefinition, 'id'> & { id: string; scope: ResourceScope };
+const everywhere = (): ResourceScope => ({ global: true, profileIds: [], spaceIds: [], projectKeys: [] });
+const blank = (): Draft => ({ id: '', name: '', package: '', version: '', executable: '', checkArgs: ['--version'], description: '', repairProfileId: undefined, scope: everywhere() });
 
-/** Command-line tools the hub installs with npm into a managed folder on each machine. */
+/** GLOSSARY: CLI. Command-line programs the hub has each machine install with pnpm and lists to threads at their levels. */
 export function ToolsSettings({ toolId, onOpen, onBack, onOpenThread }: { toolId?: string; onOpen: (id: string) => void; onBack: () => void; onOpenThread: (id: string) => void }) {
   const client = useClient();
   const { state, loadError, retry } = useResources();
   const machines = useLive(() => client.call('machines.list', {}), 'machines.changed');
-  if (!state) return loadError ? <LoadError error={loadError} retry={retry} /> : <p className="note" role="status">Loading tools…</p>;
-  if (toolId === 'new') return <ToolForm taken={state.tools.map((t) => t.id)} onSaved={(t) => onOpen(t.id)} onDone={onBack} />;
+  const { profiles = [] } = useProfiles();
+  const { state: projects } = useProjects();
+  const { spaces = [] } = useSpaces();
+  if (!state) return loadError ? <LoadError error={loadError} retry={retry} /> : <p className="note" role="status">Loading CLIs…</p>;
+  if (toolId === 'new') return <ToolForm all={state.tools} taken={state.tools.map((t) => t.id)} onSaved={(t) => onOpen(t.id)} onDone={onBack} />;
   const tool = state.tools.find((t) => t.id === toolId);
-  if (toolId && !tool) return <><p className="note">This tool was deleted.</p><button className="link" onClick={onBack}>All tools</button></>;
+  if (toolId && !tool) return <><p className="note">This CLI was deleted.</p><button className="link" onClick={onBack}>All CLIs</button></>;
   if (tool) {
+    const here = machines?.find((m) => m.thisMachine);
     return (
-      <ToolForm key={tool.id} tool={tool} taken={[]} onSaved={() => {}} onDone={onBack}
+      <ToolForm key={tool.id} tool={tool} all={state.tools} packageDescription={state.toolStatuses.find((s) => s.toolId === tool.id && s.machineId === here?.id)?.description} taken={[]} onSaved={() => {}} onDone={onBack}
         after={<MachineStatuses tool={tool} machines={machines} statuses={state.toolStatuses} onOpenThread={onOpenThread} />} />
     );
   }
   const here = machines?.find((m) => m.thisMachine);
   return (
     <>
-      <p className="note">Managed npm tools. Accio installs each tool’s exact version into its own folder on every machine, checks it, and adds it to every thread’s PATH on that machine. A failed check starts a repair thread.</p>
-      <SettingsSection add={{ label: 'Add tool', onClick: () => onOpen('new') }}>
+      <p className="note">Command-line programs from npm. Accio installs each CLI’s exact version with pnpm once on every machine, checks it, and lists it to the threads at its levels, with its description, on their PATH. A program you installed yourself isn’t available to threads until you add it here. A failed check starts a repair thread; threads keep running without that CLI.</p>
+      <SettingsSection add={{ label: 'Add CLI', onClick: () => onOpen('new') }}>
         {[...state.tools].sort((a, b) => a.name.localeCompare(b.name)).map((t) => {
           const status = state.toolStatuses.find((s) => s.toolId === t.id && s.machineId === here?.id);
           const r = readiness(here, status);
           return (
-            <SettingLink key={t.id} icon={<Wrench />} title={t.name} description={`${t.package}@${t.version}`} onClick={() => onOpen(t.id)}>
+            <SettingLink key={t.id} icon={<Wrench />} title={t.name} description={`${t.package}@${t.version} · ${scopeSummary(t.scope, profiles, projects?.projects, spaces)}`} onClick={() => onOpen(t.id)}>
               {here && <span className={`pill ${r.tone}`} title="On this machine"><span className="dot" />{r.label}</span>}
             </SettingLink>
           );
@@ -73,10 +81,12 @@ const valid = {
   executable: (v: string) => ToolDefinition.shape.executable.safeParse(v).success,
 };
 
-function ToolForm({ tool, taken, onSaved, onDone, after }: { tool?: ToolDefinition; taken: string[]; onSaved: (t: ToolDefinition) => void; onDone: () => void; /** Shown between the form and its footer. */ after?: ReactNode }) {
+function ToolForm({ tool, all, packageDescription, taken, onSaved, onDone, after }: { tool?: ToolEntry; all: ToolEntry[]; /** What the installed package says it does, on this machine. */ packageDescription?: string; taken: string[]; onSaved: (t: ToolEntry) => void; onDone: () => void; /** Shown between the form and its footer. */ after?: ReactNode }) {
   const client = useClient();
   const { profiles = [] } = useProfiles();
-  const { value, dirty, set, reset } = useDraft<Draft>(tool ?? blank());
+  const { value, dirty, set, reset } = useDraft<Draft>(tool ? { ...tool, description: tool.description ?? '' } : blank());
+  // GLOSSARY: CLI. Another CLI with the same executable: where both are on, the narrower level wins.
+  const sameExecutable = all.filter((t) => t.id !== tool?.id && t.executable === value.executable.trim());
   const [args, setArgs] = useState<string>();
   const [touched, setTouched] = useState(false);
   const { busy, error, run } = useAction();
@@ -85,7 +95,7 @@ function ToolForm({ tool, taken, onSaved, onDone, after }: { tool?: ToolDefiniti
   const changed = dirty || (args !== undefined && JSON.stringify(checkArgs) !== JSON.stringify(tool?.checkArgs ?? ['--version']));
 
   const problems = {
-    name: !value.name.trim() ? 'Give the tool a name.' : undefined,
+    name: !value.name.trim() ? 'Give the CLI a name.' : undefined,
     package: !valid.package(value.package.trim()) ? 'An npm package name, such as @playwright/cli.' : undefined,
     version: !value.version.trim() ? 'Pin a version, such as 1.2.3.' : !valid.version(value.version.trim()) ? 'Use an exact version, such as 1.2.3.' : undefined,
     executable: !valid.executable(value.executable.trim()) ? 'The command the package installs, such as playwright-cli.' : undefined,
@@ -106,7 +116,7 @@ function ToolForm({ tool, taken, onSaved, onDone, after }: { tool?: ToolDefiniti
       ...value,
       id: tool?.id ?? slugId(value.name, taken),
       name: value.name.trim(), package: value.package.trim(), version: value.version.trim(), executable: value.executable.trim(),
-      checkArgs, repairProfileId: value.repairProfileId || undefined,
+      checkArgs, description: value.description?.trim() || undefined, repairProfileId: value.repairProfileId || undefined,
     }));
     if (saved) { reset(); setArgs(undefined); onSaved(saved); }
   };
@@ -139,6 +149,10 @@ function ToolForm({ tool, taken, onSaved, onDone, after }: { tool?: ToolDefiniti
               {(p) => <input {...p} value={value.version} onChange={(e) => set('version', e.target.value)} placeholder="1.2.3, exact" title="An exact version, so every machine runs the same tool" spellCheck={false} required />}
             </Field>
           </div>
+          <label className="field" title="Threads see this line next to the CLI's name. Leave it empty to use the package's own description">
+            <span>Description</span>
+            <input value={value.description ?? ''} onChange={(e) => set('description', e.target.value)} placeholder={packageDescription ?? 'What threads can do with it, such as “Controls the desktop: windows, clicks and screenshots”'} maxLength={300} />
+          </label>
           <div className="field-row">
             <Field label="Executable" className="grow" error={show('executable')}>
               {(p) => <input {...p} value={value.executable} onChange={(e) => set('executable', e.target.value)} placeholder="playwright-cli" spellCheck={false} required />}
@@ -150,7 +164,17 @@ function ToolForm({ tool, taken, onSaved, onDone, after }: { tool?: ToolDefiniti
           </div>
         </div>
       </SettingsSection>
-      <p className="note">Saving installs and checks this tool on this machine. Managed tools are available to every profile and project on the machine.</p>
+      <SettingsSection title="Levels">
+        <div className="setting-form">
+          <ScopeEditor name={value.name || 'this CLI'} scope={value.scope} onChange={(scope) => set('scope', scope)} disabled={busy} withSpaces />
+          {sameExecutable.length > 0 && (
+            <small className="hint" role="status">
+              {sameExecutable.map((t) => `${t.name} (${t.package}@${t.version})`).join(', ')} also {sameExecutable.length === 1 ? 'provides' : 'provide'} <code>{value.executable.trim()}</code>. A thread where both are on gets the one at the narrower level.
+            </small>
+          )}
+        </div>
+      </SettingsSection>
+      <p className="note">Saving installs and checks this CLI on this machine; every other machine installs it on its own.</p>
       <SettingsSection title="Repair">
         <div className="setting-form">
           <div className="field" title="When a check fails, Accio starts a thread on that machine that fixes the install, then checks again">
@@ -163,7 +187,7 @@ function ToolForm({ tool, taken, onSaved, onDone, after }: { tool?: ToolDefiniti
       </SettingsSection>
       {after}
       {error && <p className="error" role="alert">{error}</p>}
-      <SettingsFooter remove={tool && { name: tool.name, run: remove, consequence: 'Threads on every machine lose this tool.' }} busy={busy} onCancel={onDone} saveLabel={tool ? 'Save' : 'Add tool'} saveDisabled={busy || (!!tool && !changed)} dirty={changed && !busy} />
+      <SettingsFooter remove={tool && { name: tool.name, run: remove, consequence: 'Threads on every machine lose this CLI.' }} busy={busy} onCancel={onDone} saveLabel={tool ? 'Save' : 'Add CLI'} saveDisabled={busy || (!!tool && !changed)} dirty={changed && !busy} />
     </form>
   );
 }

@@ -123,9 +123,9 @@ function MachineDetail({ machine, onBack, onOpenThread }: { machine: MachineView
         ))}
       </SettingsSection>
       <section className="settings-section">
-        <h2>Managed tools</h2>
-        {!resources ? <p className="note" role="status">Loading tools…</p> : resources.tools.length === 0 ? (
-          <div className="settings-card"><SettingRow title="No managed tools" description="Add tools in Settings / Tools." /></div>
+        <h2>CLIs</h2>
+        {!resources ? <p className="note" role="status">Loading CLIs…</p> : resources.tools.length === 0 ? (
+          <div className="settings-card"><SettingRow title="No CLIs" description="Add CLIs in Settings / CLIs." /></div>
         ) : (
           <div className="tool-cards">
             {[...resources.tools].sort((a, b) => a.name.localeCompare(b.name)).map((t) => (

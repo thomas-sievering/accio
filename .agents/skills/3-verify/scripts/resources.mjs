@@ -24,10 +24,10 @@ export default async function journey({ page, runDir, home, fixture, action, cap
   const project = JSON.parse(await readFile(join(home, 'projects.json'), 'utf8')).projects[0];
   const key = project.repoKey ?? `local:${project.id}`;
 
-  await action('tools/settings: empty state, preset, validation and machine-wide save', async () => {
+  await action('tools/settings: empty state, preset, validation and an Everywhere CLI installed with pnpm', async () => {
     await button('Settings').click();
-    await nav('Tools').click();
-    await button('Add tool').click();
+    await nav('CLIs').click();
+    await button('Add CLI').click();
     await button('Use preset').click();
     assert.equal(await textbox('npm package').inputValue(), '@playwright/cli');
     assert.equal(await textbox('Executable').inputValue(), 'playwright-cli');
@@ -35,25 +35,32 @@ export default async function journey({ page, runDir, home, fixture, action, cap
     await textbox('Version').fill('1 2');
     await page.getByText('Use an exact version, such as 1.2.3.').waitFor();
     await textbox('Version').fill('0.1.23');
-    assert.equal(await page.getByRole('checkbox').count(), 0);
-    await button('Add tool').click();
+    // A new CLI starts on Everywhere.
+    assert(await page.getByRole('checkbox', { name: /Enable everywhere/ }).isChecked());
+    await textbox('Description').fill('Drives a real browser');
+    await button('Add CLI').click();
     await page.getByRole('main').getByRole('navigation').getByText('Playwright CLI', { exact: true }).waitFor();
     await page.getByRole('group', { name: /\(this machine\): Ready$/ }).waitFor({ timeout: 180_000 });
-    const tool = (await resources()).tools.find((t) => t.id === 'playwright-cli');
-    assert(!('scope' in tool));
+    const saved = await resources();
+    const tool = saved.tools.find((t) => t.id === 'playwright-cli');
+    // Levels are stored beside the definitions, in toolSelections.
+    assert.equal(saved.toolSelections['playwright-cli'].global, true);
+    assert.equal(tool.description, 'Drives a real browser');
     assert.equal(tool.package, '@playwright/cli');
     log.push({ tool });
   });
   await capture('tools-preset-saved');
 
-  await action('tools/status: a failing install needs attention and explains the blocked repair', async () => {
+  await action('tools/status: a failing install at the profile level needs attention and explains the blocked repair', async () => {
     await button('Cancel').click();
-    await button('Add tool').click();
+    await button('Add CLI').click();
     await textbox('Name').fill('Broken tool');
     await textbox('npm package').fill('accio-verify-missing-package-zz9');
     await textbox('Version').fill('0.0.1');
     await textbox('Executable').fill('accio-missing');
-    await button('Add tool').click();
+    await page.getByRole('checkbox', { name: /Enable everywhere/ }).uncheck();
+    await page.getByRole('group', { name: 'Profiles' }).getByRole('checkbox', { name: 'Verify personal' }).check();
+    await button('Add CLI').click();
     await page.getByRole('main').getByRole('navigation').getByText('Broken tool', { exact: true }).waitFor();
     await page.getByRole('group', { name: /\(this machine\): Needs attention$/ }).waitFor({ timeout: 180_000 });
     await page.getByText(/^No repair thread: Sign in to a provider/).waitFor();
@@ -61,6 +68,9 @@ export default async function journey({ page, runDir, home, fixture, action, cap
     const status = (await resources()).toolStatuses.find((s) => s.toolId === 'broken-tool');
     assert.equal(status.status, 'error');
     assert.match(status.repairError, /Sign in to a provider/);
+    const levels = (await resources()).toolSelections['broken-tool'];
+    assert.equal(levels.global, false);
+    assert.equal(levels.profileIds.length, 1);
     log.push({ status: { ...status, detail: status.detail?.slice(0, 300) } });
   });
   await capture('tools-needs-attention');
@@ -211,14 +221,14 @@ export default async function journey({ page, runDir, home, fixture, action, cap
   await action('machines/detail: managed tool readiness reuses status cards', async () => {
     await nav('Machines').click();
     await page.getByRole('button', { name: /\(this machine\)/ }).click();
-    await page.getByRole('heading', { name: 'Managed tools', exact: true }).waitFor();
+    await page.getByRole('heading', { name: 'CLIs', exact: true }).waitFor();
     await page.getByRole('group', { name: 'Broken tool: Needs attention' }).waitFor();
     await page.getByRole('group', { name: 'Playwright CLI: Ready' }).waitFor();
   });
   await capture('machine-tools');
   await action('responsive: tool detail at narrow width', async () => {
     await page.setViewportSize({ width: 560, height: 900 });
-    await nav('Tools').click();
+    await nav('CLIs').click();
     await page.getByRole('button', { name: /^Broken tool/ }).click();
     await page.getByRole('heading', { name: 'Machines', exact: true }).waitFor();
   });

@@ -13,12 +13,12 @@ describe('hub resource management', () => {
   async function installed(prefix: string) {
     const folder = join(prefix, 'node_modules', '@playwright', 'cli');
     await mkdir(folder, { recursive: true });
-    await writeFile(join(folder, 'package.json'), JSON.stringify({ version: '1.0.0', bin: { 'playwright-cli': 'cli.js' } }));
+    await writeFile(join(folder, 'package.json'), JSON.stringify({ version: '1.0.0', description: 'Drives a browser', bin: { 'playwright-cli': 'cli.js' } }));
     await writeFile(join(folder, 'cli.js'), '');
   }
   it('starts exactly one local repair thread on check failure and verifies after it completes', async () => {
     const held = gate(); let broken = true;
-    const harness = new FakeHarness(async function* () { await held.opened; broken = false; yield* replyWith('Repaired'); });
+    const harness = new FakeHarness(async function* (run) { if (run.prompt === 'Not blocked') { yield* replyWith('Done'); return; } await held.opened; broken = false; yield* replyWith('Repaired'); });
     const t = await startTestApp({ harness, resourceCommand: async () => { if (broken) throw new Error('browser dependency missing'); return '1.0.0'; } }); stop = t.stop;
     const c = await t.connect(); await c.signedIn('Personal'); await installed(t.app.resources.tools.folder(definition));
     await c.call('tools.save', definition);
@@ -28,14 +28,18 @@ describe('hub resource management', () => {
     expect((await c.call('threads.list', {}))).toHaveLength(1);
     expect(harness.runs[0]?.prompt).toContain('browser dependency missing');
     expect(harness.runs[0]?.env.PATH).toContain(join(t.home, 'tools'));
-    await expect(c.call('threads.start', { profileId: 'personal', text: 'Blocked draft' })).rejects.toThrow('not ready');
-    expect(await c.call('threads.list', {})).toHaveLength(1);
-    expect(harness.runs).toHaveLength(1);
+    // A broken CLI doesn't hold other threads up; their turn is told it is unavailable.
+    const other = await c.call('threads.start', { profileId: 'personal', text: 'Not blocked' });
+    await c.waitFor('threads.changed', threads => threads.some(x => x.id === other.id && x.status === 'idle'));
+    const turn = harness.runs.find(run => run.prompt === 'Not blocked');
+    expect(turn?.resourceInstructions).toContain('- playwright-cli: its check failed: browser dependency missing');
+    expect(turn?.resourceInstructions).toContain('A repair thread is fixing it.');
+    expect(turn?.env.PATH).not.toContain(t.app.resources.tools.bin(definition));
     held.release();
     await c.waitFor('resources.changed', state => state.toolStatuses.some(s => s.toolId === definition.id && s.status === 'ready'));
     expect((await c.call('resources.get', {})).toolStatuses[0]?.status).toBe('ready');
   });
-  it('adds managed tools to ordinary turns without project or profile selections', async () => {
+  it('lists CLIs on Everywhere in ordinary turns and puts them on the PATH', async () => {
     const harness = new FakeHarness();
     const t = await startTestApp({ harness, resourceCommand: async () => '1.0.0' }); stop = t.stop;
     const c = await t.connect(); await c.signedIn('Personal');
@@ -44,6 +48,28 @@ describe('hub resource management', () => {
     const thread = await c.call('threads.start', { profileId: 'personal', text: 'Use the browser' });
     await c.waitFor('threads.changed', threads => threads.some(x => x.id === thread.id && x.status === 'idle'));
     expect(harness.runs[0]?.env.PATH).toContain(t.app.resources.tools.bin(definition));
+    expect(harness.runs[0]?.resourceInstructions).toContain('- playwright-cli (Playwright CLI): Drives a browser');
+  });
+  it('gives a CLI only to threads at its levels, and the narrowest version wins', async () => {
+    const harness = new FakeHarness();
+    const t = await startTestApp({ harness, resourceCommand: async () => '1.0.0' }); stop = t.stop;
+    const c = await t.connect(); await c.signedIn('Personal');
+    const wide = { ...definition, id: 'pw-wide', description: 'Wide copy' };
+    const narrow = { ...definition, id: 'pw-personal', description: 'Personal copy', scope: { ...optionalScope(), profileIds: ['personal'] } };
+    const work = { ...definition, id: 'desk', executable: 'agent-desktop', package: 'agent-desktop', description: 'Desktop', scope: { ...optionalScope(), profileIds: ['work'] } };
+    for (const tool of [wide, narrow]) await installed(t.app.resources.tools.folder(tool));
+    await c.call('tools.save', wide); await c.call('tools.save', narrow);
+    await expect(c.call('tools.save', work)).rejects.toThrow();
+    await c.call('tools.check', { id: 'pw-wide' }); await c.call('tools.check', { id: 'pw-personal' });
+    const thread = await c.call('threads.start', { profileId: 'personal', text: 'Which browser?' });
+    await c.waitFor('threads.changed', threads => threads.some(x => x.id === thread.id && x.status === 'idle'));
+    const turn = harness.runs[0]!;
+    expect(turn.resourceInstructions).toContain('Personal copy');
+    expect(turn.resourceInstructions).not.toContain('Wide copy');
+    expect(turn.env.PATH).toContain(t.app.resources.tools.bin(narrow));
+    expect(turn.env.PATH).not.toContain(t.app.resources.tools.bin(wide));
+    await c.call('tools.setScope', { id: 'pw-personal', scope: optionalScope() });
+    expect((await c.call('resources.get', {})).tools.find(tool => tool.id === 'pw-personal')?.scope).toEqual(optionalScope());
   });
   it('keeps failed checks visible when no profile can run a repair', async () => {
     const t = await startTestApp({ resourceCommand: async () => { throw new Error('broken'); } }); stop = t.stop;

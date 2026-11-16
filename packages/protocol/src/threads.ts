@@ -5,6 +5,7 @@ import { ModelSelection } from './models.js';
 import { IMAGE_ATTACHMENT_BYTES, IMAGE_TYPES, IMAGES_PER_MESSAGE, type AssetUrl, type MediaBinding, type RelayMedia, type ThreadAsset, type ToolDetails } from './media.js';
 import type { LoadedSkill } from './workspaceSkills.js';
 import type { SecretRequestItem } from './secrets.js';
+import type { ConfirmationItem } from './confirmations.js';
 import type { RemoteMachine } from './relay.js';
 import type { OfferedIssue } from './issues.js';
 
@@ -257,6 +258,7 @@ export type PromptCacheUsage = {
 
 export type TranscriptItem =
   | SecretRequestItem
+  | ConfirmationItem
   | { kind: 'usage'; id: string; turnId: string; provider: 'anthropic'; usage: PromptCacheUsage }
   /** GLOSSARY: Context window. How full it was at the turn's latest request, as the harness reported; one per turn. */
   | { kind: 'context'; id: string; turnId: string; usedTokens: number; windowTokens: number; compactAtTokens?: number }
