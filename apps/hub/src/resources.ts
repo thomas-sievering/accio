@@ -47,24 +47,14 @@ export class Resources {
   deleteSource(id: string) { return this.save(d => ({ ...d, sources: d.sources.filter(s => s.id !== id), skills: d.skills.filter(s => s.sourceId !== id), skillSelections: Object.fromEntries(Object.entries(d.skillSelections ?? {}).filter(([key]) => !key.startsWith(`${id}:`))), skillSnapshots: (d.skillSnapshots ?? []).filter(s => s.sourceId !== id) })); }
   setSkillScope(id: string, scope: ResourceScope) { return this.save(d => { if (!d.skills.some(s => s.id === id)) throw new Error('No such skill'); return { ...d, skillSelections: { ...d.skillSelections, [id]: scope }, skills: d.skills.map(s => s.id === id ? { ...s, scope } : s) }; }); }
   /** Update just one project inside the store queue so concurrent selections keep each other. */
-  setSkillProject(id: string, selection: { projectKey: string; enabled: boolean }) {
-    return this.save(d => {
-      const skill = d.skills.find(skill => skill.id === id);
-      if (!skill) throw new Error('No such skill');
-      const projectKeys = skill.scope.projectKeys.filter(key => key !== selection.projectKey);
-      if (selection.enabled) projectKeys.push(selection.projectKey);
-      const scope = { ...skill.scope, projectKeys };
-      return { ...d, skillSelections: { ...d.skillSelections, [id]: scope }, skills: d.skills.map(skill => skill.id === id ? { ...skill, scope } : skill) };
-    });
-  }
+  setSkillProject(id: string, selection: { projectKey: string; enabled: boolean }) { return this.setSkillMember(id, 'projectKeys', selection.projectKey, selection.enabled); }
   /** GLOSSARY: Space. The same for one space, by its id. */
-  setSkillSpace(id: string, selection: { spaceId: string; enabled: boolean }) {
+  setSkillSpace(id: string, selection: { spaceId: string; enabled: boolean }) { return this.setSkillMember(id, 'spaceIds', selection.spaceId, selection.enabled); }
+  private setSkillMember(id: string, list: 'projectKeys' | 'spaceIds', member: string, on: boolean) {
     return this.save(d => {
       const skill = d.skills.find(skill => skill.id === id);
       if (!skill) throw new Error('No such skill');
-      const spaceIds = skill.scope.spaceIds.filter(key => key !== selection.spaceId);
-      if (selection.enabled) spaceIds.push(selection.spaceId);
-      const scope = { ...skill.scope, spaceIds };
+      const scope = { ...skill.scope, [list]: [...skill.scope[list].filter(key => key !== member), ...(on ? [member] : [])] };
       return { ...d, skillSelections: { ...d.skillSelections, [id]: scope }, skills: d.skills.map(skill => skill.id === id ? { ...skill, scope } : skill) };
     });
   }

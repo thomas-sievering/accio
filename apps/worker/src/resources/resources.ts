@@ -55,8 +55,8 @@ export class ResourceManager {
   private async homeSkills(key: string | undefined, space: Space | undefined, waitForHome: boolean): Promise<WorkspaceSkill[]> {
     if (!space?.homeProjectKey || space.homeProjectKey === key || !this.spaceLevel) return [];
     const home = await this.spaceLevel.home(space.homeProjectKey, waitForHome).catch(() => undefined);
-    // A home this machine can't scan leaves the space with its library skills only, rather than refusing the turn.
-    const files = home ? await repositorySkills(home).catch(() => []) : [];
+    // A home not here leaves the space with its library skills only; one here whose files can't be read is an error, like the project's own.
+    const files = home ? await repositorySkills(home).catch((error: Error) => { throw new Error(`The skills in the space’s home can’t be read: ${error.message}`); }) : [];
     return files.map(skill => ({ ...skill, id: skill.id.replace(/^repository:/, 'home:'), enabledBy: 'space' as const }));
   }
   /** One state for the whole resolution. Only skills a thread gets need their files here, so a wider source that is overridden can't block a turn. */

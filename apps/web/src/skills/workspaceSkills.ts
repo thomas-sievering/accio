@@ -6,7 +6,8 @@ export type WorkspaceSkillsState = { value?: WorkspaceSkills; error?: string; lo
 
 /**
  * The skills a thread (or draft) would get on its next turn. Reloaded when the
- * context changes, the connection reopens, the hub's resources or spaces change, or this
+ * context changes, the connection reopens, the hub's resources or spaces change, a checkout
+ * appears (such as a space's home cloned here), or this
  * thread's transcript reports a skill it loaded. A reload keeps the last list on
  * screen; a different context starts empty.
  */
@@ -37,6 +38,7 @@ export function useWorkspaceSkills(context: SkillContext | undefined): Workspace
     const offStatus = client.onStatus(load);
     const offResources = client.onEvent('resources.changed', load);
     const offSpaces = client.onEvent('spaces.changed', load);
+    const offProjects = client.onEvent('projects.changed', load);
     const offItem = client.onEvent('thread.item', ({ threadId, item }) => {
       if (params.threadId && threadId === params.threadId && item.kind === 'tool' && item.loadedSkills?.length) load();
     });
@@ -46,6 +48,7 @@ export function useWorkspaceSkills(context: SkillContext | undefined): Workspace
       offStatus();
       offResources();
       offSpaces();
+      offProjects();
       offItem();
     };
   }, [client, key, attempt]);
@@ -76,8 +79,10 @@ export const isInherited = (skill: WorkspaceSkill) => skill.origin === 'library'
 export const isOverridden = (skill: WorkspaceSkill) => skill.enabled && !!skill.overriddenBy;
 /** GLOSSARY: Harness skill. Ships with the thread's harness. */
 export const isHarnessSkill = (skill: WorkspaceSkill) => skill.origin === 'harness';
-/** Library skills nothing turned on here yet: what Add skill offers. */
+/** Library skills nothing turned on here yet: what the project's Add skill offers. */
 export const isAddable = (skill: WorkspaceSkill) => skill.origin === 'library' && !skill.enabled;
+/** Library skills the space hasn't turned on: what the space's Add skill offers, including ones on only for this project, profile or everywhere. */
+export const isAddableToSpace = (skill: WorkspaceSkill) => skill.origin === 'library' && skill.enabledBy !== 'space';
 
 export const byName = (a: WorkspaceSkill, b: WorkspaceSkill) => a.name.localeCompare(b.name);
 

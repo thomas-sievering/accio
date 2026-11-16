@@ -6,7 +6,7 @@ import { Chevron, Plus, Refresh } from '../app/icons';
 import { useAction } from '../app/useAction';
 import { useProjects } from '../projects/projects';
 import { shortRevision } from '../resources/resources';
-import { byName, harnessName, isAddable, isHarnessSkill, isInherited, isOverridden, isProjectSkill, isSpaceSkill, LEVEL_NAMES, originLabel, skillReference, useWorkspaceSkills } from './workspaceSkills';
+import { byName, harnessName, isAddable, isAddableToSpace, isHarnessSkill, isInherited, isOverridden, isProjectSkill, isSpaceSkill, LEVEL_NAMES, originLabel, skillReference, useWorkspaceSkills } from './workspaceSkills';
 
 type SectionKey = 'project' | 'space' | 'profile' | 'global' | 'harness' | 'overridden';
 /** Which sections are open, kept while the app runs so switching threads doesn't fold them again. */
@@ -31,6 +31,7 @@ export function SkillsPanel({ context, composer }: { context: SkillContext; comp
   const profile = useMemo(() => skills.filter((s) => isInherited(s) && s.enabledBy === 'profile').sort(byName), [skills]);
   const everywhere = useMemo(() => skills.filter((s) => isInherited(s) && s.enabledBy === 'global').sort(byName), [skills]);
   const addable = useMemo(() => skills.filter(isAddable).sort(byName), [skills]);
+  const addableToSpace = useMemo(() => skills.filter(isAddableToSpace).sort(byName), [skills]);
   const shipped = useMemo(() => skills.filter(isHarnessSkill).sort(byName), [skills]);
   const overridden = useMemo(() => skills.filter(isOverridden).sort(byName), [skills]);
   const harness = value?.harnessId ? harnessName(value.harnessId) : undefined;
@@ -72,7 +73,7 @@ export function SkillsPanel({ context, composer }: { context: SkillContext; comp
           <p className="hint skills-message">Project skills need a project. Start the thread in a project to add any.</p>
         </section>}
       {value.space && <SkillsSection title="Space" skills={inSpace} {...fold('space')} where={`In the home of ${value.space.name} or turned on for that space.`}
-        head={(title) => <AddSkill candidates={addable} context={context} title={title} level="space" onAnnounce={setAnnounce}
+        head={(title) => <AddSkill candidates={addableToSpace} context={context} title={title} level="space" onAnnounce={setAnnounce}
           onChanged={() => { toggle('space', true); reload(); }} />}
         empty={<p className="hint skills-message">No skills in the home’s <code>.agents/skills</code> or <code>.claude/skills</code> and none turned on for {value.space.name}.</p>}>
         {inSpace.map((s) => <SkillItem key={s.id} skill={s} {...row} />)}

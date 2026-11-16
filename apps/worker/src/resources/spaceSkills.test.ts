@@ -96,6 +96,13 @@ describe('space skills', () => {
     for (const name of ['guide', 'notes', 'docs', 'review']) expect(delivered.match(new RegExp(`- ${name}:`, 'g'))).toHaveLength(1);
   });
 
+  it('refuses to list or deliver skills when the home’s skill files can’t be read, rather than letting wider ones win', async () => {
+    const { t, c, checkout } = await fixture();
+    await writeFile(join(t.home, 'home', '.agents', 'skills', 'guide', 'SKILL.md'), 'x'.repeat(1_000_001));
+    await expect(c.call('threads.skills', { checkoutId: checkout.id })).rejects.toThrow('The skills in the space’s home can’t be read');
+    await expect(c.call('threads.start', { checkoutId: checkout.id, text: 'work' })).rejects.toThrow('space’s home');
+  });
+
   it('delivers a space selection made in Settings and the home’s files to Claude and Codex threads alike', async () => {
     const codex = new FakeCodex();
     const { c, profile, checkout, space, skill, harness, codexHarness } = await fixture({ codex });
