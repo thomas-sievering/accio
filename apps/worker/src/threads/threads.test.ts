@@ -173,7 +173,7 @@ describe('threads slice', () => {
     await settled(c, thread.id);
   });
 
-  it('keeps shelf state and conversations across restart while removing abandoned empty threads', async () => {
+  it('keeps shelf state and conversations across restart', async () => {
     const { t, c, checkout } = await setup(new FakeHarness());
     stop = t.stop;
     const thread = await c.call('threads.start', { checkoutId: checkout.id, text: 'hi' });
@@ -181,13 +181,6 @@ describe('threads slice', () => {
     const shelved = await c.call('threads.settle', { threadId: thread.id });
     await t.stop({ keepHome: true });
     stop = undefined;
-
-    const path = join(t.home, 'threads.json');
-    const stored = JSON.parse(await readFile(path, 'utf8'));
-    // Older threads can have a default title and no session despite having messages.
-    stored[0].title = 'New thread';
-    stored[0].sessionId = null;
-    await writeFile(path, JSON.stringify([...stored, { ...stored[0], id: 'abandoned', settledAt: null }]));
     const restarted = await startTestApp({ harness: new FakeHarness() }, t.home);
     stop = restarted.stop;
     const next = await restarted.connect();

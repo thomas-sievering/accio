@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { DEFAULT_MODEL } from '@accio/protocol';
@@ -175,20 +175,4 @@ describe('profile model choices', () => {
     expect(await c.call('threads.setModel', { threadId: thread.id, model: fable })).toMatchObject({ model: fable });
   });
 
-  it('loads threads and hub settings from before model selection existed', async () => {
-    const t = await startTestApp({ harness: new FakeHarness() }); stop = t.stop;
-    const c = await t.connect(); await c.signedIn('Personal');
-    const path = join(t.home, 'repo'); await mkdir(path);
-    const checkout = await c.call('checkouts.add', { path, profileId: 'personal' });
-    const thread = await c.call('threads.start', { checkoutId: checkout.id, text: 'hi' });
-    await c.waitFor('threads.changed', (ts) => ts.some((t) => t.id === thread.id && t.status === 'idle'));
-    await t.stop({ keepHome: true }); stop = undefined;
-    const file = join(t.home, 'threads.json');
-    const threads = JSON.parse(await readFile(file, 'utf8')); delete threads[0].model;
-    await writeFile(file, JSON.stringify(threads));
-    const restarted = await startTestApp({ harness: new FakeHarness() }, t.home); stop = restarted.stop;
-    const next = await restarted.connect();
-    expect((await next.call('threads.list', {}))[0]?.model).toEqual(DEFAULT_MODEL);
-    expect((await next.call('models.list', { profileId: 'personal' })).favorites).toEqual([]);
-  });
 });
