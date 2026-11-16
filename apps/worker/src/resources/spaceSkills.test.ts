@@ -97,6 +97,15 @@ describe('space skills', () => {
     expect(listed.skills.filter(skill => skill.origin === 'home')).toEqual([]);
   });
 
+  it('keeps a deleted space’s selection without blocking other changes to the skill', async () => {
+    const { c, checkout, saved, review } = await space({}, c => c.signedIn('Personal'));
+    await c.call('threads.setSkillEnabled', { checkoutId: checkout.id, skillId: review.id, enabled: true, level: 'space' });
+    await c.call('spaces.delete', { id: saved.id });
+    const { scope } = (await c.call('resources.get', {})).skills.find(skill => skill.id === review.id)!;
+    await c.call('skills.setScope', { id: review.id, scope: { ...scope, profileIds: ['personal'] } });
+    expect((await c.call('threads.skills', { checkoutId: checkout.id })).skills.find(skill => skill.id === review.id)).toMatchObject({ enabledBy: 'profile' });
+  });
+
   it('delivers a space’s library skills to Claude and Codex threads alike, chosen in Settings', async () => {
     const claude = new FakeHarness();
     const codex = new FakeHarness((_run, n) => replyWith(`codex says ${n}`, 'codex-thread'));

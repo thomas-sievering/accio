@@ -1,3 +1,4 @@
+import { ResourceScope, type ResourcesState } from '@accio/protocol';
 import type { HubClient } from './client.js';
 import type { ResourceAccess } from './resources.js';
 import type { McpAccess } from './mcp.js';
@@ -7,9 +8,14 @@ export const RESOURCE_WRITES = ['saveTool', 'deleteTool', 'saveSource', 'stageSk
 /** Definitions are shared; installing tools and materializing skills stays on the machine. */
 export function remoteResources(client: HubClient): ResourceAccess {
   return {
-    state: () => client.snapshot?.resources ?? { tools: [], sources: [], skills: [], mcps: [], toolStatuses: [], skillVersions: [] },
+    state: () => withScopes(client.snapshot?.resources ?? { tools: [], sources: [], skills: [], mcps: [], toolStatuses: [], skillVersions: [] }),
     ...Object.fromEntries(RESOURCE_WRITES.map(method => [method, (...args: unknown[]) => client.call('resources.write', { method, args })])),
   } as ResourceAccess;
+}
+
+/** A hub from before spaces had skills sends scopes without space ids. */
+function withScopes(state: ResourcesState): ResourcesState {
+  return state.skills.every(skill => Array.isArray(skill.scope.spaceIds)) ? state : { ...state, skills: state.skills.map(skill => ({ ...skill, scope: ResourceScope.parse(skill.scope) })) };
 }
 
 /** Only short-lived MCP grants reach a harness; upstream credentials remain at its hub. */

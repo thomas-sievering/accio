@@ -197,8 +197,6 @@ function SkillRow({ skill }: { skill: SkillEntry }) {
   const { profiles = [] } = useProfiles();
   const { state: projects, checkoutsOf } = useProjects();
   const { spaces } = useSpaces();
-  // A deleted space's selection stays behind on the hub; saving drops it rather than refusing.
-  const withoutDeletedSpaces = (scope: ResourceScope) => ({ ...scope, spaceIds: scope.spaceIds.filter((id) => !spaces || spaces.some((s) => s.id === id)) });
   const [open, setOpen] = useState<'scope' | 'copy'>();
   const [draft, setDraft] = useState<ResourceScope>();
   const [checkoutId, setCheckoutId] = useState('');
@@ -230,7 +228,7 @@ function SkillRow({ skill }: { skill: SkillEntry }) {
             <span className="spacer" />
             <button type="button" className="ghost" onClick={() => { setDraft(undefined); setOpen(undefined); }}>Cancel</button>
             <button type="button" className="ghost primary" disabled={save.busy || !changed}
-              onClick={async () => { if (await save.run(() => client.call('skills.setScope', { id: skill.id, scope: withoutDeletedSpaces(scope) }))) { setDraft(undefined); setOpen(undefined); } }}>
+              onClick={async () => { if (await save.run(() => client.call('skills.setScope', { id: skill.id, scope }))) { setDraft(undefined); setOpen(undefined); } }}>
               {save.busy ? 'Saving…' : 'Save'}
             </button>
           </div>

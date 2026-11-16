@@ -99,12 +99,13 @@ export class ResourceManager {
   private announce() { this.broadcast('resources.changed', this.state()); }
   private tool(id: string) { const tool = this.state().tools.find(t => t.id === id); if (!tool) throw new Error('No such tool'); return tool; }
   private local(machineId?: string) { if (machineId && machineId !== this.machineId) throw new Error('This machine must be online locally; remote execution is not available yet'); }
-  private checkScope(scope: { profileIds: string[]; projectKeys: string[]; spaceIds: string[] }) {
+  /** A space deleted since it was selected stays in the scope, unused; only newly selected spaces must exist. */
+  private checkScope(scope: { profileIds: string[]; projectKeys: string[]; spaceIds: string[] }, before: string[] = []) {
     for (const id of scope.profileIds) this.profiles.require(id);
     const keys = new Set(this.projects.state().projects.map(projectKey));
     if (scope.projectKeys.some(key => !keys.has(key))) throw new Error('No such project');
     const spaces = new Set(this.spaces().map(space => space.id));
-    if (scope.spaceIds.some(id => !spaces.has(id))) throw new Error('No such space');
+    if (scope.spaceIds.some(id => !spaces.has(id) && !before.includes(id))) throw new Error('No such space');
   }
   register(router: Router) {
     router.on('resources.get', () => this.state())
@@ -128,7 +129,7 @@ export class ResourceManager {
         await this.store.applySkills(id, revision); this.announce(); return this.state().skills.filter(s => s.sourceId === id);
       }))
       .on('skills.deleteSource', ({ id }) => this.sourceOperation(id, async () => { await this.store.deleteSource(id); this.announce(); return null; }))
-      .on('skills.setScope', async ({ id, scope }) => { this.checkScope(scope); await this.store.setSkillScope(id, scope); this.announce(); return this.state().skills.find(s => s.id === id)!; })
+      .on('skills.setScope', async ({ id, scope }) => { this.checkScope(scope, this.state().skills.find(s => s.id === id)?.scope.spaceIds); await this.store.setSkillScope(id, scope); this.announce(); return this.state().skills.find(s => s.id === id)!; })
       .on('skills.copy', async ({ id, checkoutId }) => { const skill = this.state().skills.find(s => s.id === id); if (!skill) throw new Error('No such skill'); const release = this.projects.useCheckout(checkoutId); try { return await this.skills.copy(await this.localSkill(skill), this.projects.checkout(checkoutId).path); } finally { release(); } })
       .on('mcp.save', async mcp => { this.validateMcp(mcp); const old = this.state().mcps.find(m => m.id === mcp.id); if (old && (old.url !== mcp.url || old.auth !== mcp.auth || old.oauthClientId !== mcp.oauthClientId)) await this.gateway.signOut(mcp.id); await this.store.saveMcp(mcp); this.announce(); return this.state().mcps.find(m => m.id === mcp.id)!; })
       .on('mcp.delete', async ({ id }) => { await this.gateway.signOut(id); await this.store.deleteMcp(id); this.announce(); return null; })
