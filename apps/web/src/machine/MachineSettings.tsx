@@ -13,6 +13,7 @@ import { useResources } from '../resources/resources';
 import { ToolStatusCard } from '../tools/ToolStatusCard';
 import { OnboardMachine } from './OnboardMachine';
 import { MachineUpdate, useMachineUpdate } from './MachineUpdate';
+import { RevokeMachine } from './RevokeMachine';
 import { formatDayTime } from '../ui/dates';
 
 /** The machines known to the hub, including those currently offline. */
@@ -152,6 +153,7 @@ function MachineDetail({ machine, onBack, onOpenThread }: { machine: MachineView
           </div>
         ))}
       </SettingsSection>
+      {!machine.thisMachine && <RevokeMachine machine={machine} onRevoked={onBack} />}
       {error && <p className="error" role="alert">{error}</p>}
       <SettingsFooter busy={busy} onCancel={onBack} saveLabel="Save" saveDisabled={busy || !dirty} dirty={!busy && dirty} />
     </form>

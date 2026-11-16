@@ -15,7 +15,7 @@
         // The Electron shell tests/chat.ts launches by path.
         "tests/electron-shell.cjs",
         // Journeys the verify runner loads by path (smoke.mjs by default); the runner itself is a package script.
-        ".agents/skills/3-verify/scripts/{smoke,hubs,link-hub,real-turn,resources,sorting-hat}.mjs",
+        ".agents/skills/3-verify/scripts/{smoke,hubs,link-hub,real-turn,resources,sorting-hat,revoke-machine}.mjs",
         // The smooth-ui recorders, run with node.
         ".agents/skills/smooth-ui/scripts/*.mjs"
       ],

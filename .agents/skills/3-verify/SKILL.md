@@ -152,7 +152,7 @@ For an interrupted invocation, send Ctrl+C to the runner and allow it to finish 
 
 - `scripts/verify.mjs`: executable Node launcher, read-only doctor, evidence and teardown. Run via `pnpm verify` or the explicit Node commands above.
 - `scripts/smoke.mjs`: default journey module; invoked by the runner, not as a standalone process. Extend coverage through a custom journey with the same injected arguments.
-- `scripts/resources.mjs`, `scripts/hubs.mjs`, `scripts/sorting-hat.mjs`: offline journeys for tools/MCP/skills, hubs and a hub's own Sorting Hat; run them through the runner as their feature files say.
+- `scripts/resources.mjs`, `scripts/hubs.mjs`, `scripts/sorting-hat.mjs`, `scripts/revoke-machine.mjs`: offline journeys for tools/MCP/skills, hubs, a hub's own Sorting Hat and revoking a second machine; run them through the runner as their feature files say.
 - `scripts/steps.mjs`: steps several journeys share (first-run profile, adding a local project, common controls); import it from a custom journey too.
 - `scripts/real-turn.mjs`, `scripts/link-hub.mjs`: the verify-device journeys behind `pnpm verify:real` and `pnpm verify:link-hub`.
 
