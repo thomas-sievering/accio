@@ -212,7 +212,8 @@ export class Turns {
       // Reserve the turn above, but publish it only after its tools are ready.
       // GLOSSARY: GitHub account. The agent's gh commands act as the profile's account, like Accio's own reads.
       const env = { ...turnEnv(state.home, thread.profileId, thread.model.harnessId, access), ...await deps.machines.github.env(thread.profileId, cwd).catch(() => ({})) };
-      resources = await deps.resources()?.prepare(thread.profileId, thread.projectId, env, { repair: !!thread.repairToolId, cwd });
+      // GLOSSARY: Home. Like the Space section below, a first turn waits for the home's clone to have its skill files.
+      resources = await deps.resources()?.prepare(thread.profileId, thread.projectId, env, { repair: !!thread.repairToolId, cwd, waitForHome: !delivering && !thread.workVersion });
       const project = deps.projects.state().projects.find((p) => p.id === thread.projectId);
       // GLOSSARY: Space. A thread's first turn waits for its space's home to be cloned here.
       const space = project && await deps.spaceContext()?.section({ project, cwd, firstTurn: !delivering && !thread.workVersion });

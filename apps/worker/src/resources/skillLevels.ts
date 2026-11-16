@@ -1,7 +1,4 @@
-import { SKILL_LEVELS, type ResourceScope, type SkillLevel, type WorkspaceSkill } from '@accio/protocol';
-
-/** Where a thread stands: its profile and its project's key. A space joins here with #199. */
-export type LevelContext = { profileId?: string; projectKey?: string };
+import { SKILL_LEVELS, type LevelContext, type ResourceScope, type SkillLevel, type WorkspaceSkill } from '@accio/protocol';
 
 /**
  * GLOSSARY: Skill level. The narrowest level a library skill's selection turns it on
@@ -10,6 +7,7 @@ export type LevelContext = { profileId?: string; projectKey?: string };
 export function enabledLevel(scope: ResourceScope, context: LevelContext): SkillLevel | null {
   const on: Record<SkillLevel, boolean> = {
     project: !!context.projectKey && scope.projectKeys.includes(context.projectKey),
+    space: !!context.spaceId && scope.spaceIds.includes(context.spaceId),
     profile: !!context.profileId && scope.profileIds.includes(context.profileId),
     global: scope.global,
   };
@@ -31,7 +29,7 @@ export function resolveLevels(skills: WorkspaceSkill[]): WorkspaceSkill[] {
       if (rank(skill) > best) skill.overriddenBy = SKILL_LEVELS[best];
       const level = named.filter(other => rank(other) === rank(skill));
       if (level.length > 1) skill.conflict = level.some(other => other.origin === 'repository') && level.some(other => other.origin === 'library')
-        ? `This project already has a skill named ${name}. Choose either the project copy or the synced skill in settings.`
+        ? `${skill.enabledBy === 'space' ? 'The space’s home' : 'This project'} already has a skill named ${name}. Choose either the ${skill.enabledBy === 'space' ? 'home’s' : 'project'} copy or the synced skill in settings.`
         : `More than one enabled skill is named ${name}. Choose one source before the next turn.`;
     }
   }

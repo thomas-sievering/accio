@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { method } from './rpc.js';
 
+/** GLOSSARY: Skill level. Where a library skill or CLI is turned on: everywhere, for profiles, for spaces (by space id) and for projects (by project key). */
 export const ResourceScope = z.object({ global: z.boolean().default(false), profileIds: z.array(z.string()).default([]), spaceIds: z.array(z.string()).default([]), projectKeys: z.array(z.string()).default([]) });
 export type ResourceScope = z.infer<typeof ResourceScope>;
 const Id = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/);

@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { JsonFile, JsonStore } from '@accio/persistence';
-import { McpDefinition, ToolDefinition, narrowestLevel } from '@accio/protocol';
+import { McpDefinition, ResourceScope as ResourceScopeInput, ToolDefinition, narrowestLevel } from '@accio/protocol';
 import type { ResourceScope, ResourcesState, SkillEntry, SkillSource, ToolSave, ToolStatus } from '@accio/protocol';
 
 export const optionalScope = (): ResourceScope => ({ global: false, profileIds: [], spaceIds: [], projectKeys: [] });
@@ -28,6 +28,9 @@ export class Resources {
     // Parsing strips scopes stored on legacy tool and MCP definitions; CLI levels live in toolSelections.
     data.tools = data.tools.map(tool => ToolDefinition.parse(tool));
     data.mcps = data.mcps.map(mcp => McpDefinition.parse(mcp));
+    // Selections saved before spaces had skills have no `spaceIds`.
+    data.skills = data.skills.map(skill => ({ ...skill, scope: ResourceScopeInput.parse(skill.scope) }));
+    if (data.skillSelections) data.skillSelections = Object.fromEntries(Object.entries(data.skillSelections).map(([id, scope]) => [id, ResourceScopeInput.parse(scope)]));
     this.secrets = await this.secretsFile.read();
   }
   state(): ResourcesState { const { skillSnapshots = [], skillSelections: _selections, toolSelections = {}, ...data } = this.data; return structuredClone({ ...data, tools: data.tools.map(tool => ({ ...tool, scope: toolSelections[tool.id] ?? everywhere() })), skillVersions: skillSnapshots.map(s => ({ sourceId: s.sourceId, revision: s.revision, active: this.data.skills.some(skill => skill.sourceId === s.sourceId && skill.revision === s.revision) })), mcps: this.data.mcps.map(m => ({ ...m, signedIn: !!this.secrets[m.id] })) }); }
@@ -48,13 +51,14 @@ export class Resources {
   deleteSource(id: string) { return this.save(d => ({ ...d, sources: d.sources.filter(s => s.id !== id), skills: d.skills.filter(s => s.sourceId !== id), skillSelections: Object.fromEntries(Object.entries(d.skillSelections ?? {}).filter(([key]) => !key.startsWith(`${id}:`))), skillSnapshots: (d.skillSnapshots ?? []).filter(s => s.sourceId !== id) })); }
   setSkillScope(id: string, scope: ResourceScope) { return this.save(d => { if (!d.skills.some(s => s.id === id)) throw new Error('No such skill'); return { ...d, skillSelections: { ...d.skillSelections, [id]: scope }, skills: d.skills.map(s => s.id === id ? { ...s, scope } : s) }; }); }
   /** Update just one project inside the store queue so concurrent selections keep each other. */
-  setSkillProject(id: string, selection: { projectKey: string; enabled: boolean }) {
+  setSkillProject(id: string, selection: { projectKey: string; enabled: boolean }) { return this.setSkillMember(id, 'projectKeys', selection.projectKey, selection.enabled); }
+  /** GLOSSARY: Space. The same for one space, by its id. */
+  setSkillSpace(id: string, selection: { spaceId: string; enabled: boolean }) { return this.setSkillMember(id, 'spaceIds', selection.spaceId, selection.enabled); }
+  private setSkillMember(id: string, list: 'projectKeys' | 'spaceIds', member: string, on: boolean) {
     return this.save(d => {
       const skill = d.skills.find(skill => skill.id === id);
       if (!skill) throw new Error('No such skill');
-      const projectKeys = skill.scope.projectKeys.filter(key => key !== selection.projectKey);
-      if (selection.enabled) projectKeys.push(selection.projectKey);
-      const scope = { ...skill.scope, projectKeys };
+      const scope = { ...skill.scope, [list]: [...skill.scope[list].filter(key => key !== member), ...(on ? [member] : [])] };
       return { ...d, skillSelections: { ...d.skillSelections, [id]: scope }, skills: d.skills.map(skill => skill.id === id ? { ...skill, scope } : skill) };
     });
   }

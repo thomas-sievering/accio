@@ -323,7 +323,7 @@ A git repository of skills that the hub pulls and hands out, such as spellbook. 
 _Avoid_: Skill pack, plugin
 
 **Skill level**:
-Where a thread's skills come from, widest first: Everywhere, Profile, Space and Project. Everywhere means every machine, profile and project on the hub, never one machine. A project's skills are its repository's skill files plus library skills turned on for it; a space's will be its home's skill files plus library skills turned on for it. When two levels have a skill of the same name, the narrowest wins and the other is overridden. Skills installed on a machine, such as in `~/.agents/skills`, are no level and never reach a thread. See ADR 0020.
+Where a thread's skills come from, widest first: Everywhere, Profile, Space and Project. Everywhere means every machine, profile and project on the hub, never one machine. A project's skills are its repository's skill files plus library skills turned on for it; a space's are its home's skill files plus library skills turned on for it. A thread in the home gets the home's skill files as Project skills. When two levels have a skill of the same name, the narrowest wins and the other is overridden. Skills installed on a machine, such as in `~/.agents/skills`, are no level and never reach a thread. See ADR 0020.
 _Avoid_: Global (for one machine), scope, tier
 
 **Harness skill**:

@@ -421,11 +421,17 @@ const scriptedCheckout = await client.call('checkouts.add', { path: scriptedFold
 await client.call('projects.setDelivery', { projectId: scriptedCheckout.projectId, deliveryPolicy: 'direct', previewCommand: '', testCommand: 'node check.cjs' });
 // Skills panel: a project with one repository skill, and a library source with one profile skill, one optional,
 // and one of the repository skill's name turned on Everywhere, which the repository's overrides (ADR 0020).
+// skills-home is a home for skills-panel.spec.ts to put in a space with it: its lib-docs overrides the profile's.
 const skillsFolder = join(home, 'skills-project');
+const skillsHome = join(home, 'skills-home');
 const skillsLibrary = join(home, 'skills-library');
 const skillFile = (name: string, description: string, body: string) => `---\nname: ${name}\ndescription: ${description}\n---\n${body}\n`;
 for (const [folder, files] of [
   [skillsFolder, { '.agents/skills/repo-notes/SKILL.md': skillFile('repo-notes', 'How this repository writes notes', 'Write notes in plain sentences.') }],
+  [skillsHome, {
+    '.agents/skills/home-guide/SKILL.md': skillFile('home-guide', 'How the space works', 'Space-wide instructions.'),
+    '.claude/skills/lib-docs/SKILL.md': skillFile('lib-docs', 'The space’s documentation rules', 'Home docs instructions.'),
+  }],
   [skillsLibrary, {
     'lib-review/SKILL.md': skillFile('lib-review', 'Review a change before shipping', 'Review instructions.'),
     'lib-docs/SKILL.md': skillFile('lib-docs', 'Keep documentation current', 'Docs instructions.'),
@@ -433,6 +439,7 @@ for (const [folder, files] of [
   }],
 ] as const) await initRepo(folder, files, { author: BROWSER_AUTHOR, message: 'skills fixture' });
 const skillsCheckout = await client.call('checkouts.add', { path: skillsFolder, profileId: 'personal' });
+await client.call('checkouts.add', { path: skillsHome, profileId: 'personal' });
 await client.call('skills.addSource', { id: 'library', name: 'Library', url: skillsLibrary, ref: 'HEAD' });
 const docs = (await client.call('resources.get', {})).skills.find((skill) => skill.name === 'lib-docs')!;
 await client.call('skills.setScope', { id: docs.id, scope: { ...docs.scope, profileIds: ['personal'] } });
