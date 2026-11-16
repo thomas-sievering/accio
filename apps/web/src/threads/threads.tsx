@@ -18,8 +18,6 @@ type ThreadsCtx = {
   /** A new thread not yet started: just the checkout it will run in. It exists on the server only once its first message is sent. */
   draft: { checkoutId: string; profileId?: string } | null;
   openDraft: (checkoutId: string, profileId?: string) => void;
-  /** Counts thread and draft openings, so a view over the main pane can close on any of them, even reselecting the open thread. */
-  navigation: number;
   /** The open list plus the Working, Snoozed and Settled shelves, after the project scope and search. */
   shelves: ThreadShelves;
   /** Where the sidebar places a thread, so other lists of threads group them as it does. */
@@ -44,7 +42,8 @@ export type ThreadActions = {
 
 const Ctx = createContext<ThreadsCtx | null>(null);
 
-export function ThreadsProvider({ children }: { children: ReactNode }) {
+/** `onNavigate` runs on every thread or draft opening, even reselecting the open thread, so the shell can show the thread surface. */
+export function ThreadsProvider({ children, onNavigate }: { children: ReactNode; onNavigate: () => void }) {
   const client = useClient();
   useEffect(() => () => clearFirstMessages(client), [client]);
   const { value: threads, error: loadError, retry: retryLoad } = useLiveState(() => client.call('threads.list', {}), 'threads.changed');
@@ -53,7 +52,6 @@ export function ThreadsProvider({ children }: { children: ReactNode }) {
   // Kept across restarts, like the selected thread, so the app reopens on the draft it closed on.
   const [draft, updateDraft] = useState<ThreadsCtx['draft']>(() => { try { return JSON.parse(localStorage.getItem(draftKey) ?? 'null'); } catch { return null; } });
   const setDraft = (value: ThreadsCtx['draft']) => { updateDraft(value); if (value) localStorage.setItem(draftKey, JSON.stringify(value)); else localStorage.removeItem(draftKey); };
-  const [navigation, setNavigation] = useState(0);
   const { filter } = useProfiles();
   const { visible, state: projects } = useProjects();
   const [storedScope, setProjectScope] = useLocalState<string>('accio.projectScope', '');
@@ -73,14 +71,13 @@ export function ThreadsProvider({ children }: { children: ReactNode }) {
       select: (id) => {
         setDraft(null);
         setSelected(id);
-        setNavigation((n) => n + 1);
+        onNavigate();
       },
       draft,
       openDraft: (checkoutId, profileId) => {
         setDraft({ checkoutId, profileId });
-        setNavigation((n) => n + 1);
+        onNavigate();
       },
-      navigation,
       placement,
       shelves: shelveThreads(filterThreads(threads ?? [], { project: projectScope, profileId: filter, projects: projects?.projects ?? [] }, query), now, placement),
       projectScope,
@@ -98,7 +95,7 @@ export function ThreadsProvider({ children }: { children: ReactNode }) {
     // setDraft, setSelected and setProjectScope are rebuilt each render, but they only close over
     // keys derived from client, which is listed; recreate only when data changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [client, threads, placement, loadError, retryLoad, selectedId, draft, navigation, now, projects, projectScope, query, filter],
+    [client, threads, placement, loadError, retryLoad, selectedId, draft, onNavigate, now, projects, projectScope, query, filter],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

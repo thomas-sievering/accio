@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { LimitsProvider } from '../limits/limits';
 import type { LimitsScope } from '../limits/limitsModel';
 import { defaultLimitsScope } from '../limits/limitsModel';
@@ -21,6 +21,7 @@ import { useClient } from './connection';
 import { ConnectionNotice } from './ConnectionNotice';
 import { FirstRun } from './FirstRun';
 import { Close, FolderPlus, Limits, Settings as Gear } from './icons';
+import { closePage, limitsPage, loadPage, pageUnderSettings, savedPage, settingsPage, THREAD_PAGE, type Page } from './page';
 import { ScopeMenu } from './ScopeMenu';
 import { SidebarResizer } from './Resizer';
 import { Settings, type SettingsRoute } from './Settings';
@@ -30,14 +31,20 @@ import { SnoozeNotice } from '../threads/SnoozeNotice';
 type OpenSheet = { kind: 'addProject' } | null;
 
 export function App() {
+  const viewKey = `accio:${useClient().hubId}:view`;
+  // The app reopens on the page it closed on; a thread or draft under it comes back on its own.
+  const [page, setPage] = useState<Page>(() => loadPage(localStorage.getItem(viewKey)));
+  useEffect(() => localStorage.setItem(viewKey, JSON.stringify(savedPage(page))), [viewKey, page]);
+  // Opening a thread or draft from anywhere, even the open one again, shows the thread surface.
+  const showThread = useCallback(() => setPage(THREAD_PAGE), []);
   return (
     <ProfilesProvider>
       <LimitsProvider>
         <ProjectsProvider>
-          <ThreadsProvider>
+          <ThreadsProvider onNavigate={showThread}>
             <ResourcesProvider>
               <PendingSecretsProvider>
-                <Shell />
+                <Shell page={page} setPage={setPage} />
               </PendingSecretsProvider>
             </ResourcesProvider>
           </ThreadsProvider>
@@ -52,48 +59,31 @@ export function App() {
  * gear opens Settings (profiles, hub, machine); everything a
  * thread can do is on its right-click menu.
  */
-function Shell() {
+function Shell({ page, setPage }: { page: Page; setPage: Dispatch<SetStateAction<Page>> }) {
   const { profiles, filter, setFilter } = useProfiles();
   const { state } = useProjects();
-  const { threads, selectedId, select, draft, projectScope, setProjectScope, navigation } = useThreads();
+  const { spaces } = useSpaces();
+  const { threads, selectedId, select, draft, projectScope, setProjectScope } = useThreads();
   const filterLabel = state?.projects.find((p) => p.id === projectScope)?.name
     ?? profiles?.find((p) => p.id === filter)?.name;
   const thread = threads?.find((t) => t.id === selectedId);
   const [sheet, setSheet] = useState<OpenSheet>(null);
-  const viewKey = `accio:${useClient().hubId}:view`;
-  // The app reopens on the page it closed on; a thread or draft under it comes back on its own.
-  const [saved] = useState(() => savedView(viewKey));
-  const [settings, setSettings] = useState<SettingsRoute | null>(saved.settings ? { section: saved.settings } as SettingsRoute : null);
-  const closeSettings = useCallback(() => setSettings(null), []);
-  useAppEvent('settings.open', setSettings);
+  const settings = page.kind === 'settings' ? page.route : null;
+  // The main pane's page (under Settings, the one they return to). A dashboard or space view whose project or space is gone shows the thread surface.
+  const under = pageUnderSettings(page);
+  const dashboardProject = under.kind === 'dashboard' ? state?.projects.find((p) => p.id === under.projectId) : undefined;
+  const openSpace = under.kind === 'space' ? spaces?.find((s) => s.id === under.spaceId) : undefined;
+  const covered = under.kind === 'limits' || !!dashboardProject || !!openSpace;
+  const openSettings = useCallback((route: SettingsRoute) => setPage((p) => settingsPage(p, route)), [setPage]);
+  const closeCurrent = useCallback(() => setPage(closePage), [setPage]);
+  useAppEvent('settings.open', openSettings);
   // One project editor: the header chip and the Filter gear open its Settings page.
-  useAppEvent('project.open', ({ id }) => setSettings({ section: 'projects', projectId: id }));
+  useAppEvent('project.open', ({ id }) => openSettings({ section: 'projects', projectId: id }));
+  useAppEvent('project.dashboard', ({ id }) => setPage({ kind: 'dashboard', projectId: id }));
+  useAppEvent('space.open', ({ id }) => setPage({ kind: 'space', spaceId: id }));
   const [panelWanted, togglePanel] = usePanelOpen();
-  const [limits, setLimits] = useState<{ scope: LimitsScope; navigation: number } | null>(saved.limits !== undefined ? { scope: saved.limits, navigation } : null);
-  // Like Limits, a project dashboard or a space view covers the main pane until a thread or draft is opened.
-  const [page, setPage] = useState<{ view: PageView; navigation: number } | null>(() => {
-    const view: PageView | undefined = saved.dashboard !== undefined ? { dashboard: saved.dashboard } : saved.space !== undefined ? { space: saved.space } : undefined;
-    return view ? { view, navigation } : null;
-  });
-  const pageView = page !== null && page.navigation === navigation ? page.view : undefined;
-  const { spaces } = useSpaces();
-  const dashboardProject = pageView && 'dashboard' in pageView ? state?.projects.find((p) => p.id === pageView.dashboard) : undefined;
-  const openSpace = pageView && 'space' in pageView ? spaces?.find((s) => s.id === pageView.space) : undefined;
-  const closePage = useCallback(() => setPage(null), []);
-  useAppEvent('project.dashboard', ({ id }) => { setLimits(null); setPage({ view: { dashboard: id }, navigation }); });
-  useAppEvent('space.open', ({ id }) => { setSettings(null); setLimits(null); setPage({ view: { space: id }, navigation }); });
-  const limitsOpen = limits !== null && limits.navigation === navigation;
-  useEffect(() => {
-    const view: SavedView = {
-      ...(settings ? { settings: settings.section } : {}),
-      ...(limitsOpen ? { limits: limits.scope } : {}),
-      ...pageView,
-    };
-    localStorage.setItem(viewKey, JSON.stringify(view));
-  }, [viewKey, settings, limits, limitsOpen, pageView]);
-  const pageOpen = !!dashboardProject || !!openSpace;
   // The panel belongs to an open thread or draft: home, onboarding, Limits, a project dashboard and a space view have none.
-  const hasPane = !!(thread || draft) && !limitsOpen && !pageOpen;
+  const hasPane = !!(thread || draft) && !covered;
   const panelOpen = panelWanted && hasPane;
   const narrow = useNarrow();
   const overlay = panelOpen && narrow && settings === null;
@@ -112,45 +102,40 @@ function Shell() {
   }, [overlay, dismissOverlay]);
   const openThread = (id: string) => {
     select(id);
-    setSettings(null);
     setSheet(null);
   };
   useAppEvent('thread.open', ({ id }) => openThread(id));
   const close = () => setSheet(null);
-  const openProfile = (profileId: string) => setSettings({ section: 'profiles', profileId });
-  const openSecrets = useCallback((profileId: string) => setSettings({ section: 'secrets', profileId }), []);
-  const openAccount = (accountId: string) => setSettings({ section: 'accounts', accountId });
-  // Limits cover the main pane until a thread or draft is opened; settings opened from them return here.
+  const openProfile = (profileId: string) => openSettings({ section: 'profiles', profileId });
+  const openSecrets = useCallback((profileId: string) => openSettings({ section: 'secrets', profileId }), [openSettings]);
+  const openAccount = (accountId: string) => openSettings({ section: 'accounts', accountId });
+  // Closing Limits returns focus to what opened them, or to Settings' Limits link when they return to Settings.
   const limitsReturnFocus = useRef<HTMLElement | null>(null);
-  const limitsOrigin = useRef<SettingsRoute | undefined>(undefined);
   const closeLimits = useCallback(() => {
-    setLimits(null);
-    const origin = limitsOrigin.current;
-    limitsOrigin.current = undefined;
-    if (origin) setSettings(origin);
+    const toSettings = page.kind === 'limits' && page.back?.kind === 'settings';
+    setPage(closePage);
     requestAnimationFrame(() => {
-      if (origin) {
+      if (toSettings) {
         [...document.querySelectorAll<HTMLElement>('.settings-link')].find((el) => el.textContent?.trim() === 'Limits')?.focus();
         return;
       }
       const target = limitsReturnFocus.current;
       if (target?.isConnected && !target.closest('[hidden]')) target.focus();
     });
-  }, []);
-  const openLimits = (scope: LimitsScope, origin?: SettingsRoute) => {
-    limitsOrigin.current = origin;
+  }, [page, setPage]);
+  const openLimits = (scope: LimitsScope) => {
     limitsReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    setPage(null);
-    setLimits({ scope, navigation });
+    setPage((p) => limitsPage(p, scope));
   };
   const draftProfileId = draft && (draft.profileId ?? state?.projects.find((p) => p.id === state.checkouts.find((c) => c.id === draft.checkoutId)?.projectId)?.profileId);
   const currentProfileId = draft ? draftProfileId ?? undefined : thread?.profileId;
   const setUp = profiles && state && profiles.length > 0 && profiles.some(hasSignedInAccount) && state.checkouts.length > 0;
   // Until setup is done there is nothing to search, filter or start a thread in.
   const settingUp = !!profiles && !!state && !setUp;
+  const inSettings = settings !== null;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (settings || settingUp || e.shiftKey || e.altKey) return;
+      if (inSettings || settingUp || e.shiftKey || e.altKey) return;
       const key = e.key.toLowerCase();
       if ((e.ctrlKey || e.metaKey) && key === 'n') {
         e.preventDefault();
@@ -166,7 +151,7 @@ function Shell() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [settings, settingUp]);
+  }, [inSettings, settingUp]);
   // Arrow keys step between the sidebar's thread rows.
   const onRowKeys = (e: React.KeyboardEvent<HTMLElement>) => {
     if ((e.key !== 'ArrowDown' && e.key !== 'ArrowUp') || !(e.target instanceof HTMLElement) || !e.target.matches('.row-main')) return;
@@ -176,17 +161,32 @@ function Shell() {
     e.preventDefault();
     next.focus();
   };
+  // The page over the thread surface. Under Settings none renders, so Escape stays with Settings.
+  const coveringPage = () => {
+    if (inSettings) return null;
+    switch (under.kind) {
+      case 'limits':
+        return <LimitsView scope={under.scope} onScope={(scope) => setPage((p) => p.kind === 'limits' ? { ...p, scope } : p)} onClose={closeLimits} onOpenAccount={openAccount} />;
+      case 'dashboard':
+        return dashboardProject && <ProjectDashboard key={dashboardProject.id} project={dashboardProject} onClose={closeCurrent} />;
+      case 'space':
+        return openSpace && <SpaceView key={openSpace.id} space={openSpace} onClose={closeCurrent} />;
+      case 'thread':
+        return null;
+    }
+  };
+  const threadActive = !covered && !inSettings;
 
   return (
     <>
-      {settings && <Settings route={settings} onRoute={setSettings} onClose={closeSettings} onOpenThread={openThread}
-        onOpenLimits={() => { setSettings(null); openLimits(defaultLimitsScope(profiles, currentProfileId, filter), settings); }} />}
-      <div className={`layout${panelOpen ? ' with-panel' : ''}`} hidden={settings !== null}>
+      {settings && <Settings route={settings} onRoute={openSettings} onClose={closeCurrent} onOpenThread={openThread}
+        onOpenLimits={() => openLimits(defaultLimitsScope(profiles, currentProfileId, filter))} />}
+      <div className={`layout${panelOpen ? ' with-panel' : ''}`} hidden={inSettings}>
         <aside className="sidebar" inert={overlay}>
           <div className="side-controls drag">
             <div className="side-tools">
               {!settingUp && <ThreadSearch />}
-              {!settingUp && <ScopeMenu onOpenProject={(p) => setSettings({ section: 'projects', projectId: p.id })} />}
+              {!settingUp && <ScopeMenu onOpenProject={(p) => openSettings({ section: 'projects', projectId: p.id })} />}
               <button className="side-icon" title="Add project" aria-label="Add project" disabled={!profiles?.length} onClick={() => setSheet({ kind: 'addProject' })}>
                 <FolderPlus />
               </button>
@@ -205,11 +205,11 @@ function Shell() {
           </nav>
           <SnoozeNotice />
           <footer className="side-foot">
-            <button className="side-icon" title="Settings" aria-label="Settings" onClick={() => setSettings({ section: 'accounts' })}>
+            <button className="side-icon" title="Settings" aria-label="Settings" onClick={() => openSettings({ section: 'accounts' })}>
               <Gear />
             </button>
-            <button className={`side-icon${limitsOpen ? ' on-page' : ''}`} title="Limits" aria-label="Limits" aria-pressed={limitsOpen}
-              onClick={() => limitsOpen ? closeLimits() : openLimits(defaultLimitsScope(profiles, currentProfileId, filter))}>
+            <button className={`side-icon${page.kind === 'limits' ? ' on-page' : ''}`} title="Limits" aria-label="Limits" aria-pressed={page.kind === 'limits'}
+              onClick={() => page.kind === 'limits' ? closeLimits() : openLimits(defaultLimitsScope(profiles, currentProfileId, filter))}>
               <Limits />
             </button>
             <ConnectionNotice />
@@ -217,18 +217,13 @@ function Shell() {
         </aside>
         <div inert={overlay} style={{ display: 'contents' }}><SidebarResizer /></div>
         <div className="main" role="main" inert={overlay}>
-          {limitsOpen && !settings && (
-            <LimitsView scope={limits.scope} onScope={(scope) => setLimits({ scope, navigation })} onClose={closeLimits}
-              onOpenAccount={openAccount} />
-          )}
-          {dashboardProject && !limitsOpen && !settings && <ProjectDashboard key={dashboardProject.id} project={dashboardProject} onClose={closePage} />}
-          {openSpace && !limitsOpen && !settings && <SpaceView key={openSpace.id} space={openSpace} onClose={closePage} />}
-          {/* Keep the composer and reading position mounted while checking limits/settings. */}
-          <div className="thread-surface" hidden={limitsOpen || pageOpen || settings !== null}>
+          {coveringPage()}
+          {/* Keep the composer and reading position mounted under every other page. */}
+          <div className="thread-surface" hidden={!threadActive}>
             {draft ? (
-              <DraftPane key={`${draft.checkoutId}:${draft.profileId}`} {...draft} active={!limitsOpen && !pageOpen && !settings} onOpenProfile={openProfile} onOpenLimits={openLimits} />
+              <DraftPane key={`${draft.checkoutId}:${draft.profileId}`} {...draft} active={threadActive} onOpenProfile={openProfile} onOpenLimits={openLimits} />
             ) : thread ? (
-              <ThreadPane key={thread.id} thread={thread} onOpenSecrets={openSecrets} active={!limitsOpen && !pageOpen && !settings} onOpenProfile={openProfile} onOpenLimits={openLimits} />
+              <ThreadPane key={thread.id} thread={thread} onOpenSecrets={openSecrets} active={threadActive} onOpenProfile={openProfile} onOpenLimits={openLimits} />
             ) : (
               <>
                 <header className="main-top drag" />
@@ -244,21 +239,6 @@ function Shell() {
       </div>
     </>
   );
-}
-
-/** The page open over the thread pane, as remembered across restarts. Ids that no longer exist fall back to the thread pane. */
-type SavedView = { settings?: SettingsRoute['section']; limits?: LimitsScope; dashboard?: string; space?: string };
-
-/** A page over the thread pane: one project's dashboard (its id) or one space's view (its id). */
-type PageView = { dashboard: string } | { space: string };
-
-function savedView(key: string): SavedView {
-  try {
-    const view: unknown = JSON.parse(localStorage.getItem(key) ?? '{}');
-    return view && typeof view === 'object' ? view as SavedView : {};
-  } catch {
-    return {};
-  }
 }
 
 function Idle() {
