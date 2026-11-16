@@ -15,7 +15,7 @@
   box-shadow: 0 12px 40px #0008;
   font-size: 13px;
 }
-.issue-picker:popover-open { display: flex; flex-direction: column; animation: menu-in 0.1s ease-out backwards; }
+.issue-picker:popover-open { display: flex; flex-direction: column; }
 .issue-picker svg { flex: none; width: 13px; height: 13px; }
 .issue-picker-search { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--line); color: var(--muted); }
 .issue-picker-search input { flex: 1; min-width: 0; padding: 0; border: 0; outline: none; background: transparent; color: var(--ink); font: inherit; }
