@@ -14,7 +14,7 @@ import {
 } from './claudeOAuth.js';
 import { JsonStore } from './store.js';
 import type { AccountLimitsView, AccountView, Fetch, ProviderId } from './types.js';
-import { STATE_FILE, emptyState, loadState, type HatState, type StoredAccount, type StoredHatKey, type StoredHouse } from './state.js';
+import { STATE_FILE, emptyState, loadState, type HatState, type StoredHatKey, type StoredHouse } from './state.js';
 import { HatError } from './errors.js';
 import { OpenAIAuth } from './openaiAuth.js';
 import { AccountLimits, LimitsReadError } from './limits.js';
@@ -38,8 +38,6 @@ export type HouseView = {
 };
 /** GLOSSARY: Hat key, without its secret. */
 export type HatKeyView = Omit<StoredHatKey, 'hash'>;
-/** An account as sorting-hat.json stores it, with a ChatGPT account's Codex auth.json. */
-export type ImportedAccount = StoredAccount & { codexAuth?: unknown };
 
 const PROVIDERS: ProviderId[] = ['anthropic', 'openai'];
 const HOUSE_ID = /^[a-z0-9][a-z0-9_-]{0,63}$/;
@@ -431,43 +429,6 @@ export class SortingHat implements Forwarding {
   /** GLOSSARY: Usage, for a time range, grouped and split as asked. */
   usageReport(query?: UsageQuery): UsageReport {
     return this.usage.report(query);
-  }
-
-  /**
-   * Takes accounts, with their credentials, and houses as another Sorting Hat
-   * stored them, such as an Accio hub moving its accounts here (API.md, "Import"). Those
-   * with an id already here are replaced, so it can be repeated; hat keys stay.
-   */
-  importState(accounts: ImportedAccount[], houses: StoredHouse[]) {
-    return this.change(async () => {
-      const known = new Map(this.accounts.map((a) => [a.id, a]));
-      for (const a of accounts) {
-        if (typeof a?.id !== 'string' || !a.id || a.id.length > 200) throw new HatError('Each account needs an id.');
-        if (!PROVIDERS.includes(a.providerId ?? 'anthropic')) throw new HatError('providerId must be anthropic or openai.');
-        if (typeof a.name !== 'string' || !a.name.trim() || a.name.length > 80) throw new HatError('Account name must have 1 to 80 characters.');
-        const claude = a.account;
-        if (claude && (typeof claude.accessToken !== 'string' || typeof claude.refreshToken !== 'string' || typeof claude.expiresAt !== 'number')) throw new HatError(`Account ${a.id} has incomplete Claude credentials.`);
-        if (a.openai && (!a.codexAuth || typeof a.codexAuth !== 'object')) throw new HatError(`Account ${a.id} needs its Codex auth.json as codexAuth.`);
-        known.set(a.id, a);
-      }
-      for (const h of houses) {
-        if (typeof h?.id !== 'string' || !HOUSE_ID.test(h.id)) throw new HatError('A house id has 1 to 64 lowercase letters, digits, - or _, starting with a letter or digit.');
-        houseName(h.name);
-        if (!Array.isArray(h.accountIds) || h.accountIds.some((id) => !known.has(id))) throw new HatError(`House ${h.id} lists an account that is neither here nor imported.`);
-      }
-      for (const a of accounts) if (a.openai) await this.openai.restore(a.openai.credentialId, a.codexAuth);
-      const ids = new Set(accounts.map((a) => a.id));
-      const stored = accounts.map(({ codexAuth: _auth, ...a }) => ({ ...a, account: a.account ?? null, openai: a.openai ?? null }));
-      const replaced = houses.filter((h) => this.houses.some((x) => x.id === h.id));
-      const previous = this.accounts.filter((a) => ids.has(a.id));
-      await this.commit({
-        accounts: [...this.accounts.filter((a) => !ids.has(a.id)), ...stored],
-        houses: [...this.houses.map((h) => replaced.find((r) => r.id === h.id) ?? h), ...houses.filter((h) => !replaced.includes(h))].map(({ id, name, accountIds }) => ({ id, name, accountIds: [...new Set(accountIds)] })),
-      });
-      for (const a of previous) if (a.openai && a.openai.credentialId !== known.get(a.id)?.openai?.credentialId) await this.openai.remove(a.openai.credentialId);
-      for (const id of ids) this.signInChanged(id);
-      return { accounts: [...ids].map((id) => this.accountView(id)), houses: houses.map((h) => this.houseView(h.id)) };
-    });
   }
 
   async close(): Promise<void> {
