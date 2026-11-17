@@ -1,7 +1,7 @@
 import { useId, useRef, useState, type KeyboardEvent } from 'react';
 import { SecretSlot, type ProfileView, type ProjectView, type SecretSummary } from '@accio/protocol';
 import { useClient } from '../app/connection';
-import { ConfirmAction, NEW, SettingsFooter, SettingsSection, type SettingsNav, type SettingsRoute } from '../app/Settings';
+import { ConfirmAction, NEW, SectionStatus, SettingsFooter, SettingsSection, type SettingsNav, type SettingsRoute } from '../app/Settings';
 import { useAction } from '../app/useAction';
 import { useProfiles } from '../profiles/profiles';
 import { useProjects } from '../projects/projects';
@@ -58,7 +58,7 @@ export function SecretDetail({ nav, data, item: secret }: Props & { item: Secret
 /** One list for a profile's saved secrets, with the profile picker. */
 export function SecretsList({ nav, data }: Props) {
   const { profiles, profile } = data;
-  if (!profiles) return <p className="note" role="status">Loading secrets…</p>;
+  if (!profiles) return <SectionStatus what="secrets" />;
   if (!profiles.length) return <p className="note">Add a profile first. Secrets belong to one profile.</p>;
   return (
     <div className="settings-profile-form secrets-page">
@@ -105,8 +105,7 @@ function SecretList({ profile, secrets, error, retry, canWrite, projectName, onA
       <SettingsSection add={{ label: 'Add secret', disabled: !canWrite, onClick: onAdd }}>
           {!sorted ? (
             <div className="setting">
-              {error ? <><p className="error grow" role="alert">Could not load secrets: {error}</p><button type="button" className="ghost" onClick={retry}>Retry</button></>
-                : <p className="note">Loading…</p>}
+              <SectionStatus what="secrets" error={error} retry={retry} />
             </div>
           ) : sorted.length === 0 ? (
             <div className="setting">

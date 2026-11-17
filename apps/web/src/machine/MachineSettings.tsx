@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import type { MachineView } from '@accio/protocol';
 import { useClient, useHubs } from '../app/connection';
-import { useLive } from '../app/useLive';
+import { useLiveState } from '../app/useLive';
 import { Chevron, Hub, Monitor } from '../app/icons';
 import { SettingRow, SettingsFooter, SettingsSection, StatusPill, type SettingsNav } from '../app/Settings';
 import { Field } from '../resources/Field';
@@ -21,9 +21,9 @@ export function useMachinesData() {
   const client = useClient();
   // Machines revoked here: the hub keeps their records, so until one is paired again it shows as Revoked rather than Offline.
   const [revokedIds, setRevokedIds] = useState<string[]>([]);
-  const items = useLive(() => client.call('machines.list', {}), 'machines.changed');
+  const { value: items, error, retry } = useLiveState(() => client.call('machines.list', {}), 'machines.changed');
   const revoked = (m: MachineView) => !m.connected && revokedIds.includes(m.id);
-  return { items, revoked, markRevoked: (id: string) => setRevokedIds((ids) => [...ids, id]) };
+  return { items, error, retry, revoked, markRevoked: (id: string) => setRevokedIds((ids) => [...ids, id]) };
 }
 type Props = { nav: SettingsNav; data: ReturnType<typeof useMachinesData> };
 

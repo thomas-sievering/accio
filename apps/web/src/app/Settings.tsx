@@ -207,7 +207,7 @@ function SectionPage({ entry, nav, root }: { entry: SectionEntry; nav: SettingsN
   }, [route, detailLabel, root]);
 
   const props = { nav, data };
-  const page = loading ? (data.error ? <LoadError error={data.error} retry={data.retry} /> : <p className="note" role="status">Loading {entry.plural}…</p>)
+  const page = loading ? <SectionStatus what={entry.plural ?? ''} error={data.error} retry={data.retry} />
     : id === NEW && entry.New ? <entry.New key={JSON.stringify(route)} {...props} />
       : item && entry.Detail ? <entry.Detail key={`${item.id}:${JSON.stringify(route.extra ?? {})}`} {...props} item={item} />
         : id ? <><p className="note">This {entry.noun} no longer exists.</p><button type="button" className="link" onClick={nav.back}>All {entry.plural}</button></>
@@ -237,9 +237,11 @@ function SectionPage({ entry, nav, root }: { entry: SectionEntry; nav: SettingsN
   );
 }
 
-/** A section that couldn't load from the hub, with a way to try again. */
-function LoadError({ error, retry }: { error: string; retry?: () => void }) {
-  return <p className="error" role="alert">Could not load from the hub: {error} {retry && <button type="button" className="link" onClick={retry}>Retry</button>}</p>;
+/** The one wording of a section's items while they load, or when they couldn't, with a way to try again. */
+export function SectionStatus({ what, error, retry }: { what: string; error?: string; retry?: () => void }) {
+  return error
+    ? <p className="error" role="alert">Could not load from the hub: {error} {retry && <button type="button" className="link" onClick={retry}>Retry</button>}</p>
+    : <p className="note" role="status">Loading {what}…</p>;
 }
 
 /** While `active` (an inline confirmation is open), Escape cancels it and goes no further: this capture listener runs before Settings' own Escape handling. */
