@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { JsonFile } from '@accio/persistence';
@@ -130,19 +130,6 @@ describe('profiles slice', () => {
     vi.restoreAllMocks();
     await c.call('profiles.save', { id: profile.id, name: 'Changed', accountIds: { anthropic: [second.id] } });
     expect(claudeAccount((await c.call('profiles.list', {}))[0]!)?.id).toBe(second.id);
-  });
-
-  it('does not retain a hub profile when config folder preparation fails', async () => {
-    t = await startTestApp();
-    const c = await t.connect();
-    await mkdir(join(t.home, 'profiles'), { recursive: true });
-    const block = join(t.home, 'profiles', 'blocked');
-    await writeFile(block, 'not a directory');
-    await expect(c.call('profiles.save', { name: 'Blocked', createHouse: true })).rejects.toThrow();
-    expect(await c.call('profiles.list', {})).toEqual([]);
-    expect(t.hat.hat.houseViews()).toEqual([]);
-    await rm(block);
-    expect(await c.call('profiles.save', { name: 'Blocked' })).toMatchObject({ id: 'blocked' });
   });
 
 });

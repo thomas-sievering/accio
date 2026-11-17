@@ -1,10 +1,8 @@
-import { mkdir } from 'node:fs/promises';
 import { accountInUse, noHouseMessage, type AccountLimitsView, type LimitWindow, type ProfileView, type ProviderId } from '@accio/protocol';
 import { HubClient } from '@accio/hub';
 import type { Broadcast, Router } from '../rpc/router.js';
 import { UserError } from '../rpc/router.js';
-import { saveProfile, type Profile } from './profile.js';
-import { configFolderOf, writeConfigFolder, type HubAccess } from './claudeConfigFolder.js';
+import { writeConfigFolder, type HubAccess } from './claudeConfigFolder.js';
 import { BrowserSignIns } from '../hub/browserSignIns.js';
 
 export type ProfileInUse = (profileId: string) => string | undefined;
@@ -33,10 +31,10 @@ export class Profiles {
     // A profile without a house on the hub's Sorting Hat gets no key; its threads say why when they start.
     for (const profile of this.client.snapshot?.profiles ?? []) if (profile.house !== null) await this.connect(profile.id).catch((error) => console.error(`[profiles] ${profile.name}:`, (error as Error).message));
   }
-  all(): readonly Profile[] { return this.client.snapshot?.profiles ?? []; }
+  all(): readonly ProfileView[] { return this.client.snapshot?.profiles ?? []; }
   get(id: string) { return this.all().find((p) => p.id === id); }
   require(id: string) { const profile = this.get(id); if (!profile) throw new UserError(`No profile ${id}`); return profile; }
-  profileView(id: string): ProfileView { this.require(id); return this.client.snapshot.profiles.find((p) => p.id === id)!; }
+  profileView(id: string): ProfileView { return this.require(id); }
   codexModels(id: string) { this.require(id); return this.client.snapshot.models[id] ?? []; }
   limitWindows(accountId: string): LimitWindow[] {
     return this.limitViews().find((v) => v.accountId === accountId)?.snapshot?.windows ?? [];
@@ -93,8 +91,6 @@ export class Profiles {
       .on('sortingHat.configure', (p) => this.client.call('sortingHat.configure', p))
       .on('sortingHat.disconnect', () => this.client.call('sortingHat.disconnect', {}))
       .on('profiles.save', (p) => this.change(async () => {
-        const preview = saveProfile(this.all(), p).saved;
-        await mkdir(configFolderOf(this.home, preview.id), { recursive: true });
         const saved = await this.client.call<ProfileView>('profiles.save', p);
         if (saved.house !== null) await this.connect(saved.id);
         return saved;
