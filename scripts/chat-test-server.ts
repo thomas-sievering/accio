@@ -7,7 +7,7 @@ import { onShutdown } from './fixtureLifetime.js';
 import { startApp } from '../apps/worker/src/app.js';
 import { runCommand } from '../apps/worker/src/resources/process.js';
 import { FakeHarness, SESSION, replyWith, toolCall } from '../apps/worker/src/testing/fakeHarness.js';
-import { fakeClaudeFetch, linkSortingHat, startTestSortingHat, TestClient } from '../apps/worker/src/testing/testApp.js';
+import { linkSortingHat, startTestSortingHat, TestClient } from '../apps/worker/src/testing/testApp.js';
 import type { HarnessMessage } from '../apps/worker/src/threads/harness.js';
 import { DeliveryGit, DeliveryPending } from '../apps/worker/src/threads/delivery.js';
 import { git } from '../apps/worker/src/git.js';
@@ -330,8 +330,7 @@ Object.assign(harness, { generateText: async ({ prompt }: { prompt: string }) =>
   if (!prompt.includes('Naming fixture:')) throw new Error('No naming response for this fixture');
   return JSON.stringify({ title: prompt.includes('Use German') ? 'Anmeldung reparieren' : 'Fix login redirects', needsRefinement: false });
 } });
-const hat = await startTestSortingHat(home, { claudeFetch: (url, init) => String(url).endsWith('/api/oauth/usage')
-  ? Promise.resolve(Response.json({ rate_limits_available: false })) : fakeClaudeFetch(url, init) });
+const hat = await startTestSortingHat(home);
 // GLOSSARY: Harness skill. What the fake Claude harness ships with, for the Skills panel.
 Object.assign(harness, { skills: async () => [{ name: 'fixture-simplify', description: 'Review changed code for reuse' }, { name: 'fixture-debug', description: 'Turn on debug logging' }] });
 const app = await startApp({ home, host: '127.0.0.1', port: Number(process.env.ACCIO_CHAT_TEST_PORT ?? 47481), hubPort: 0, token, webRoot: resolve(process.env.ACCIO_CHAT_TEST_WEB_ROOT ?? 'apps/web/dist') }, {

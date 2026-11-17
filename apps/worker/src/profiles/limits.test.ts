@@ -39,6 +39,15 @@ describe('account limits RPC and hub ownership', () => {
     await expect(a.call('accounts.refreshLimits', { accountIds: new Array(101).fill(account.id) })).rejects.toThrow(/Invalid params/);
   });
 
+  it('keeps a test account signed in when its limits refresh, without asking the real provider (#243)', async () => {
+    t = await startTestApp();
+    const c = await t.connect();
+    const account = (await c.signedIn('Personal')).providers[0]!.accounts[0]!;
+    const [view] = await c.call('accounts.refreshLimits', { accountIds: [account.id], force: true });
+    // The real endpoint answers the dummy token with 401, and the Sorting Hat would then skip the account.
+    expect(view).toMatchObject({ accountId: account.id, status: 'unsupported', problem: null });
+  });
+
   it('refreshes an unselected account on the hub, retries a rejected token once, and clears data on reauthentication/deletion', async () => {
     let calls = 0;
     const tokens: string[] = [];
