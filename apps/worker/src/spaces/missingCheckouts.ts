@@ -9,6 +9,8 @@ export type MissingCheckoutsDeps = {
   clone: (repoKey: string, url: string, profileId: string) => Promise<CheckoutView>;
   /** The profile another machine records the repository under and the URL to clone it from; undefined when none has it. */
   source: (repoKey: string) => { profileId: string; url: () => Promise<string> } | undefined;
+  /** The hub's profile for the repository (GLOSSARY: Shared settings), else this machine's project's. */
+  profileOf: (repoKey: string) => string | undefined;
 };
 
 /** A project's checkout on this machine, or why it can't have one. */
@@ -18,10 +20,10 @@ export type Found = { checkout: CheckoutView } | { unavailable: string };
 const RETRY_AFTER_MS = 10 * 60_000;
 
 /**
- * GLOSSARY: Checkout, Space. This machine's checkout of a project of a space, by its key, cloned here
- * when there is none on disk: under the project's profile as this machine or another one online records it,
- * from the URL a machine with a checkout fetches from. A project without a remote, or that no machine
- * online has, so its profile isn't known, can't be had here.
+ * GLOSSARY: Checkout, Space. This machine's checkout of a project, by its key, cloned here when there
+ * is none on disk: under the hub's profile for it (else as another machine online records it), from the
+ * URL a machine with a checkout fetches from, else the https address from the key. A project without a
+ * remote, or whose profile isn't known, can't be had here.
  */
 export class MissingCheckouts {
   private cloning = new Map<string, Promise<CheckoutView>>();
@@ -29,8 +31,9 @@ export class MissingCheckouts {
 
   constructor(private deps: MissingCheckoutsDeps) {}
 
-  /** The project's checkout here, waiting for its clone when it has none. */
-  async checkout(key: string): Promise<Found> {
+  /** The project's checkout here, waiting for its clone when it has none. `retry` tries again at once after a failed clone. */
+  async checkout(key: string, { retry = false } = {}): Promise<Found> {
+    if (retry && !this.cloning.has(key)) this.failed.delete(key);
     const found = await this.find(key);
     if (!('cloning' in found)) return found;
     return found.cloning.then((checkout) => ({ checkout }), () => ({ unavailable: this.failed.get(key)?.reason ?? 'its clone failed' }));
@@ -53,8 +56,7 @@ export class MissingCheckouts {
     if (failed && Date.now() - failed.at < RETRY_AFTER_MS) return { unavailable: failed.reason };
     if (key.startsWith('local:')) return { unavailable: 'it has no remote to clone it from' };
     const source = this.deps.source(key);
-    // Each machine records a project's profile itself: this one's record wins.
-    const profileId = project?.profileId ?? source?.profileId;
+    const profileId = this.deps.profileOf(key) ?? source?.profileId;
     if (!profileId) return { unavailable: "no machine that has it is online, so its profile isn't known" };
     const clone = (async () => this.deps.clone(key, source ? await source.url() : httpsUrlOf(key), profileId))()
       .then((checkout) => { this.failed.delete(key); return checkout; }, (error: Error) => {

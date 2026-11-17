@@ -17,14 +17,16 @@ export function DraftRow({ draft: d }: { draft: NewThreadDraft }) {
   const { draft: open, openDraft } = useThreads();
   const { state } = useProjects();
   const projectId = state?.checkouts.find((c) => c.id === d.checkoutId)?.projectId;
-  const where = (projectId && state?.projects.find((p) => p.id === projectId)?.name) || 'No project';
-  const active = !!open && open.checkoutId === d.checkoutId && (open.profileId ?? '') === (d.profileId ?? '');
+  // A hub project without a checkout here is named by the hub, or by its repository once it's gone.
+  const elsewhere = d.repoKey ? state?.elsewhere?.find((p) => p.repoKey === d.repoKey)?.name ?? d.repoKey.split('/').pop() : undefined;
+  const where = (projectId && state?.projects.find((p) => p.id === projectId)?.name) || elsewhere || 'No project';
+  const active = !!open && open.checkoutId === d.checkoutId && (open.profileId ?? '') === (d.profileId ?? '') && (open.repoKey ?? '') === (d.repoKey ?? '');
   const title = draftTitle(d);
   return (
     <div className={`row open draft${active ? ' active' : ''}`}>
-      <button className="row-main" onClick={() => openDraft(d.checkoutId, d.profileId)} title={`${title} · ${where} · Draft`}
+      <button className="row-main" onClick={() => openDraft(d.checkoutId, d.profileId, d.repoKey)} title={`${title} · ${where} · Draft`}
         aria-current={active ? 'page' : undefined}>
-        {projectId ? <ProjectMark id={projectId} /> : <span className="no-project-mark" />}
+        {projectId ? <ProjectMark id={projectId} /> : elsewhere ? <ProjectMark id={d.repoKey!} name={elsewhere} /> : <span className="no-project-mark" />}
         <span className="row-name">
           <span className="row-title">{title}</span>
           <span className="row-project with-state">

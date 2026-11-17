@@ -29,7 +29,7 @@ The process on a machine that runs harnesses, executes turns and provides access
 _Avoid_: Server (for the role), machine (for the process), agent, sub-agent
 
 **Relay**:
-The hub passing messages between workers on different machines, so you can read and drive a thread from any client. The thread stays on its worker's machine; nothing is copied. Each client lists every machine's threads together, with the owning machine's name on the others. While that machine is offline its threads stay listed from the last list it sent, greyed and read-only, except that you can snooze them until the machine is back. A new thread can start on any machine on the relay: one without a checkout of the project's repository clones it first, into the profile's folder there or else its home folder. No project starts on any machine. Saved images and files can be viewed through the relay. Sending image attachments, editing thread skills and Open app for an owned preview require the thread's machine. See the [relay plan](docs/plans/thread-relay.md).
+The hub passing messages between workers on different machines, so you can read and drive a thread from any client. The thread stays on its worker's machine; nothing is copied. Each client lists every machine's threads together, with the owning machine's name on the others. While that machine is offline its threads stay listed from the last list it sent, greyed and read-only, except that you can snooze them until the machine is back. A new thread can start on any machine on the relay, in any project the hub keeps: a machine without a checkout of the project's repository, this one included, clones it first, into the profile's folder there or else its home folder. No project starts on any machine. Saved images and files can be viewed through the relay. Sending image attachments, editing thread skills and Open app for an owned preview require the thread's machine. See the [relay plan](docs/plans/thread-relay.md).
 _Avoid_: Sync (for threads), tunnel
 
 **Update**:
@@ -45,7 +45,7 @@ A PNG of a machine's Accio desktop window, which a thread takes through the app_
 _Avoid_: Capture (as a noun), snapshot
 
 **Shared settings**:
-Everything the hub stores and hands to every paired machine, so that you change it once from any client: the profiles with their houses on the Sorting Hat, which project belongs to which profile, the spaces, the harnesses, skill sources, MCP servers, and each machine's profile folders. A few of them apply to one machine only, such as its profile folders, but they are still stored on the hub. A client keeps only its own look and feel, such as the theme.
+Everything the hub stores and hands to every paired machine, so that you change it once from any client: the profiles with their houses on the Sorting Hat, the projects with a remote and which profile each belongs to, the spaces, the harnesses, skill sources, MCP servers, and each machine's profile folders. A few of them apply to one machine only, such as its profile folders, but they are still stored on the hub. A client keeps only its own look and feel, such as the theme.
 _Avoid_: Config, fleet, machine settings (for settings stored on the hub)
 
 ## Profiles
@@ -130,7 +130,7 @@ _Avoid_: Quota, usage, rate limit (in UI text)
 ## Work
 
 **Project**:
-A repository, recognised across machines by its git remote URL. It belongs to exactly one profile, which can change only while the project has no threads.
+A repository, recognised across machines by its git remote URL. It belongs to exactly one profile, which can change only while the project has no threads on any machine. The hub keeps each project with a remote and its profile, whether or not any machine has a checkout of it, so New thread lists it on every machine. A machine adding a checkout of a repository the hub already has joins it under the hub's profile: the first machine to add a repository decides it. The hub forgets a project once its last checkout anywhere is removed (an offline machine counts by its last list). A folder without a remote is a project on its own machine only.
 _Avoid_: Workspace, repo (in UI text)
 
 **Space**:
@@ -142,7 +142,7 @@ The project in a space that holds what applies to the whole space, such as its g
 _Avoid_: Home repo (in UI text), space repo
 
 **Checkout**:
-One machine's copy of a project's repository. A folder without a git remote is a project with a single checkout. Starting a thread on a machine without one clones the repository there and adds it, reusing a clone already in place. A project of a space is cloned the same way on a machine where a thread in the space runs, using the profile and remote URL of a machine that has it; one without a remote, or that no machine online has, is not available on that machine.
+One machine's copy of a project's repository. A folder without a git remote is a project with a single checkout. Starting a thread on a machine without one, from New thread or through the relay, clones the repository there under the hub's profile for it and adds it, reusing a clone already in place. It clones from the remote URL of a machine online that has a checkout, else from the https address of the repository. A project of a space is cloned the same way on a machine where a thread in the space runs; one without a remote, or whose profile neither the hub nor a machine online knows, is not available on that machine.
 _Avoid_: Clone, project folder
 
 **Owned worktree**:

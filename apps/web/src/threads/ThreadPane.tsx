@@ -124,19 +124,23 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
  * A new thread before its first message, centred under a question as in T3 Code.
  * Sending creates the thread and its first turn together.
  */
-export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile, onOpenLimits }: { checkoutId: string; profileId?: string; active?: boolean; onOpenProfile: (profileId: string) => void; onOpenLimits: (profileId: string) => void }) {
+export function DraftPane({ checkoutId, profileId, repoKey: hubRepoKey, active = true, onOpenProfile, onOpenLimits }: { checkoutId: string; profileId?: string; repoKey?: string; active?: boolean; onOpenProfile: (profileId: string) => void; onOpenLimits: (profileId: string) => void }) {
   const client = useClient();
   const { select, threads } = useThreads();
-  const place = usePlace(checkoutId, profileId);
+  // GLOSSARY: Project. A hub project this machine has no checkout of: the thread clones it on the machine chosen, under the hub's profile.
+  const { state: projectsState } = useProjects();
+  const hubProject = hubRepoKey ? projectsState?.elsewhere?.find((p) => p.repoKey === hubRepoKey) ?? projectsState?.projects.find((p) => p.repoKey === hubRepoKey) : undefined;
+  const projectName = hubRepoKey ? hubProject?.name ?? hubRepoKey.split('/').pop() : undefined;
+  const place = usePlace(checkoutId, hubProject?.profileId ?? profileId);
   const [choice, setChoice] = useState<{ checkoutId: string; profileId?: string; model: ModelSelection }>();
   const model = choice?.checkoutId === checkoutId && choice.profileId === place.profile?.id ? choice.model : defaultModel(place.profile, place.accounts);
   useShareDraftHarness(model.harnessId);
   const machines = useLive(() => client.call('machines.list', {}), 'machines.changed');
   const [chosenMachineId, setChosenMachineId] = useState<string>();
   // GLOSSARY: Relay. Another machine on the relay can run it; one without a checkout of the repository clones it first.
-  const repoKey = place.project?.repoKey;
+  const repoKey = hubRepoKey ?? place.project?.repoKey;
   const startable = machines?.filter((m) => m.thisMachine || (m.relay && (!checkoutId || !!repoKey)));
-  const noCheckout = (m: MachineView) => !!checkoutId && !m.thisMachine && !!repoKey && !m.relay?.repos.includes(repoKey);
+  const noCheckout = (m: MachineView) => !!repoKey && (m.thisMachine ? !checkoutId : !m.relay?.repos.includes(repoKey));
   const local = machines?.find((m) => m.thisMachine);
   const machineId = chosenMachineId ?? local?.id;
   const machine = startable?.find((m) => m.id === machineId);
@@ -170,16 +174,16 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
 
   return (
     <>
-      <PaneHeader title="New thread" {...place} />
+      <PaneHeader title="New thread" {...place} projectName={projectName} />
       {starting && <StartingTranscript {...starting} />}
       {/* While starting, the composer settles where the thread's own will be, so the swap is still. */}
       <div className={`hero${starting ? ' starting' : ''}`} inert={!!starting}>
-        <h1>{checkoutId ? <>What should we build in {place.project ? <span className="hero-project">{place.project.name}</span> : 'this checkout'}?</> : 'What should we build?'}</h1>
+        <h1>{checkoutId ? <>What should we build in {place.project ? <span className="hero-project">{place.project.name}</span> : 'this checkout'}?</> : projectName ? <>What should we build in <span className="hero-project">{projectName}</span>?</> : 'What should we build?'}</h1>
         <ThreadNotice profile={place.profile} model={model} onOpenProfile={onOpenProfile} />
         {chosenMachineId && unavailable && <p className="note" role="status">The selected machine is offline. Choose an online machine.</p>}
         <Composer
           target="draft"
-          draftId={newThreadDraftId(checkoutId, profileId)}
+          draftId={newThreadDraftId(checkoutId, profileId, hubRepoKey)}
           profileId={place.profile?.id}
           skills={checkoutId ? { checkoutId, ...(place.profile ? { profileId: place.profile.id } : {}), harnessId: model.harnessId } : place.profile ? { profileId: place.profile.id, harnessId: model.harnessId } : undefined}
           imagesUnavailable={machine && !machine.thisMachine ? remoteImagesReason : undefined}
@@ -194,7 +198,8 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
             const shown = viewTransition('thread-start', () => setStarting({ text, images: previews }));
             try {
               const images = uploads.length ? { images: uploads } : {};
-              const thread = await client.call('threads.start', checkoutId ? { checkoutId, text, model, machineId, ...images, ...(sent ? { issue: { ref: sent.ref, title: sent.title } } : {}) } : { profileId: profileId!, text, model, machineId, ...images });
+              const thread = await client.call('threads.start', checkoutId ? { checkoutId, text, model, machineId, ...images, ...(sent ? { issue: { ref: sent.ref, title: sent.title } } : {}) }
+                : hubRepoKey ? { repoKey: hubRepoKey, text, model, machineId, ...images } : { profileId: profileId!, text, model, machineId, ...images });
               keepFirstMessage(client, thread.id, text, previews);
               await shown;
               if (open.current) await viewTransition('thread-open', () => select(thread.id));

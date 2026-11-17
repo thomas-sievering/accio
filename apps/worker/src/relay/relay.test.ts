@@ -288,15 +288,84 @@ describe('thread relay between machines', () => {
     const childId = answers[1]!.match(/\(([^)]+)\)/)![1]!;
     await expect.poll(async () => remote(await mac.client.call('threads.list', {}), childId), { timeout: 10_000 }).toMatchObject({ checkoutId: notes.id, profileId: work.id });
 
-    // wiki is only on the MacBook, which goes offline: its last list here can't say wiki's profile now.
+    // wiki is only on the MacBook, which goes offline: the hub still says wiki's profile, so it is cloned here from its https address.
     await checkout(mac, 'wiki', 'https://github.com/me/wiki', work.id);
+    // The https address from the key ends in .git.
+    fetchFrom(join(mac.app.home, 'wiki'), 'https://github.com/me/wiki');
     await pc.client.waitFor('machines.changed', (all) => !!all.find((m) => m.id === macView.id)?.relay?.repos.includes('github.com/me/wiki'), 10_000);
-    await mac.app.stop();
+    await mac.app.stop({ keepHome: true });
+    cleanup.push(() => rm(mac.app.home, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
     await pc.client.waitFor('machines.changed', (all) => !all.find((m) => m.id === macView.id)?.relay, 10_000);
     const [space] = await pc.client.call('spaces.list', {});
     await pc.client.call('spaces.save', { id: space!.id, name: 'accio', projectKeys: [...space!.projectKeys, 'github.com/me/wiki'] });
     const wikiCaller = await pc.client.call('threads.start', { checkoutId: pcCheckout.id, text: 'start wiki' });
     await pc.client.waitFor('threads.changed', (list) => list.some((t) => t.id === wikiCaller.id && t.status === 'idle'), 30_000);
-    expect(answers[2]).toBe("wiki is not available on this machine: no machine that has it is online, so its profile isn't known.");
+    expect(answers[2]).toContain(' in wiki on this machine. It runs on its own');
+    const wiki = await pc.client.call('projects.get', {});
+    expect(wiki.projects.find((p) => p.repoKey === 'github.com/me/wiki')?.profileId).toBe(work.id);
+  }, 60_000);
+
+  it('lists every hub project, clones one on the machine a new thread runs on, and forgets it with its last checkout', async () => {
+    const { mac, pc } = await machines();
+    const personal = await mac.client.signedIn('Personal');
+    const work = await mac.client.signedIn('Work');
+    const macId = (await mac.client.thisMachine()).id;
+    const pcId = (await pc.client.thisMachine()).id;
+    // notes is only on the MacBook, under Work: the PC lists it from the hub without a checkout.
+    const notes = await checkout(mac, 'notes', 'https://github.com/me/notes', work.id);
+    fetchFrom(join(mac.app.home, 'notes.git'), 'https://github.com/me/notes');
+    cleanup.push(async () => forgetFetchFrom());
+    const listed = await pc.client.waitFor('projects.changed', (s) => !!s.elsewhere?.some((p) => p.repoKey === 'github.com/me/notes'), 10_000);
+    expect(listed.elsewhere).toEqual([{ repoKey: 'github.com/me/notes', name: 'notes', profileId: work.id }]);
+    expect((await mac.client.call('projects.get', {})).elsewhere).toEqual([]);
+
+    // Sending on this machine clones it into the profile's folder here, under the hub's profile.
+    const folder = join(pc.app.home, 'work');
+    await pc.client.call('machines.setProfileFolders', { machineId: pcId, profileId: work.id, folders: [folder] });
+    const thread = await pc.client.call('threads.start', { repoKey: 'github.com/me/notes', text: 'write notes' });
+    const here = await pc.client.call('projects.get', {});
+    const cloned = here.checkouts.find((c) => c.id === thread.checkoutId);
+    expect(cloned?.path).toBe(join(folder, 'notes'));
+    expect(here.projects.find((p) => p.id === cloned?.projectId)).toMatchObject({ repoKey: 'github.com/me/notes', profileId: work.id });
+    expect(thread.profileId).toBe(work.id);
+    expect(here.elsewhere).toEqual([]);
+
+    // A machine adding a repository the hub has under another profile adopts the hub's.
+    await checkout(pc, 'accio', 'https://github.com/me/accio', personal.id);
+    await mac.client.waitFor('projects.changed', (s) => !!s.elsewhere?.some((p) => p.repoKey === 'github.com/me/accio'), 10_000);
+    const joined = await checkout(mac, 'accio', 'https://github.com/me/accio', work.id);
+    expect((await mac.client.call('projects.get', {})).projects.find((p) => p.id === joined.projectId)?.profileId).toBe(personal.id);
+    // Moving it moves it for every machine, but not while a machine has threads in it.
+    const pcAccio = (await pc.client.call('projects.get', {})).projects.find((p) => p.repoKey === 'github.com/me/accio')!;
+    await pc.client.call('projects.setProfile', { projectId: pcAccio.id, profileId: work.id });
+    await expect.poll(async () => (await mac.client.call('projects.get', {})).projects.find((p) => p.id === joined.projectId)?.profileId, { timeout: 10_000 }).toBe(work.id);
+    const macThread = await mac.client.call('threads.start', { checkoutId: joined.id, text: 'hi' });
+    await pc.client.waitFor('threads.changed', (threads) => remote(threads, macThread.id)?.status === 'idle', 10_000);
+    await expect(pc.client.call('projects.setProfile', { projectId: pcAccio.id, profileId: personal.id })).rejects.toThrow(/1 thread on other machines/);
+
+    // Started on the MacBook, which has none of wiki since it removed its checkout: it clones there.
+    const wiki = await checkout(pc, 'wiki', 'https://github.com/me/wiki', work.id);
+    fetchFrom(join(pc.app.home, 'wiki.git'), 'https://github.com/me/wiki');
+    await mac.client.waitFor('projects.changed', (s) => !!s.elsewhere?.some((p) => p.repoKey === 'github.com/me/wiki'), 10_000);
+    const remoteStart = await mac.client.call('threads.start', { repoKey: 'github.com/me/wiki', text: 'on the pc', machineId: pcId });
+    expect(remoteStart.machine?.id).toBe(pcId);
+    expect(remote(await pc.client.call('threads.list', {}), remoteStart.id)?.checkoutId).toBe(wiki.id);
+    await mac.client.call('machines.setProfileFolders', { machineId: macId, profileId: work.id, folders: [join(mac.app.home, 'work')] });
+    await pc.client.waitFor('machines.changed', (all) => !!all.find((m) => m.id === macId)?.relay, 10_000);
+    const onMac = await pc.client.call('threads.start', { checkoutId: wiki.id, text: 'on the mac', machineId: macId });
+    expect(onMac.machine?.id).toBe(macId);
+    const macWiki = (await mac.client.call('projects.get', {})).checkouts.find((c) => c.path === join(mac.app.home, 'work', 'wiki'));
+    expect(macWiki).toBeDefined();
+
+    // Removing the MacBook's notes leaves it on the hub, since the PC has a checkout of it…
+    await pc.client.waitFor('machines.changed', (all) => !!all.find((m) => m.id === macId)?.relay?.repos.includes('github.com/me/wiki'), 10_000);
+    await mac.client.waitFor('machines.changed', (all) => !!all.find((m) => m.id === pcId)?.relay?.repos.includes('github.com/me/notes'), 10_000);
+    await mac.client.call('checkouts.remove', { id: notes.id });
+    expect((await mac.client.call('projects.get', {})).elsewhere?.map((p) => p.repoKey)).toEqual(['github.com/me/notes']);
+    // …while removing the last checkout anywhere forgets it.
+    const docs = await checkout(pc, 'docs', 'https://github.com/me/docs', work.id);
+    await mac.client.waitFor('projects.changed', (s) => !!s.elsewhere?.some((p) => p.repoKey === 'github.com/me/docs'), 10_000);
+    await pc.client.call('checkouts.remove', { id: docs.id });
+    await expect.poll(async () => (await mac.client.call('projects.get', {})).elsewhere?.map((p) => p.repoKey), { timeout: 10_000 }).toEqual(['github.com/me/notes']);
   }, 60_000);
 });

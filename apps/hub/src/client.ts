@@ -1,5 +1,5 @@
 import WebSocket from 'ws';
-import { DEFAULT_THREAD_NAMING, type AccountView } from '@accio/protocol';
+import { DEFAULT_THREAD_NAMING, type AccountView, type HubProject } from '@accio/protocol';
 import type { MachineHello, SharedSettings } from './sharedSettings.js';
 import type { HubSnapshot } from './service.js';
 import { HUB_PROTOCOL } from './service.js';
@@ -111,7 +111,11 @@ export class HubClient {
   async close() { this.stopped = true; clearTimeout(this.retry); this.ws?.terminate(); }
 }
 
-export type SettingsAccess = Pick<SharedSettings, 'threadNaming' | 'setThreadNaming' | 'spaces' | 'saveSpace' | 'deleteSpace' | 'profiles' | 'machines' | 'machine' | 'modelFavorites' | 'setModelFavorite' | 'harnessTools' | 'setHarnessTools' | 'offlineSnoozes' | 'setOfflineSnooze' | 'onMachinesChanged' | 'machineConnected' | 'machineDisconnected' | 'renameMachine' | 'setProfileFolders' | 'setProfileGitHub'> & { refresh?: () => Promise<void> };
+export type SettingsAccess = Pick<SharedSettings, 'threadNaming' | 'setThreadNaming' | 'spaces' | 'saveSpace' | 'deleteSpace' | 'registerProjects' | 'setProjectProfile' | 'forgetProject' | 'profiles' | 'machines' | 'machine' | 'modelFavorites' | 'setModelFavorite' | 'harnessTools' | 'setHarnessTools' | 'offlineSnoozes' | 'setOfflineSnooze' | 'onMachinesChanged' | 'machineConnected' | 'machineDisconnected' | 'renameMachine' | 'setProfileFolders' | 'setProfileGitHub'> & {
+  refresh?: () => Promise<void>;
+  /** GLOSSARY: Project. Undefined from a hub that keeps no projects yet, whose machines keep each project's profile themselves. */
+  projects: () => HubProject[] | undefined;
+};
 
 /** Synchronous read views with writes committed by the hub over the connection. */
 export function remoteSettings(client: HubClient): SettingsAccess {
@@ -122,6 +126,10 @@ export function remoteSettings(client: HubClient): SettingsAccess {
     spaces: () => structuredClone(client.snapshot?.spaces ?? []),
     saveSpace: (space) => client.call('spaces.save', space),
     deleteSpace: async (id) => { await client.call('spaces.delete', { id }); },
+    projects: () => structuredClone(client.snapshot?.projects),
+    registerProjects: (projects) => client.call('hubProjects.register', { projects }),
+    setProjectProfile: async (project) => { await client.call('hubProjects.setProfile', project); },
+    forgetProject: async (repoKey) => { await client.call('hubProjects.forget', { repoKey }); },
     refresh: () => client.refresh(true),
     profiles: () => client.snapshot?.profiles.map(({ id, name }) => ({ id, name })) ?? [],
     machines: () => client.snapshot?.machines ?? [],

@@ -15,9 +15,12 @@ type ThreadsCtx = {
   /** The open thread, or '' when none (or a draft) is open. */
   selectedId: string;
   select: (id: string) => void;
-  /** A new thread not yet started: just the checkout it will run in. It exists on the server only once its first message is sent. */
-  draft: { checkoutId: string; profileId?: string } | null;
-  openDraft: (checkoutId: string, profileId?: string) => void;
+  /**
+   * A new thread not yet started: just the checkout it will run in, or a hub project this machine has no
+   * checkout of (`repoKey`, with its profile). It exists on the server only once its first message is sent.
+   */
+  draft: Draft | null;
+  openDraft: (checkoutId: string, profileId?: string, repoKey?: string) => void;
   /** The open list plus the Working, Snoozed and Settled shelves, after the project scope and search. */
   shelves: ThreadShelves;
   /** Where the sidebar places a thread, so other lists of threads group them as it does. */
@@ -31,6 +34,8 @@ type ThreadsCtx = {
   /** Thread actions shared by the row's hover buttons and its right-click menu. */
   act: ThreadActions;
 };
+
+type Draft = { checkoutId: string; profileId?: string; repoKey?: string };
 
 export type ThreadActions = {
   snooze: (id: string) => Promise<unknown>;
@@ -74,8 +79,8 @@ export function ThreadsProvider({ children, onNavigate }: { children: ReactNode;
         onNavigate();
       },
       draft,
-      openDraft: (checkoutId, profileId) => {
-        setDraft({ checkoutId, profileId });
+      openDraft: (checkoutId, profileId, repoKey) => {
+        setDraft({ checkoutId, profileId, ...(repoKey ? { repoKey } : {}) });
         onNavigate();
       },
       placement,

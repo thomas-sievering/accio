@@ -1,6 +1,6 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import type { ProjectsState } from '@accio/protocol';
+import type { HubProject, ProjectsState } from '@accio/protocol';
 import type { Profiles } from '../profiles/profiles.js';
 import type { Machines } from '../machine/machine.js';
 import type { Broadcast, Router } from '../rpc/router.js';
@@ -24,7 +24,25 @@ import {
 export type CheckoutInUse = (checkoutId: string) => string | undefined;
 export type ProjectInUse = (projectId: string) => string | undefined;
 
-/** Projects and this machine's checkouts of them. */
+/** GLOSSARY: Project. The hub's projects, and whether other machines still have checkouts of them. */
+export type ProjectsHub = {
+  /** Undefined from a hub that keeps no projects yet: each project's profile is then this machine's own. */
+  list: () => HubProject[] | undefined;
+  register: (projects: HubProject[]) => Promise<unknown>;
+  setProfile: (project: HubProject) => Promise<void>;
+  forget: (repoKey: string) => Promise<void>;
+  onChanged: (listener: () => void) => void;
+  /** Whether another machine has a checkout of the repository, by its last list even while offline. */
+  checkoutElsewhere: (repoKey: string) => boolean;
+};
+
+/** How long a project the hub didn't take, such as while it was offline, waits before it is registered again. */
+const REGISTER_RETRY_MS = 60_000;
+
+/**
+ * Projects and this machine's checkouts of them. A project with a remote is also kept on the hub,
+ * which decides its profile for every machine (GLOSSARY: Shared settings).
+ */
 export class Projects {
   private file: JsonFile<ProjectsData>;
   private data: ProjectsData = { projects: [], checkouts: [] };
@@ -35,26 +53,90 @@ export class Projects {
   private projectInUseChecks: ProjectInUse[] = [];
   /** Clones in progress by repository, so two threads starting at once share one. */
   private cloning = new Map<string, Promise<Checkout>>();
+  /** Repositories registered with the hub and not yet in its list. */
+  private registering = new Set<string>();
+  private syncing?: Promise<void>;
+  private syncAgain = false;
+  private shownElsewhere = '[]';
+  private closed = false;
 
   constructor(
     home: string,
     private profiles: Profiles,
     private machines: Machines,
     private broadcast: Broadcast,
+    private hub: ProjectsHub,
   ) {
     this.file = new JsonFile(join(home, 'projects.json'), () => ({ projects: [], checkouts: [] }));
     profiles.onCheckInUse((profileId) => {
       const names = this.data.projects.filter((p) => p.profileId === profileId).map((p) => p.name);
       return names.length ? `project${names.length > 1 ? 's' : ''} ${names.join(', ')}` : undefined;
     });
+    hub.onChanged(() => this.sync());
   }
 
   async load() {
     this.data = await this.file.read();
+    this.sync();
   }
 
-  state(): ProjectsState {
+  /** This machine's projects and checkouts. */
+  state(): ProjectsData {
     return this.data;
+  }
+
+  /** What clients see: this machine's projects, and the hub's that it has no checkout of. */
+  view(): ProjectsState {
+    return { ...this.data, elsewhere: this.elsewhere() };
+  }
+
+  private elsewhere(): HubProject[] {
+    const here = new Set(this.data.projects.map((p) => p.repoKey));
+    return (this.hub.list() ?? []).filter((p) => !here.has(p.repoKey));
+  }
+
+  /** GLOSSARY: Project. The profile the hub keeps for a repository, else this machine's project's. */
+  profileOf(repoKey: string): string | undefined {
+    return this.hub.list()?.find((p) => p.repoKey === repoKey)?.profileId ?? this.data.projects.find((p) => p.repoKey === repoKey)?.profileId;
+  }
+
+  /** The hub's project for a repository, if it keeps one. */
+  hubProject(repoKey: string): HubProject | undefined {
+    return this.hub.list()?.find((p) => p.repoKey === repoKey);
+  }
+
+  /** Brings this machine in line with the hub, one pass at a time. */
+  private sync() {
+    if (this.closed) return;
+    if (this.syncing) { this.syncAgain = true; return; }
+    this.syncing = this.reconcile().catch((error) => console.error('[projects] hub sync failed', error)).finally(() => {
+      this.syncing = undefined;
+      if (this.syncAgain) { this.syncAgain = false; this.sync(); }
+    });
+  }
+
+  /**
+   * GLOSSARY: Project. Takes the hub's profile for each repository, then registers the ones the hub
+   * doesn't have. The first machine to register a repository decides its profile; threads keep theirs.
+   */
+  private async reconcile() {
+    const hub = this.hub.list();
+    if (!hub) return;
+    const kept = new Map(hub.map((p) => [p.repoKey, p]));
+    for (const key of this.registering) if (kept.has(key)) this.registering.delete(key);
+    const adopted = this.data.projects.map((p) => {
+      const shared = p.repoKey ? kept.get(p.repoKey) : undefined;
+      return shared && shared.profileId !== p.profileId ? { ...p, profileId: shared.profileId } : p;
+    });
+    if (adopted.some((p, i) => p !== this.data.projects[i])) await this.commit({ ...this.data, projects: adopted });
+    else if (JSON.stringify(this.elsewhere()) !== this.shownElsewhere) this.announce();
+    const missing = this.data.projects.filter((p): p is Project & { repoKey: string } => !!p.repoKey && !kept.has(p.repoKey) && !this.registering.has(p.repoKey));
+    if (!missing.length) return;
+    const keys = missing.map((p) => p.repoKey);
+    for (const key of keys) this.registering.add(key);
+    // One the hub refused, or couldn't take while offline, is tried again later rather than on every change.
+    const retry = () => { const timer = setTimeout(() => { for (const key of keys) this.registering.delete(key); this.sync(); }, REGISTER_RETRY_MS); timer.unref?.(); };
+    await this.hub.register(missing.map(({ repoKey, name, profileId }) => ({ repoKey, name, profileId }))).then(retry, retry);
   }
 
   checkout(id: string): Checkout {
@@ -98,6 +180,8 @@ export class Projects {
    * folder here (else home) when none is on disk. Calls for the same repository at once share one clone.
    */
   clone(repoKey: string, url: string, profileId: string): Promise<Checkout> {
+    // GLOSSARY: Shared settings. The hub's profile for the repository wins over the one asked for.
+    profileId = this.hubProject(repoKey)?.profileId ?? profileId;
     const pending = this.cloning.get(repoKey) ?? this.cloneOnce(repoKey, url, profileId).finally(() => this.cloning.delete(repoKey));
     this.cloning.set(repoKey, pending);
     return pending;
@@ -129,7 +213,7 @@ export class Projects {
     try {
       await this.profiles.syncReferences();
       const facts = await inspectFolder(path);
-      const { data, checkout } = addCheckout(this.data, facts, profileId);
+      const { data, checkout } = addCheckout(this.data, facts, (facts.repoKey && this.hubProject(facts.repoKey)?.profileId) || profileId);
       await this.commit(data);
       return checkout;
     } finally {
@@ -139,7 +223,7 @@ export class Projects {
 
   register(router: Router) {
     router
-      .on('projects.get', () => this.data)
+      .on('projects.get', () => this.view())
       .on('projects.setDelivery', async ({ projectId, deliveryPolicy, previewCommand, testCommand }) => {
         const project = this.data.projects.find((p) => p.id === projectId);
         if (!project) throw new UserError('No such project');
@@ -153,7 +237,7 @@ export class Projects {
           path: facts.root,
           name: projectNameFor(facts),
           repoKey: facts.repoKey,
-          existingProject: findProjectFor(this.data, facts),
+          existingProject: findProjectFor(this.data, facts) ?? this.onlyOnHub(facts.repoKey),
           alreadyAdded: this.data.checkouts.some((c) => samePath(c.path, facts.root)),
           suggestedProfileId: suggestProfile(this.machines.profileFoldersHere(), facts.root),
         };
@@ -178,7 +262,13 @@ export class Projects {
             const reason = check(id);
             if (reason) throw new UserError(`This checkout still has ${reason}`);
           }
+          const project = this.projectOf(this.checkout(id));
           await this.commit(removeCheckout(this.data, id));
+          // GLOSSARY: Project. The hub forgets it once no machine has a checkout of it, not even one offline.
+          const gone = !this.data.projects.some((p) => p.id === project.id);
+          if (gone && project.repoKey && this.hubProject(project.repoKey) && !this.hub.checkoutElsewhere(project.repoKey)) {
+            await this.hub.forget(project.repoKey).catch((error) => console.error('[projects] could not forget the project on the hub', error));
+          }
           return null;
         } finally {
           this.removing.delete(id);
@@ -200,6 +290,10 @@ export class Projects {
               if (reason) throw new UserError(`This project still has ${reason}. Delete them before moving it to another profile.`);
             }
           }
+          // GLOSSARY: Shared settings. The hub keeps it for every machine, and they adopt it.
+          if (project.repoKey && project.profileId !== profileId && this.hub.list()) {
+            await this.hub.setProfile({ repoKey: project.repoKey, name: project.name, profileId }).catch((error: Error) => { throw new UserError(error.message); });
+          }
           const updated = { ...project, profileId };
           await this.commit({ ...this.data, projects: this.data.projects.map((p) => (p.id === projectId ? updated : p)) });
           return updated;
@@ -210,12 +304,28 @@ export class Projects {
   }
 
   async close() {
+    this.closed = true;
+    await this.syncing;
     await this.file.idle();
+  }
+
+  /** A hub project this machine has no checkout of, as the project a folder of that repository joins. */
+  private onlyOnHub(repoKey: string | null): Project | null {
+    const shared = repoKey ? this.hubProject(repoKey) : undefined;
+    return shared ? { id: '', name: shared.name, profileId: shared.profileId, repoKey: shared.repoKey } : null;
+  }
+
+  private announce() {
+    const view = this.view();
+    this.shownElsewhere = JSON.stringify(view.elsewhere);
+    this.broadcast('projects.changed', view);
   }
 
   private async commit(next: ProjectsData) {
     this.data = next;
-    this.broadcast('projects.changed', next);
+    this.announce();
     await this.file.write(next);
+    // A new project goes to the hub.
+    this.sync();
   }
 }

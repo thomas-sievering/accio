@@ -34,6 +34,8 @@ export type RelayDeps = {
   setOfflineSnooze: (threadId: string, snooze: OfflineSnooze | null) => Promise<void>;
   /** To this hub's clients on this machine. */
   send: <E extends keyof Events>(event: E, data: Events[E]) => void;
+  /** GLOSSARY: Shared settings. The hub's profile for a repository, else this machine's project's. */
+  profileOf: (repoKey: string) => string | undefined;
 };
 
 type Cache = { machines: Record<string, RelaySnapshot> };
@@ -153,6 +155,12 @@ export class Relay {
     };
   }
 
+  /** Whether another paired machine has a checkout of the repository, by its last list even while it is offline. */
+  checkoutElsewhere(repoKey: string): boolean {
+    return [...this.remote].some(([machineId, snapshot]) => !!this.deps.machineName(machineId)
+      && snapshot.checkouts.some((c) => snapshot.projects.find((p) => p.id === c.projectId)?.repoKey === repoKey));
+  }
+
   /** Sends a call about another machine's thread to that machine. Undefined: the thread is this machine's. */
   forward(method: string, params: unknown): Promise<unknown> | undefined {
     if (method === 'threads.start') return this.startThere(params as ParamsOf<'threads.start'>);
@@ -220,15 +228,19 @@ export class Relay {
       const project = projects.find((p) => p.id === here?.projectId);
       if (!here || !project) throw new UserError('No such checkout');
       if (!project.repoKey) throw new UserError(`${project.name} has no remote, so ${name} cannot clone it.`);
-      const snapshot = this.remote.get(machineId)!;
-      const there = snapshot.projects.find((p) => p.repoKey === project.repoKey);
-      let checkoutId = there && snapshot.checkouts.find((c) => c.projectId === there.id)?.id;
-      if (!checkoutId) {
-        const url = await remoteUrlOf(here.path, project.repoKey);
-        const cloned = await socket.call(machineId, 'checkouts.clone', { machineId, repoKey: project.repoKey, url, profileId: project.profileId }, CLONE_TIMEOUT_MS + 30_000)
-          .catch((error: Error) => { throw new UserError(error.message); }) as CheckoutView;
-        checkoutId = cloned.id;
-      }
+      const repoKey = project.repoKey;
+      const checkoutId = await this.checkoutThere(machineId, repoKey, this.deps.profileOf(repoKey) ?? project.profileId, () => remoteUrlOf(here.path, repoKey));
+      params = { checkoutId, text, ...(model ? { model } : {}), ...(startedBy ? { startedBy } : {}) };
+    } else if ('repoKey' in input) {
+      // GLOSSARY: Project. A hub project this machine has no checkout of: cloned there from a machine's URL for it.
+      const { repoKey } = input;
+      const profileId = this.deps.profileOf(repoKey) ?? this.cloneSource(repoKey)?.profileId;
+      if (!profileId) throw new UserError(`${repoKey} isn't a project on this hub.`);
+      const { projects, checkouts } = this.deps.projects();
+      const mine = projects.find((p) => p.repoKey === repoKey);
+      const here = mine && checkouts.find((c) => c.projectId === mine.id);
+      const checkoutId = await this.checkoutThere(machineId, repoKey, profileId,
+        () => here ? remoteUrlOf(here.path, repoKey) : this.cloneSource(repoKey)?.url() ?? Promise.resolve(httpsUrlOf(repoKey)));
       params = { checkoutId, text, ...(model ? { model } : {}), ...(startedBy ? { startedBy } : {}) };
     } else params = { profileId: input.profileId, text, ...(model ? { model } : {}), ...(startedBy ? { startedBy } : {}) };
     return socket.call(machineId, 'threads.start', params).then((result) => {
@@ -242,6 +254,17 @@ export class Relay {
       }
       return this.decorate(machineId, result);
     }, (error: Error) => { throw new UserError(error.message); });
+  }
+
+  /** That machine's checkout of the repository, cloned there from `url` under the profile's folder when it has none. */
+  private async checkoutThere(machineId: string, repoKey: string, profileId: string, url: () => Promise<string>): Promise<string> {
+    const snapshot = this.remote.get(machineId)!;
+    const there = snapshot.projects.find((p) => p.repoKey === repoKey);
+    const checkoutId = there && snapshot.checkouts.find((c) => c.projectId === there.id)?.id;
+    if (checkoutId) return checkoutId;
+    const cloned = await this.socket!.call(machineId, 'checkouts.clone', { machineId, repoKey, url: await url(), profileId }, CLONE_TIMEOUT_MS + 30_000)
+      .catch((error: Error) => { throw new UserError(error.message); }) as CheckoutView;
+    return cloned.id;
   }
 
   /**

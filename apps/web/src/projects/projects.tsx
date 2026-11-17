@@ -1,5 +1,5 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
-import type { CheckoutView, ProjectView, ProjectsState } from '@accio/protocol';
+import type { CheckoutView, HubProject, ProjectView, ProjectsState } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { useLive } from '../app/useLive';
 import { useProfiles } from '../profiles/profiles';
@@ -8,6 +8,8 @@ type ProjectsCtx = {
   state: ProjectsState | undefined;
   /** Projects of the selected profile (or all), sorted by name. */
   visible: ProjectView[];
+  /** GLOSSARY: Project. The hub's projects of the selected profile (or all) that this machine has no checkout of, sorted by name. */
+  elsewhere: HubProject[];
   checkoutsOf: (projectId: string) => CheckoutView[];
 };
 
@@ -20,9 +22,11 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<ProjectsCtx>(() => {
     const projects = state?.projects ?? [];
+    const shown = <P extends { profileId: string; name: string }>(list: P[]) => list.filter((p) => filter === 'all' || p.profileId === filter).sort((a, b) => a.name.localeCompare(b.name));
     return {
       state,
-      visible: projects.filter((p) => filter === 'all' || p.profileId === filter).sort((a, b) => a.name.localeCompare(b.name)),
+      visible: shown(projects),
+      elsewhere: shown(state?.elsewhere ?? []),
       checkoutsOf: (id) => (state?.checkouts ?? []).filter((c) => c.projectId === id),
     };
   }, [state, filter]);

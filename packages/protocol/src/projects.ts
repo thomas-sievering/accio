@@ -22,9 +22,18 @@ export type CheckoutView = {
   path: string;
 };
 
+/**
+ * GLOSSARY: Project, as the hub keeps it in shared settings: a repository with a remote and the
+ * profile it belongs to, whether or not any machine has a checkout of it. A folder without a
+ * remote stays on its machine.
+ */
+export type HubProject = { repoKey: string; name: string; profileId: string };
+
 export type ProjectsState = {
   projects: ProjectView[];
   checkouts: CheckoutView[];
+  /** The hub's projects this machine has no checkout of; a thread started in one clones it first. */
+  elsewhere?: HubProject[];
 };
 
 /** What accio would do with a folder, before you add it. */
