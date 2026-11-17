@@ -1,3 +1,4 @@
+import { request as httpRequest } from 'node:http';
 import type { Harness, HarnessMessage, HarnessTurn } from '../threads/harness.js';
 import type { SecretDelivery, SecretToolArgs } from '../secrets/secrets.js';
 
@@ -23,11 +24,21 @@ export class FakeHarness implements Harness {
   }
 }
 
+/**
+ * Plain node:http, not fetch: a card can wait for its answer longer than fetch's
+ * five-minute limit on response headers, as the real harnesses' tool timeouts allow.
+ */
 async function requestSecret(tools: NonNullable<HarnessTurn['tools']>, input: SecretToolArgs): Promise<SecretDelivery> {
-  const response = await fetch(tools.url, { method: 'POST', headers: { 'content-type': 'application/json', authorization: tools.authorization },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'request_secret', arguments: input } }) });
-  if (!response.ok) throw new Error(`request_secret failed: HTTP ${response.status}`);
-  const answer = await response.json() as { result?: { isError?: boolean; content: { text: string }[] }; error?: { message: string } };
+  const body = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'request_secret', arguments: input } });
+  const { status, text: raw } = await new Promise<{ status: number; text: string }>((resolve, reject) => {
+    const req = httpRequest(tools.url, { method: 'POST', headers: { 'content-type': 'application/json', authorization: tools.authorization } }, (res) => {
+      let text = ''; res.setEncoding('utf8');
+      res.on('data', (chunk: string) => { text += chunk; }).on('end', () => resolve({ status: res.statusCode ?? 0, text })).on('error', reject);
+    });
+    req.on('error', reject).end(body);
+  });
+  if (status !== 200) throw new Error(`request_secret failed: HTTP ${status}`);
+  const answer = JSON.parse(raw) as { result?: { isError?: boolean; content: { text: string }[] }; error?: { message: string } };
   if (answer.error) throw new Error(answer.error.message);
   const text = answer.result!.content[0]!.text;
   if (answer.result!.isError) throw new Error(text);
