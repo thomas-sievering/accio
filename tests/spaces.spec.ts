@@ -74,12 +74,14 @@ test('creates a new home from the Home project picker and opens its first thread
     await button('Settings').click();
     await page.locator('.sidebar nav').getByRole('button', { name: 'Spaces', exact: true }).click();
     await page.getByRole('button', { name: /^Add space/ }).click();
-    await page.getByRole('textbox', { name: 'Name', exact: true }).fill('agents');
+    // The space has no name yet: the dialog asks for it, as the editor's Name field is behind it.
     await page.getByRole('group', { name: 'Projects', exact: true }).getByRole('checkbox', { name: /^delivery-project/ }).check();
     await pick(page, 'Home project', 'New home…');
 
     const dialog = page.getByRole('dialog', { name: 'New home' });
     const name = dialog.getByRole('textbox', { name: 'Name', exact: true });
+    await expect(name).toHaveValue('home');
+    await dialog.getByRole('textbox', { name: 'Space name', exact: true }).fill('agents');
     await expect(name).toHaveValue('agents-home');
     // A home is usually personal, even for a work space: the profile is always picked.
     await expect(dialog.getByRole('button', { name: 'Profile', exact: true })).toHaveText('Choose…');
