@@ -68,7 +68,7 @@ export type WorkspaceSlot = {
   global: Router;
   /** Where this hub's accio tools are served: the default hub's at the origin, others under `/hubs/<id>`. */
   toolsOrigin: string;
-  asleep: boolean;
+  asleep: () => boolean;
   closing: () => boolean;
   /** The hub's status, running count or snapshot may have changed. */
   changed: () => void;
@@ -83,7 +83,7 @@ export async function openWorkspace(record: SavedHub, deps: WorkspaceDeps, slot:
   const { here } = deps;
   const client = new HubClient(record.url, record.id, record.token, { ...here, harnesses: deps.harnesses });
   if (record.snapshot) client.snapshot = record.snapshot;
-  client.setAsleep(slot.asleep);
+  client.setAsleep(slot.asleep());
   await client.start();
   const settings = remoteSettings(client);
   const secrets = remoteSecrets(client);
@@ -213,24 +213,28 @@ export async function openWorkspace(record: SavedHub, deps: WorkspaceDeps, slot:
   router.on('machines.list', async () => { await machines.refresh(); await machines.reportGitHub().catch(() => {}); return relay.machines(); });
   router.forward = (method, params) => relay.forward(method, params);
 
-  await projects.load();
-  await threads.load();
-  await relay.load();
-  if (client.status === 'connected') { await profiles.load(); await profiles.syncReferences(); }
-
   // A snooze set from another machine, or dropped by the hub, changes how these threads look.
   settings.onMachinesChanged(() => relay.announce());
   const stopUpdates = updates?.onChange((view) => { relay.emit('update.changed', view); send('update.changed', view); });
+  let reconciliation: Promise<unknown> = Promise.resolve();
+  const close = async () => { stopUpdates?.(); await relay.close(); await threads.close(); await secrets.close(); await resources.close(); await reconciliation; await profiles.close(); await projects.close(); await client.close(); };
+  try {
+    await projects.load();
+    await threads.load();
+    await relay.load();
+    if (client.status === 'connected') { await profiles.load(); await profiles.syncReferences(); }
+  } catch (error) { await close().catch(() => {}); throw error; }
+
   const continueAfterRestart = () => {
     if (!slot.closing()) void threads.continueAfterRestart().catch(error => console.error('[threads] startup recovery failed', error));
   };
   client.onChanged(() => { slot.changed(); broadcast('resources.changed', resources.state()); if (client.status === 'connected') resources.syncTools(); relay.announce(); continueAfterRestart(); });
   void machines.reportGitHub().catch(() => {});
-  relay.setAsleep(slot.asleep);
+  // The system may have slept or woken while the workspace opened.
+  client.setAsleep(slot.asleep()); relay.setAsleep(slot.asleep());
   relay.start(record.url, record.token);
-  const reconciliation = client.status === 'connected' ? resources.reconcile().catch(error => console.error('[resources] startup check failed', error)) : Promise.resolve();
+  if (client.status === 'connected') reconciliation = resources.reconcile().catch(error => console.error('[resources] startup check failed', error));
   continueAfterRestart();
   return { client, router, relay, profiles, machines, models, projects, spaces, threads, tools, resources, secrets, home: record.home,
-    serve: async (req, res) => await tools.handle(req, res) || threads.assets.handle(req, res),
-    close: async () => { stopUpdates?.(); await relay.close(); await threads.close(); await secrets.close(); await resources.close(); await reconciliation; await profiles.close(); await projects.close(); await client.close(); } };
+    serve: async (req, res) => await tools.handle(req, res) || threads.assets.handle(req, res), close };
 }

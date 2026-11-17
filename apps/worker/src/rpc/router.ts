@@ -52,8 +52,8 @@ export class Router {
   }
 
   /** Calls a method here as a client would, such as from an accio tool; a failure throws its message as a user error. */
-  async call<M extends MethodName>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>> {
-    const response = await this.handle({ id: 0, method, params });
+  async call<M extends MethodName>(method: M, params: ParamsOf<M>, { local = false } = {}): Promise<ResultOf<M>> {
+    const response = await this.handle({ id: 0, method, params }, { local });
     if (!response?.ok) throw new UserError(response?.error ?? 'Invalid request');
     return response.result as ResultOf<M>;
   }

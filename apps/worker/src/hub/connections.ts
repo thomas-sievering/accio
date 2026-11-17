@@ -41,7 +41,7 @@ export class HubConnections {
   }
   async open(record: SavedHub) {
     const workspace = await openWorkspace(record, this.deps, {
-      global: this.global, asleep: this.asleep, closing: () => this.closing, changed: this.announce,
+      global: this.global, asleep: () => this.asleep, closing: () => this.closing, changed: this.announce,
       toolsOrigin: record.id === this.defaultId ? this.deps.origin : `${this.deps.origin}/hubs/${record.id}`,
     });
     this.workspaces.set(record.id, workspace);

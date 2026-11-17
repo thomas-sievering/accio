@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { JsonFile } from '@accio/persistence';
 import { RelaySocket, type RelayRequest } from '@accio/hub';
-import { OFFLINE_SNOOZE_MS, RELAY_MACHINE_METHODS, RELAY_THREAD_METHODS, type CheckoutView, type OfflineSnooze, type Events, type MachineView, type ParamsOf, type ProjectsState, type ResultOf, type RelaySnapshot, type ThreadView } from '@accio/protocol';
+import { OFFLINE_SNOOZE_MS, RELAY_MACHINE_METHODS, RELAY_THREAD_METHODS, type CheckoutView, type OfflineSnooze, type Events, type MachineView, type MethodName, type ParamsOf, type ProjectsState, type ResultOf, type RelaySnapshot, type ThreadView } from '@accio/protocol';
 import { UserError, type Router } from '../rpc/router.js';
 import { CLONE_TIMEOUT_MS, httpsUrlOf, remoteUrlOf } from '../projects/git.js';
 import type { RemoteMediaKey, ThreadAssets } from '../threads/assets.js';
@@ -303,10 +303,7 @@ export class Relay {
       const { machineId: _, ...own } = params as Record<string, unknown>;
       params = own;
     }
-    const response = await this.deps.router.handle({ id: 0, method, params }, { local: true });
-    if (!response) throw new Error('Invalid request');
-    if (!response.ok) throw new Error(response.error);
-    return response.result;
+    return this.deps.router.call(method as MethodName, params as never, { local: true });
   }
 
   private receive(from: string, event: string, data: unknown) {
