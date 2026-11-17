@@ -94,9 +94,9 @@ test('creates a new home from the Home project picker and opens its first thread
     await dialog.getByRole('button', { name: 'Create home', exact: true }).click();
     await expect(dialog).toContainText("Use letters, digits, '.', '-' or '_'");
     await name.fill('agents-home');
-    // Without a GitHub account chosen for the profile here, gh's active account is never used.
+    // Without a GitHub account chosen for the profile, gh's active account is never used.
     await pick(page, 'Create as', 'New GitHub repo');
-    await expect(dialog).toContainText('This profile has no GitHub account on this machine. Choose one in Settings / Machines.');
+    await expect(dialog).toContainText('This profile has no GitHub account. Choose one in Settings / Profiles.');
     await pick(page, 'Create as', 'Local folder');
     await expect(page.getByRole('menu', { name: 'Create as' })).toBeHidden();
     await dialog.screenshot({ path: info.outputPath('new-home.png') });
