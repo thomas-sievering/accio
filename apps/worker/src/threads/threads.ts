@@ -203,7 +203,8 @@ export class Threads {
       if (state.closing) return;
       this.restartCandidates.delete(id);
       const thread = state.list.find(t => t.id === id);
-      if (!thread || thread.status !== 'interrupted' || state.running.has(id)) continue;
+      // Asks what the resume below would, so a thread something else holds is left to it.
+      if (!thread || thread.status !== 'interrupted' || state.busy(thread, { delivering: true, allow: ['queued', 'messages'] })) continue;
       try {
         await this.turns.begin(id, RESUME_PROMPT, { resume: true });
       } catch (error) {
@@ -232,10 +233,11 @@ export class Threads {
     const { state, turns } = this;
     return this.withMessages(threadId, async () => {
       const thread = state.get(threadId);
-      if (!thread || state.closing) return;
-      const free = !state.running.has(threadId) && thread.status !== 'running' && !state.lifecycle.has(threadId)
-        && thread.delivery?.status !== 'queued' && thread.delivery?.status !== 'running' && !thread.queuedMessages?.length;
-      if (free) {
+      if (!thread) return;
+      // This runs as the thread's message operation.
+      const busy = state.busy(thread, { allow: ['messages'] });
+      if (busy === 'closing') return;
+      if (!busy) {
         try { await turns.begin(threadId, text, { wake: true }); return; }
         catch (error) { console.error('[waits] waking the thread failed; queued its message instead', error); }
       }
@@ -321,11 +323,9 @@ export class Threads {
         // Never wait behind a starting turn for steering: it may be blocked on
         // authentication, and the caller must keep its unsent draft immediately.
         // A scripted ship holds the slot with no turn to steer.
-        if (state.running.has(threadId) && !turns.canSteer(threadId) && state.get(threadId)?.delivery?.status === 'running') {
-          throw new UserError('Finish or cancel delivery before sending more work.');
-        }
-        if (state.running.has(threadId) && mode !== 'queue' && !turns.canSteer(threadId)) {
-          throw new UserError('The agent is starting or finishing. Try sending again in a moment.');
+        if (state.running.has(threadId) && !turns.canSteer(threadId)) {
+          this.assertMessageAllowed(threadId);
+          if (mode !== 'queue') throw new UserError('The agent is starting or finishing. Try sending again in a moment.');
         }
         const goal = parseGoalCommand(text);
         if (goal && !pick && !uploads.length) return this.withMessages(threadId, () => this.goalCommand(threadId, goal, text));
@@ -652,13 +652,9 @@ export class Threads {
     return pending;
   }
 
+  /** A message starts a turn, or steers or queues behind the running one. Callers run as the thread's message operation. */
   private assertMessageAllowed(id: string) {
-    const { state } = this;
-    state.assertOpen();
-    if (state.lifecycle.has(id)) throw new UserError('Wait for the current thread action to finish.');
-    const delivery = state.require(id).delivery?.status;
-    if (delivery === 'queued' || delivery === 'running') throw new UserError('Finish or cancel delivery before sending more work.');
-    if (state.running.get(id)?.signal.aborted) throw new UserError('Wait for this turn to stop.');
+    this.state.assertFree(this.state.require(id), { allow: ['running', 'queued', 'messages'] });
   }
 
   private async changeQueue(id: string, change: (queue: NonNullable<Thread['queuedMessages']>) => NonNullable<Thread['queuedMessages']>) {
@@ -674,9 +670,9 @@ export class Threads {
 
   private async withLifecycle<T>(id: string, action: () => Promise<T>): Promise<T> {
     const { state } = this;
-    state.assertOpen();
-    state.require(id);
-    if (state.lifecycle.has(id)) throw new UserError('Wait for the current thread action to finish.');
+    // An action may overlap a turn and its messages, such as a preview opening as work ends.
+    // Each action checks the rest of the rule itself.
+    state.assertFree(state.require(id), { allow: ['delivery', 'stopping', 'running', 'queued', 'messages'] });
     state.lifecycle.add(id);
     const pending = action();
     state.starts.add(pending);
