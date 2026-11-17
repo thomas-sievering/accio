@@ -78,7 +78,7 @@ function Shell({ page, setPage }: { page: Page; setPage: Dispatch<SetStateAction
   const closeCurrent = useCallback(() => setPage(closePage), [setPage]);
   useAppEvent('settings.open', openSettings);
   // One project editor: the header chip and the Filter gear open its Settings page.
-  useAppEvent('project.open', ({ id }) => openSettings({ section: 'projects', projectId: id }));
+  useAppEvent('project.open', ({ id }) => openSettings({ section: 'projects', id }));
   useAppEvent('project.dashboard', ({ id }) => setPage({ kind: 'dashboard', projectId: id }));
   useAppEvent('space.open', ({ id }) => setPage({ kind: 'space', spaceId: id }));
   const [panelWanted, togglePanel] = usePanelOpen();
@@ -106,9 +106,9 @@ function Shell({ page, setPage }: { page: Page; setPage: Dispatch<SetStateAction
   };
   useAppEvent('thread.open', ({ id }) => openThread(id));
   const close = () => setSheet(null);
-  const openProfile = (profileId: string) => openSettings({ section: 'profiles', profileId });
-  const openSecrets = useCallback((profileId: string) => openSettings({ section: 'secrets', profileId }), [openSettings]);
-  const openAccount = (accountId: string) => openSettings({ section: 'accounts', accountId });
+  const openProfile = (profileId: string) => openSettings({ section: 'profiles', id: profileId });
+  const openSecrets = useCallback((profileId: string) => openSettings({ section: 'secrets', extra: { profileId } }), [openSettings]);
+  const openAccount = (accountId: string) => openSettings({ section: 'accounts', id: accountId });
   // Closing Limits returns focus to what opened them, or to Settings' Limits link when they return to Settings.
   const limitsReturnFocus = useRef<HTMLElement | null>(null);
   const closeLimits = useCallback(() => {
@@ -186,7 +186,7 @@ function Shell({ page, setPage }: { page: Page; setPage: Dispatch<SetStateAction
           <div className="side-controls drag">
             <div className="side-tools">
               {!settingUp && <ThreadSearch />}
-              {!settingUp && <ScopeMenu onOpenProject={(p) => openSettings({ section: 'projects', projectId: p.id })} />}
+              {!settingUp && <ScopeMenu onOpenProject={(p) => openSettings({ section: 'projects', id: p.id })} />}
               <button className="side-icon" title="Add project" aria-label="Add project" disabled={!profiles?.length} onClick={() => setSheet({ kind: 'addProject' })}>
                 <FolderPlus />
               </button>

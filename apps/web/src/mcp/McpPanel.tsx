@@ -12,7 +12,7 @@ const target = (m: McpView) => (m.transport === 'http' ? m.url ?? '' : [m.comman
 export function McpPanel() {
   const { state, loadError, retry } = useResources();
   const mcps = useMemo(() => [...(state?.mcps ?? [])].sort(byName), [state]);
-  const manage = (mcpId?: string) => emitAppEvent('settings.open', { section: 'mcps', ...(mcpId ? { mcpId } : {}) });
+  const manage = (mcpId?: string) => emitAppEvent('settings.open', { section: 'mcps', ...(mcpId ? { id: mcpId } : {}) });
 
   if (!state) {
     return <div className="skills-panel">

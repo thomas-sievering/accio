@@ -3,7 +3,7 @@ import type { MachineView } from '@accio/protocol';
 import { useClient, useHubs } from '../app/connection';
 import { useLive } from '../app/useLive';
 import { Chevron, Hub, Monitor } from '../app/icons';
-import { SettingRow, SettingsFooter, SettingsSection, StatusPill } from '../app/Settings';
+import { SettingRow, SettingsFooter, SettingsSection, StatusPill, type SettingsNav } from '../app/Settings';
 import { Field } from '../resources/Field';
 import { useProfiles } from '../profiles/profiles';
 import { FolderList } from './FolderList';
@@ -16,24 +16,31 @@ import { MachineUpdate, useMachineUpdate } from './MachineUpdate';
 import { RevokeMachine } from './RevokeMachine';
 import { formatDayTime } from '../ui/dates';
 
-/** The machines known to the hub, including those currently offline. */
-export function MachineSettings({ machineId, onOpen, onBack, onOpenThread }: { machineId?: string; onOpen: (id: string) => void; onBack: () => void; onOpenThread: (threadId: string) => void }) {
+/** The machines known to the hub, including those currently offline, and those revoked from this window. */
+export function useMachinesData() {
   const client = useClient();
-  const [onboarding, setOnboarding] = useState(false);
   // Machines revoked here: the hub keeps their records, so until one is paired again it shows as Revoked rather than Offline.
   const [revokedIds, setRevokedIds] = useState<string[]>([]);
+  const items = useLive(() => client.call('machines.list', {}), 'machines.changed');
   const revoked = (m: MachineView) => !m.connected && revokedIds.includes(m.id);
-  const machines = useLive(() => client.call('machines.list', {}), 'machines.changed');
-  if (!machines) return <p className="note">Loading machines…</p>;
-  const machine = machines.find((m) => m.id === machineId);
-  if (machine) return <MachineDetail key={machine.id} machine={machine} revoked={revoked(machine)} onRevoked={() => { setRevokedIds((ids) => [...ids, machine.id]); onBack(); }} onBack={onBack} onOpenThread={onOpenThread} />;
+  return { items, revoked, markRevoked: (id: string) => setRevokedIds((ids) => [...ids, id]) };
+}
+type Props = { nav: SettingsNav; data: ReturnType<typeof useMachinesData> };
+
+export function MachinePage({ nav, data, item: machine }: Props & { item: MachineView }) {
+  return <MachineDetail machine={machine} revoked={data.revoked(machine)} onRevoked={() => { data.markRevoked(machine.id); nav.back(); }} onBack={nav.back} onOpenThread={nav.openThread} />;
+}
+
+export function MachinesList({ nav, data }: Props) {
+  const [onboarding, setOnboarding] = useState(false);
+  const machines = data.items!;
   return (
     <>
       <p className="note">Workers connected to this hub run coding turns. Open a machine to manage its name, tools and what each profile uses there.</p>
       <HubRow />
       <SettingsSection add={!onboarding ? { label: 'Add machine', onClick: () => setOnboarding(true) } : undefined}>
         {machines.length === 0 && <SettingRow title="No machines connected yet" />}
-        {machines.map((m) => <MachineRow key={m.id} machine={m} revoked={revoked(m)} onOpen={() => onOpen(m.id)} />)}
+        {machines.map((m) => <MachineRow key={m.id} machine={m} revoked={data.revoked(m)} onOpen={() => nav.open(m.id)} />)}
       </SettingsSection>
       {onboarding && <OnboardMachine onClose={() => { setOnboarding(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.settings-add')?.focus()); }} />}
     </>
@@ -84,7 +91,7 @@ function MachineDetail({ machine, revoked, onRevoked, onBack, onOpenThread }: { 
   // Each profile's GitHub login by profile id; '' means the account git uses.
   const [github, setGitHub] = useState<Record<string, string>>({});
   const [touched, setTouched] = useState(false);
-  const { busy, error, run } = useAction();
+  const { busy, error, attempt } = useAction();
   const shownName = name ?? machine.name;
   const changedFolders = Object.keys(folders).filter((id) => JSON.stringify(folders[id]) !== JSON.stringify(machine.profileFolders[id] ?? []));
   const savedGitHub = (id: string) => machine.profileGitHub?.[id] ?? '';
@@ -95,11 +102,10 @@ function MachineDetail({ machine, revoked, onRevoked, onBack, onOpenThread }: { 
     e.preventDefault();
     setTouched(true);
     if (!shownName.trim()) return;
-    const done = await run(async () => {
+    const done = await attempt(async () => {
       if (renamed) await client.call('machines.rename', { machineId: machine.id, name: shownName.trim() });
       for (const profileId of changedFolders) await client.call('machines.setProfileFolders', { machineId: machine.id, profileId, folders: folders[profileId]! });
       for (const profileId of changedGitHub) await client.call('machines.setProfileGitHub', { machineId: machine.id, profileId, login: github[profileId] || null });
-      return true;
     });
     if (done) { setName(undefined); setFolders({}); setGitHub({}); }
   };

@@ -170,7 +170,7 @@ function SkillItem({ skill, context, composer, onChanged, onAnnounce, harness }:
           <button type="button" className="ghost" onClick={() => emitAppEvent('composer.insert', { target: composer, text: skillReference(skill) })}>Reference in message</button>
           {own && (
             <button type="button" className="ghost" disabled={disable.busy} onClick={async () => {
-              const done = await disable.run(async () => (await client.call('threads.setSkillEnabled', { ...context, skillId: skill.id, enabled: false, level: own }), true));
+              const done = await disable.attempt(() => client.call('threads.setSkillEnabled', { ...context, skillId: skill.id, enabled: false, level: own }));
               if (done) { onAnnounce(`${skill.name} disabled for this ${ownName}. Applies from the next turn.`); onChanged(); }
             }}>{disable.busy ? 'Disabling…' : `Disable for this ${ownName}`}</button>
           )}
@@ -229,7 +229,7 @@ function Instructions({ skill, context, onAnnounce }: { skill: WorkspaceSkill; c
               <button type="button" className="ghost" disabled={save.busy} onClick={() => { setDraft(undefined); save.clear(); }}>Cancel</button>
               <button type="button" className="ghost primary" disabled={save.busy || !changed} onClick={async () => {
                 const content = draft;
-                const done = await save.run(async () => (await client.call('threads.saveSkillContent', { ...context, skillId: skill.id, content }), true));
+                const done = await save.attempt(() => client.call('threads.saveSkillContent', { ...context, skillId: skill.id, content }));
                 if (!done) return;
                 setLoaded({ ...loaded!, content });
                 setDraft(undefined);

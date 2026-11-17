@@ -1,61 +1,91 @@
-import { Children, Fragment, createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { HubSettings } from '../hub/HubSettings';
-import { MachineSettings } from '../machine/MachineSettings';
-import { HarnessesSettings } from '../harnesses/HarnessesSettings';
-import { SystemPromptSettings } from '../harnesses/SystemPromptSettings';
-import { NamingSettings } from '../threads/NamingSettings';
-import { AccountsSettings } from '../profiles/AccountsSettings';
-import { ProfilesSettings } from '../profiles/ProfilesSettings';
-import { useProfiles } from '../profiles/profiles';
-import { SecretsSettings, type SecretsRoute } from '../secrets/SecretsSettings';
-import { ToolsSettings } from '../tools/ToolsSettings';
-import { McpSettings } from '../mcp/McpSettings';
-import { SkillsSettings } from '../skills/SkillsSettings';
-import { ProjectsSettings } from '../projects/ProjectsSettings';
-import { SpacesSettings } from '../spaces/SpacesSettings';
-import { useSpaces } from '../spaces/spaces';
-import { useProjects } from '../projects/projects';
-import { useResources } from '../resources/resources';
-import { ArrowLeft, BookOpen, Chevron, Folder, IdCard, Key, Layers, Limits, Monitor, Plug, Plus, ScrollText, Spaces, Users, Wrench } from './icons';
-import { useClient } from './connection';
-import { useLive } from './useLive';
+import { Children, Fragment, createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import type { ProviderId } from '@accio/protocol';
+import { SETTINGS, type Section } from './settingsSections';
+import { ArrowLeft, Chevron, Plus } from './icons';
 import { SidebarResizer } from './Resizer';
 import { HubSelector } from '../hub/HubSelector';
 
-/** Where Settings is open. `profileId` opens one profile ('new' to add one). */
-export type SettingsRoute = { section: 'profiles'; profileId?: string } | { section: 'accounts'; accountId?: string } | ({ section: 'secrets' } & SecretsRoute) | { section: 'hub'; hubId?: string } | { section: 'harnesses'; harnessId?: string } | { section: 'systemPrompt' } | { section: 'machines'; machineId?: string }
-  | { section: 'naming' } | { section: 'tools'; toolId?: string } | { section: 'mcps'; mcpId?: string } | { section: 'skills'; sourceId?: string } | { section: 'projects'; projectId?: string; /** Save and Cancel return to the project dashboard. */ fromDashboard?: boolean }
-  | { section: 'spaces'; /** 'new' adds one. */ spaceId?: string };
-type Section = SettingsRoute['section'];
+/** The item id of a section's page for adding one; never an item's own id. */
+export const NEW = 'new';
+
+/** Where Settings is open: a section, one of its items (`NEW` adds one), and the little state some sections keep. */
+export type SettingsRoute = { section: Section; id?: string; extra?: SettingsExtra };
+type SettingsExtra = {
+  /** Secrets: the profile whose secrets are listed. */
+  profileId?: string;
+  /** Secrets: the open secret's form replaces its value. */
+  replace?: boolean;
+  /** Projects: Save and Cancel return to the project dashboard. */
+  fromDashboard?: boolean;
+  /** Accounts: the provider of a new account. */
+  providerId?: ProviderId;
+};
+
+/** How a section's panels move around Settings. */
+export type SettingsNav = {
+  route: SettingsRoute;
+  /** Opens one item of this section, or `NEW`. */
+  open: (id: string, extra?: SettingsExtra) => void;
+  /** Back to this section's list. */
+  back: () => void;
+  /** This section's list with `extra`, such as Secrets of another profile. */
+  toList: (extra: SettingsExtra) => void;
+  /** Any Settings route, through the open page's unsaved-edit check. */
+  navigate: (route: SettingsRoute) => void;
+  /** Leaves Settings. */
+  close: () => void;
+  openThread: (threadId: string) => void;
+};
+
+type Item = { id: string };
+/** What a section loads. `items` is undefined while loading; the rest is the section's own. */
+export type SectionData<T extends Item = Item> = { items?: T[]; error?: string; retry?: () => void };
+type PanelProps<D> = { nav: SettingsNav; data: D };
 
 /**
- * Every page listed is a shared setting of the hub chosen in the selector above them. This machine's saved hubs
- * open from that selector's menu instead. `limits` opens the Limits sheet, not a page.
+ * One Settings section, registered in `SETTINGS`. Settings draws its list, new, loading, error and
+ * deleted pages, its breadcrumb and its sidebar link from this entry; the panels draw the rest.
  */
-const GROUPS: { label: string; items: { id: Exclude<Section, 'hub'> | 'limits'; label: string; icon: ReactNode }[] }[] = [
-  { label: 'Profiles', items: [
-    { id: 'profiles', label: 'Profiles', icon: <Users /> },
-    { id: 'accounts', label: 'Accounts', icon: <IdCard /> },
-    { id: 'limits', label: 'Limits', icon: <Limits /> },
-    { id: 'secrets', label: 'Secrets', icon: <Key /> },
-  ] },
-  { label: 'Threads', items: [
-    { id: 'harnesses', label: 'Harnesses', icon: <Layers /> },
-    { id: 'systemPrompt', label: 'System prompt', icon: <ScrollText /> },
-    { id: 'naming', label: 'Thread naming', icon: <ScrollText /> },
-  ] },
-  { label: 'Tools and skills', items: [
-    { id: 'tools', label: 'CLIs', icon: <Wrench /> },
-    { id: 'mcps', label: 'MCP servers', icon: <Plug /> },
-    { id: 'skills', label: 'Skills', icon: <BookOpen /> },
-  ] },
-  { label: 'Projects and machines', items: [
-    { id: 'projects', label: 'Projects', icon: <Folder /> },
-    { id: 'spaces', label: 'Spaces', icon: <Spaces /> },
-    { id: 'machines', label: 'Machines', icon: <Monitor /> },
-  ] },
-];
-const LABEL = { hub: 'Hubs', ...Object.fromEntries(GROUPS.flatMap((g) => g.items.map((i) => [i.id, i.label]))) } as Record<Section | 'limits', string>;
+export type SectionEntry<T extends Item = Item, D extends SectionData<T> = SectionData<T>> = {
+  label: string;
+  icon: ReactNode;
+  /** The sidebar group it is listed in; without one it opens from elsewhere (Hubs, from the hub selector). */
+  group?: string;
+  /** One item and many, as in "New CLI", "This CLI no longer exists." and "All CLIs". */
+  noun?: string;
+  plural?: string;
+  /** The breadcrumb of the page that adds one, when it isn't "New <noun>". */
+  newLabel?: string;
+  /** Loads the section's data. Without it the section has no items to wait for. */
+  useData?: (route: SettingsRoute) => D;
+  /** An item's breadcrumb; its name by default. */
+  name?: (item: T, route: SettingsRoute) => string | undefined;
+  /** The list a page of this section goes back to; the bare section by default. */
+  list?: (route: SettingsRoute) => SettingsRoute;
+  /** The list shows its own loading and errors (Secrets keeps its profile picker while they load). */
+  listLoads?: boolean;
+  List: (props: PanelProps<D>) => ReactNode;
+  New?: (props: PanelProps<D>) => ReactNode;
+  Detail?: (props: PanelProps<D> & { item: T }) => ReactNode;
+};
+
+/** The sidebar's Limits link, which opens the Limits page rather than a section. */
+export type LimitsLink = { label: string; icon: ReactNode; group: string; opensLimits: true };
+
+const isSection = (entry: SectionEntry | LimitsLink): entry is SectionEntry => !('opensLimits' in entry);
+const entryOf = (section: Section): SectionEntry => {
+  const entry = SETTINGS[section] as SectionEntry | LimitsLink | undefined;
+  return entry && isSection(entry) ? entry : SETTINGS.accounts as SectionEntry;
+};
+const listRoute = (route: SettingsRoute): SettingsRoute => entryOf(route.section).list?.(route) ?? { section: route.section };
+
+/** The sidebar: table entries in order, under their groups. Read when drawn, as the table and its panels import Settings. */
+const navGroups = () => Object.entries(SETTINGS as Record<string, SectionEntry | LimitsLink>).reduce<{ label: string; items: { id: string; entry: SectionEntry | LimitsLink }[] }[]>((groups, [id, entry]) => {
+  if (!entry.group) return groups;
+  const group = groups.find((g) => g.label === entry.group) ?? groups[groups.push({ label: entry.group, items: [] }) - 1]!;
+  group.items.push({ id, entry });
+  return groups;
+}, []);
 
 /**
  * Leaving a settings page with unsaved edits asks first. The page's footer registers
@@ -63,50 +93,13 @@ const LABEL = { hub: 'Hubs', ...Object.fromEntries(GROUPS.flatMap((g) => g.items
  */
 const LeaveGuard = createContext<{ current?: (go: () => void) => boolean }>({});
 
-/** Settings replace the whole window while open, as in T3 Code. Back (top of the sidebar, as in Cal.com and Circle) or Escape returns to the threads. */
+/**
+ * Settings replace the whole window while open, as in T3 Code. Back (top of the sidebar, as in Cal.com and Circle) or Escape returns to the threads.
+ * Every page listed is a shared setting of the hub chosen in the selector above them. This machine's saved hubs open from that selector's menu instead.
+ */
 export function Settings({ route, onRoute, onClose, onOpenThread, onOpenLimits }: { route: SettingsRoute; onRoute: (r: SettingsRoute) => void; onClose: () => void; onOpenThread: (threadId: string) => void; onOpenLimits?: () => void }) {
-  const { profiles, accounts } = useProfiles();
-  const { state: resources } = useResources();
-  const { state: projectState } = useProjects();
-  const profileId = route.section === 'profiles' ? route.profileId : undefined;
-  const accountId = route.section === 'accounts' ? route.accountId : undefined;
-  const accountLabel = accountId === 'new' || accountId === 'new-openai' ? 'New account' : accounts?.find((a) => a.id === accountId)?.name;
-  const profileLabel = profileId === 'new' ? 'New profile' : profiles?.find((p) => p.id === profileId)?.name;
-  const secretLabel = route.section === 'secrets' && route.secretId ? route.secretId === 'new' ? 'New secret' : route.replace ? 'Replace value' : 'Edit secret' : undefined;
-  const backTo: SettingsRoute = route.section === 'secrets' ? { section: 'secrets', profileId: route.profileId } : { section: route.section };
-  const toolId = route.section === 'tools' ? route.toolId : undefined;
-  const mcpId = route.section === 'mcps' ? route.mcpId : undefined;
-  const sourceId = route.section === 'skills' ? route.sourceId : undefined;
-  const resourceLabel = toolId ? (toolId === 'new' ? 'New tool' : resources?.tools.find((t) => t.id === toolId)?.name)
-    : mcpId ? (mcpId === 'new' ? 'New MCP server' : resources?.mcps.find((m) => m.id === mcpId)?.name)
-      : sourceId ? (sourceId === 'new' ? 'New skill source' : resources?.sources.find((s) => s.id === sourceId)?.name)
-        : undefined;
-  const client = useClient();
-  const machines = useLive(() => client.call('machines.list', {}), 'machines.changed');
-  const machineLabel = route.section === 'machines' && route.machineId ? machines?.find((m) => m.id === route.machineId)?.name : undefined;
-  const hubLabel = route.section === 'hub' && route.hubId ? 'Add hub' : undefined;
-  const projectLabel = route.section === 'projects' && route.projectId ? projectState?.projects.find((p) => p.id === route.projectId)?.name : undefined;
-  const { spaces } = useSpaces();
-  const spaceLabel = route.section === 'spaces' && route.spaceId ? route.spaceId === 'new' ? 'New space' : spaces?.find((s) => s.id === route.spaceId)?.name : undefined;
-  const harnessLabel = route.section === 'harnesses' && route.harnessId ? 'Built-in tools' : undefined;
-  const detailLabel = projectLabel || spaceLabel || profileLabel || accountLabel || secretLabel || resourceLabel || machineLabel || hubLabel || harnessLabel;
-  const previousDetail = useRef<string | undefined>(undefined);
   const root = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => {
-    const previous = previousDetail.current;
-    previousDetail.current = detailLabel;
-    // Wait until hidden/unmounted panes have released browser focus.
-    const frame = requestAnimationFrame(() => {
-      const active = document.activeElement as HTMLElement | null;
-      if (active && root.current?.contains(active) && active !== document.body && !active.matches('.crumbs') && active.getClientRects().length) return;
-      const rows = [...(root.current?.querySelectorAll<HTMLElement>('.settings-page .setting-link') ?? [])];
-      const row = rows.find(el => el.querySelector('b')?.textContent === previous) ?? rows[0];
-      (row ?? root.current?.querySelector<HTMLElement>('.settings-page input:not(:disabled), .settings-page button:not(:disabled)') ?? root.current?.querySelector<HTMLElement>('.main-top .crumbs'))?.focus();
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [route, detailLabel]);
-
-  const inDetail = !!((route.section === 'harnesses' && route.harnessId) || profileId || accountId || toolId || mcpId || sourceId || (route.section === 'secrets' && route.secretId) || (route.section === 'machines' && route.machineId) || (route.section === 'hub' && route.hubId) || (route.section === 'projects' && route.projectId) || (route.section === 'spaces' && route.spaceId));
+  const entry = entryOf(route.section);
   // Escape goes up one level and leaves Settings only from a top-level page; an open inline confirmation takes it first (useEscape).
   const leave = useRef<(go: () => void) => boolean>(undefined);
   /** Every way out of a page (section, breadcrumb, Back, Escape) goes through the page's unsaved-edit check. */
@@ -114,7 +107,7 @@ export function Settings({ route, onRoute, onClose, onOpenThread, onOpenLimits }
   const navigate = (r: SettingsRoute) => go(() => onRoute(r));
   const leaveSettings = () => go(onClose);
   const escape = useRef<() => void>(() => undefined);
-  escape.current = () => (inDetail ? navigate(backTo) : leaveSettings());
+  escape.current = () => (route.id ? navigate(listRoute(route)) : leaveSettings());
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // Text fields use the same leave guard; native selects keep their own Escape.
@@ -129,6 +122,16 @@ export function Settings({ route, onRoute, onClose, onOpenThread, onOpenLimits }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
+  // Panels open and leave their own pages directly: they do so only once nothing is left unsaved.
+  const nav: SettingsNav = {
+    route,
+    open: (id, extra) => onRoute({ section: route.section, id, ...(extra ? { extra } : {}) }),
+    back: () => onRoute(listRoute(route)),
+    toList: (extra) => onRoute({ section: route.section, extra }),
+    navigate,
+    close: onClose,
+    openThread: onOpenThread,
+  };
 
   return (
     <div ref={root} className="layout">
@@ -141,23 +144,23 @@ export function Settings({ route, onRoute, onClose, onOpenThread, onOpenLimits }
         </header>
         <nav className="side-body">
           <HubSelector onManage={() => navigate({ section: 'hub' })} />
-          {GROUPS.map((g, n) => (
-            <div key={n} className="settings-group">
+          {navGroups().map((g) => (
+            <div key={g.label} className="settings-group">
               <div className="settings-group-label">{g.label}</div>
-              {g.items.map(({ id, label, icon }) => id === 'limits' ? onOpenLimits && (
+              {g.items.map(({ id, entry: item }) => !isSection(item) ? onOpenLimits && (
                 <button key={id} className="settings-link" onClick={() => go(onOpenLimits)}>
-                  {icon}
-                  {label}
+                  {item.icon}
+                  {item.label}
                 </button>
               ) : (
                 <button
                   key={id}
                   className={`settings-link${route.section === id ? ' active' : ''}`}
                   aria-current={route.section === id ? 'page' : undefined}
-                  onClick={() => navigate({ section: id })}
+                  onClick={() => navigate({ section: id as Section })}
                 >
-                  {icon}
-                  {label}
+                  {item.icon}
+                  {item.label}
                 </button>
               ))}
             </div>
@@ -165,55 +168,82 @@ export function Settings({ route, onRoute, onClose, onOpenThread, onOpenLimits }
         </nav>
       </aside>
       <SidebarResizer />
-      <main className="main">
-        <header className="main-top drag">
-          <nav className="crumbs" tabIndex={-1}>
-            <span>Settings</span>
-            <span className="sep">/</span>
-            {detailLabel ? (
-              <>
-                <button onClick={() => navigate(backTo)}>{LABEL[route.section]}</button>
-                <span className="sep">/</span>
-                <b>{detailLabel}</b>
-              </>
-            ) : (
-              <b>{LABEL[route.section]}</b>
-            )}
-          </nav>
-        </header>
-        <LeaveGuard.Provider value={leave}>
-        <div className="settings-scroll">
-          <div className="settings-page">
-            {route.section === 'profiles' && (
-              <ProfilesSettings
-                profileId={profileId}
-                onOpen={(id) => onRoute({ section: 'profiles', profileId: id })}
-                onBack={() => onRoute({ section: 'profiles' })}
-                onOpenSecrets={(id) => navigate({ section: 'secrets', profileId: id })}
-              />
-            )}
-            {route.section === 'accounts' && <AccountsSettings accountId={accountId} onOpen={(id) => onRoute({ section: 'accounts', accountId: id })} onBack={() => onRoute({ section: 'accounts' })} />}
-            {route.section === 'secrets' && <SecretsSettings route={route} onRoute={(r) => onRoute({ section: 'secrets', ...r })} />}
-            {route.section === 'hub' && <HubSettings adding={!!route.hubId} onAdd={() => onRoute({ section: 'hub', hubId: 'new' })} onBack={() => onRoute({ section: 'hub' })} />}
-            {route.section === 'harnesses' && <HarnessesSettings harnessId={route.harnessId} onOpen={(harnessId) => onRoute({ section: 'harnesses', harnessId })} onBack={() => onRoute({ section: 'harnesses' })} />}
-            {route.section === 'systemPrompt' && <SystemPromptSettings />}
-            {route.section === 'naming' && <NamingSettings />}
-            {route.section === 'tools' && <ToolsSettings key={toolId ?? ''} toolId={toolId} onOpen={(id) => onRoute({ section: 'tools', toolId: id })} onBack={() => onRoute({ section: 'tools' })} onOpenThread={onOpenThread} />}
-            {route.section === 'mcps' && <McpSettings key={mcpId ?? ''} mcpId={mcpId} onOpen={(id) => onRoute({ section: 'mcps', mcpId: id })} onBack={() => onRoute({ section: 'mcps' })} />}
-            {route.section === 'skills' && <SkillsSettings key={sourceId ?? ''} sourceId={sourceId} onOpen={(id) => onRoute({ section: 'skills', sourceId: id })} onBack={() => onRoute({ section: 'skills' })} />}
-            {route.section === 'projects' && <ProjectsSettings projectId={route.projectId} onOpen={(projectId) => projectId === undefined && route.fromDashboard ? onClose() : onRoute({ section: 'projects', projectId })} onRoute={navigate} />}
-            {route.section === 'spaces' && <SpacesSettings spaceId={route.spaceId} onOpen={(spaceId) => onRoute({ section: 'spaces', spaceId })} onBack={() => onRoute({ section: 'spaces' })} />}
-            {route.section === 'machines' && <MachineSettings machineId={route.machineId} onOpen={(machineId) => onRoute({ section: 'machines', machineId })} onBack={() => onRoute({ section: 'machines' })} onOpenThread={onOpenThread} />}
-          </div>
-        </div>
-        </LeaveGuard.Provider>
-      </main>
+      <LeaveGuard.Provider value={leave}>
+        <SectionPage key={route.section} entry={entry} nav={nav} root={root} />
+      </LeaveGuard.Provider>
     </div>
   );
 }
 
+/** Whatever a section never had an entry for. */
+const useNoData = (): SectionData => ({});
+
+/**
+ * The one frame of every section: its breadcrumb, then its list, the page adding one, one item's page,
+ * or the same loading, error and deleted states. Keyed by section, so each section's data loads once.
+ */
+function SectionPage({ entry, nav, root }: { entry: SectionEntry; nav: SettingsNav; root: RefObject<HTMLDivElement | null> }) {
+  const { route } = nav;
+  const useData = entry.useData ?? useNoData;
+  const data = useData(route);
+  const { id } = route;
+  const item = id && id !== NEW ? data.items?.find((i) => i.id === id) : undefined;
+  const detailLabel = id === NEW ? entry.newLabel ?? `New ${entry.noun}` : item ? entry.name?.(item, route) ?? (item as { name?: string }).name : undefined;
+  const loading = !!entry.useData && !data.items && (!!id || !entry.listLoads);
+
+  const previousDetail = useRef<string | undefined>(undefined);
+  useLayoutEffect(() => {
+    const previous = previousDetail.current;
+    previousDetail.current = detailLabel;
+    // Wait until hidden/unmounted panes have released browser focus.
+    const frame = requestAnimationFrame(() => {
+      const active = document.activeElement as HTMLElement | null;
+      if (active && root.current?.contains(active) && active !== document.body && !active.matches('.crumbs') && active.getClientRects().length) return;
+      const rows = [...(root.current?.querySelectorAll<HTMLElement>('.settings-page .setting-link') ?? [])];
+      const row = rows.find(el => el.querySelector('b')?.textContent === previous) ?? rows[0];
+      (row ?? root.current?.querySelector<HTMLElement>('.settings-page input:not(:disabled), .settings-page button:not(:disabled)') ?? root.current?.querySelector<HTMLElement>('.main-top .crumbs'))?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [route, detailLabel, root]);
+
+  const props = { nav, data };
+  const page = loading ? (data.error ? <LoadError error={data.error} retry={data.retry} /> : <p className="note" role="status">Loading {entry.plural}…</p>)
+    : id === NEW && entry.New ? <entry.New key={JSON.stringify(route)} {...props} />
+      : item && entry.Detail ? <entry.Detail key={`${item.id}:${JSON.stringify(route.extra ?? {})}`} {...props} item={item} />
+        : id ? <><p className="note">This {entry.noun} no longer exists.</p><button type="button" className="link" onClick={nav.back}>All {entry.plural}</button></>
+          : <entry.List {...props} />;
+
+  return (
+    <main className="main">
+      <header className="main-top drag">
+        <nav className="crumbs" tabIndex={-1}>
+          <span>Settings</span>
+          <span className="sep">/</span>
+          {detailLabel ? (
+            <>
+              <button onClick={() => nav.navigate(listRoute(route))}>{entry.label}</button>
+              <span className="sep">/</span>
+              <b>{detailLabel}</b>
+            </>
+          ) : (
+            <b>{entry.label}</b>
+          )}
+        </nav>
+      </header>
+      <div className="settings-scroll">
+        <div className="settings-page">{page}</div>
+      </div>
+    </main>
+  );
+}
+
+/** A section that couldn't load from the hub, with a way to try again. */
+function LoadError({ error, retry }: { error: string; retry?: () => void }) {
+  return <p className="error" role="alert">Could not load from the hub: {error} {retry && <button type="button" className="link" onClick={retry}>Retry</button>}</p>;
+}
+
 /** While `active` (an inline confirmation is open), Escape cancels it and goes no further: this capture listener runs before Settings' own Escape handling. */
-export function useEscape(active: boolean, cancel: () => void) {
+function useEscape(active: boolean, cancel: () => void) {
   const latest = useRef(cancel);
   latest.current = cancel;
   useEffect(() => {
@@ -229,7 +259,33 @@ export function useEscape(active: boolean, cancel: () => void) {
   }, [active]);
 }
 
-/** A titled group of settings, drawn as one card. */
+/**
+ * The one confirmation of an action that can't be undone, such as Delete, Remove, Disconnect or Revoke.
+ * It reads the same everywhere: what happens, then Cancel, which has focus and is what Escape does, then the
+ * red action last. The host shows it in place of its own button while confirming.
+ */
+export function ConfirmAction({ question, consequence, action, busy, error, onConfirm, onCancel }: {
+  /** The group's name, as "Delete Work?". */
+  question: string;
+  consequence?: string;
+  /** The red button, as "Delete Work". */
+  action: string;
+  busy?: boolean;
+  error?: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  useEscape(true, onCancel);
+  return (
+    <div className="confirm-action" role="group" aria-label={question}>
+      {consequence && <small className="hint">{consequence}</small>}
+      <button type="button" className="ghost" disabled={busy} autoFocus onClick={onCancel}>Cancel</button>
+      <button type="button" className="ghost danger" disabled={busy} onClick={onConfirm}>{action}</button>
+      {error && <p className="error" role="alert">{error}</p>}
+    </div>
+  );
+}
+
 /** A titled card of rows. `add` puts a dashed "+ label" slot under the card, so adding never reads as another row. */
 export function SettingsSection({ title, add, children }: { title?: string; add?: { label: string; disabled?: boolean; onClick: () => void }; children?: ReactNode }) {
   return (
@@ -287,8 +343,7 @@ export function SettingLink({ icon, title, description, warn, chevron = true, on
 /**
  * The one footer of every settings detail page: Delete on the left, Cancel and Save on the right.
  * Without `saveLabel` the page has nothing to save and offers Done. Delete stays visible but disabled,
- * with `blocked` as its reason, when the thing is in use.
- * Every confirmation reads the same way: what happens, then Cancel, then the red action last.
+ * with `blocked` as its reason, when the thing is in use. Delete asks first (ConfirmAction).
  * With `dirty`, leaving the page another way asks "Discard changes?" here first.
  */
 export function SettingsFooter({ remove, busy, onCancel, saveLabel, saveDisabled, saveForm, onSave, dirty = false }: {
@@ -314,16 +369,11 @@ export function SettingsFooter({ remove, busy, onCancel, saveLabel, saveDisabled
     return () => { guard.current = undefined; };
   }, [dirty, guard]);
   const keepEditing = () => { setLeaving(undefined); requestAnimationFrame(() => save.current?.focus()); };
-  useEscape(confirming, () => setConfirming(false));
   useEscape(!!leaving, keepEditing);
   return (
-    <footer className="settings-actions" role={leaving || confirming ? 'group' : undefined} aria-label={leaving ? 'Discard changes?' : confirming ? `Delete ${remove?.name}?` : undefined}>
+    <footer className="settings-actions" role={leaving ? 'group' : undefined} aria-label={leaving ? 'Discard changes?' : undefined}>
       {remove && !leaving && (confirming ? (
-        <>
-          {remove.consequence && <small className="hint">{remove.consequence}</small>}
-          <button type="button" className="ghost" disabled={busy} autoFocus onClick={() => setConfirming(false)}>Cancel</button>
-          <button type="button" className="ghost danger" disabled={busy} onClick={remove.run}>Delete {remove.name}</button>
-        </>
+        <ConfirmAction question={`Delete ${remove.name}?`} consequence={remove.consequence} action={`Delete ${remove.name}`} busy={busy} onConfirm={remove.run} onCancel={() => setConfirming(false)} />
       ) : (
         <>
           <button type="button" className="ghost danger" disabled={busy || !!remove.blocked} onClick={() => setConfirming(true)}>Delete</button>

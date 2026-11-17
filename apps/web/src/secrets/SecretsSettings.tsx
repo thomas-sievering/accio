@@ -1,7 +1,7 @@
 import { useId, useRef, useState, type KeyboardEvent } from 'react';
 import { SecretSlot, type ProfileView, type ProjectView, type SecretSummary } from '@accio/protocol';
 import { useClient } from '../app/connection';
-import { SettingsFooter, SettingsSection, useEscape } from '../app/Settings';
+import { ConfirmAction, NEW, SettingsFooter, SettingsSection, type SettingsNav, type SettingsRoute } from '../app/Settings';
 import { useAction } from '../app/useAction';
 import { useProfiles } from '../profiles/profiles';
 import { useProjects } from '../projects/projects';
@@ -11,67 +11,82 @@ import { safeError, valueInputProps, valueProblem } from './secretValue';
 import { MenuSelect } from '../ui/MenuSelect';
 import { formatDay } from '../ui/dates';
 
-/** Where Secrets settings is open: a profile's list, a new secret, or one secret's edit or replace form. */
-export type SecretsRoute = { profileId?: string; secretId?: string; replace?: boolean };
-
-/**
- * One list and one form for a profile's saved secrets. Values are write-only:
- * they can be added or replaced, never shown.
- */
-export function SecretsSettings({ route, onRoute }: { route: SecretsRoute; onRoute: (r: SecretsRoute) => void }) {
+/** A profile's saved secrets: the one in `extra.profileId`, else the profile the sidebar filters by, else the first. */
+export function useSecretsData(route: SettingsRoute) {
   const { profiles, filter } = useProfiles();
   const { state } = useProjects();
-  const profile = profiles?.find((p) => p.id === route.profileId)
-    ?? (route.profileId ? undefined : profiles?.find((p) => p.id === filter) ?? profiles?.[0]);
+  const profileId = route.extra?.profileId;
+  const profile = profiles?.find((p) => p.id === profileId)
+    ?? (profileId ? undefined : profiles?.find((p) => p.id === filter) ?? profiles?.[0]);
   const { secrets, error, retry } = useSecretList(profile?.id);
   const store = useSecretStore();
-  if (!profiles) return null;
-  if (!profiles.length) return <p className="note">Add a profile first. Secrets belong to one profile.</p>;
+  const projects = state?.projects ?? [];
+  const projectName = (id: string) => projects.find((p) => p.id === id)?.name;
+  return { items: !profiles ? undefined : profile ? secrets : [], error, retry, profiles, profile, projects, projectName, store };
+}
+type Props = { nav: SettingsNav; data: ReturnType<typeof useSecretsData> };
 
-    const projectName = (id: string) => state?.projects.find((p) => p.id === id)?.name;
-  const formOpen = !!route.secretId;
-  const secret = secrets?.find((s) => s.id === route.secretId);
-  const toList = (profileId = profile?.id) => onRoute({ profileId });
+/** Values are write-only: they can be added or replaced, never shown. */
+function StoreNote({ store }: { store: SecretStore | undefined }) {
+  return store?.available === false ? <p className="note" role="status">Saved secrets are unavailable{store.reason ? `: ${store.reason}` : '.'} Threads can still use a secret once.</p> : null;
+}
 
+export function NewSecret({ nav, data }: Props) {
+  const { profile, profiles = [] } = data;
+  if (!profile) return <p className="note">That profile no longer exists. Choose another.</p>;
   return (
     <div className="settings-profile-form secrets-page">
-      {!formOpen && <p className="note">Tokens and keys a profile’s threads can use. Values can be replaced, never shown.</p>}
-
-      {!formOpen && (
-        <div className="field secrets-profile">
-          <span>Profile</span>
-          <MenuSelect label="Profile" value={profile?.id ?? ''} placeholder="Choose a profile" onChange={(profileId) => onRoute({ profileId })}
-            options={profiles.map((p) => ({ value: p.id, label: p.name }))} />
-        </div>
-      )}
-
-      {!profile ? <p className="note">That profile no longer exists. Choose another.</p>
-        : store?.available === false && <p className="note" role="status">Saved secrets are unavailable{store.reason ? `: ${store.reason}` : '.'} Threads can still use a secret once.</p>}
-
-      {profile && (route.secretId === 'new' ? (
-        <SecretForm key={`new:${profile.id}`} profile={profile} profiles={profiles} projects={state?.projects ?? []} store={store} onDone={toList} />
-      ) : route.secretId ? (
-        secret ? <SecretForm key={`${secret.id}:${route.replace ? 'replace' : 'edit'}`} profile={profile} profiles={profiles} projects={state?.projects ?? []} store={store} secret={secret} replace={route.replace}
-          accessText={accessLabel(secret, profile.name, projectName)}
-          onReplace={() => onRoute({ profileId: profile.id, secretId: secret.id, replace: true })} onDone={toList} />
-          : secrets ? <div className="settings-card"><div className="setting-form"><p className="note">This secret no longer exists.</p><button type="button" className="ghost" onClick={() => toList()}>Back to secrets</button></div></div>
-          : null
-      ) : (
-        <SecretList
-          profile={profile}
-          secrets={secrets}
-          error={error}
-          retry={retry}
-          canWrite={store?.available !== false}
-          projectName={projectName}
-          onAdd={() => onRoute({ profileId: profile.id, secretId: 'new' })}
-          onEdit={(id) => onRoute({ profileId: profile.id, secretId: id })}
-          onReplace={(id) => onRoute({ profileId: profile.id, secretId: id, replace: true })}
-        />
-      ))}
+      <StoreNote store={data.store} />
+      <SecretForm profile={profile} profiles={profiles} projects={data.projects} store={data.store} onDone={(profileId = profile.id) => nav.toList({ profileId })} />
     </div>
   );
 }
+
+export function SecretDetail({ nav, data, item: secret }: Props & { item: SecretSummary }) {
+  const profile = data.profile!;
+  const replace = nav.route.extra?.replace;
+  return (
+    <div className="settings-profile-form secrets-page">
+      <StoreNote store={data.store} />
+      <SecretForm profile={profile} profiles={data.profiles!} projects={data.projects} store={data.store} secret={secret} replace={replace}
+        accessText={accessLabel(secret, profile.name, data.projectName)}
+        onReplace={() => nav.open(secret.id, { profileId: profile.id, replace: true })} onDone={(profileId = profile.id) => nav.toList({ profileId })} />
+    </div>
+  );
+}
+
+/** One list for a profile's saved secrets, with the profile picker. */
+export function SecretsList({ nav, data }: Props) {
+  const { profiles, profile } = data;
+  if (!profiles) return <p className="note" role="status">Loading secrets…</p>;
+  if (!profiles.length) return <p className="note">Add a profile first. Secrets belong to one profile.</p>;
+  return (
+    <div className="settings-profile-form secrets-page">
+      <p className="note">Tokens and keys a profile’s threads can use. Values can be replaced, never shown.</p>
+      <div className="field secrets-profile">
+        <span>Profile</span>
+        <MenuSelect label="Profile" value={profile?.id ?? ''} placeholder="Choose a profile" onChange={(profileId) => nav.toList({ profileId })}
+          options={profiles.map((p) => ({ value: p.id, label: p.name }))} />
+      </div>
+      {!profile ? <p className="note">That profile no longer exists. Choose another.</p> : <>
+        <StoreNote store={data.store} />
+        <SecretList
+          profile={profile}
+          secrets={data.items}
+          error={data.error}
+          retry={data.retry}
+          canWrite={data.store?.available !== false}
+          projectName={data.projectName}
+          onAdd={() => nav.open(NEW, { profileId: profile.id })}
+          onEdit={(id) => nav.open(id, { profileId: profile.id })}
+          onReplace={(id) => nav.open(id, { profileId: profile.id, replace: true })}
+        />
+      </>}
+    </div>
+  );
+}
+
+const DELETE_CONSEQUENCE = 'Threads stop receiving it. This does not revoke the token at the service.';
 
 function SecretList({ profile, secrets, error, retry, canWrite, projectName, onAdd, onEdit, onReplace }: {
   profile: ProfileView;
@@ -108,7 +123,6 @@ function SecretList({ profile, secrets, error, retry, canWrite, projectName, onA
 function SecretRow({ secret: s, access, canWrite, onEdit, onReplace }: { secret: SecretSummary; access: string; canWrite: boolean; onEdit: () => void; onReplace: () => void }) {
   const client = useClient();
   const [confirming, setConfirming] = useState(false);
-  useEscape(confirming, () => setConfirming(false));
   const { busy, error, run } = useAction();
   const remove = () => void run(() => client.call('secrets.delete', { id: s.id }));
   return (
@@ -122,20 +136,15 @@ function SecretRow({ secret: s, access, canWrite, onEdit, onReplace }: { secret:
           <span>Updated {formatDay(s.updatedAt)}</span>
         </span>
       </div>
-      {!confirming && (
-        <div className="setting-value">
+      <div className="setting-value">
+        {confirming ? (
+          <ConfirmAction question={`Delete ${s.name}?`} consequence={DELETE_CONSEQUENCE} action={`Delete ${s.name}`} busy={busy}
+            error={error && `Could not delete: ${error}`} onConfirm={remove} onCancel={() => setConfirming(false)} />
+        ) : <>
           <button type="button" className="ghost" disabled={!canWrite} onClick={onReplace} aria-label={`Replace ${s.name}`}>Replace</button>
           <button type="button" className="ghost danger" onClick={() => setConfirming(true)} aria-label={`Delete ${s.name}`}>Delete</button>
-        </div>
-      )}
-      {confirming && (
-        <div className="secret-confirm" role="group" aria-label={`Delete ${s.name}`}>
-          <p>Delete {s.name}? Threads stop receiving it. This does not revoke the token at the service.</p>
-          <button type="button" className="ghost" disabled={busy} onClick={() => setConfirming(false)} autoFocus>Cancel</button>
-          <button type="button" className="ghost danger" disabled={busy} onClick={remove}>{busy ? 'Deleting…' : `Delete ${s.name}`}</button>
-          {error && <p className="error" role="alert">Could not delete: {error}</p>}
-        </div>
-      )}
+        </>}
+      </div>
     </div>
   );
 }
@@ -296,7 +305,7 @@ function SecretForm({ profile: initial, profiles, projects: allProjects, store, 
         </div>
       </SettingsSection>
       <SettingsFooter
-        remove={secret && !replace ? { name: secret.name, run: () => void removeSecret(), consequence: 'Threads stop receiving it. This does not revoke the token at the service.' } : undefined}
+        remove={secret && !replace ? { name: secret.name, run: () => void removeSecret(), consequence: DELETE_CONSEQUENCE } : undefined}
         busy={busy} onCancel={() => onDone()} onSave={() => void submit()} saveDisabled={!ready}
         saveLabel={busy ? 'Saving…' : creating ? 'Save secret' : replace ? 'Replace value' : 'Save'} dirty={dirty && !busy} />
     </div>

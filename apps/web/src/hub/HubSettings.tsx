@@ -1,32 +1,35 @@
 import { useEffect, useState } from 'react';
 import { useHubs } from '../app/connection';
 import { Hub } from '../app/icons';
-import { SettingRow, SettingsSection, StatusPill, useEscape } from '../app/Settings';
+import { ConfirmAction, NEW, SettingRow, SettingsSection, StatusPill, type SettingsNav } from '../app/Settings';
 import { useAction } from '../app/useAction';
 import { PairHubForm } from './PairHubForm';
 import { PairingCode, type Pairing } from './PairingCode';
 import { SortingHatSettings } from './SortingHatSettings';
 
+/** "Add hub" in Settings / Hubs: the pairing form as its own page. */
+export function AddHub({ nav }: { nav: SettingsNav }) {
+  return <PairHubForm onCancel={nav.back} />;
+}
+
 /** The saved hubs; "Add hub" opens the pairing form as its own page. Without a hub yet (first run) the form is the whole page. */
-export function HubSettings({ adding, onAdd, onBack }: { adding?: boolean; onAdd?: () => void; onBack?: () => void } = {}) {
+export function HubSettings({ nav }: { nav?: SettingsNav } = {}) {
   const { hubs, selectedId, select, root } = useHubs();
   const [pairing, setPairing] = useState<Pairing>();
   const [copied, setCopied] = useState(false);
   useEffect(() => { if (!copied) return; const timer = setTimeout(() => setCopied(false), 2000); return () => clearTimeout(timer); }, [copied]);
   const [confirming, setConfirming] = useState<string>();
   const { busy, error, run } = useAction();
-  useEscape(!!confirming, () => setConfirming(undefined));
   const current = hubs.find((h) => h.id === selectedId);
   if (!hubs.length) return <SettingsSection><PairHubForm /></SettingsSection>;
-  if (adding) return <PairHubForm onCancel={onBack} />;
   return <>
     <p className="note">Hubs keep your profiles, accounts and threads. This device uses one at a time.</p>
-    <SettingsSection add={onAdd && { label: 'Add hub', onClick: onAdd }}>
-      {hubs.map((hub) => <SettingRow key={hub.id} icon={<Hub />} title={hub.name} description={confirming === hub.id ? 'You will be disconnected from this hub.' : hub.url}>
-        {confirming === hub.id ? <>
-          <button type="button" className="ghost" disabled={busy} autoFocus onClick={() => setConfirming(undefined)}>Cancel</button>
-          <button type="button" className="ghost danger" disabled={busy} onClick={() => void run(async () => { await root.call('hubs.remove', { id: hub.id }); setConfirming(undefined); })}>Remove {hub.name}</button>
-        </> : <>
+    <SettingsSection add={nav && { label: 'Add hub', onClick: () => nav.open(NEW) }}>
+      {hubs.map((hub) => <SettingRow key={hub.id} icon={<Hub />} title={hub.name} description={hub.url}>
+        {confirming === hub.id ? (
+          <ConfirmAction question={`Remove ${hub.name}?`} consequence="You will be disconnected from this hub." action={`Remove ${hub.name}`} busy={busy}
+            onConfirm={() => void run(async () => { await root.call('hubs.remove', { id: hub.id }); setConfirming(undefined); })} onCancel={() => setConfirming(undefined)} />
+        ) : <>
           <StatusPill tone={hub.status === 'connected' ? 'ok' : hub.error ? 'bad' : undefined}>{hub.status === 'connected' ? 'Connected' : hub.status === 'connecting' ? 'Connecting' : 'Offline'}</StatusPill>
           {hub.id !== selectedId && <button type="button" className="ghost" onClick={() => select(hub.id)}>Use hub</button>}
           <button type="button" className="ghost" disabled={busy || hub.running > 0} title={hub.running > 0 ? 'Threads are running on this hub.' : undefined} onClick={() => setConfirming(hub.id)}>Remove</button>
