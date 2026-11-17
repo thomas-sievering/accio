@@ -30,8 +30,8 @@ function line(t: ThreadView, now: Date): string {
   if (t.machine) facts.push(`on ${t.machine.name}${t.machine.online ? '' : ' (offline)'}`);
   if (t.projectName) facts.push(`project ${t.projectName}`);
   if (t.workspace?.branch) facts.push(`branch ${t.workspace.branch}`);
-  const pr = t.delivery?.pullRequest?.url ?? t.delivery?.pullRequestUrl;
-  if (pr) facts.push(`PR ${pr}${t.delivery?.pullRequest ? `, ${t.delivery.pullRequest.state}` : ''}`);
+  const pr = t.delivery?.pullRequest;
+  if (pr) facts.push(`PR ${pr.url}, ${pr.state}`);
   else if (t.delivery?.status === 'delivered') facts.push(`delivered to ${t.delivery.baseBranch}`);
   return `- @${threadHandle(t)}: "${t.title || 'Untitled'}" (${facts.join('; ')})`;
 }

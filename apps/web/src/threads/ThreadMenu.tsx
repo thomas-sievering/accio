@@ -10,7 +10,7 @@ import { releaseFirstMessage } from './sentImages';
 import { useThreadAvailability } from './useThreadAvailability';
 
 type Open = { thread: ThreadView; x: number; y: number };
-type Mode = 'menu' | 'rename' | 'confirmDelete';
+type Mode = 'menu' | 'confirmDelete';
 type MenuCtx = { show: (thread: ThreadView, x: number, y: number) => void; renaming: string | undefined; setRenaming: (id: string | undefined) => void };
 const Ctx = createContext<MenuCtx>({ show: () => {}, renaming: undefined, setRenaming: () => {} });
 
@@ -28,18 +28,16 @@ export function useRenaming() {
 /**
  * Every thread action as menu items, shared by the sidebar row menu and the thread
  * header menu: rename, stop, snooze or wake, settle or reopen, delete. Deleting asks
- * twice: the first click turns the item into Cancel and Delete thread. With
- * `onRename` the title is edited elsewhere (in its sidebar row); without it the
- * menu shows a title field.
+ * twice: the first click turns the item into Cancel and Delete thread. Rename
+ * closes the menu and opens the title editor where the caller shows it.
  */
 export function ThreadMenuItems({ thread, close, onRename, before }: {
-  thread: ThreadView; close: () => void; onRename?: () => void; before?: ReactNode;
+  thread: ThreadView; close: () => void; onRename: () => void; before?: ReactNode;
 }) {
   const client = useClient();
   const { unavailable } = useThreadAvailability(thread);
   const { selectedId, select, now, act } = useThreads();
   const [mode, setMode] = useState<Mode>('menu');
-  const [title, setTitle] = useState(thread.title);
   const { busy, error, run } = useAction();
   const done = async (fn: () => Promise<unknown>) => {
     if ((await run(async () => (await fn(), true))) === true) close();
@@ -58,57 +56,44 @@ export function ThreadMenuItems({ thread, close, onRename, before }: {
       </button>
     );
   };
-  const rename = (e: FormEvent) => {
-    e.preventDefault();
-    if (!unavailable && title.trim()) void done(() => client.call('threads.rename', { threadId: thread.id, title }));
-  };
-
   return (
     <>
-      {mode === 'rename' ? (
-        <form className="menu-form" onSubmit={rename}>
-          <input value={title} onChange={(e) => setTitle(e.target.value)} aria-label="Thread title" autoFocus maxLength={120} />
-        </form>
+      {before}
+      <button className="menu-item" role="menuitem" disabled={!!unavailable} title={unavailable} onClick={() => { close(); onRename(); }}>
+        <span className="menu-text">Rename…</span>
+      </button>
+      <button className="menu-item" role="menuitem" disabled={busy || !!unavailable} title={unavailable} onClick={() => done(() => client.call('threads.regenerateTitle', { threadId: thread.id }))}>
+        <span className="menu-text">{busy ? 'Generating?' : 'Regenerate title'}</span>
+      </button>
+      {running && item('Stop', 'stop')}
+      {place === 'snoozed' ? item('Wake now', 'reopen', { whileOffline: !!thread.snoozedUntilOnline })
+        : awaiting ? item('Snooze until back online', 'snooze', { whileOffline: true })
+        : item('Snooze until morning', 'snooze')}
+      {place === 'settled' ? item('Reopen', 'reopen')
+        : item('Settle', 'settle', { blocked: awaiting ? `${thread.machine!.name} is offline. Read the thread once it is back to settle it.` : undefined })}
+      <hr />
+      {mode === 'confirmDelete' ? (
+        <div className="menu-confirm">
+          <button className="menu-item" role="menuitem" autoFocus disabled={busy || !!unavailable} title={unavailable} onClick={() => setMode('menu')}>
+            <span className="menu-text">Cancel</span>
+          </button>
+          <button className="menu-item danger" role="menuitem" disabled={busy || !!unavailable} title={unavailable}
+            onClick={() =>
+              done(async () => {
+                await client.call('threads.delete', { threadId: thread.id });
+                releaseFirstMessage(client, thread.id);
+                if (selectedId === thread.id) select('');
+              })
+            }>
+            <span className="menu-text">Delete thread</span>
+          </button>
+        </div>
       ) : (
-        <>
-          {before}
-          <button className="menu-item" role="menuitem" disabled={!!unavailable} title={unavailable} onClick={() => onRename ? (close(), onRename()) : setMode('rename')}>
-            <span className="menu-text">Rename…</span>
-          </button>
-          <button className="menu-item" role="menuitem" disabled={busy || !!unavailable} title={unavailable} onClick={() => done(() => client.call('threads.regenerateTitle', { threadId: thread.id }))}>
-            <span className="menu-text">{busy ? 'Generating?' : 'Regenerate title'}</span>
-          </button>
-          {running && item('Stop', 'stop')}
-          {place === 'snoozed' ? item('Wake now', 'reopen', { whileOffline: !!thread.snoozedUntilOnline })
-            : awaiting ? item('Snooze until back online', 'snooze', { whileOffline: true })
-            : item('Snooze until morning', 'snooze')}
-          {place === 'settled' ? item('Reopen', 'reopen')
-            : item('Settle', 'settle', { blocked: awaiting ? `${thread.machine!.name} is offline. Read the thread once it is back to settle it.` : undefined })}
-          <hr />
-          {mode === 'confirmDelete' ? (
-            <div className="menu-confirm">
-              <button className="menu-item" role="menuitem" autoFocus disabled={busy || !!unavailable} title={unavailable} onClick={() => setMode('menu')}>
-                <span className="menu-text">Cancel</span>
-              </button>
-              <button className="menu-item danger" role="menuitem" disabled={busy || !!unavailable} title={unavailable}
-                onClick={() =>
-                  done(async () => {
-                    await client.call('threads.delete', { threadId: thread.id });
-                    releaseFirstMessage(client, thread.id);
-                    if (selectedId === thread.id) select('');
-                  })
-                }>
-                <span className="menu-text">Delete thread</span>
-              </button>
-            </div>
-          ) : (
-            <button className="menu-item danger" role="menuitem" disabled={running || !!unavailable}
-              title={unavailable ?? (running ? 'Stop the thread to delete it' : undefined)}
-              onClick={() => setMode('confirmDelete')}>
-              <span className="menu-text">Delete thread</span>
-            </button>
-          )}
-        </>
+        <button className="menu-item danger" role="menuitem" disabled={running || !!unavailable}
+          title={unavailable ?? (running ? 'Stop the thread to delete it' : undefined)}
+          onClick={() => setMode('confirmDelete')}>
+          <span className="menu-text">Delete thread</span>
+        </button>
       )}
       {error && <p className="error menu-error">{error}</p>}
     </>
@@ -159,12 +144,16 @@ export function RowRename({ thread }: { thread: ThreadView }) {
   return <TitleEdit thread={thread} className="row-rename" onDone={() => setRenaming(undefined)} />;
 }
 
-/** An in-place title field, shared by the sidebar row and the thread header. */
-export function TitleEdit({ thread, className, onDone }: { thread: ThreadView; className: string; onDone: () => void }) {
+/**
+ * The one title editor, in the sidebar row and the thread header. Enter (or Save) saves the
+ * trimmed title; Escape, Cancel or leaving the field keeps the old one. The header, with room
+ * for them, shows Save and Cancel.
+ */
+export function TitleEdit({ thread, className, buttons = false, onDone }: { thread: ThreadView; className: string; buttons?: boolean; onDone: () => void }) {
   const client = useClient();
   const { unavailable } = useThreadAvailability(thread);
   const [title, setTitle] = useState(thread.title);
-  const { run } = useAction();
+  const { busy, error, run } = useAction();
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => input.current?.select(), []);
   const submit = async (e: FormEvent) => {
@@ -175,12 +164,17 @@ export function TitleEdit({ thread, className, onDone }: { thread: ThreadView; c
     if ((await run(async () => (await client.call('threads.rename', { threadId: thread.id, title: next }), true))) === true) onDone();
   };
   return (
-    <form className={className} onSubmit={submit}>
+    <form className={className} onSubmit={submit}
+      onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) onDone(); }}>
       <input ref={input} value={title} disabled={!!unavailable} title={unavailable} autoFocus maxLength={120} aria-label="Thread title"
         onChange={(e) => setTitle(e.target.value)}
-        onBlur={onDone}
         onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Escape') onDone(); }} />
       <small className="title-count" aria-live="polite">{title.length}/120</small>
+      {buttons && <>
+        <button type="submit" className="ghost" disabled={!!unavailable || busy || !title.trim()}>Save</button>
+        <button type="button" className="ghost" disabled={busy} onClick={onDone}>Cancel</button>
+      </>}
+      {error && <span className="error" role="alert">{error}</span>}
     </form>
   );
 }

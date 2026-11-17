@@ -146,7 +146,6 @@ export type ThreadDelivery = {
   requestedAt: string;
   revision?: string;
   publishedRevision?: string;
-  pullRequestUrl?: string;
   pullRequest?: DeliveryPullRequest;
   detail?: string;
   continuationAttempts?: number;

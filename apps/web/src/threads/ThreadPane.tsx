@@ -73,7 +73,7 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
 
   return (
     <>
-      <PaneHeader title={thread.title} titleEditor={renaming ? <TitleEdit thread={thread} className="header-rename" onDone={() => setRenaming(false)} /> : <EditableTitle key={thread.id} thread={thread} />} {...place} checkout={thread.workspace && !thread.workspace.releasedAt && place.checkout ? { ...place.checkout, path: thread.workspace.path } : place.checkout} actions={<ThreadActionsMenu key={thread.id} thread={thread} items={items} onRename={() => setRenaming(true)} />} projectName={thread.projectName} machine={thread.machine} />
+      <PaneHeader title={thread.title} titleEditor={renaming ? <TitleEdit key={thread.id} thread={thread} className="thread-title-form" buttons onDone={() => setRenaming(false)} /> : <EditableTitle thread={thread} onEdit={() => setRenaming(true)} />} {...place} checkout={thread.workspace && !thread.workspace.releasedAt && place.checkout ? { ...place.checkout, path: thread.workspace.path } : place.checkout} actions={<ThreadActionsMenu key={thread.id} thread={thread} items={items} onRename={() => setRenaming(true)} />} projectName={thread.projectName} machine={thread.machine} />
       {!visibleItems && !error && starting ? <StartingTranscript {...starting} /> : visibleItems ? <PendingPick.Provider value={{ pick, setPick, enabled: !running && !unavailable }}>
         <Transcript threadId={thread.id} items={visibleItems} working={running} onOpenSecrets={onOpenSecrets} />
       </PendingPick.Provider> : (

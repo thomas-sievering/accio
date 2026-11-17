@@ -36,8 +36,6 @@ export class Changelog {
 export function changelogEntry(thread: Thread): ChangelogEntry | undefined {
   const d = thread.delivery;
   if (d?.status !== 'delivered') return undefined;
-  const url = d.pullRequest?.url ?? d.pullRequestUrl;
-  const number = d.pullRequest?.number ?? Number(d.pullRequestUrl?.match(/\/pull\/(\d+)(?:[/?#]|$)/)?.[1]);
   const revision = d.publishedRevision ?? d.pullRequest?.mergeRevision ?? d.revision;
   return {
     id: d.id ?? `${thread.id}:${d.requestedAt}`,
@@ -47,7 +45,7 @@ export function changelogEntry(thread: Thread): ChangelogEntry | undefined {
     title: thread.title,
     ...(d.note ? { note: d.note } : {}),
     target: d.pullRequest?.baseBranch ?? d.baseBranch,
-    ...(url && number ? { pullRequest: { number, url } } : {}),
+    ...(d.pullRequest ? { pullRequest: { number: d.pullRequest.number, url: d.pullRequest.url } } : {}),
     ...(revision ? { revision } : {}),
     deliveredAt: d.completedAt ?? d.checkedAt ?? thread.updatedAt,
   };

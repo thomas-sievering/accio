@@ -6,7 +6,7 @@ import { useAction } from '../app/useAction';
 import { usePopoverMenu } from '../ui/usePopoverMenu';
 import { ThreadMenuItems } from './ThreadMenu';
 
-export function ThreadActionsMenu({ thread, items, onRename }: { thread: ThreadView; items?: TranscriptItem[]; onRename?: () => void }) {
+export function ThreadActionsMenu({ thread, items, onRename }: { thread: ThreadView; items?: TranscriptItem[]; onRename: () => void }) {
   const client = useClient();
   const id = useId();
   const { busy, error, run, clear } = useAction();
