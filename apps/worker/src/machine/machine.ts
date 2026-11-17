@@ -91,7 +91,6 @@ export class Machines {
 
   register(router: Router) {
     router
-      .on('machines.list', async () => { await this.refresh(); return this.views(); })
       .on('machines.rename', async ({ machineId, name }) => {
         await this.refresh();
         if (!this.settings.machine(machineId)) throw new UserError('No such machine');
