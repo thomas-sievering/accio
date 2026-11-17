@@ -35,11 +35,6 @@ export function useResources(): ResourcesCtx {
   return c;
 }
 
-/** Shown in place of a resources page when the hub's state could not be read. */
-export function LoadError({ error, retry }: { error: string; retry: () => void }) {
-  return <p className="error" role="alert">Could not load from the hub: {error} <button type="button" className="link" onClick={retry}>Retry</button></p>;
-}
-
 /** The key the hub selects a project by: its remote, so every checkout of it shares the selection. */
 export { projectKey };
 

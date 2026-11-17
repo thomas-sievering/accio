@@ -206,6 +206,34 @@
   border-top: 1px solid var(--line);
   background: var(--bg);
 }
+/* ConfirmAction: what happens, Cancel, then the red action. In a row it takes a line of its own under the row's text. */
+.confirm-action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.confirm-action .hint {
+  flex: 1 1 220px;
+}
+.settings-actions > .confirm-action {
+  justify-content: flex-start;
+}
+.settings-actions > .confirm-action .hint {
+  flex: 0 1 auto;
+}
+.confirm-action .error {
+  flex-basis: 100%;
+  margin: 0;
+}
+.setting:has(> .setting-value > .confirm-action) {
+  flex-wrap: wrap;
+}
+.setting-value:has(> .confirm-action) {
+  flex: 1 1 100%;
+  max-width: none;
+}
 .pill {
   display: inline-flex;
   align-items: center;

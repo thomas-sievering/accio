@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { ProjectView } from '@accio/protocol';
 import { useClient } from '../app/connection';
-import { SettingsFooter, SettingsSection, useEscape, type SettingsRoute } from '../app/Settings';
+import { ConfirmAction, SettingsFooter, SettingsSection, type SettingsRoute } from '../app/Settings';
 import { useAction } from '../app/useAction';
 import { useProfiles } from '../profiles/profiles';
 import { useThreads } from '../threads/threads';
@@ -24,7 +24,7 @@ export function ProjectForm({ project, onClose, onOpenSettings }: { project: Pro
   const { threads = [] } = useThreads();
   const { state: resources } = useResources();
   const threadCount = threads.filter((t) => t.projectId === project.id).length;
-  const { busy, error, run } = useAction();
+  const { busy, error, attempt } = useAction();
   const [confirming, setConfirming] = useState<string>();
   const [profileId, setProfileId] = useState(project.profileId);
   const [policy, setPolicy] = useState(project.deliveryPolicy ?? 'direct');
@@ -39,20 +39,14 @@ export function ProjectForm({ project, onClose, onOpenSettings }: { project: Pro
   });
   const deliveryChanged = policy !== (project.deliveryPolicy ?? 'direct') || previewCommand !== (project.previewCommand ?? '') || testCommand !== (project.testCommand ?? '');
   const dirty = profileId !== project.profileId || deliveryChanged || skillChanges.length > 0;
-  // An open inline confirmation takes Escape first.
-  useEscape(confirming !== undefined, () => setConfirming(undefined));
-
   const remove = (checkoutId: string) =>
-    run(async () => {
-      await client.call('checkouts.remove', { id: checkoutId, deleteThreads: confirming === checkoutId });
-    }).finally(() => setConfirming(undefined));
+    attempt(() => client.call('checkouts.remove', { id: checkoutId, deleteThreads: confirming === checkoutId })).finally(() => setConfirming(undefined));
 
   const save = async () => {
-    const done = await run(async () => {
+    const done = await attempt(async () => {
       if (profileId !== project.profileId) await client.call('projects.setProfile', { projectId: project.id, profileId });
       if (deliveryChanged) await client.call('projects.setDelivery', { projectId: project.id, deliveryPolicy: policy, previewCommand, testCommand });
       for (const { skill, on } of skillChanges) await client.call('skills.setScope', { id: skill.id, scope: { ...skill.scope, projectKeys: toggled(skill.scope.projectKeys, key, on) } });
-      return true;
     });
     if (done) onClose();
   };
@@ -99,14 +93,8 @@ export function ProjectForm({ project, onClose, onOpenSettings }: { project: Pro
                   <MidPath text={c.path} />
                 </FolderLink>
                 {confirming === c.id ? (
-                  <>
-                    <button type="button" disabled={busy} className="ghost" onClick={() => setConfirming(undefined)}>
-                      Cancel
-                    </button>
-                    <button type="button" disabled={busy} className="ghost danger" onClick={() => remove(c.id)}>
-                      {count > 0 ? `Remove checkout and delete ${count} ${count === 1 ? 'thread' : 'threads'}` : 'Confirm remove'}
-                    </button>
-                  </>
+                  <ConfirmAction question={`Remove checkout ${c.path}?`} busy={busy} onConfirm={() => remove(c.id)} onCancel={() => setConfirming(undefined)}
+                    action={count > 0 ? `Remove checkout and delete ${count} ${count === 1 ? 'thread' : 'threads'}` : 'Remove checkout'} />
                 ) : (
                   <button type="button" disabled={busy} className="ghost danger" aria-label={`Remove checkout ${c.path}`} onClick={() => setConfirming(c.id)}>
                     Remove checkout

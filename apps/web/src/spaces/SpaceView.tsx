@@ -31,7 +31,7 @@ export function SpaceView({ space, onClose }: { space: Space; onClose: () => voi
         </div>
         <span className="spacer" />
         <button type="button" className="side-icon" title={`${space.name} settings`} aria-label={`${space.name} settings`}
-          onClick={() => emitAppEvent('settings.open', { section: 'spaces', spaceId: space.id })}><Settings /></button>
+          onClick={() => emitAppEvent('settings.open', { section: 'spaces', id: space.id })}><Settings /></button>
         <button type="button" className="side-icon" title="Close (Esc)" aria-label="Close space" onClick={onClose}><Close /></button>
       </header>
       <div className="settings-scroll">

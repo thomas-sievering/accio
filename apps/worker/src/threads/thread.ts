@@ -36,6 +36,15 @@ export function fromStored(t: Thread): Thread {
   return { ...t, workVersion: t.workVersion ?? 0, organizationVersion: t.organizationVersion ?? 0 };
 }
 
+/**
+ * Threads that may have nothing said in them: a thread is stored quietly before its
+ * first turn runs, so one cut off by a stop in between is left empty. Load drops
+ * those whose transcript is empty too.
+ */
+export function dropUnstarted(threads: readonly Thread[]): Thread[] {
+  return threads.filter((t) => t.workspace || !(t.status === 'idle' && t.sessionId === null && t.title === NEW_THREAD_TITLE));
+}
+
 /** GLOSSARY: Snooze. A thread hides until `until`; snoozing a settled thread reopens it first. */
 export function snooze(thread: Thread, until: string): Thread {
   return { ...thread, snoozedUntil: until, settledAt: null };
