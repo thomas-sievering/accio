@@ -18,6 +18,16 @@
     position-try-fallbacks: flip-block, flip-inline;
   }
 }
+/* A menu usePopoverMenu places against the window, for one that must open on a
+   given side or at the pointer; its position, width and height are set as it opens. */
+.menu[data-placed] {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  position-area: none;
+  position-try-fallbacks: none;
+  overflow-y: auto;
+}
 .menu hr {
   height: 1px;
   margin: 6px -6px;

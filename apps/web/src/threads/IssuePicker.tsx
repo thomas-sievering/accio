@@ -1,6 +1,7 @@
-import { useId, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { useId, useRef, useState, type KeyboardEvent } from 'react';
 import type { IssueList, IssueView, ThreadView } from '@accio/protocol';
 import { Folder, Issue, MessageSquarePlus, Search } from '../app/icons';
+import { usePopoverMenu } from '../ui/usePopoverMenu';
 import { issueGroups } from './issueGroups';
 
 /**
@@ -21,15 +22,24 @@ export function IssuePicker({ list, value, onChange, onOpen, working = new Map()
   onOpenThread: (threadId: string) => void;
 }) {
   const id = useId();
-  const menu = useRef<HTMLDivElement>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
   const search = useRef<HTMLInputElement>(null);
-  const [position, setPosition] = useState<CSSProperties>({});
   const [query, setQuery] = useState('');
   const [highlight, setHighlight] = useState(0);
   const groups = issueGroups(list, query, new Set(working.keys()));
   const flat = groups.flatMap((group) => group.issues);
   const active = Math.min(highlight, flat.length - 1);
+  // Opens downward so the list never covers the composer above it, unless far more room is above.
+  const { props, trigger, popover: menu } = usePopoverMenu({
+    placement: { width: 480, side: 'below', height: 220 },
+    // Its keys stay in the search field; from anywhere else in it, the arrows return there.
+    items: '[role="combobox"]',
+    focus: () => search.current,
+    onToggle: (open) => {
+      if (!open) { setQuery(''); return; }
+      onOpen();
+      setHighlight(Math.max(0, value ? flat.findIndex((issue) => issue.ref === value.ref) : 0));
+    },
+  });
   const source = list.tracker?.kind === 'github' ? list.tracker.repository : list.tracker?.folder;
 
   const pick = (issue: IssueView) => { menu.current?.hidePopover(); onChange(issue); };
@@ -54,26 +64,11 @@ export function IssuePicker({ list, value, onChange, onOpen, working = new Map()
   return <>
     <button type="button" ref={trigger} className={`machine-trigger issue-trigger${value ? ' picked' : ''}`} popoverTarget={id} aria-haspopup="dialog"
       aria-label={value ? `Issue: ${value.label} ${value.title}. Change issue` : 'Pick an issue'}
-      title={value ? `Claimed for this thread when it starts` : undefined}
-      onClick={(event) => {
-        const rect = event.currentTarget.getBoundingClientRect();
-        const width = Math.min(480, window.innerWidth - 24);
-        // Open downward so the list never covers the composer above it, unless far more room is above.
-        const below = window.innerHeight - rect.bottom >= Math.min(220, rect.top);
-        setPosition({ width, left: Math.max(12, Math.min(rect.left, window.innerWidth - width - 12)),
-          maxHeight: Math.max(160, (below ? window.innerHeight - rect.bottom : rect.top) - 24),
-          ...(below ? { top: rect.bottom + 6, bottom: 'auto' } : { bottom: window.innerHeight - rect.top + 6, top: 'auto' }) });
-      }}>
+      title={value ? `Claimed for this thread when it starts` : undefined}>
       <Issue />
       <span>{value ? <>{value.label} <span className="issue-trigger-note">· claims on send</span></> : 'Pick an issue'}</span>
     </button>
-    <div id={id} ref={menu} className="issue-picker" popover="auto" role="dialog" aria-label="Pick an issue" style={position}
-      onToggle={(event) => {
-        if (event.newState !== 'open') { setQuery(''); return; }
-        onOpen();
-        setHighlight(Math.max(0, value ? flat.findIndex((issue) => issue.ref === value.ref) : 0));
-        requestAnimationFrame(() => search.current?.focus());
-      }}>
+    <div id={id} {...props} className="issue-picker" popover="auto" role="dialog" aria-label="Pick an issue">
       <div className="issue-picker-search">
         <Search />
         <input ref={search} value={query} placeholder="Search open issues" aria-label="Search open issues" spellCheck={false}
