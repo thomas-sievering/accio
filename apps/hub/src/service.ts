@@ -286,7 +286,6 @@ export async function startHubService(opts: HubServiceOptions) {
       }
       case 'machines.rename': await settings.renameMachine(p.machineId, p.name); return null;
       case 'machines.setProfileFolders': await settings.setProfileFolders(p.machineId, p.profileId, p.folders); return null;
-      case 'machines.setProfileGitHub': await settings.setProfileGitHub(p.machineId, p.profileId, p.login); return null;
       case 'models.favorite': await settings.setModelFavorite(p.profileId, p.model, p.favorite); return null;
       case 'harnesses.setTools': await settings.setHarnessTools(p.harnessId, p.tools); return null;
       case 'threads.snoozeUntilOnline':

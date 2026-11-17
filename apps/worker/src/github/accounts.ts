@@ -13,14 +13,14 @@ const runGh: GhRunner = async (args, options) => (await exec('gh', args, { cwd: 
   ...(options?.env ? { env: { ...process.env, ...options.env } } : {}) })).stdout;
 
 /**
- * GLOSSARY: GitHub account. The gh login a profile's threads use on this machine:
- * the one chosen in machine settings, else the one git sends for the repository's
+ * GLOSSARY: GitHub account. The gh login a profile's threads use, through this machine's gh:
+ * the one chosen in the profile's settings, else the one git sends for the repository's
  * origin. Its token reaches gh as GH_TOKEN, so Accio's own reads and the agent's
  * gh commands act as the same account that pushes.
  */
 export class GitHubAccounts {
   constructor(
-    /** The login chosen for a profile on this machine, if any. */
+    /** The login chosen for a profile, if any. */
     private chosen: (profileId: string) => string | undefined,
     private gh: GhRunner = runGh,
     private gitUser: GitUserOf = gitCredentialUser,
@@ -38,6 +38,9 @@ export class GitHubAccounts {
     this.known = { at: Date.now(), logins };
     return logins;
   }
+
+  /** The login chosen for a profile, if any; Automatic has none. */
+  chosenLogin(profileId: string): string | undefined { return this.chosen(profileId); }
 
   /** The login for a profile in a repository: the chosen one, else git's for origin when gh knows it. */
   async login(profileId: string, cwd?: string): Promise<string | undefined> {

@@ -29,8 +29,6 @@ export type MachineView = MachineInfo & {
   profileFolders: Record<string, string[]>;
   /** GLOSSARY: GitHub account. The logins gh is signed in to on this machine, as it last reported. */
   githubAccounts?: string[];
-  /** Profile id → the GitHub account this machine uses for that profile's threads. Unset: the account git uses for the repository. */
-  profileGitHub?: Record<string, string>;
   /**
    * GLOSSARY: Relay. Set on another machine while it is on the relay, so new threads can start there:
    * the repositories (repo keys) it has a checkout of.
@@ -44,12 +42,6 @@ const SetProfileFolders = z.object({
   folders: z.array(z.string().trim().min(1)).default([]),
 });
 
-const SetProfileGitHub = z.object({
-  machineId: z.string(),
-  profileId: z.string(),
-  /** Null: use the account git uses for each repository. */
-  login: GitHubLogin.nullable(),
-});
 
 export const machineMethods = {
   'machines.list': method<z.ZodObject<{}>, MachineView[]>(z.object({})),
@@ -57,7 +49,6 @@ export const machineMethods = {
     z.object({ machineId: z.string(), name: z.string().trim().min(1).max(100) }),
   ),
   'machines.setProfileFolders': method<typeof SetProfileFolders, MachineView>(SetProfileFolders),
-  'machines.setProfileGitHub': method<typeof SetProfileGitHub, MachineView>(SetProfileGitHub),
 };
 
 export type MachineEvents = {

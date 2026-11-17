@@ -8,8 +8,9 @@ export type AccountSelection = Partial<Record<ProviderId, string[]>>;
 
 /** Each profile with its house on the Sorting Hat and the ids of that house's accounts, whose details are in the account list. */
 export function profileViews(profiles: readonly SharedProfile[], link: Pick<SortingHatLink, 'house' | 'accountIdInUse'>): ProfileView[] {
-  return profiles.map(({ houseId, ...p }) => ({
+  return profiles.map(({ houseId, githubLogin, ...p }) => ({
     ...p,
+    githubLogin: githubLogin ?? null,
     house: houseId ? { id: houseId, name: link.house(houseId)?.name ?? houseId } : null,
     providers: PROVIDERS.map((provider) => ({ ...provider, accountIds: (houseId && link.house(houseId)?.accounts[provider.id]) || [], inUseId: houseId ? link.accountIdInUse(houseId, provider.id) : null })),
   }));
@@ -27,7 +28,8 @@ export function saveSharedProfile(profiles: readonly SharedProfile[], req: SaveP
   let id = old?.id ?? base;
   for (let n = 2; !old && profiles.some((p) => p.id === id); n++) id = `${base}-${n}`;
   const houseId = req.houseId === undefined ? old?.houseId : req.houseId ?? undefined;
-  const saved: SharedProfile = { id, name: req.name, ...(houseId ? { houseId } : {}) };
+  const githubLogin = req.githubLogin === undefined ? old?.githubLogin : req.githubLogin ?? undefined;
+  const saved: SharedProfile = { id, name: req.name, ...(houseId ? { houseId } : {}), ...(githubLogin ? { githubLogin } : {}) };
   if (profiles.some((p) => p.id !== id && p.name.toLowerCase() === req.name.toLowerCase())) throw new HubError(`A profile named ${req.name} already exists`);
   return { saved, profiles: old ? profiles.map((p) => p.id === id ? saved : p) : [...profiles, saved] };
 }

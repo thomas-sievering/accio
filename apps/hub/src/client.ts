@@ -36,8 +36,11 @@ export class HubClient {
     this.appliedSequence = Math.max(this.appliedSequence, sequence);
     // Older hubs embed accounts in each provider instead of sending their ids. Normalize
     // at the connection boundary so worker policy and renderer views see the same shape.
+    // Older hubs keep each profile's GitHub account per machine; this machine's choice stands in.
+    const here = snapshot.machines?.find((m) => m.id === this.hello.id);
     this.snapshot = { ...snapshot, profiles: snapshot.profiles.map((profile) => ({
       ...profile,
+      githubLogin: profile.githubLogin ?? here?.profileGitHub?.[profile.id] ?? null,
       providers: profile.providers.map((provider) => {
         const { accounts, ...view } = provider as typeof provider & { accounts?: AccountView[] };
         return { ...view, accountIds: view.accountIds ?? accounts?.map((account) => account.id) ?? [] };
@@ -111,7 +114,7 @@ export class HubClient {
   async close() { this.stopped = true; clearTimeout(this.retry); this.ws?.terminate(); }
 }
 
-export type SettingsAccess = Pick<SharedSettings, 'threadNaming' | 'setThreadNaming' | 'spaces' | 'saveSpace' | 'deleteSpace' | 'registerProjects' | 'setProjectProfile' | 'forgetProject' | 'profiles' | 'machines' | 'machine' | 'modelFavorites' | 'setModelFavorite' | 'harnessTools' | 'setHarnessTools' | 'offlineSnoozes' | 'setOfflineSnooze' | 'onMachinesChanged' | 'machineConnected' | 'machineDisconnected' | 'renameMachine' | 'setProfileFolders' | 'setProfileGitHub'> & {
+export type SettingsAccess = Pick<SharedSettings, 'threadNaming' | 'setThreadNaming' | 'spaces' | 'saveSpace' | 'deleteSpace' | 'registerProjects' | 'setProjectProfile' | 'forgetProject' | 'profiles' | 'machines' | 'machine' | 'modelFavorites' | 'setModelFavorite' | 'harnessTools' | 'setHarnessTools' | 'offlineSnoozes' | 'setOfflineSnooze' | 'onMachinesChanged' | 'machineConnected' | 'machineDisconnected' | 'renameMachine' | 'setProfileFolders'> & {
   refresh?: () => Promise<void>;
   /** GLOSSARY: Project. Undefined from a hub that keeps no projects yet, whose machines keep each project's profile themselves. */
   projects: () => HubProject[] | undefined;
@@ -131,7 +134,7 @@ export function remoteSettings(client: HubClient): SettingsAccess {
     setProjectProfile: async (project) => { await client.call('hubProjects.setProfile', project); },
     forgetProject: async (repoKey) => { await client.call('hubProjects.forget', { repoKey }); },
     refresh: () => client.refresh(true),
-    profiles: () => client.snapshot?.profiles.map(({ id, name }) => ({ id, name })) ?? [],
+    profiles: () => client.snapshot?.profiles.map(({ id, name, githubLogin }) => ({ id, name, ...(githubLogin ? { githubLogin } : {}) })) ?? [],
     machines: () => client.snapshot?.machines ?? [],
     machine: (id) => client.snapshot?.machines.find((m) => m.id === id),
     modelFavorites: (id) => client.snapshot?.favorites[id] ?? [],
@@ -146,6 +149,5 @@ export function remoteSettings(client: HubClient): SettingsAccess {
     machineDisconnected: async () => {},
     renameMachine: async (machineId, name) => { await client.call('machines.rename', { machineId, name }); },
     setProfileFolders: async (machineId, profileId, folders) => { await client.call('machines.setProfileFolders', { machineId, profileId, folders }); },
-    setProfileGitHub: async (machineId, profileId, login) => { await client.call('machines.setProfileGitHub', { machineId, profileId, login }); },
   };
 }

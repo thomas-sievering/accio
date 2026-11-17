@@ -49,7 +49,7 @@ export class NewHomes {
     });
     // The repo belongs to the account the home's threads push as: the profile's chosen login, never gh's active one.
     const login = location === 'github' ? this.deps.githubLogin(profileId) : undefined;
-    if (location === 'github' && !login) throw new UserError("Choose a GitHub account for this profile on this machine in Settings / Machines first. The home's repo is created under it.");
+    if (location === 'github' && !login) throw new UserError("Choose a GitHub account for this profile in Settings / Profiles first. The home's repo is created under it.");
     const base = this.deps.profileFolder(profileId) ?? homedir();
     const path = join(base, name);
     await mkdir(base, { recursive: true });

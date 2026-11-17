@@ -57,14 +57,14 @@ describe('machines on the hub', () => {
     };
     t = await startTestApp({ github: gh });
     const c = await t.connect();
-    const { id: machineId } = await c.thisMachine();
-    await c.call('profiles.save', { name: 'Work' });
-    expect((await c.call('machines.list', {}))[0]).toMatchObject({ githubAccounts: ['me', 'work_hrc'], profileGitHub: {} });
-    const saved = await c.call('machines.setProfileGitHub', { machineId, profileId: 'work', login: 'work_hrc' });
-    expect(saved.profileGitHub).toEqual({ work: 'work_hrc' });
-    await expect(c.call('machines.setProfileGitHub', { machineId, profileId: 'work', login: 'not a login' })).rejects.toThrow();
-    await expect(c.call('machines.setProfileGitHub', { machineId, profileId: 'nope', login: 'me' })).rejects.toThrow(/No profile/);
-    expect((await c.call('machines.setProfileGitHub', { machineId, profileId: 'work', login: null })).profileGitHub).toEqual({});
+    const work = await c.call('profiles.save', { name: 'Work' });
+    expect(work.githubLogin).toBeNull();
+    expect((await c.call('machines.list', {}))[0]).toMatchObject({ githubAccounts: ['me', 'work_hrc'] });
+    expect((await c.call('profiles.save', { id: work.id, name: 'Work', githubLogin: 'work_hrc' })).githubLogin).toBe('work_hrc');
+    // A save that leaves it out keeps it.
+    expect((await c.call('profiles.save', { id: work.id, name: 'Work' })).githubLogin).toBe('work_hrc');
+    await expect(c.call('profiles.save', { id: work.id, name: 'Work', githubLogin: 'not a login' })).rejects.toThrow();
+    expect((await c.call('profiles.save', { id: work.id, name: 'Work', githubLogin: null })).githubLogin).toBeNull();
   });
 
   it('refuses folders for a machine or profile the hub does not know', async () => {

@@ -6,8 +6,11 @@ import { HubError } from './errors.js';
 
 export type { HarnessInstall };
 
-/** A profile as the hub stores it; `houseId` links it to one of the Sorting Hat's houses. */
-export type SharedProfile = { id: string; name: string; houseId?: string };
+/**
+ * A profile as the hub stores it; `houseId` links it to one of the Sorting Hat's houses, and
+ * `githubLogin` is the GitHub account its threads use on every machine (GLOSSARY: GitHub account).
+ */
+export type SharedProfile = { id: string; name: string; houseId?: string; githubLogin?: string };
 
 /** What a machine tells the hub about itself when it connects. */
 export type MachineHello = MachineInfo & { harnesses: HarnessInstall[]; githubAccounts?: string[] };
@@ -19,7 +22,7 @@ export type MachineRecord = MachineHello & {
   lastSeen: string;
   /** Profile id → this machine's profile folders. */
   profileFolders: Record<string, string[]>;
-  /** Profile id → the GitHub login this machine uses for it (GLOSSARY: GitHub account). */
+  /** Profile id → GitHub login, as hubs before profile-wide GitHub accounts stored them; moved onto the profiles on load. */
   profileGitHub?: Record<string, string>;
 };
 
@@ -38,6 +41,21 @@ type Data = {
   /** GLOSSARY: Project. Each repository with a remote and its profile, whether or not a machine has a checkout of it. */
   projects?: HubProject[];
 };
+
+/**
+ * GLOSSARY: GitHub account. Hubs used to keep it per machine; each profile takes the login most of its
+ * machines chose, the first machine's on a tie, and the machines' copies go.
+ */
+function withProfileGitHub(data: Data): Data {
+  const profiles = data.profiles.map((p) => {
+    if (p.githubLogin) return p;
+    const counts = new Map<string, number>();
+    for (const m of data.machines) { const login = m.profileGitHub?.[p.id]; if (login) counts.set(login, (counts.get(login) ?? 0) + 1); }
+    const [login] = [...counts].reduce<[string | undefined, number]>((best, entry) => (entry[1] > best[1] ? entry : best), [undefined, 0]);
+    return login ? { ...p, githubLogin: login } : p;
+  });
+  return { ...data, profiles, machines: data.machines.map(({ profileGitHub: _moved, ...m }) => m) };
+}
 
 /** Far more than anyone snoozes; keeps one store from growing without bound. */
 const MAX_OFFLINE_SNOOZES = 10_000;
@@ -156,7 +174,10 @@ export class SharedSettings {
     return () => { this.listeners.delete(listener); };
   }
 
-  async load() { await this.store.load(); }
+  async load() {
+    await this.store.load();
+    if (this.data.machines.some((m) => m.profileGitHub)) await this.change(() => this.commit(withProfileGitHub(this.data)));
+  }
 
   profiles(): readonly SharedProfile[] {
     return this.data.profiles;
@@ -169,7 +190,6 @@ export class SharedSettings {
       const machines = this.data.machines.map((m) => ({
         ...m,
         profileFolders: Object.fromEntries(Object.entries(m.profileFolders).filter(([id]) => ids.has(id))),
-        ...(m.profileGitHub ? { profileGitHub: Object.fromEntries(Object.entries(m.profileGitHub).filter(([id]) => ids.has(id))) } : {}),
       }));
       const modelFavorites = Object.fromEntries(Object.entries(this.data.modelFavorites ?? {}).filter(([id]) => ids.has(id)));
       // A profile a machine's checkouts still use can't be deleted, so its projects left here have none.
@@ -260,15 +280,6 @@ export class SharedSettings {
     await this.updateMachine(machineId, (m) => {
       this.requireProfile(profileId);
       return { ...m, profileFolders: { ...m.profileFolders, [profileId]: [...new Set(folders)] } };
-    });
-  }
-
-  /** Null returns the profile to the account git uses for each repository. */
-  async setProfileGitHub(machineId: string, profileId: string, login: string | null) {
-    await this.updateMachine(machineId, (m) => {
-      this.requireProfile(profileId);
-      const { [profileId]: _previous, ...others } = m.profileGitHub ?? {};
-      return { ...m, profileGitHub: login ? { ...others, [profileId]: login } : others };
     });
   }
 

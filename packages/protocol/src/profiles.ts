@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { method } from './rpc.js';
+import { GitHubLogin } from './machine.js';
 
 /** GLOSSARY: Provider. */
 export type ProviderId = 'anthropic' | 'openai';
@@ -42,6 +43,8 @@ export type ProfileView = {
   providers: ProfileProviderView[];
   /** GLOSSARY: House. The Sorting Hat house this profile links to; null while it links to none, so its threads can't run. */
   house: { id: string; name: string } | null;
+  /** GLOSSARY: GitHub account. The gh login its threads use on every machine; null for the account git uses for each repository. */
+  githubLogin: string | null;
 };
 
 /** Why a profile's threads can't run while it links to no house on the hub's Sorting Hat. */
@@ -83,6 +86,8 @@ export const SaveProfileParams = z.object({
   }).optional(),
   /** The Sorting Hat house to link, or null to unlink; omit to keep the link. */
   houseId: z.string().min(1).max(64).nullable().optional(),
+  /** GLOSSARY: GitHub account. A gh login, or null for the account git uses for each repository; omit to keep it. */
+  githubLogin: GitHubLogin.nullable().optional(),
   /** Make a house of the profile's name on the hub's Sorting Hat and link it, in place of houseId. */
   createHouse: z.boolean().optional(),
 });

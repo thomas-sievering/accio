@@ -477,8 +477,8 @@ it('reads GitHub and runs the agent as the GitHub account chosen for the threadâ
   const { client, checkout, source, origin } = await project(harness, gh);
   await git(source, 'config', `url.${origin.replaceAll('\\', '/')}.insteadOf`, 'https://github.com/test/fixture.git');
   await git(source, 'remote', 'set-url', 'origin', 'https://github.com/test/fixture.git');
-  const { id: machineId } = await client.thisMachine();
-  await client.call('machines.setProfileGitHub', { machineId, profileId: 'personal', login: 'work_hrc' });
+  const personal = (await client.call('profiles.list', {})).find((p) => p.id === 'personal')!;
+  await client.call('profiles.save', { id: personal.id, name: personal.name, githubLogin: 'work_hrc' });
   const envs: (Record<string, string> | undefined)[] = [];
   const manager = new DeliveryGit(app.home, async (_cwd, args, env) => { envs.push(env); return args[0] === 'pr' ? [] : []; });
   vi.mocked(DeliveryGit.prototype.hostRoute).mockRestore();

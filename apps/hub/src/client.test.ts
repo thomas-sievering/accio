@@ -36,6 +36,19 @@ it.each(['refresh', 'call'] as const)('normalizes older hub profile accounts on 
   } finally { await client.close(); }
 });
 
+it('takes this machine’s GitHub account choice from an older hub that keeps it per machine', async () => {
+  const machine = (id: string, login: string) => ({ id, name: id, platform: 'test', version: 'test', harnesses: [], lastSeen: '', profileFolders: {}, connected: true, profileGitHub: { personal: login } });
+  const snapshot = { hubId: 'hub', protocol: HUB_PROTOCOL, epoch: 'epoch', revision: 1, accounts: [], machines: [machine('other', 'elsewhere'), machine('m', 'me')],
+    profiles: [{ id: 'personal', name: 'Personal', house: null, providers: [] }, { id: 'work', name: 'Work', house: null, providers: [] }] };
+  server = createServer((_req, res) => { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(snapshot)); });
+  await new Promise<void>((done) => server!.listen(0, '127.0.0.1', done));
+  const client = new HubClient(`http://127.0.0.1:${(server.address() as AddressInfo).port}`, 'hub', 'token', { id: 'm', name: 'm', platform: 'test', version: 'test', harnesses: [] });
+  try {
+    await client.refresh();
+    expect(client.snapshot.profiles.map((p) => p.githubLogin)).toEqual(['me', null]);
+  } finally { await client.close(); }
+});
+
 it('reports a proxy error page as an unavailable hub, not as broken JSON', async () => {
   server = createServer((_req, res) => { res.writeHead(502, { 'content-type': 'text/html' }); res.end('<!DOCTYPE html><html><body>Bad gateway</body></html>'); });
   await new Promise<void>((done) => server!.listen(0, '127.0.0.1', done));

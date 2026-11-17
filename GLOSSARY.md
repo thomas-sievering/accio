@@ -59,7 +59,7 @@ A folder on one machine whose new projects default to a profile. Each machine ha
 _Avoid_: Root
 
 **GitHub account**:
-The gh login a profile's threads use for GitHub on one machine: Accio's own Ship checks and the agent's gh commands. It is chosen per profile in each machine's settings, since gh sign-ins are per machine, and stored on the hub like profile folders. Left on Automatic, it is the account git sends for the repository's origin, so reads act as the same account that pushes.
+The gh login a profile's threads use for GitHub: Accio's own Ship checks and the agent's gh commands. It is chosen once per profile, in the profile's settings, and holds on every machine. The token comes from each machine's own gh, so Settings → Machines shows whether gh there is signed in to it; where it isn't, gh's active account stands in. Left on Automatic, it is the account git sends for the repository's origin, so reads act as the same account that pushes.
 _Avoid_: GitHub profile, GitHub identity
 
 **Provider**:

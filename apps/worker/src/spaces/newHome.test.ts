@@ -155,8 +155,8 @@ describe('creating a new home for a space', () => {
       }
       throw new Error(`unexpected gh ${args.join(' ')}`);
     };
-    const { c, folder, machineId } = await app(gh);
-    await c.call('machines.setProfileGitHub', { machineId, profileId: 'personal', login: 'me' });
+    const { c, folder } = await app(gh);
+    await chooseGitHub(c, 'me');
 
     const created = await c.call('spaces.createHome', { space: { name: 'hrc', projectKeys: [] }, name: 'hrc-home', profileId: 'personal', location: 'github' });
 
@@ -181,8 +181,8 @@ describe('creating a new home for a space', () => {
       if (args[1] === 'token') return 'token\n';
       throw new Error('unexpected');
     };
-    const { c, folder, machineId } = await app(gh);
-    await c.call('machines.setProfileGitHub', { machineId, profileId: 'personal', login: 'me' });
+    const { c, folder } = await app(gh);
+    await chooseGitHub(c, 'me');
     await expect(c.call('spaces.createHome', { space: { name: 'hrc', projectKeys: [] }, name: 'hrc-home', profileId: 'personal', location: 'github' }))
       .rejects.toThrow('Could not create the GitHub repo hrc-home: GraphQL: Name already exists on this account (createRepository)');
     await expect(readdir(join(folder, 'hrc-home'))).rejects.toThrow();
@@ -195,9 +195,15 @@ describe('creating a new home for a space', () => {
     const gh: GhRunner = async (args) => { calls.push(args); throw new Error('unexpected'); };
     const { c, folder } = await app(gh);
     await expect(c.call('spaces.createHome', { space: { name: 'hrc', projectKeys: [] }, name: 'hrc-home', profileId: 'personal', location: 'github' }))
-      .rejects.toThrow("Choose a GitHub account for this profile on this machine in Settings / Machines first. The home's repo is created under it.");
+      .rejects.toThrow("Choose a GitHub account for this profile in Settings / Profiles first. The home's repo is created under it.");
     expect(calls.filter((args) => args[0] === 'repo')).toEqual([]);
     await expect(readdir(join(folder, 'hrc-home'))).rejects.toThrow();
     expect(await c.call('spaces.list', {})).toEqual([]);
   });
 });
+
+/** GLOSSARY: GitHub account. Chooses the personal profile's, for every machine. */
+async function chooseGitHub(c: Awaited<ReturnType<typeof app>>['c'], login: string) {
+  const personal = (await c.call('profiles.list', {})).find((p) => p.id === 'personal')!;
+  await c.call('profiles.save', { id: personal.id, name: personal.name, githubLogin: login });
+}

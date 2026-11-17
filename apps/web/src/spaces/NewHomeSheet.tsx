@@ -42,10 +42,10 @@ export function NewHomeSheet({ space, onSpaceName, onClose }: { space: SaveSpace
 
   const folder = here?.profileFolders?.[profileId]?.[0];
   const path = folder ? `${folder}${folder.includes('\\') ? '\\' : '/'}${name}` : undefined;
-  const loginOf = (id: string) => here?.profileGitHub?.[id];
+  const loginOf = (id: string) => profiles.find((p) => p.id === id)?.githubLogin ?? undefined;
   const login = loginOf(profileId);
   const where = path ?? (profileId ? 'your home folder on this machine, since this profile has no folder here' : "the profile's folder on this machine");
-  const githubProblem = location === 'github' && profileId && !login ? 'This profile has no GitHub account on this machine. Choose one in Settings / Machines.' : undefined;
+  const githubProblem = location === 'github' && profileId && !login ? 'This profile has no GitHub account. Choose one in Settings / Profiles.' : undefined;
   const nameProblem = !name.trim() ? 'Enter a name for the home.' : !NAME.test(name.trim()) ? "Use letters, digits, '.', '-' or '_', as in a folder or repository name." : undefined;
   const spaceProblem = !spaceName.trim() ? 'Enter a name for the space.' : undefined;
   // The editor behind keeps the name too, and the home's name follows it until you change that.
@@ -81,7 +81,7 @@ export function NewHomeSheet({ space, onSpaceName, onClose }: { space: SaveSpace
           <div className="field">
             <span>Profile</span>
             <MenuSelect label="Profile" value={profileId} placeholder="Choose…" onChange={setProfileId} invalid={tried && !profileId}
-              options={profiles.map((p) => ({ value: p.id, label: p.name, detail: loginOf(p.id) ? `GitHub ${loginOf(p.id)}` : 'No GitHub account on this machine' }))} />
+              options={profiles.map((p) => ({ value: p.id, label: p.name, detail: loginOf(p.id) ? `GitHub ${loginOf(p.id)}` : 'No GitHub account chosen' }))} />
             {tried && !profileId && <small className="error" role="alert">Choose a profile.</small>}
             <small className="hint">The home's threads run under this profile and push with its GitHub account. The space's other projects keep their own profiles.</small>
           </div>

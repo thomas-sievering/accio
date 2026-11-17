@@ -332,7 +332,7 @@ export function ghFailure(error: unknown): string {
   const status = Number(/HTTP (\d{3})/.exec(stderr)?.[1]);
   if (status >= 500) return `GitHub returned an error (HTTP ${status}). This is on GitHub's side; observation will retry.`;
   if (status === 401 || /gh auth login|not logged in|authentication required/i.test(stderr)) return 'GitHub rejected the sign-in. Sign in again with gh auth login on this machine; observation will retry.';
-  if (status === 403 || status === 404) return `GitHub refused access to this repository (HTTP ${status}). The GitHub account in use may not have access; choose the profile's GitHub account in Settings / Machines. Observation will retry.`;
+  if (status === 403 || status === 404) return `GitHub refused access to this repository (HTTP ${status}). The GitHub account in use may not have access; choose the profile's GitHub account in Settings / Profiles. Observation will retry.`;
   return 'Could not read GitHub delivery or checks. Observation will retry.';
 }
 function assertChecks(checks: GhCheck[]) {

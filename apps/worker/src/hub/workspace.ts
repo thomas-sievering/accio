@@ -114,7 +114,7 @@ export async function openWorkspace(record: SavedHub, deps: WorkspaceDeps, slot:
   };
   const profiles = new Profiles(record.home, client, broadcast, () => [...projects.state().projects.map((p) => p.profileId), ...threads.profileReferences()]);
   const machines = new Machines(here, settings, broadcast,
-    deps.github && new GitHubAccounts((profileId) => settings.machine(here.id)?.profileGitHub?.[profileId], deps.github));
+    deps.github && new GitHubAccounts((profileId) => settings.profiles().find((p) => p.id === profileId)?.githubLogin, deps.github));
   const claudeModels = new ClaudeModels(deps.claudeModelSource,
     async (profileId) => harnessEnv(process.env, await profiles.hubAccess(profileId, 'anthropic'), configFolderOf(record.home, profileId)),
     () => broadcast('models.changed', null));
@@ -224,7 +224,7 @@ export async function openWorkspace(record: SavedHub, deps: WorkspaceDeps, slot:
     profileFolder: (profileId) => machines.profileFoldersHere().find((p) => p.id === profileId)?.folders[0],
     requireThreadsStart: async (profileId) => { await models.ready(profileId); models.require(profileId); },
     removeCheckout: async (id) => { await router.call('checkouts.remove', { id }); },
-    githubLogin: (profileId) => settings.machine(here.id)?.profileGitHub?.[profileId],
+    githubLogin: (profileId) => machines.github.chosenLogin(profileId),
     gh: (profileId, cwd, args) => machines.github.run(profileId, cwd, args),
     start: (params) => threads.start(params),
   });

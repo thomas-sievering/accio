@@ -79,20 +79,24 @@ it('keeps built-in tool overrides per harness and rejects unknown harnesses', as
   expect(reloaded.harnessTools()).toEqual({ claudeCode: { web: false }, codex: { goals: true } });
 });
 
-it('keeps each profile’s GitHub account per machine, clears it on request and with the profile', async () => {
-  const settings = await setup();
-  await settings.setProfiles([{ id: 'work', name: 'Work' }, { id: 'personal', name: 'Personal' }]);
-  await settings.setProfileGitHub('here', 'work', 'work_hrc');
-  await settings.setProfileGitHub('here', 'personal', 'me');
-  await settings.machineConnected({ ...hello, githubAccounts: ['me', 'work_hrc'] });
+it('moves GitHub accounts chosen per machine onto their profiles, taking the one most machines chose', async () => {
+  home = await mkdtemp(join(tmpdir(), 'accio-settings-'));
+  const machine = (id: string, profileGitHub: Record<string, string>) => ({ ...hello, id, lastSeen: '2026-01-01T00:00:00.000Z', profileFolders: {}, profileGitHub });
+  await new JsonFile(join(home, 'hub', 'settings.json'), () => ({})).write({
+    profiles: [{ id: 'work', name: 'Work' }, { id: 'personal', name: 'Personal' }, { id: 'other', name: 'Other', githubLogin: 'kept' }],
+    machines: [machine('a', { work: 'work_hrc', personal: 'me', other: 'ignored' }), machine('b', { work: 'old' }), machine('c', { work: 'work_hrc' })],
+  });
+  const settings = new SharedSettings(home);
+  await settings.load();
+  expect(settings.profiles()).toEqual([
+    { id: 'work', name: 'Work', githubLogin: 'work_hrc' },
+    { id: 'personal', name: 'Personal', githubLogin: 'me' },
+    { id: 'other', name: 'Other', githubLogin: 'kept' },
+  ]);
+  expect(settings.machines().every((m) => !('profileGitHub' in m))).toBe(true);
   const reloaded = new SharedSettings(home);
   await reloaded.load();
-  expect(reloaded.machine('here')).toMatchObject({ githubAccounts: ['me', 'work_hrc'], profileGitHub: { work: 'work_hrc', personal: 'me' } });
-  await settings.setProfileGitHub('here', 'personal', null);
-  expect(settings.machine('here')?.profileGitHub).toEqual({ work: 'work_hrc' });
-  await settings.setProfiles([{ id: 'personal', name: 'Personal' }]);
-  expect(settings.machine('here')?.profileGitHub).toEqual({});
-  await expect(settings.setProfileGitHub('here', 'work', 'work_hrc')).rejects.toThrow(/No profile/);
+  expect(reloaded.profiles()[0]).toEqual({ id: 'work', name: 'Work', githubLogin: 'work_hrc' });
 });
 
 it('keeps snoozes until a machine is back, and drops them when it reconnects', async () => {

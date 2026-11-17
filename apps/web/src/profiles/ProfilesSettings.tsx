@@ -1,14 +1,15 @@
 import { useState, type FormEvent } from 'react';
-import { accountInUse, noSortingHatMessage, providerAccounts, type AccountView, type ProfileView } from '@accio/protocol';
+import { accountInUse, noSortingHatMessage, providerAccounts, type AccountView, type MachineView, type ProfileView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { ArrowUp, Close, ProviderLogo, User } from '../app/icons';
 import { NEW, SettingLink, SettingsFooter, SettingsSection, type SettingsNav } from '../app/Settings';
 import { useAction } from '../app/useAction';
+import { useLive } from '../app/useLive';
 import { ResourcePicker } from '../resources/ResourcePicker';
 import { Field, focusFirstInvalid } from '../resources/Field';
 import { toggled, useResources } from '../resources/resources';
 import { hasSignedInAccount, profileSave, selectionOf, useProfiles } from './profiles';
-import { MenuSelect } from '../ui/MenuSelect';
+import { MenuSelect, type MenuOption } from '../ui/MenuSelect';
 
 /** Always the latest views, so sign-in changes show up while a profile's form is open. */
 export function useProfilesData() {
@@ -51,6 +52,10 @@ function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: Pr
   const [house, setHouse] = useState(initialHouse);
   const relinked = !!sortingHat && house !== savedHouse;
   const [name, setName] = useState(profile?.name ?? '');
+  // GLOSSARY: GitHub account. '' is Automatic.
+  const savedGitHub = profile?.githubLogin ?? '';
+  const [github, setGitHub] = useState(savedGitHub);
+  const machines = useLive(() => client.call('machines.list', {}), 'machines.changed');
   const houseName = house === NEW_HOUSE ? name.trim() : sortingHat?.houses.find((h) => h.id === house)?.name ?? house;
   const { state: resources } = useResources();
   // Skill choices wait here until Save, keyed by skill id.
@@ -61,14 +66,15 @@ function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: Pr
     const skill = resources?.skills.find((s) => s.id === id);
     return skill && profile && skill.scope.profileIds.includes(profile.id) !== on ? [{ skill, on }] : [];
   });
-  const dirty = profile ? skillChanges.length > 0 || name !== profile.name || relinked || JSON.stringify(selection) !== JSON.stringify(initial) : !!(name || house !== initialHouse || selection.anthropic.length || selection.openai.length);
+  const dirty = profile ? skillChanges.length > 0 || name !== profile.name || relinked || github !== savedGitHub || JSON.stringify(selection) !== JSON.stringify(initial) : !!(name || house !== initialHouse || github || selection.anthropic.length || selection.openai.length);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setTouched(true);
     if (!name.trim()) return focusFirstInvalid(e.currentTarget);
     const saved = await run(async () => {
-      const p = await client.call('profiles.save', house === NEW_HOUSE ? { ...profileSave(undefined, name, selection), createHouse: true } : profileSave(profile?.id, name, selection, sortingHat ? house || null : undefined));
+      const save = house === NEW_HOUSE ? { ...profileSave(undefined, name, selection), createHouse: true } : profileSave(profile?.id, name, selection, sortingHat ? house || null : undefined);
+      const p = await client.call('profiles.save', { ...save, githubLogin: github || null });
       for (const { skill, on } of skillChanges) await client.call('skills.setScope', { id: skill.id, scope: { ...skill.scope, profileIds: toggled(skill.scope.profileIds, p.id, on) } });
       return p;
     });
@@ -103,6 +109,13 @@ function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: Pr
           <small className="hint">{sortingHat && `Accounts are set up in Settings / Accounts. Choosing them here sets the accounts of ${houseName ? `the house ${houseName}` : 'its house'} on the Sorting Hat, for every app that uses it.`}{profile && onOpenSecrets && <> <button type="button" className="link" onClick={() => onOpenSecrets(profile.id)}>Saved secrets</button></>}</small>
         </div>
       </SettingsSection>
+      <SettingsSection title="GitHub">
+        <div className="setting-form">
+          <Field label="GitHub account" hint={`What ${name.trim() || 'this profile'}’s threads use for GitHub on every machine: Accio’s Ship checks and the agent’s gh commands. Each machine’s gh needs to be signed in to it.`}>
+            {(p) => <MenuSelect id={p.id} label="GitHub account" value={github} disabled={busy || !machines} onChange={setGitHub} options={githubOptions(machines ?? [], savedGitHub)} />}
+          </Field>
+        </div>
+      </SettingsSection>
       {profile && (
         <SettingsSection title="Skills">
           <div className="setting-form">
@@ -114,6 +127,20 @@ function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: Pr
       <SettingsFooter remove={profile && { name: profile.name, run: remove, consequence: 'Its house and accounts stay on the Sorting Hat; only the profile goes.' }} busy={busy} onCancel={onDone} saveLabel={profile ? 'Save' : 'Add profile'} saveDisabled={busy || !accounts || (!!profile && !dirty)} dirty={dirty && !busy} />
     </form>
   );
+}
+
+/** The logins gh is signed in to on any machine, after the automatic choice; a saved login no machine has stays visible. */
+function githubOptions(machines: readonly MachineView[], saved: string): MenuOption<string>[] {
+  const logins = [...new Set(machines.flatMap((m) => m.githubAccounts ?? []))].sort();
+  const missing = (login: string) => machines.filter((m) => !m.githubAccounts?.includes(login)).map((m) => m.name);
+  return [
+    { value: '', label: 'Automatic', detail: 'The account git uses for each repository' },
+    ...logins.map((login) => {
+      const without = missing(login);
+      return { value: login, label: login, ...(without.length ? { detail: `Not signed in to gh on ${without.join(', ')}` } : {}) };
+    }),
+    ...(saved && !logins.includes(saved) ? [{ value: saved, label: saved, detail: 'Not signed in to gh on any machine' }] : []),
+  ];
 }
 
 /** The house picker's value for "make a house of this profile's name"; never a house id. */

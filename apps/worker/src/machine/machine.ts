@@ -30,7 +30,7 @@ export function machineInfo(id: string): MachineInfo {
  * folders there (ADR 0004).
  */
 export class Machines {
-  /** GLOSSARY: GitHub account. Each profile's on this machine. */
+  /** GLOSSARY: GitHub account. Each profile's, used through this machine's gh. */
   readonly github: GitHubAccounts;
   async refresh() { await this.settings.refresh?.(); }
   constructor(
@@ -39,7 +39,7 @@ export class Machines {
     private broadcast: Broadcast,
     github?: GitHubAccounts,
   ) {
-    this.github = github ?? new GitHubAccounts((profileId) => this.settings.machine(this.here.id)?.profileGitHub?.[profileId]);
+    this.github = github ?? new GitHubAccounts((profileId) => this.settings.profiles().find((p) => p.id === profileId)?.githubLogin);
     settings.onMachinesChanged(() => this.announce());
   }
 
@@ -68,7 +68,7 @@ export class Machines {
   views(): MachineView[] {
     return this.settings
       .machines()
-      .map(({ id, name, platform, version, connected, lastSeen, harnesses, profileFolders, githubAccounts, profileGitHub }) => ({
+      .map(({ id, name, platform, version, connected, lastSeen, harnesses, profileFolders, githubAccounts }) => ({
         id,
         name,
         platform,
@@ -78,7 +78,6 @@ export class Machines {
         harnesses,
         profileFolders,
         githubAccounts: githubAccounts ?? [],
-        profileGitHub: profileGitHub ?? {},
         thisMachine: id === this.here.id,
       }))
       .sort((a, b) => Number(b.thisMachine) - Number(a.thisMachine) || a.name.localeCompare(b.name));
@@ -102,13 +101,6 @@ export class Machines {
         if (!this.settings.machine(machineId)) throw new UserError('No such machine');
         if (!this.settings.profiles().some((p) => p.id === profileId)) throw new UserError(`No profile ${profileId}`);
         await this.settings.setProfileFolders(machineId, profileId, folders);
-        return this.views().find((m) => m.id === machineId)!;
-      })
-      .on('machines.setProfileGitHub', async ({ machineId, profileId, login }) => {
-        await this.refresh();
-        if (!this.settings.machine(machineId)) throw new UserError('No such machine');
-        if (!this.settings.profiles().some((p) => p.id === profileId)) throw new UserError(`No profile ${profileId}`);
-        await this.settings.setProfileGitHub(machineId, profileId, login);
         return this.views().find((m) => m.id === machineId)!;
       });
   }
