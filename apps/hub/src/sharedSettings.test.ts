@@ -118,3 +118,23 @@ it('keeps snoozes until a machine is back, and drops them when it reconnects', a
   await settings.machineDisconnected('away');
   expect(settings.offlineSnoozes()).toEqual({});
 });
+
+it('keeps projects by repository: the first profile registered wins, until one is moved, forgotten or its profile deleted', async () => {
+  const settings = await setup();
+  await settings.setProfiles([{ id: 'work', name: 'Work' }, { id: 'personal', name: 'Personal' }]);
+  const accio = { repoKey: 'github.com/me/accio', name: 'accio', profileId: 'work' };
+  expect(await settings.registerProjects([accio, { repoKey: 'github.com/me/gone', name: 'gone', profileId: 'nobody' }])).toEqual([accio]);
+  // Another machine with the same repository under another profile adopts the first one's.
+  const notes = { repoKey: 'github.com/me/notes', name: 'notes', profileId: 'personal' };
+  expect(await settings.registerProjects([{ ...accio, profileId: 'personal' }, notes])).toEqual([accio, notes]);
+
+  await settings.setProjectProfile({ ...accio, profileId: 'personal' });
+  await expect(settings.setProjectProfile({ ...accio, profileId: 'nobody' })).rejects.toThrow('This profile no longer exists.');
+  await settings.forgetProject('github.com/me/notes');
+  const reloaded = new SharedSettings(home);
+  await reloaded.load();
+  expect(reloaded.projects()).toEqual([{ ...accio, profileId: 'personal' }]);
+
+  await settings.setProfiles([{ id: 'work', name: 'Work' }]);
+  expect(settings.projects()).toEqual([]);
+});

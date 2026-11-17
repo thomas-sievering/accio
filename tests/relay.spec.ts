@@ -13,6 +13,24 @@ async function pasteImage(page: Page) {
   }, data);
 }
 
+test('lists a hub project only another machine has, and starts it there', async ({ page, baseURL }, info) => {
+  await page.goto(`${baseURL}/#token=relay-test-token`);
+  await page.locator('.sidebar').getByRole('button', { name: 'New thread', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Search projects' }).fill('mac-only');
+  await page.getByRole('option', { name: 'mac-only', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'What should we build in mac-only?' })).toBeVisible();
+  await page.getByRole('button', { name: 'Run on machine: PC', exact: true }).click();
+  const menu = page.getByRole('menu', { name: 'Run on machine' });
+  await expect(menu.getByRole('menuitemradio', { name: /^PC/ })).toContainText('This machine · No checkout yet');
+  await page.screenshot({ path: info.outputPath('hub-project-machines.png') });
+  await menu.getByRole('menuitemradio', { name: 'MacBook', exact: true }).click();
+  await page.locator('.composer textarea').fill('Start in mac-only');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect(page.locator('.thread-machine')).toContainText('MacBook');
+  await expect(page.locator('.thread-project-name')).toContainText('mac-only');
+  await expect(page.locator('.msg.assistant').last()).toContainText('MacBook here.');
+});
+
 test('remote actions match relay support and become read-only when the owner goes offline', async ({ page, baseURL }, info) => {
   let uploads = 0;
   await page.routeWebSocket('**/ws?*', socket => {

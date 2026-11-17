@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { JsonStore } from '@accio/persistence';
-import { DEFAULT_THREAD_NAMING, type ThreadNamingSettings, type HarnessInstall, type MachineInfo, type OfflineSnooze, type SaveSpace, type Space } from '@accio/protocol';
+import { DEFAULT_THREAD_NAMING, type ThreadNamingSettings, type HarnessInstall, type HubProject, type MachineInfo, type OfflineSnooze, type SaveSpace, type Space } from '@accio/protocol';
 import { HubError } from './errors.js';
 
 export type { HarnessInstall };
@@ -35,6 +35,8 @@ type Data = {
   offlineSnoozes?: Record<string, OfflineSnooze>;
   /** GLOSSARY: Space. Not tied to profiles, so deleting a profile leaves them as they are (ADR 0019). */
   spaces?: Space[];
+  /** GLOSSARY: Project. Each repository with a remote and its profile, whether or not a machine has a checkout of it. */
+  projects?: HubProject[];
 };
 
 /** Far more than anyone snoozes; keeps one store from growing without bound. */
@@ -108,6 +110,46 @@ export class SharedSettings {
     });
   }
 
+  projects(): HubProject[] { return structuredClone(this.data.projects ?? []); }
+
+  /**
+   * GLOSSARY: Project. Adds the repositories the hub doesn't have yet. One it has keeps its
+   * profile: the first machine to register a repository decides it, and the others adopt it.
+   * A project of a profile the hub doesn't have is left out.
+   */
+  async registerProjects(projects: HubProject[]): Promise<HubProject[]> {
+    return this.change(async () => {
+      const known = this.data.projects ?? [];
+      const keys = new Set(known.map((p) => p.repoKey));
+      const added: HubProject[] = [];
+      for (const p of projects) {
+        if (keys.has(p.repoKey) || !this.data.profiles.some((profile) => profile.id === p.profileId)) continue;
+        keys.add(p.repoKey);
+        added.push({ repoKey: p.repoKey, name: p.name, profileId: p.profileId });
+      }
+      if (added.length) await this.commit({ ...this.data, projects: [...known, ...added] });
+      return this.projects();
+    });
+  }
+
+  /** Moves a project to another profile, for every machine; the machine checks its threads first. */
+  async setProjectProfile(project: HubProject) {
+    return this.change(async () => {
+      if (!this.data.profiles.some((p) => p.id === project.profileId)) throw new HubError('This profile no longer exists.');
+      const known = this.data.projects ?? [];
+      const saved = { ...known.find((p) => p.repoKey === project.repoKey) ?? { repoKey: project.repoKey, name: project.name }, profileId: project.profileId };
+      await this.commit({ ...this.data, projects: known.some((p) => p.repoKey === project.repoKey) ? known.map((p) => (p.repoKey === project.repoKey ? saved : p)) : [...known, saved] });
+    });
+  }
+
+  /** Drops a project once no machine has a checkout of it; its spaces and threads stay as they are. */
+  async forgetProject(repoKey: string) {
+    return this.change(async () => {
+      const known = this.data.projects ?? [];
+      if (known.some((p) => p.repoKey === repoKey)) await this.commit({ ...this.data, projects: known.filter((p) => p.repoKey !== repoKey) });
+    });
+  }
+
   /** Connected clients observe the same machine registry and folder settings. */
   onMachinesChanged(listener: () => void): () => void {
     this.listeners.add(listener);
@@ -130,7 +172,9 @@ export class SharedSettings {
         ...(m.profileGitHub ? { profileGitHub: Object.fromEntries(Object.entries(m.profileGitHub).filter(([id]) => ids.has(id))) } : {}),
       }));
       const modelFavorites = Object.fromEntries(Object.entries(this.data.modelFavorites ?? {}).filter(([id]) => ids.has(id)));
-      await this.commit({ ...this.data, profiles, machines, modelFavorites });
+      // A profile a machine's checkouts still use can't be deleted, so its projects left here have none.
+      const projects = this.data.projects?.filter((p) => ids.has(p.profileId));
+      await this.commit({ ...this.data, profiles, machines, modelFavorites, ...(projects ? { projects } : {}) });
     });
   }
 

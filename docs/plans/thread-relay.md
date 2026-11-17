@@ -43,7 +43,7 @@ Each slice is usable on the PC and the MacBook on their own, and each is verifie
 
 1. **See them.** Hub `/relay` socket, worker relay client, merged `threads.list` with machine labels and a machine filter in the sidebar, and the cached greyed list for offline machines. Opening a remote thread shows its transcript live (`threads.observe` and streamed events). Read-only.
 2. **Drive them.** Forward the thread actions: send, steering, queued messages, stop, resume, retry, snooze, settle, rename, model and goal. Ship and Prepare for review are worker-side work, so they forward too.
-3. **Start them.** `MachinePicker` offers connected machines with a checkout of the chosen project, and No project threads offer any connected machine. A project with checkouts only on another machine is not listed here yet, so a thread starts there only from a project this machine has too.
+3. **Start them.** `MachinePicker` offers connected machines with a checkout of the chosen project, and No project threads offer any connected machine. New thread also lists the hub's projects this machine has no checkout of (#253): a thread started in one clones it on the machine chosen, this one included.
 4. **Media.** Images, attachments and `threads.assetUrl`/`fileUrl` across the relay, through a hub-forwarded HTTP stream rather than WebSocket frames.
 5. **The rest.** Secret requests, choices, project apps and dashboards, the Changelog across machines, and **Open app** for owned previews on another machine, which needs port forwarding.
 

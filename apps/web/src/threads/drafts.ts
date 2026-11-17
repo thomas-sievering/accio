@@ -110,13 +110,13 @@ export function composerKey(hubId: string, draftId: string) {
   return `accio:${hubId}:composer:${draftId}`;
 }
 
-/** The composer of a new thread not yet started, in a checkout or (with a profile) in No project. */
-export function newThreadDraftId(checkoutId: string, profileId?: string) {
-  return `new:${checkoutId}:${profileId ?? ''}`;
+/** The composer of a new thread not yet started, in a checkout, a hub project not here or (with a profile) in No project. */
+export function newThreadDraftId(checkoutId: string, profileId?: string, repoKey?: string) {
+  return `new:${checkoutId}:${profileId ?? ''}${repoKey ? `:${repoKey}` : ''}`;
 }
 
 /** A new thread with something in its composer: listed in the inbox until it is sent or emptied. */
-export type NewThreadDraft = DraftContent & { key: string; checkoutId: string; profileId?: string };
+export type NewThreadDraft = DraftContent & { key: string; checkoutId: string; profileId?: string; repoKey?: string };
 
 function hasContent(c: DraftContent) {
   return !!c.text.trim() || c.pastes.length > 0 || c.reactions.length > 0 || c.images.length > 0;
@@ -130,8 +130,8 @@ export function draftsOf(hubId: string): NewThreadDraft[] {
   const drafts: NewThreadDraft[] = [];
   for (const [key, content] of contents) {
     if (!key.startsWith(prefix) || !hasContent(content)) continue;
-    const [checkoutId = '', profileId = ''] = key.slice(prefix.length).split(':');
-    drafts.push({ ...content, key, checkoutId, profileId: profileId || undefined });
+    const [checkoutId = '', profileId = '', repoKey = ''] = key.slice(prefix.length).split(':');
+    drafts.push({ ...content, key, checkoutId, profileId: profileId || undefined, ...(repoKey ? { repoKey } : {}) });
   }
   listed = { hubId, version, drafts };
   return drafts;

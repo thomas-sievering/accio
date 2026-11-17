@@ -129,7 +129,8 @@ function Shell({ page, setPage }: { page: Page; setPage: Dispatch<SetStateAction
   };
   const draftProfileId = draft && (draft.profileId ?? state?.projects.find((p) => p.id === state.checkouts.find((c) => c.id === draft.checkoutId)?.projectId)?.profileId);
   const currentProfileId = draft ? draftProfileId ?? undefined : thread?.profileId;
-  const setUp = profiles && state && profiles.length > 0 && profiles.some((p) => hasSignedInAccount(p, accounts)) && state.checkouts.length > 0;
+  // A machine without checkouts is set up once the hub has projects to clone here.
+  const setUp = profiles && state && profiles.length > 0 && profiles.some((p) => hasSignedInAccount(p, accounts)) && (state.checkouts.length > 0 || !!state.elsewhere?.length);
   // Until setup is done there is nothing to search, filter or start a thread in.
   const settingUp = !!profiles && !!accounts && !!state && !setUp;
   const inSettings = settings !== null;
@@ -221,7 +222,7 @@ function Shell({ page, setPage }: { page: Page; setPage: Dispatch<SetStateAction
           {/* Keep the composer and reading position mounted under every other page. */}
           <div className="thread-surface" hidden={!threadActive}>
             {draft ? (
-              <DraftPane key={`${draft.checkoutId}:${draft.profileId}`} {...draft} active={threadActive} onOpenProfile={openProfile} onOpenLimits={openLimits} />
+              <DraftPane key={`${draft.checkoutId}:${draft.profileId}:${draft.repoKey ?? ''}`} {...draft} active={threadActive} onOpenProfile={openProfile} onOpenLimits={openLimits} />
             ) : thread ? (
               <ThreadPane key={thread.id} thread={thread} onOpenSecrets={openSecrets} active={threadActive} onOpenProfile={openProfile} onOpenLimits={openLimits} />
             ) : (

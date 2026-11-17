@@ -34,7 +34,7 @@ export function MachinePicker({ machines, value, onChange, note }: {
       {online.map((m) => <button key={m.id} type="button" className="menu-item" role="menuitemradio" aria-checked={m.id === value}
         onClick={() => { menu.current?.hidePopover(); trigger.current?.focus(); onChange(m.id); }}>
         <Monitor />
-        <span className="menu-text"><b>{m.name}</b>{m.thisMachine ? <small>This machine</small> : note?.(m) && <small>{note(m)}</small>}</span>
+        <span className="menu-text"><b>{m.name}</b>{(m.thisMachine || note?.(m)) && <small>{[m.thisMachine && 'This machine', note?.(m)].filter(Boolean).join(' · ')}</small>}</span>
         <span className="machine-check" aria-hidden>{m.id === value && <Check />}</span>
       </button>)}
     </div>

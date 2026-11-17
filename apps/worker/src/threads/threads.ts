@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { implementMessage, issueNamedIn, threadHandle, type DeliveryStepName, type OfferedIssue, type ParamsOf, type ShippedNote, type ThreadView, type TranscriptItem } from '@accio/protocol';
+import { implementMessage, issueNamedIn, threadHandle, type CheckoutView, type DeliveryStepName, type OfferedIssue, type ParamsOf, type ShippedNote, type ThreadView, type TranscriptItem } from '@accio/protocol';
 import type { SecretsAccess } from '@accio/hub';
 import { now } from '../time.js';
 import type { Profiles } from '../profiles/profiles.js';
@@ -65,6 +65,8 @@ export type ThreadsOptions = {
   /** The hub's built-in tool overrides. */
   toolOverrides: () => BuiltinToolOverrides;
   onRepairFinished: (toolId: string) => void;
+  /** GLOSSARY: Checkout. This machine's checkout of a hub project, cloned here when it has none. */
+  checkoutOf: (repoKey: string) => Promise<CheckoutView>;
 };
 
 /** Threads on this machine, their transcripts, and the turns running in them. */
@@ -95,6 +97,7 @@ export class Threads {
   private implementing = new Set<string>();
   private restartCandidates = new Set<string>();
   private restartDeliveries = new Set<string>();
+  private checkoutOf: ThreadsOptions['checkoutOf'];
 
   constructor(
     home: string,
@@ -105,9 +108,10 @@ export class Threads {
     private models: Models,
     private machines: Machines,
     vault: SecretsAccess,
-    { knownThreads, tools, deliveryHosting, resources, spaceContext, toolOverrides, onRepairFinished }: ThreadsOptions,
+    { knownThreads, tools, deliveryHosting, resources, spaceContext, toolOverrides, onRepairFinished, checkoutOf }: ThreadsOptions,
   ) {
     this.resources = resources;
+    this.checkoutOf = checkoutOf;
     this.state = new ThreadState(home, projects, broadcast, (threadId) => this.secrets.hasPending(threadId));
     this.naming = new ThreadNaming(this.state, profiles, models, harnesses);
     this.issues = new Issues((profileId, cwd, args) => machines.github.run(profileId, cwd, args));
@@ -450,9 +454,13 @@ export class Threads {
         if (!machine.thisMachine) throw new UserError(`Update accio on ${machine.name} to start threads there.`);
       }
       state.assertOpen();
-      const checkout = 'checkoutId' in input ? this.projects.checkout(input.checkoutId) : undefined;
-      const project = checkout ? this.projects.projectOf(checkout) : undefined;
-      const profileId = project?.profileId ?? ('profileId' in input ? input.profileId : '');
+      let checkout = 'checkoutId' in input ? this.projects.checkout(input.checkoutId) : undefined;
+      let project = checkout ? this.projects.projectOf(checkout) : undefined;
+      // GLOSSARY: Project. A hub project this machine has no checkout of yet: cloned below, once the thread can run.
+      const repoKey = 'repoKey' in input ? input.repoKey : undefined;
+      const repoProfile = repoKey ? this.projects.profileOf(repoKey) : undefined;
+      if (repoKey && !repoProfile) throw new UserError(`${repoKey} isn't a project on this hub.`);
+      const profileId = project?.profileId ?? repoProfile ?? ('profileId' in input ? input.profileId : '');
       const releaseProfile = this.profiles.useProfile(profileId);
       let release = () => {};
       try {
@@ -462,6 +470,14 @@ export class Threads {
         const choice = model ?? this.models.default(profileId);
         await this.profiles.hubAccess(profileId, providerOf(choice.harnessId));
         state.assertOpen();
+        if (repoKey) {
+          checkout = await this.checkoutOf(repoKey);
+          project = this.projects.projectOf(checkout);
+          // The clone joined this machine's project under the hub's profile, which the thread keeps.
+          if (project.profileId !== profileId) throw new UserError(`${project.name} moved to another profile. Try again.`);
+          release = this.projects.useCheckout(checkout.id);
+          state.assertOpen();
+        }
         const selected = model ? this.models.requireExact(profileId, choice) : this.models.require(profileId, choice);
         // GLOSSARY: a thread keeps the profile it started with for its whole life.
         const thread = newThread({ checkoutId: checkout?.id ?? '', projectId: project?.id ?? '', profileId, hubId: this.profiles.client.id, model: selected }, now());

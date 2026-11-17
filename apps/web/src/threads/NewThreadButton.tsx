@@ -10,7 +10,7 @@ import { useThreads } from './threads';
 /** Searchable project picker; No project is always the first choice. */
 export function NewThreadButton({ className = 'side-icon', label }: { className?: string; label?: string }) {
   const { openDraft, projectScope, setProjectScope, threads, selectedId } = useThreads();
-  const { visible, checkoutsOf } = useProjects();
+  const { visible, elsewhere, checkoutsOf } = useProjects();
   const { profiles = [], filter } = useProfiles();
   const search = useRef<HTMLInputElement>(null);
   const id = useId();
@@ -26,29 +26,34 @@ export function NewThreadButton({ className = 'side-icon', label }: { className?
     focus: () => search.current,
     onToggle: (open) => { if (open) go(''); },
   });
-  const start = (checkoutId: string, profileId?: string) => {
+  const start = (checkoutId: string, profileId?: string, repoKey?: string) => {
     menu.current?.hidePopover();
     setProjectScope('');
-    openDraft(checkoutId, profileId);
+    openDraft(checkoutId, profileId, repoKey);
   };
   const go = (next: string) => {
     setStep(next); setQuery(''); setActiveId(next ? '' : currentProject);
     search.current?.focus();
   };
   type Choice = { id: string; name: string; detail?: string; projectId?: string; next?: boolean; disabled?: boolean; pick: () => void };
+  // GLOSSARY: Project. The hub's projects without a checkout here are listed among them; sending clones one on the chosen machine.
+  const projectChoices: Choice[] = [
+    ...visible.map((p) => {
+      const checkouts = checkoutsOf(p.id);
+      return {
+        id: p.id, name: p.name, detail: checkouts[0]?.path, projectId: p.id,
+        next: checkouts.length > 1, disabled: checkouts.length === 0,
+        pick: () => checkouts.length === 1 ? start(checkouts[0]!.id) : go(p.id),
+      };
+    }),
+    ...elsewhere.map((p) => ({ id: `hub:${p.repoKey}`, name: p.name, projectId: p.repoKey, pick: () => start('', p.profileId, p.repoKey) })),
+  ].sort((a, b) => a.name.localeCompare(b.name));
   const project = visible.find((p) => p.id === step);
   const choices: Choice[] = step === 'profiles'
     ? availableProfiles.map((p) => ({ id: p.id, name: p.name, pick: () => start('', p.id) }))
     : project
       ? checkoutsOf(project.id).map((c) => ({ id: c.id, name: folderName(c.path), detail: c.path, projectId: project.id, pick: () => start(c.id) }))
-      : visible.map((p) => {
-        const checkouts = checkoutsOf(p.id);
-        return {
-          id: p.id, name: p.name, detail: checkouts[0]?.path, projectId: p.id,
-          next: checkouts.length > 1, disabled: checkouts.length === 0,
-          pick: () => checkouts.length === 1 ? start(checkouts[0]!.id) : go(p.id),
-        };
-      });
+      : projectChoices;
   const q = query.trim().toLowerCase();
   const filtered = choices.filter((c) => `${c.name} ${c.detail ?? ''}`.toLowerCase().includes(q));
   if (!step) filtered.unshift({
@@ -87,7 +92,7 @@ export function NewThreadButton({ className = 'side-icon', label }: { className?
               aria-selected={index === selected} disabled={c.disabled} tabIndex={-1}
               ref={(node) => { if (index === selected) node?.scrollIntoView({ block: 'nearest' }); }}
               onMouseMove={() => setActiveId(c.id)} onClick={c.pick}>
-              {c.projectId ? <ProjectMark id={c.projectId} size={16} /> : <span className="no-project-mark" />}
+              {c.projectId ? <ProjectMark id={c.projectId} name={c.name} size={16} /> : <span className="no-project-mark" />}
               <span className="menu-text"><b>{c.name}</b>{c.detail && index === selected && <small>{c.detail}</small>}</span>
               {c.next && <Chevron />}
             </button>

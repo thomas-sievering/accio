@@ -30,6 +30,8 @@ export type HubSnapshot = {
   threadNaming?: ReturnType<SharedSettings['threadNaming']>;
   /** GLOSSARY: Space. Absent from hubs before spaces. */
   spaces?: ReturnType<SharedSettings['spaces']>;
+  /** GLOSSARY: Project. Absent from hubs before they kept projects. */
+  projects?: ReturnType<SharedSettings['projects']>;
   /** GLOSSARY: Snooze. Absent from hubs before snoozes until a machine is back. */
   offlineSnoozes?: ReturnType<SharedSettings['offlineSnoozes']>;
   models: Record<string, CodexModel[]>;
@@ -93,6 +95,8 @@ function isBrowserCallback(value: string) {
   const u = new URL(value);
   return u.protocol === 'http:' && u.hostname === 'localhost' && u.pathname === '/callback' && !!u.port && !u.search && !u.hash && !u.username && !u.password;
 }
+/** GLOSSARY: Project. A repository with a remote, by its key, as a machine registers it. */
+const HubProjectInput = z.object({ repoKey: z.string().min(1).max(300), name: z.string().min(1).max(200), profileId: z.string().min(1).max(160) });
 /** Methods only paired machines call, or call with more than the client protocol lists. */
 const machineCalls = {
   'machine.hello': z.object({
@@ -102,6 +106,9 @@ const machineCalls = {
   }),
   'machine.references': z.object({ profiles: z.array(z.string()).max(10_000) }),
   'machine.modelKey': z.object({ profileId: z.string().min(1).max(160) }),
+  'hubProjects.register': z.object({ projects: z.array(HubProjectInput).max(10_000) }),
+  'hubProjects.setProfile': HubProjectInput,
+  'hubProjects.forget': z.object({ repoKey: HubProjectInput.shape.repoKey }),
   'hub.pairingCode': z.object({}),
   'hub.revokeMachine': z.object({ machineId: z.string().min(1).max(128) }),
   'resources.write': ResourceWrite,
@@ -167,7 +174,7 @@ export async function startHubService(opts: HubServiceOptions) {
     const remote = link.view();
     return { hubId: trust.id, protocol: HUB_PROTOCOL, revision, epoch, ...(opts.version ? { version: opts.version } : {}), profiles: profileViews(profiles, link), accounts: link.accountViews(), machines: settings.machines(),
       favorites: Object.fromEntries(profiles.map((p) => [p.id, settings.modelFavorites(p.id)])), harnessTools: settings.harnessTools(),
-      threadNaming: settings.threadNaming(), spaces: settings.spaces(), offlineSnoozes: settings.offlineSnoozes(),
+      threadNaming: settings.threadNaming(), spaces: settings.spaces(), projects: settings.projects(), offlineSnoozes: settings.offlineSnoozes(),
       models: Object.fromEntries(profiles.map((p) => [p.id, p.houseId ? link.codexModels(p.houseId) : []])), resources: resources.state(), limits: link.limitViews(), secrets: profiles.flatMap(p => secrets.list(p.id)),
       ...(remote ? { sortingHat: remote } : {}) };
   }
@@ -192,6 +199,9 @@ export async function startHubService(opts: HubServiceOptions) {
         await settings.machineConnected(hello); return null;
       }
       case 'machine.references': await trust.references(machineId, p.profiles); return null;
+      case 'hubProjects.register': return settings.registerProjects(p.projects);
+      case 'hubProjects.setProfile': await settings.setProjectProfile(p); return null;
+      case 'hubProjects.forget': await settings.forgetProject(p.repoKey); return null;
       case 'machine.modelKey': {
         const profile = settings.profiles().find((profile) => profile.id === p.profileId);
         if (!profile) throw new HubError('No such profile');

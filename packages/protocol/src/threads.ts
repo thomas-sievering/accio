@@ -294,6 +294,8 @@ const said = (start: { text: string; images?: string[] }) => start.text.length >
 const Start = z.union([
   z.object({ checkoutId: z.string().min(1), ...StartCommon }).refine(said, { message: 'Write a message' }),
   z.object({ profileId: z.string().min(1), ...StartCommon }).refine(said, { message: 'Write a message' }),
+  /** GLOSSARY: Project. A hub project this machine has no checkout of: it clones one first, under the hub's profile for it. */
+  z.object({ repoKey: z.string().min(1).max(300), ...StartCommon }).refine(said, { message: 'Write a message' }),
 ]);
 /** Base64 bytes of one pasted image, which the client has already shrunk to the attachment limit. */
 const Upload = z.object({ name: z.string().max(180), mimeType: z.enum(IMAGE_TYPES), data: z.string().min(1).max(Math.ceil(IMAGE_ATTACHMENT_BYTES / 3) * 4 + 4) });

@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { HubClient, remoteSettings, remoteResources, remoteMcp, remoteSecrets, type SecretsAccess, type HubSnapshot, type HarnessInstall } from '@accio/hub';
 import { projectKey, type Events, type MachineInfo } from '@accio/protocol';
-import { Router, type Broadcast } from '../rpc/router.js';
+import { Router, UserError, type Broadcast } from '../rpc/router.js';
 import { Profiles } from '../profiles/profiles.js';
 import { Machines } from '../machine/machine.js';
 import { Models } from '../harnesses/models.js';
@@ -119,7 +119,15 @@ export async function openWorkspace(record: SavedHub, deps: WorkspaceDeps, slot:
     async (profileId) => harnessEnv(process.env, await profiles.hubAccess(profileId, 'anthropic'), configFolderOf(record.home, profileId)),
     () => broadcast('models.changed', null));
   const models = new Models(profiles, settings, here.id, claudeModels);
-  const projects = new Projects(record.home, profiles, machines, broadcast);
+  // GLOSSARY: Shared settings. The hub keeps each project with a remote and its profile, for every machine.
+  const projects = new Projects(record.home, profiles, machines, broadcast, {
+    list: () => settings.projects(),
+    register: (list) => settings.registerProjects(list),
+    setProfile: (project) => refused(() => settings.setProjectProfile(project)),
+    forget: (repoKey) => settings.forgetProject(repoKey),
+    onChanged: (listener) => { settings.onMachinesChanged(listener); },
+    checkoutElsewhere: (repoKey) => relay.checkoutElsewhere(repoKey),
+  });
   const spaces = new Spaces(settings, broadcast);
 
   const tools = new AccioTools([offerChoice, finishGoalTool((id, outcome, summary) => threads.finishGoal(id, outcome, summary), (id) => threads.goalActive(id)),
@@ -141,7 +149,7 @@ export async function openWorkspace(record: SavedHub, deps: WorkspaceDeps, slot:
   const { updates } = deps;
   if (updates) tools.add(...machineTools({ here: here.id, machines: () => settings.machines(), folder: join(deps.home, 'screenshots'), call: (method, params) => router.call(method, params) }));
   // GLOSSARY: Space. Checkouts of the space's projects, cloned here when missing, for the Space section and start_thread.
-  const spaceCheckouts = new MissingCheckouts({ projects: () => projects.state(), clone: (repoKey, url, profileId) => projects.clone(repoKey, url, profileId), source: (repoKey) => relay.cloneSource(repoKey) });
+  const spaceCheckouts = new MissingCheckouts({ projects: () => projects.state(), clone: (repoKey, url, profileId) => projects.clone(repoKey, url, profileId), source: (repoKey) => relay.cloneSource(repoKey), profileOf: (repoKey) => projects.profileOf(repoKey) });
   const siblings = new SiblingThreads({ spaces: () => spaces.list(), projects: () => projects.state(), projectsOn: (machineId) => relay.projectsOn(machineId), checkoutHere: (key) => spaceCheckouts.checkout(key) });
   tools.add(startThreadTool({
     here: here.id,
@@ -166,6 +174,16 @@ export async function openWorkspace(record: SavedHub, deps: WorkspaceDeps, slot:
     knownThreads: () => relay.merged(), tools, deliveryHosting: deps.deliveryHosting, resources,
     spaceContext: new SpaceContext({ spaces: () => spaces.list(), projects: () => projects.state(), checkouts: spaceCheckouts }),
     toolOverrides: () => settings.harnessTools(), onRepairFinished: (id) => resources.tools.afterRepair(id),
+    checkoutOf: async (repoKey) => {
+      const found = await spaceCheckouts.checkout(repoKey, { retry: true });
+      if ('unavailable' in found) throw new UserError(`${repoKey} can't be cloned on this machine: ${found.unavailable}.`);
+      return found.checkout;
+    },
+  });
+  // GLOSSARY: Project. Its threads on other machines also keep it in its profile.
+  projects.onCheckProjectInUse((projectId) => {
+    const n = relay.merged([]).filter((t) => t.projectId === projectId).length;
+    return n ? `${n} thread${n > 1 ? 's' : ''} on other machines` : undefined;
   });
   tools.add(addCliTool({
     caller: (id) => threads.views().find((t) => t.id === id),
@@ -194,6 +212,7 @@ export async function openWorkspace(record: SavedHub, deps: WorkspaceDeps, slot:
     offlineSnoozes: () => settings.offlineSnoozes(),
     setOfflineSnooze: (threadId, snooze) => settings.setOfflineSnooze(threadId, snooze),
     send: (event, data) => { if (event === 'threads.changed') threads.threadsChanged(); send(event, data); },
+    profileOf: (repoKey) => projects.profileOf(repoKey),
   });
   // GLOSSARY: Home. "New home…" in Settings → Spaces; a user action, not an accio tool.
   const newHomes = new NewHomes({
