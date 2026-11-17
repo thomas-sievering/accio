@@ -25,8 +25,7 @@ export type RelayHubFrame =
 export type RelaySnapshot = {
   threads: ThreadView[];
   projects: ProjectView[];
-  /** Absent from machines on an earlier build: no thread can start there. */
-  checkouts?: CheckoutView[];
+  checkouts: CheckoutView[];
   /** Orders snapshots from one machine: a new `boot` replaces, otherwise the higher `seq` wins. */
   version: { boot: string; seq: number };
 };
