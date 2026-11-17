@@ -4,6 +4,7 @@ import { useProfiles } from '../profiles/profiles';
 import { folderName } from '../projects/folderName';
 import { ProjectMark } from '../projects/ProjectMark';
 import { useProjects } from '../projects/projects';
+import { usePopoverMenu } from '../ui/usePopoverMenu';
 import { useThreads } from './threads';
 
 /** Searchable project picker; No project is always the first choice. */
@@ -11,7 +12,6 @@ export function NewThreadButton({ className = 'side-icon', label }: { className?
   const { openDraft, projectScope, setProjectScope, threads, selectedId } = useThreads();
   const { visible, checkoutsOf } = useProjects();
   const { profiles = [], filter } = useProfiles();
-  const menu = useRef<HTMLDivElement>(null);
   const search = useRef<HTMLInputElement>(null);
   const id = useId();
   const [query, setQuery] = useState('');
@@ -20,6 +20,12 @@ export function NewThreadButton({ className = 'side-icon', label }: { className?
   // The project in view (the filtered one, else the open thread's) starts highlighted.
   const currentProject = projectScope || threads?.find((t) => t.id === selectedId)?.projectId || '';
   const availableProfiles = profiles.filter((p) => filter === 'all' || p.id === filter);
+  // Centred by CSS; its keys stay in the search field, and from Back the arrows return there.
+  const { props, popover: menu } = usePopoverMenu({
+    items: '[role="combobox"]',
+    focus: () => search.current,
+    onToggle: (open) => { if (open) go(''); },
+  });
   const start = (checkoutId: string, profileId?: string) => {
     menu.current?.hidePopover();
     setProjectScope('');
@@ -55,8 +61,7 @@ export function NewThreadButton({ className = 'side-icon', label }: { className?
       <button className={className} title="New thread" aria-label="New thread" popoverTarget={id}>
         <MessageSquarePlus />{label}
       </button>
-      <div className="new-thread-picker" id={id} popover="auto" ref={menu}
-        onToggle={(e) => { if (e.newState === 'open') go(''); }}>
+      <div className="new-thread-picker" id={id} popover="auto" {...props}>
         <div className="picker-search">
           {step && <button aria-label="Back to projects" onClick={() => go('')}><ArrowLeft /></button>}
           <input ref={search} autoFocus placeholder="Search..." value={query} role="combobox"

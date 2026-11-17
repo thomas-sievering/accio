@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import type { DeliveryMode, DeliverySummary, ProjectView, ThreadView } from '@accio/protocol';
 import { emitAppEvent } from '../app/appEvents';
 import { useClient, useConnectionStatus } from '../app/connection';
@@ -8,6 +8,7 @@ import { StatusGlyphIcon } from './StatusMark';
 import { checkedAgo, deliveryStatus, requestedStatus, statusText } from './status';
 import { useThreads } from './threads';
 import { formatDayTime } from '../ui/dates';
+import { usePopoverMenu } from '../ui/usePopoverMenu';
 import { useThreadAvailability } from './useThreadAvailability';
 
 /** Delivery intent stays on the server, including when this view is closed or disconnected. */
@@ -21,9 +22,10 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
   const [attempt, setAttempt] = useState(0);
   const { busy, error, run } = useAction();
   const id = useId();
-  const menu = useRef<HTMLDivElement>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
-  const [position, setPosition] = useState<CSSProperties>({});
+  // Above the Ship split, reaching back from its chevron over the Ship button.
+  const { props: menuProps, trigger, popover: menu } = usePopoverMenu({
+    placement: { width: 310, side: 'above', height: 130, gap: 8, margin: 8, shift: -90 },
+  });
   const pill = useRef<HTMLSpanElement>(null);
   useResizeGlide(pill);
   const { now } = useThreads();
@@ -169,21 +171,7 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
       {/* The chip beside it already carries the tone; only a call to act keeps its own mark. */}
       {status?.tone === 'attention' && <span className="delivery-dot" aria-hidden="true" />}<span className="delivery-hint-text">{hint}</span>
     </p>}
-    <div id={id} ref={menu} className="menu delivery-menu" popover="auto" role="menu" aria-label="Shipping options" style={position}
-      onToggle={e => {
-        if (e.newState === 'open' && trigger.current) {
-          const box = trigger.current.getBoundingClientRect();
-          setPosition({ left: Math.max(8, Math.min(box.left - 90, window.innerWidth - 318)), top: 'auto', bottom: window.innerHeight - box.top + 8 });
-          requestAnimationFrame(() => menu.current?.querySelector<HTMLButtonElement>('[aria-checked="true"]')?.focus());
-        }
-      }} onKeyDown={e => {
-        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-          e.preventDefault();
-          const buttons = [...menu.current!.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')];
-          const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
-          buttons[(current + (e.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length]?.focus();
-        }
-      }}>
+    <div id={id} {...menuProps} className="menu delivery-menu" popover="auto" role="menu" aria-label="Shipping options">
       <button className="menu-item" role="menuitemradio" aria-checked={mode === 'ship'} disabled={!!unavailable || busy || !canRun} onClick={() => choose('ship')}>
         <span className="delivery-check">{mode === 'ship' && <Check />}</span>
         <span className="menu-text">Ship to {target}<small>{project?.deliveryPolicy === 'pull-request' ? 'Rebase, test and merge through a PR.' : 'Rebase, test and push when ready.'}</small></span>

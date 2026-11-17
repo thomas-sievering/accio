@@ -1,10 +1,9 @@
-import { useRef } from 'react';
 import type { ProjectView } from '@accio/protocol';
 import { useProfiles } from '../profiles/profiles';
 import { ProjectMark } from '../projects/ProjectMark';
 import { useProjects } from '../projects/projects';
 import { useThreads } from '../threads/threads';
-import { focusMenuItem, onMenuKeyDown } from '../ui/menuKeys';
+import { usePopoverMenu } from '../ui/usePopoverMenu';
 import { Check, Layers, ListFilter, Settings, User } from './icons';
 
 /**
@@ -15,7 +14,7 @@ export function ScopeMenu({ onOpenProject }: { onOpenProject: (p: ProjectView) =
   const { profiles = [], filter, setFilter } = useProfiles();
   const { state } = useProjects();
   const { projectScope, setProjectScope } = useThreads();
-  const menu = useRef<HTMLDivElement>(null);
+  const { props, popover: menu } = usePopoverMenu({});
   const projects = [...(state?.projects ?? [])].sort((a, b) => a.name.localeCompare(b.name));
   const active = filter !== 'all' || projectScope !== '';
 
@@ -32,8 +31,7 @@ export function ScopeMenu({ onOpenProject }: { onOpenProject: (p: ProjectView) =
       <button className={`side-icon thread-filter${active ? ' on' : ''}`} popoverTarget="scope-menu" title="Filter threads" aria-label="Filter threads" aria-haspopup="menu">
         <ListFilter />
       </button>
-      <div className="menu scope-menu" id="scope-menu" popover="auto" ref={menu} role="menu" aria-label="Filter threads"
-        onKeyDown={onMenuKeyDown} onToggle={(e) => { if (e.newState === 'open') focusMenuItem(menu.current); }}>
+      <div className="menu scope-menu" id="scope-menu" popover="auto" {...props} role="menu" aria-label="Filter threads">
         <div className="menu-label">Filter threads</div>
         <button className="menu-item" role="menuitemradio" aria-checked={checked('all')} onClick={() => pick('all')}>
           <span className="menu-icon"><Layers /></span>

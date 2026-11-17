@@ -6,14 +6,6 @@
   overflow: clip;
   text-overflow: ellipsis;
 }
-/* Right-click menu, placed at the pointer rather than under a button. */
-.menu.context-menu {
-  position: fixed;
-  inset: auto;
-  margin: 0;
-  width: 220px;
-  position-area: none;
-}
 .menu-item.danger,
 .menu-item.danger:hover {
   color: var(--red);

@@ -1,36 +1,21 @@
-import { useId, useRef, useState, type KeyboardEvent } from 'react';
+import { useId, useState } from 'react';
 import { useHubs } from '../app/connection';
 import { Check, ChevronDown, Hub, Settings } from '../app/icons';
+import { usePopoverMenu } from '../ui/usePopoverMenu';
 
 /** Settings-sidebar card and menu naming the hub the settings below apply to; its menu switches hubs and opens this machine's saved hubs. */
 export function HubSelector({ onManage }: { onManage: () => void }) {
   const { hubs, selectedId, select } = useHubs();
   const id = useId();
-  const menu = useRef<HTMLDivElement>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
+  const { props, trigger, popover: menu } = usePopoverMenu({
+    onToggle: setOpen,
+    escapeToTrigger: true,
+  });
   const current = hubs.find((h) => h.id === selectedId);
   if (!current) return null;
   const switchable = hubs.length > 1;
 
-  const move = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      event.stopPropagation();
-      menu.current?.hidePopover();
-      trigger.current?.focus();
-      return;
-    }
-    const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]'));
-    const index = items.indexOf(document.activeElement as HTMLButtonElement);
-    const next = event.key === 'ArrowDown' ? (index + 1) % items.length
-      : event.key === 'ArrowUp' ? (index - 1 + items.length) % items.length
-        : event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : undefined;
-    if (next !== undefined) {
-      event.preventDefault();
-      items[next]?.focus();
-    }
-  };
   const label = (hub: typeof current) => <>
     <span className="hub-switcher-icon"><Hub /></span>
     <span className="hub-switcher-text">
@@ -51,11 +36,7 @@ export function HubSelector({ onManage }: { onManage: () => void }) {
       {label(current)}
       <ChevronDown />
     </button>
-    <div id={id} ref={menu} className="menu hub-menu" popover="auto" role="menu" aria-label="Choose hub" onKeyDown={move}
-      onToggle={(event) => {
-        setOpen(event.newState === 'open');
-        if (event.newState === 'open') menu.current?.querySelector<HTMLButtonElement>('[aria-checked="true"], [role="menuitem"]')?.focus();
-      }}>
+    <div id={id} {...props} className="menu hub-menu" popover="auto" role="menu" aria-label="Choose hub">
       {switchable && <div className="menu-label">Switch hub</div>}
       {switchable && hubs.map((hub) => <button key={hub.id} type="button" className="menu-item" role="menuitemradio" aria-checked={hub.id === selectedId}
         onClick={() => {

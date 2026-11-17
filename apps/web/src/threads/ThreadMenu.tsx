@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState, type FormEvent,
 import { threadPlace, type ThreadView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { useAction } from '../app/useAction';
-import { focusMenuItem, onMenuKeyDown } from '../ui/menuKeys';
+import { usePopoverMenu } from '../ui/usePopoverMenu';
 import { awaitsMachine } from './shelves';
 import { snoozeThread } from './SnoozeNotice';
 import { useThreads, type ThreadActions } from './threads';
@@ -120,13 +120,16 @@ export function ThreadMenuProvider({ children }: { children: ReactNode }) {
   const { threads } = useThreads();
   const [open, setOpen] = useState<Open>();
   const [renaming, setRenaming] = useState<string>();
-  const menu = useRef<HTMLDivElement>(null);
+  // At the pointer, opening upward when there is no room below it.
+  const { props, popover: menu } = usePopoverMenu({
+    placement: { width: 220, side: 'below', height: 220, gap: 0, margin: 8 },
+    at: open ? { x: open.x, y: open.y } : undefined,
+    onToggle: (shown) => { if (!shown) setOpen(undefined); },
+  });
 
   useEffect(() => {
-    if (!open) return;
-    menu.current?.showPopover();
-    focusMenuItem(menu.current);
-  }, [open]);
+    if (open) menu.current?.showPopover();
+  }, [open, menu]);
 
   const show = (thread: ThreadView, x: number, y: number) => setOpen({ thread, x, y });
   // Always the latest view, so the menu follows status changes while it is open.
@@ -139,11 +142,8 @@ export function ThreadMenuProvider({ children }: { children: ReactNode }) {
         <div
           className="menu context-menu"
           popover="auto"
-          ref={menu}
+          {...props}
           role="menu"
-          style={{ left: Math.min(open.x, window.innerWidth - 230), top: Math.min(open.y, window.innerHeight - 220) }}
-          onToggle={(e) => e.newState === 'closed' && setOpen(undefined)}
-          onKeyDown={onMenuKeyDown}
         >
           <ThreadMenuItems key={open.thread.id} thread={t} close={() => menu.current?.hidePopover()}
             onRename={() => setRenaming(t.id)} before={<div className="menu-label">{t.title}</div>} />
