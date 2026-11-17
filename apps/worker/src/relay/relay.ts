@@ -13,9 +13,8 @@ const MACHINE_METHODS = new Set<string>(RELAY_MACHINE_METHODS);
 const OBSERVED_PER_PEER = 16;
 /** Long enough to send the largest media through the hub. */
 const MEDIA_TIMEOUT_MS = 5 * 60_000;
-/** What a machine answers for a method it doesn't serve to others. Older machines answer exactly this. */
+/** What a machine answers for a method it doesn't serve to others. */
 const NOT_RELAYED = 'Not available from another machine.';
-const OLDER = (name: string) => `${name} runs an older Accio. Update it by hand once: git pull, then pnpm start.`;
 
 export type RelayDeps = {
   here: string;
@@ -27,14 +26,12 @@ export type RelayDeps = {
   router: () => Router;
   /** The hub's name for a paired machine; undefined once it is unpaired. */
   machineName: (id: string) => string | undefined;
-  /** Connected to the hub, though maybe not to the relay. */
-  machineConnected?: (id: string) => boolean;
   /** Caches other machines' media here and serves it to this machine's clients. */
-  assets?: () => Pick<ThreadAssets, 'cachedRemote' | 'storeRemote'> | undefined;
+  assets: () => Pick<ThreadAssets, 'cachedRemote' | 'storeRemote'> | undefined;
   /** GLOSSARY: Snooze. The hub's snoozes until a machine is back, by thread id. */
-  offlineSnoozes?: () => Record<string, OfflineSnooze>;
+  offlineSnoozes: () => Record<string, OfflineSnooze>;
   /** Records one on the hub, or wakes the thread with null. */
-  setOfflineSnooze?: (threadId: string, snooze: OfflineSnooze | null) => Promise<void>;
+  setOfflineSnooze: (threadId: string, snooze: OfflineSnooze | null) => Promise<void>;
   /** To this hub's clients on this machine. */
   send: <E extends keyof Events>(event: E, data: Events[E]) => void;
 };
@@ -68,7 +65,7 @@ export class Relay {
 
   async load() {
     const cache = await this.file.read().catch(() => ({ machines: {} }) as Cache);
-    for (const [id, snapshot] of Object.entries(cache.machines ?? {})) if (id !== this.deps.here) this.remote.set(id, snapshot);
+    for (const [id, snapshot] of Object.entries(cache.machines ?? {})) if (id !== this.deps.here && isSnapshot(snapshot)) this.remote.set(id, snapshot);
     this.index();
   }
 
@@ -115,16 +112,16 @@ export class Relay {
     return views.map(({ relay: _, ...machine }) => {
       if (machine.thisMachine || machine.id === this.deps.here || !this.online.has(machine.id)) return machine;
       const snapshot = this.remote.get(machine.id);
-      if (!snapshot?.checkouts) return machine;
+      if (!snapshot) return machine;
       const repos = new Set(snapshot.checkouts.map((c) => snapshot.projects.find((p) => p.id === c.projectId)?.repoKey).filter((key): key is string => !!key));
       return { ...machine, relay: { repos: [...repos].sort() } };
     });
   }
 
-  /** Another machine's projects and checkouts, as it last reported them; undefined when it is not on the relay or on an earlier build. */
+  /** Another machine's projects and checkouts, as it last reported them; undefined when it is not on the relay. */
   projectsOn(machineId: string): ProjectsState | undefined {
     const snapshot = this.remote.get(machineId);
-    if (machineId === this.deps.here || !this.online.has(machineId) || !snapshot?.checkouts) return undefined;
+    if (machineId === this.deps.here || !this.online.has(machineId) || !snapshot) return undefined;
     return { projects: snapshot.projects, checkouts: snapshot.checkouts };
   }
 
@@ -138,7 +135,7 @@ export class Relay {
     const holders = [...this.remote].flatMap(([machineId, snapshot]) => {
       const project = this.online.has(machineId) && this.deps.machineName(machineId) && snapshot.projects.find((p) => p.repoKey === repoKey);
       if (!project) return [];
-      return [{ machineId, project, asked: !!snapshot.checkouts?.some((c) => c.projectId === project.id) }];
+      return [{ machineId, project, asked: snapshot.checkouts.some((c) => c.projectId === project.id) }];
     });
     const asked = holders.filter((h) => h.asked);
     const first = asked[0] ?? holders[0];
@@ -147,7 +144,7 @@ export class Relay {
       profileId: first.project.profileId,
       url: async () => {
         for (const { machineId } of asked) {
-          // An earlier Accio there doesn't answer this; any failure moves on to the next machine.
+          // Any failure moves on to the next machine.
           const answer = await this.socket?.call(machineId, 'checkouts.cloneUrl', { machineId, repoKey }).catch(() => undefined) as ResultOf<'checkouts.cloneUrl'> | undefined;
           if (answer?.url) return answer.url;
         }
@@ -183,11 +180,10 @@ export class Relay {
    */
   private async snoozeUntilOnline(machineId: string, name: string, threadId: string, snooze: boolean): Promise<ThreadView> {
     const set = this.deps.setOfflineSnooze;
-    if (!set) throw new UserError(`${name} is offline.`);
     const thread = this.remote.get(machineId)?.threads.find((t) => t.id === threadId);
     if (!thread) throw new UserError('No such thread');
     if (snooze) await set(threadId, { machineId, until: new Date(Date.now() + OFFLINE_SNOOZE_MS).toISOString() }).catch((error: Error) => { throw new UserError(error.message); });
-    else if (this.deps.offlineSnoozes?.()[threadId]) await set(threadId, null).catch((error: Error) => { throw new UserError(error.message); });
+    else if (this.deps.offlineSnoozes()[threadId]) await set(threadId, null).catch((error: Error) => { throw new UserError(error.message); });
     else throw new UserError(`${name} is offline.`);
     this.announce();
     return this.decorate(machineId, thread);
@@ -202,9 +198,8 @@ export class Relay {
     if (!machineId || machineId === this.deps.here) return undefined;
     const name = this.deps.machineName(machineId);
     const snapshot = this.remote.get(machineId);
-    // Not on the relay: threads.start says whether it is unknown, offline or on an earlier build.
+    // Not on the relay: threads.start says whether it is unknown or offline.
     if (!name || !this.online.has(machineId) || !this.socket || !snapshot) return undefined;
-    if (!snapshot.checkouts) return Promise.reject(new UserError(OLDER(name)));
     if (input.images?.length) return Promise.reject(new UserError(`Images can't be sent to threads on ${name} yet.`));
     return this.startOn(machineId, name, input);
   }
@@ -217,7 +212,7 @@ export class Relay {
     const { text, model, startedBy } = input;
     const socket = this.socket!;
     let params: ParamsOf<'threads.start'>;
-    if ('checkoutId' in input && this.remote.get(machineId)?.checkouts?.some((c) => c.id === input.checkoutId)) {
+    if ('checkoutId' in input && this.remote.get(machineId)?.checkouts.some((c) => c.id === input.checkoutId)) {
       params = { checkoutId: input.checkoutId, text, ...(model ? { model } : {}) };
     } else if ('checkoutId' in input) {
       const { projects, checkouts } = this.deps.projects();
@@ -227,11 +222,11 @@ export class Relay {
       if (!project.repoKey) throw new UserError(`${project.name} has no remote, so ${name} cannot clone it.`);
       const snapshot = this.remote.get(machineId)!;
       const there = snapshot.projects.find((p) => p.repoKey === project.repoKey);
-      let checkoutId = there && snapshot.checkouts?.find((c) => c.projectId === there.id)?.id;
+      let checkoutId = there && snapshot.checkouts.find((c) => c.projectId === there.id)?.id;
       if (!checkoutId) {
         const url = await remoteUrlOf(here.path, project.repoKey);
         const cloned = await socket.call(machineId, 'checkouts.clone', { machineId, repoKey: project.repoKey, url, profileId: project.profileId }, CLONE_TIMEOUT_MS + 30_000)
-          .catch((error: Error) => { throw new UserError(error.message === NOT_RELAYED ? OLDER(name) : error.message); }) as CheckoutView;
+          .catch((error: Error) => { throw new UserError(error.message); }) as CheckoutView;
         checkoutId = cloned.id;
       }
       params = { checkoutId, text, ...(model ? { model } : {}), ...(startedBy ? { startedBy } : {}) };
@@ -255,7 +250,7 @@ export class Relay {
    * fetched once; a linked file is fetched again each time.
    */
   private async media(machineId: string, name: string, method: 'threads.assetUrl' | 'threads.fileUrl', params: unknown): Promise<unknown> {
-    const assets = this.deps.assets?.();
+    const assets = this.deps.assets();
     if (!assets) throw new UserError(`Open this on ${name} for now.`);
     if (method === 'threads.assetUrl') {
       const { threadId, assetId, download } = params as ParamsOf<'threads.assetUrl'>;
@@ -271,10 +266,7 @@ export class Relay {
 
   private async fetchMedia(machineId: string, name: string, params: ParamsOf<'threads.media'>): Promise<ResultOf<'threads.media'>> {
     if (!this.online.has(machineId) || !this.socket) throw new UserError(`${name} is offline.`);
-    return await this.socket.call(machineId, 'threads.media', params, MEDIA_TIMEOUT_MS).catch((error: Error) => {
-      // A machine from before relayed media answers that it does not serve this.
-      throw new UserError(error.message === NOT_RELAYED ? OLDER(name) : error.message);
-    }) as ResultOf<'threads.media'>;
+    return await this.socket.call(machineId, 'threads.media', params, MEDIA_TIMEOUT_MS).catch((error: Error) => { throw new UserError(error.message); }) as ResultOf<'threads.media'>;
   }
 
   /** Tells every other machine about a change to this machine itself, such as its update. */
@@ -286,14 +278,8 @@ export class Relay {
     if (typeof machineId !== 'string' || machineId === this.deps.here) return undefined;
     const name = this.deps.machineName(machineId);
     if (!name) return Promise.reject(new UserError('No such machine.'));
-    if (!this.online.has(machineId) || !this.socket) {
-      // Connected to the hub but not to the relay: an Accio from before the relay.
-      return Promise.reject(new UserError(this.deps.machineConnected?.(machineId) ? OLDER(name) : `${name} is offline.`));
-    }
-    return this.socket.call(machineId, method, params).catch((error: Error) => {
-      // A machine from before updates knew only thread methods.
-      throw new UserError(error.message === NOT_RELAYED ? OLDER(name) : error.message);
-    });
+    if (!this.online.has(machineId) || !this.socket) return Promise.reject(new UserError(`${name} is offline.`));
+    return this.socket.call(machineId, method, params).catch((error: Error) => { throw new UserError(error.message); });
   }
 
   private snapshot(): RelaySnapshot {
@@ -355,7 +341,7 @@ export class Relay {
   }
 
   private store(machineId: string, snapshot: RelaySnapshot) {
-    if (!snapshot || !Array.isArray(snapshot.threads) || !Array.isArray(snapshot.projects) || !snapshot.version) return;
+    if (!isSnapshot(snapshot)) return;
     const current = this.remote.get(machineId);
     if (current && current.version.boot === snapshot.version.boot && current.version.seq >= snapshot.version.seq) return;
     this.remote.set(machineId, snapshot);
@@ -401,7 +387,7 @@ export class Relay {
     const here = project?.repoKey ? this.deps.projects().projects.find((p) => p.repoKey === project.repoKey) : undefined;
     const online = this.online.has(machineId);
     // Snoozed until its machine is back: it wakes the moment the machine rejoins the relay.
-    const snooze = online ? undefined : this.deps.offlineSnoozes?.()[thread.id];
+    const snooze = online ? undefined : this.deps.offlineSnoozes()[thread.id];
     return {
       ...view,
       ...(snooze?.machineId === machineId ? { snoozedUntil: snooze.until, snoozedUntilOnline: true } : {}),
@@ -417,6 +403,10 @@ export class Relay {
     if (this.saveTimer) { clearTimeout(this.saveTimer); await this.file.write({ machines: Object.fromEntries(this.remote) }).catch(() => {}); }
     await this.file.idle();
   }
+}
+
+function isSnapshot(value: RelaySnapshot | undefined): value is RelaySnapshot {
+  return !!value && Array.isArray(value.threads) && Array.isArray(value.projects) && Array.isArray(value.checkouts) && !!value.version;
 }
 
 function isThreadView(value: unknown): value is ThreadView {

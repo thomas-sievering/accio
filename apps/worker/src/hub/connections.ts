@@ -90,7 +90,6 @@ export class HubConnections {
       router: () => router,
       assets: () => refs.threads?.assets,
       machineName: (id) => settings.machine(id)?.name,
-      machineConnected: (id) => settings.machines().some((m) => m.id === id && m.connected),
       offlineSnoozes: () => settings.offlineSnoozes(),
       setOfflineSnooze: (threadId, snooze) => settings.setOfflineSnooze(threadId, snooze),
       send: (event, data) => { if (event === 'threads.changed') refs.threads?.threadsChanged(); this.send(event, data, record.id); },

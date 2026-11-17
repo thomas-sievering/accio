@@ -10,7 +10,6 @@ import { HUB_INTERVAL_MS, keepAlive } from './keepAlive.js';
 import { accountSelection, profileViews, saveSharedProfile } from './profile.js';
 import { SortingHatLink } from './sortingHatLink.js';
 import type { CodexModel, Fetch } from './sortingHatClient.js';
-import { accountsToMove, moveAccounts } from './accountMove.js';
 import { Resources } from './resources.js';
 import { McpGateway } from './mcp.js';
 import { RESOURCE_WRITES } from './resourceClient.js';
@@ -133,16 +132,6 @@ export async function startHubService(opts: HubServiceOptions) {
   // GLOSSARY: Sorting Hat (ADR 0018). It holds the accounts; each profile links to one of its houses, and threads get hat keys per profile and machine.
   const link = new SortingHatLink(opts.home, secrets, () => settings.profiles().flatMap((p) => p.houseId ? [p.houseId] : []));
   await link.load();
-  await moveToLink().catch(() => {});
-  /** ADR 0018: the accounts a hub kept itself go to its Sorting Hat once it has one (accountMove.ts). */
-  async function moveToLink() {
-    if (!link.configured || !await accountsToMove(opts.home)) return false;
-    try { await moveAccounts(opts.home, link.require(), settings); await link.poll(); return true; }
-    catch (error) {
-      console.error('[hub] moving accounts to the Sorting Hat failed; it is tried again when the Sorting Hat answers:', (error as Error).message);
-      throw new HubError(`This hub’s accounts could not be moved to the Sorting Hat yet: ${(error as Error).message} It tries again when the Sorting Hat answers.`);
-    }
-  }
   const sockets = new WebSocketServer({ noServer: true, maxPayload: 16_384 });
   const owners = new Map<WebSocket, string>();
   const relay = new WebSocketServer({ noServer: true, maxPayload: RELAY_FRAME_BYTES });
@@ -185,13 +174,6 @@ export async function startHubService(opts: HubServiceOptions) {
   function announce() { revision++; for (const ws of sockets.clients) if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ revision })); }
   settings.onMachinesChanged(announce);
   link.onChanged(announce);
-  // A move that stopped halfway, such as while the Sorting Hat was unreachable, goes on once it answers again.
-  let retrying = false;
-  link.onChanged(() => {
-    if (retrying || !link.view() || link.view()!.problem) return;
-    retrying = true;
-    queue = queue.then(() => moveToLink()).then((moved) => { if (moved) announce(); }, () => {}).finally(() => { retrying = false; });
-  });
   secrets.onChanged(announce);
   function auth(req: IncomingMessage) { const token = /^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1]; return token ? trust.authenticate(token) : undefined; }
   function login(id: string, machineId: string) {
@@ -310,7 +292,7 @@ export async function startHubService(opts: HubServiceOptions) {
       case 'spaces.save': return settings.saveSpace(p);
       case 'spaces.delete': await settings.deleteSpace(p.id); return null;
       case 'sortingHat.get': return link.view() ?? null;
-      case 'sortingHat.configure': await link.configure(p); await moveToLink(); return link.view();
+      case 'sortingHat.configure': await link.configure(p); return link.view();
       case 'sortingHat.disconnect': await link.disconnect(); return null;
       default: throw new HubError(`Unknown hub method ${method}`);
     }

@@ -1,3 +1,5 @@
+> The one-time move of a hub's own accounts to the Sorting Hat, described below, was retired once every hub had moved (#223). Hubs and the Sorting Hat no longer have code for it.
+
 # Accounts live in the Sorting Hat, a service separate from Accio
 
 Provider accounts move out of the hub into the Sorting Hat, a service of its own (`apps/sorting-hat`). It signs accounts in and refreshes their credentials, groups them into houses, issues hat keys, forwards each model request to the account in use of the key's house, records usage, and reads limits. It knows nothing of Accio: no profiles, machines, threads or hubs. Apps such as pi (through pi-claude-bridge, which runs the real Claude Code) use it with a hat key exactly as Accio's threads do, and it runs without Accio. We split it so that one set of subscriptions serves every tool, and so that its usage and limits can be watched from a browser without an Accio client.
