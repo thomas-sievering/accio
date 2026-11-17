@@ -31,6 +31,8 @@ export function IssuePicker({ list, value, onChange, onOpen, working = new Map()
   // Opens downward so the list never covers the composer above it, unless far more room is above.
   const { props, trigger, popover: menu } = usePopoverMenu({
     placement: { width: 480, side: 'below', height: 220 },
+    // Its keys stay in the search field; from anywhere else in it, the arrows return there.
+    items: '[role="combobox"]',
     focus: () => search.current,
     onToggle: (open) => {
       if (!open) { setQuery(''); return; }

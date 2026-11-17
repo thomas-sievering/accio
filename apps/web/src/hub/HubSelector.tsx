@@ -10,14 +10,7 @@ export function HubSelector({ onManage }: { onManage: () => void }) {
   const [open, setOpen] = useState(false);
   const { props, trigger, popover: menu } = usePopoverMenu({
     onToggle: setOpen,
-    // Escape also hands focus back to the card.
-    onKeyDown: (event) => {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      event.stopPropagation();
-      menu.current?.hidePopover();
-      trigger.current?.focus();
-    },
+    escapeToTrigger: true,
   });
   const current = hubs.find((h) => h.id === selectedId);
   if (!current) return null;

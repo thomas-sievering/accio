@@ -47,7 +47,7 @@ type Point = { x: number; y: number };
  * button that opens it. Without `placement`, CSS anchor positioning places it (`ui/menu.css`).
  * CSS owns how it opens and closes (`ui/motion.css`).
  */
-export function usePopoverMenu<P extends HTMLElement = HTMLDivElement>({ placement, at, items = MENU_ITEMS, focus, onToggle, onKeyDown }: {
+export function usePopoverMenu<P extends HTMLElement = HTMLDivElement>({ placement, at, items = MENU_ITEMS, focus, escapeToTrigger, onToggle, onKeyDown }: {
   placement?: Placement;
   /** Opens at this point instead of against the trigger. */
   at?: Point;
@@ -55,6 +55,8 @@ export function usePopoverMenu<P extends HTMLElement = HTMLDivElement>({ placeme
   items?: string;
   /** Takes focus as it opens instead of an item. */
   focus?: () => HTMLElement | null | undefined;
+  /** Escape closes it and hands focus back to its trigger, wherever focus was before it opened. */
+  escapeToTrigger?: boolean;
   onToggle?: (open: boolean) => void;
   /** Keys of its own, handled before the shared ones; prevent a key's default to keep it. */
   onKeyDown?: (event: KeyboardEvent<P>) => void;
@@ -86,6 +88,13 @@ export function usePopoverMenu<P extends HTMLElement = HTMLDivElement>({ placeme
     },
     onKeyDown: (event: KeyboardEvent<P>) => {
       onKeyDown?.(event);
+      if (escapeToTrigger && event.key === 'Escape' && !event.defaultPrevented) {
+        event.preventDefault();
+        event.stopPropagation();
+        popover.current?.hidePopover();
+        trigger.current?.focus();
+        return;
+      }
       onMenuKeyDown(event, items);
     },
   };

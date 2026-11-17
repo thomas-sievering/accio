@@ -23,14 +23,7 @@ export function MenuSelect<T extends string>({ label, value, options, onChange, 
   const [open, setOpen] = useState(false);
   const { props, trigger, popover: menu } = usePopoverMenu({
     onToggle: setOpen,
-    // Escape also hands focus back to the field.
-    onKeyDown: (event) => {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      event.stopPropagation();
-      menu.current?.hidePopover();
-      trigger.current?.focus();
-    },
+    escapeToTrigger: true,
   });
   const current = options.find((o) => o.value === value);
   return <>
