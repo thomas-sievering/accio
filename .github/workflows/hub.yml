@@ -114,10 +114,11 @@ jobs:
         if: failure()
         with:
           name: browser-results
+          # Every suite's results. The secrets suite keeps no trace or screenshot, but its
+          # error-context.md page snapshot is safe to keep: secret fields are password inputs.
           path: |
             test-results/
-            out/e2e/chat/
-            out/e2e/limits/
+            out/e2e/
           retention-days: 7
   image:
     # Deploys pull only main's images, so pull requests skip the build.

@@ -13,10 +13,13 @@ import type { FakeCodex } from './fakeCodex.js';
 process.env.ACCIO_SECRET_KEY ??= Buffer.alloc(32, 9).toString('base64');
 
 /**
- * Anthropic's token endpoint, faked. The pasted code names the Claude login it
+ * Anthropic's token and usage endpoints, faked. The pasted code names the Claude login it
  * stands for (code 'claude-job' signs in as Claude account 'claude-job').
+ * Usage reports no limits: the real endpoint refuses the dummy token, which would end
+ * the account's sign-in partway through a test (#243). Tests of limits fake it themselves.
  */
 export const fakeClaudeFetch: typeof fetch = async (url, init) => {
+  if (String(url).endsWith('/api/oauth/usage')) return Response.json({ rate_limits_available: false });
   if (!String(url).includes('/oauth/token')) return fetch(url, init);
   const body = JSON.parse(String(init?.body));
   const who = body.code ?? 'refreshed';

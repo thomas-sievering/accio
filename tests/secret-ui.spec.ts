@@ -30,7 +30,11 @@ async function send(page: Page, text: string) {
   await expect(composer).toBeEnabled({ timeout: 15_000 });
   await composer.fill(text);
   await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled({ timeout: 15_000 });
+  // The sent message joins the transcript, so a lost send fails here rather than as a late card.
+  const sent = page.locator('.msg.user', { hasText: text });
+  const before = await sent.count();
   await composer.press('Enter');
+  await expect(sent).toHaveCount(before + 1, { timeout: 15_000 });
 }
 
 async function expectNoMarkersStored(page: Page) {
