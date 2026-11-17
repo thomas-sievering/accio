@@ -31,29 +31,9 @@ export function newThread(input: { checkoutId: string; projectId: string; profil
   };
 }
 
-/**
- * Threads stored before snooze and settle moved to the server have neither field.
- * Threads stored before model selection have no model, and ones stored while
- * Claude Code's account default was a choice have modelId 'default'; both get DEFAULT_MODEL.
- */
-export function fromStored(t: Omit<Thread, 'snoozedUntil' | 'settledAt' | 'model'> & Partial<Pick<Thread, 'snoozedUntil' | 'settledAt' | 'model'>>): Thread {
-  const model = !t.model || (t.model.harnessId === 'claudeCode' && t.model.modelId === 'default') ? { ...DEFAULT_MODEL } : t.model;
-  const workVersion = t.workVersion ?? 0;
-  const delivery = t.delivery && { ...t.delivery,
-    id: t.delivery.id ?? `${t.id}:${t.delivery.requestedAt}`,
-    workVersion: t.delivery.workVersion ?? workVersion,
-    // Historical completed deliveries have no record of a later manual Reopen.
-    autoSettle: t.delivery.autoSettle ?? t.delivery.status !== 'delivered',
-  };
-  return { ...t, model, workVersion, delivery, organizationVersion: t.organizationVersion ?? 0, snoozedUntil: t.snoozedUntil ?? null, settledAt: t.settledAt ?? null };
-}
-
-/**
- * Threads made by an earlier accio before anything was said in them. A thread
- * now exists only once its first message is sent, so these are dropped on load.
- */
-export function dropUnstarted(threads: readonly Thread[]): Thread[] {
-  return threads.filter((t) => t.workspace || !(t.status === 'idle' && t.sessionId === null && t.title === NEW_THREAD_TITLE));
+/** A thread as loaded: a new thread has no work or organization version until its first turn or change. */
+export function fromStored(t: Thread): Thread {
+  return { ...t, workVersion: t.workVersion ?? 0, organizationVersion: t.organizationVersion ?? 0 };
 }
 
 /** GLOSSARY: Snooze. A thread hides until `until`; snoozing a settled thread reopens it first. */

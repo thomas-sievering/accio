@@ -11,7 +11,7 @@ This is the maintained source for driving Accio as a user. Read the affected fea
 
 ## Driving conventions
 
-The harness is Playwright. Recipes use `page` from the runner's default-export journey contract and exact accessible roles/names from the app. Wrap actions with `action`, capture ARIA plus screenshots with `capture`, and assert outcomes. Scope settings navigation with `page.locator('.sidebar nav')`; breadcrumbs repeat names. Use `page.getByRole('button', { name: 'Back', exact: true }).click()` to leave settings. The app remembers the selected settings page, Limits, dashboard, space view, thread or draft across reloads within each hub.
+The harness is Playwright. Recipes use `page` from the runner's default-export journey contract and exact accessible roles/names from the app. Wrap actions with `action`, capture ARIA plus screenshots with `capture`, and assert outcomes. Scope settings navigation with `page.locator('.sidebar nav')`; breadcrumbs repeat names. Use `page.getByRole('button', { name: 'Back', exact: true }).click()` to leave settings. Only one page is open at a time: Settings, Limits, a project dashboard, a space view or the thread surface under them (which stays mounted, so an unsent draft survives). Opening one replaces the last; Settings opened over Limits, a dashboard or a space view return to it on Back, and Limits opened from Settings return to the same Settings section. The app remembers that page, and the thread or draft under it, across reloads within each hub. `tests/app-pages.spec.ts` covers this in the chat fixture.
 
 ## Proof and reporting
 

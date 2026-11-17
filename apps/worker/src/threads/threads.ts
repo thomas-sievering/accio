@@ -16,7 +16,6 @@ import { providerOf } from './harnessEnv.js';
 import {
   RESUME_PROMPT,
   closeOpenTools,
-  dropUnstarted,
   fromStored,
   newThread,
   reopen,
@@ -163,22 +162,11 @@ export class Threads {
     const stored = (await state.file.read()).map(fromStored).map(t => ({ ...t,
       queuedMessages: t.queuedMessages?.map(m => ({ ...m, editing: undefined })),
     }));
-    let bound = false;
-    for (const thread of stored) {
-      if (thread.hubId && thread.hubId !== this.profiles.client.id) throw new UserError('Thread storage belongs to a different hub');
-      if (!thread.hubId) { thread.hubId = this.profiles.client.id; bound = true; }
-    }
-    const candidates = new Set(dropUnstarted(stored).map((t) => t.id));
-    const started: Thread[] = [];
-    for (const thread of stored) {
-      // A title and session id alone do not prove a thread has no conversation.
-      if (candidates.has(thread.id) || (await state.transcripts.get(thread.id)).items.length > 0) started.push(thread);
-    }
+    if (stored.some(t => t.hubId && t.hubId !== this.profiles.client.id)) throw new UserError('Thread storage belongs to a different hub');
     const savedAt = new Map<string, string | undefined>();
-    for (const t of started) if (t.status === 'running') savedAt.set(t.id, await state.transcripts.savedAt(t.id));
-    const { threads, interrupted } = recoverAfterRestart(started, t => savedAt.get(t.id));
+    for (const t of stored) if (t.status === 'running') savedAt.set(t.id, await state.transcripts.savedAt(t.id));
+    const { threads, interrupted } = recoverAfterRestart(stored, t => savedAt.get(t.id));
     state.list = threads.map(t => t.delivery?.status === 'delivered' && t.delivery.completedAt && t.status === 'interrupted' ? { ...t, status: 'idle' } : t);
-    const named = await this.nameIssues();
     const recoveredRelease = await this.deliveries.recoverReleases();
     for (const thread of interrupted) {
       const live = await state.transcripts.get(thread.id);
@@ -193,28 +181,11 @@ export class Threads {
       });
       await state.transcripts.flush(thread.id);
     }
-    if (bound || named || recoveredRelease || interrupted.length || started.length < stored.length || state.list.some(t => t.delivery?.status === 'blocked')) await state.file.write(state.list);
+    if (recoveredRelease || interrupted.length || state.list.some(t => t.delivery?.status === 'blocked')) await state.file.write(state.list);
     await this.deliveries.resumeObservation();
     this.restartCandidates = new Set(state.list.filter(t => t.status === 'interrupted' && t.resumeAfterRestart && t.sessionId).map(t => t.id));
     // A Ship requested while no turn was left to finish, such as a scripted ship cut off by the restart.
     this.restartDeliveries = new Set(state.list.filter(t => t.status === 'idle' && t.delivery?.status === 'queued').map(t => t.id));
-  }
-
-  /**
-   * GLOSSARY: Issue. Open project threads started before threads kept their issue
-   * get it from their first message, so the picker knows they are in progress.
-   */
-  private async nameIssues() {
-    const { state } = this;
-    let named = false;
-    for (const thread of state.list.filter(t => t.checkoutId && !t.settledAt && !t.issue)) {
-      const first = (await state.transcripts.get(thread.id)).items.find(item => item.kind === 'user');
-      const issue = first?.kind === 'user' ? issueNamedIn(first.text) : undefined;
-      if (!issue) continue;
-      state.list = state.list.map(t => t.id === thread.id ? { ...t, issue } : t);
-      named = true;
-    }
-    return named;
   }
 
   /** Called once tools are listening, and again when an offline hub reconnects. */

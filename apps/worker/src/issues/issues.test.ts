@@ -134,7 +134,7 @@ describe('starting a thread from an issue', () => {
     expect((await c.call('threads.transcript', { threadId: thread.id })).some((i) => i.kind === 'notice')).toBe(false);
   });
 
-  it('keeps the issue a typed first message names, and finds it again for open threads that predate it', async () => {
+  it('keeps the issue a typed first message names', async () => {
     const t = await startTestApp({ harness: new FakeHarness() }); stop = t.stop;
     const c = await t.connect(); await c.signedIn('Personal');
     const path = join(t.home, 'repo'); await mkdir(path);
@@ -143,12 +143,6 @@ describe('starting a thread from an issue', () => {
     const plain = await c.call('threads.start', { checkoutId: checkout.id, text: 'Tidy the README' });
     expect([typed.issue, plain.issue]).toEqual(['#196', undefined]);
     await c.waitFor('threads.changed', (ts) => ts.filter((t) => t.status === 'idle').length === 2);
-    await t.stop({ keepHome: true }); stop = undefined;
-    const file = join(t.home, 'threads.json');
-    await writeFile(file, JSON.stringify(JSON.parse(await readFile(file, 'utf8')).map(({ issue: _, ...thread }: { issue?: string }) => thread)));
-    const restarted = await startTestApp({ harness: new FakeHarness() }, t.home); stop = restarted.stop;
-    const threads = await (await restarted.connect()).call('threads.list', {});
-    expect(Object.fromEntries(threads.map((t) => [t.id, t.issue]))).toEqual({ [typed.id]: '#196', [plain.id]: undefined });
   });
 
   it('reads one GitHub issue’s body through gh, and says why one can’t be read', async () => {

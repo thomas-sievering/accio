@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { WebSocket, WebSocketServer } from 'ws';
 import { z } from 'zod';
 import { GitHubLogin, methods, noHouseMessage, noSortingHatMessage, ResourceScope, SecretSlot, type AccountView, type AccountLimitsView, type ProfileView, type ProviderId, type ResourcesState, type SaveProfileParams, type SecretSummary, type SortingHatView } from '@accio/protocol';
-import { SharedSettings, type MachineHello, type SharedSeed } from './sharedSettings.js';
+import { SharedSettings, type MachineHello } from './sharedSettings.js';
 import { HubError } from './errors.js';
 import { HubTrust } from './trust.js';
 import { HUB_INTERVAL_MS, keepAlive } from './keepAlive.js';
@@ -40,7 +40,7 @@ export type HubSnapshot = {
   sortingHat?: SortingHatView;
 };
 export type HubServiceOptions = {
-  home: string; host?: string; port?: number; seed?: () => Promise<SharedSeed>;
+  home: string; host?: string; port?: number;
   mcpFetch?: Fetch; publicUrl?: string; secretKey?: string;
   /** GLOSSARY: Accio version. What this hub runs, shown to clients. */
   version?: string;
@@ -128,7 +128,7 @@ export async function startHubService(opts: HubServiceOptions) {
   const secrets = new SecretsVault(opts.home, opts.secretKey);
   const mcp = new McpGateway(resources, opts.mcpFetch);
   const grants = new Map<string, { machineId: string; release(): void }>();
-  await settings.load(opts.seed); await trust.load(); await resources.load(); await secrets.load();
+  await settings.load(); await trust.load(); await resources.load(); await secrets.load();
   // GLOSSARY: Sorting Hat (ADR 0018). It holds the accounts; each profile links to one of its houses, and threads get hat keys per profile and machine.
   const link = new SortingHatLink(opts.home, secrets, () => settings.profiles().flatMap((p) => p.houseId ? [p.houseId] : []));
   await link.load();

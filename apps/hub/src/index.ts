@@ -8,10 +8,8 @@ export { HubClient, hubAddress, remoteSettings, type SettingsAccess } from './cl
 export { remoteResources, remoteMcp } from './resourceClient.js';
 export { RelaySocket, type RelayHandlers, type RelayRequest } from './relayClient.js';
 export {
-  SharedSettings,
   PROVIDERS,
   HARNESSES,
-  type SharedSeed,
   type MachineHello,
   type HarnessInstall,
 } from './sharedSettings.js';
