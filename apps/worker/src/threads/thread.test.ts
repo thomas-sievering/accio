@@ -4,6 +4,7 @@ import {
   RESUME_PROMPT,
   assertResumable,
   closeOpenTools,
+  dropUnstarted,
   endTurn,
   newThread,
   recoverAfterRestart,
@@ -87,6 +88,11 @@ describe('thread lifecycle', () => {
   it('names a thread by what was typed, not by Pasted text', () => {
     expect(titleFrom(joinPastes(['Error: boom\n  at main'], 'Why does this crash?'))).toBe('Why does this crash?');
     expect(titleFrom(joinPastes(['\nError: boom\n  at main'], ''))).toBe('Error: boom');
+  });
+
+  it('drops threads from before a first message was required, and keeps every other', () => {
+    const named = startTurn(t0, 'a', 'now');
+    expect(dropUnstarted([t0, endTurn(named, 'completed', 'now')]).map((t) => t.title)).toEqual(['a']);
   });
 });
 

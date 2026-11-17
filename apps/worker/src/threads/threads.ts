@@ -16,6 +16,7 @@ import { providerOf } from './harnessEnv.js';
 import {
   RESUME_PROMPT,
   closeOpenTools,
+  dropUnstarted,
   fromStored,
   newThread,
   reopen,
@@ -163,9 +164,15 @@ export class Threads {
       queuedMessages: t.queuedMessages?.map(m => ({ ...m, editing: undefined })),
     }));
     if (stored.some(t => t.hubId && t.hubId !== this.profiles.client.id)) throw new UserError('Thread storage belongs to a different hub');
+    const candidates = new Set(dropUnstarted(stored).map((t) => t.id));
+    const started: Thread[] = [];
+    for (const thread of stored) {
+      // A title and session id alone do not prove a thread has no conversation.
+      if (candidates.has(thread.id) || (await state.transcripts.get(thread.id)).items.length > 0) started.push(thread);
+    }
     const savedAt = new Map<string, string | undefined>();
-    for (const t of stored) if (t.status === 'running') savedAt.set(t.id, await state.transcripts.savedAt(t.id));
-    const { threads, interrupted } = recoverAfterRestart(stored, t => savedAt.get(t.id));
+    for (const t of started) if (t.status === 'running') savedAt.set(t.id, await state.transcripts.savedAt(t.id));
+    const { threads, interrupted } = recoverAfterRestart(started, t => savedAt.get(t.id));
     state.list = threads.map(t => t.delivery?.status === 'delivered' && t.delivery.completedAt && t.status === 'interrupted' ? { ...t, status: 'idle' } : t);
     const recoveredRelease = await this.deliveries.recoverReleases();
     for (const thread of interrupted) {
@@ -181,7 +188,7 @@ export class Threads {
       });
       await state.transcripts.flush(thread.id);
     }
-    if (recoveredRelease || interrupted.length || state.list.some(t => t.delivery?.status === 'blocked')) await state.file.write(state.list);
+    if (recoveredRelease || interrupted.length || started.length < stored.length || state.list.some(t => t.delivery?.status === 'blocked')) await state.file.write(state.list);
     await this.deliveries.resumeObservation();
     this.restartCandidates = new Set(state.list.filter(t => t.status === 'interrupted' && t.resumeAfterRestart && t.sessionId).map(t => t.id));
     // A Ship requested while no turn was left to finish, such as a scripted ship cut off by the restart.
