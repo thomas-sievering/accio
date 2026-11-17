@@ -158,6 +158,8 @@ export class Turns {
     let release = () => {};
     let resources: TurnResources | undefined;
     let started = false;
+    /** Ends the turn's secret request and tools grant if the turn fails before `run` takes them over. */
+    let endAccess: (() => void) | undefined;
     try {
       if (stored) await stored;
       let thread = state.require(threadId);
@@ -231,23 +233,26 @@ export class Turns {
       }));
       await transcripts.add(thread.id, { kind: 'user', id: `${turnId}:u`, turnId, text, at: now(), ...(images.length ? { images } : {}), ...(resume ? { resume } : {}), ...(delivering ? { delivery: thread.delivery!.mode } : {}), ...(pick ? { pick } : {}), ...(options.goalContinue ? { goal: 'continue' as const } : {}), ...(options.wake ? { wake: true } : {}) });
       // ADR 0013: the turn's secret request travels with its accio tools grant. Both end with
-      // the turn, in `run`, which always runs from here.
+      // the turn, in `run`, or here if it never gets that far.
       const requestSecret = deps.secrets.forTurn({ threadId: thread.id, turnId, profileId: thread.profileId,
         profileName: deps.profiles.require(thread.profileId).name, projectId: thread.projectId || null,
         projectName: project?.name ?? 'No project',
         machineName: deps.machines.views().find(m => m.thisMachine)?.name ?? 'This machine', signal: controller.signal });
       const grant = deps.tools?.grant(thread.id, { requestSecret });
+      endAccess = () => { grant?.revoke(); void deps.secrets.endTurn(turnId).catch(() => {}); };
       const turnResources = resources;
       this.liveInputs.set(thread.id, { turnId });
       const instructions = [resources?.instructions, space, goalInstructions(next.goal), waitInstructions(next.wait)].filter(Boolean).join('\n\n') || undefined;
       const turn = this.run(next, turnId, { cwd, prompt, ...(files.length ? { images: files } : {}), env: resources?.env ?? env, signal: controller.signal, ...(grant ? { tools: grant.access } : {}), resourceInstructions: instructions, mcps: resources?.mcps }, delivering, resources?.skills, grant?.revoke).finally(() => { turnResources?.release(); grant?.revoke(); });
       resources = undefined;
+      endAccess = undefined;
       this.turns.add(turn);
       void turn.then(() => this.turns.delete(turn), (err) => {
         this.turns.delete(turn);
         console.error('[threads] finishing turn failed', err);
       });
     } catch (err) {
+      endAccess?.();
       resources?.release();
       state.running.delete(threadId);
       if (started) await state.update(threadId, (t) => endTurn(t, controller.signal.aborted ? 'interrupted' : 'failed', now()));
@@ -311,13 +316,13 @@ export class Turns {
         await transcripts.add(thread.id, { kind: 'notice', id: `${turnId}:err`, turnId, tone: 'error', text: (err as Error).message });
       }
     } finally {
+      // The harness is done: its token stops working before anything else, even before message writes drain.
+      revokeTools();
       if (this.subagentTurns.get(thread.id)?.turnId === turnId) this.subagentTurns.delete(thread.id);
       const input = this.liveInputs.get(thread.id);
       if (input) input.send = undefined;
       await state.messageOps.get(thread.id)?.catch(() => {});
       this.liveInputs.delete(thread.id);
-      // The harness is done: its token stops working before anything the turn left is cleaned up.
-      revokeTools();
       try {
         await deps.secrets.endTurn(turnId);
         await deps.confirmations?.endTurn(turnId);

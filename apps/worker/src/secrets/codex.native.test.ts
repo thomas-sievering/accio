@@ -51,12 +51,16 @@ it('executes request_secret in a new native Codex session through the accio tool
   expect(deliveryPath).not.toBe(''); await expect(readFile(deliveryPath)).rejects.toThrow();
 }, 35_000);
 
-it('offers request_secret through the accio tools server when a native Codex thread resumes', async () => {
-  const login = new FakeCodex(); const bodies: any[] = [];
-  app = await startTestApp({ codexFactory: login.factory, codexHarness: codexHarness(), openaiFetch: async (_url, init) => {
+it('adds request_secret through the accio tools server when resuming a native Codex thread created without it', async () => {
+  const login = new FakeCodex(); const bodies: any[] = []; const native = codexHarness(); let turns = 0;
+  // The first session starts without accio tools, so request_secret can only arrive on resume.
+  app = await startTestApp({ codexFactory: login.factory, codexHarness: { run(run) {
+    return native.run(++turns === 1 ? { ...run, tools: undefined, secretPurposes: undefined } : run);
+  } }, openaiFetch: async (_url, init) => {
     const body = JSON.parse(new TextDecoder().decode(init?.body as Uint8Array)); bodies.push(body);
     const n = bodies.length;
     let output: any = { id: `msg_${n}`, type: 'message', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: 'Native turn complete.', annotations: [] }] };
+    if (n === 1) expect(body.tools.some((t: any) => t.name === 'mcp__accio')).toBe(false);
     if (n === 2) {
       const tool = body.tools.find((t: any) => t.name === 'mcp__accio');
       expect(tool?.tools.some((t: any) => t.name === 'request_secret')).toBe(true);
