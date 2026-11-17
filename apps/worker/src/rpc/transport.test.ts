@@ -49,3 +49,23 @@ describe('transport errors', () => {
     ws.close();
   });
 });
+
+describe('transport start', () => {
+  it('holds sockets until the workspaces it serves are ready', async () => {
+    let ready!: () => void;
+    const router = { handle: async (raw: { id: number }) => ({ type: 'response', id: raw.id, ok: true, result: 'answered' }) } as unknown as Router;
+    const transport = await startTransport({ host: '127.0.0.1', port: 0, token: 't', router, ready: new Promise<void>((resolve) => { ready = resolve; }) });
+    close = transport.close;
+    const ws = new WebSocket(`ws://127.0.0.1:${transport.port}/ws?token=t`);
+    let open = false;
+    ws.once('open', () => { open = true; });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(open).toBe(false);
+    ready();
+    await vi.waitFor(() => expect(open).toBe(true));
+    const reply = new Promise<ResponseEnvelope>((resolve) => ws.once('message', (data) => resolve(JSON.parse(String(data)))));
+    ws.send(JSON.stringify({ id: 1, method: 'threads.list', params: {} }));
+    expect(await reply).toMatchObject({ id: 1, ok: true, result: 'answered' });
+    ws.close();
+  });
+});

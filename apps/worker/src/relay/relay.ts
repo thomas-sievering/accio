@@ -23,11 +23,11 @@ export type RelayDeps = {
   /** The hub's machines, as `machines.list` returns them before the relay adds to them. */
   machines: () => MachineView[];
   /** This machine's router, which serves requests from the others. */
-  router: () => Router;
+  router: Router;
   /** The hub's name for a paired machine; undefined once it is unpaired. */
   machineName: (id: string) => string | undefined;
   /** Caches other machines' media here and serves it to this machine's clients. */
-  assets: () => Pick<ThreadAssets, 'cachedRemote' | 'storeRemote'> | undefined;
+  assets: Pick<ThreadAssets, 'cachedRemote' | 'storeRemote'>;
   /** GLOSSARY: Snooze. The hub's snoozes until a machine is back, by thread id. */
   offlineSnoozes: () => Record<string, OfflineSnooze>;
   /** Records one on the hub, or wakes the thread with null. */
@@ -250,8 +250,7 @@ export class Relay {
    * fetched once; a linked file is fetched again each time.
    */
   private async media(machineId: string, name: string, method: 'threads.assetUrl' | 'threads.fileUrl', params: unknown): Promise<unknown> {
-    const assets = this.deps.assets();
-    if (!assets) throw new UserError(`Open this on ${name} for now.`);
+    const { assets } = this.deps;
     if (method === 'threads.assetUrl') {
       const { threadId, assetId, download } = params as ParamsOf<'threads.assetUrl'>;
       const key = { machineId, threadId, assetId };
@@ -304,7 +303,7 @@ export class Relay {
       const { machineId: _, ...own } = params as Record<string, unknown>;
       params = own;
     }
-    const response = await this.deps.router().handle({ id: 0, method, params }, { local: true });
+    const response = await this.deps.router.handle({ id: 0, method, params }, { local: true });
     if (!response) throw new Error('Invalid request');
     if (!response.ok) throw new Error(response.error);
     return response.result;

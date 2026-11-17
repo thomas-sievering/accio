@@ -1,46 +1,13 @@
 import { join } from 'node:path';
 import { access } from 'node:fs/promises';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import { JsonFile } from '@accio/persistence';
-import { HubClient, hubAddress, remoteSettings, remoteResources, remoteMcp, remoteSecrets, type SecretsAccess, type HubSnapshot, type HarnessInstall } from '@accio/hub';
-import { projectKey, type Events, type HubConnectionView, type MachineInfo, type ThreadView, type TranscriptItem } from '@accio/protocol';
-import { Router, UserError, type Broadcast } from '../rpc/router.js';
-import { Profiles } from '../profiles/profiles.js';
-import { Machines } from '../machine/machine.js';
-import { Models } from '../harnesses/models.js';
-import { registerHarnesses } from '../harnesses/harnesses.js';
-import { finishGoalTool } from '../goals/goal.js';
-import { deliveryStepTool } from '../threads/deliveryStep.js';
-import { shippedNoteTool } from '../threads/shippedNote.js';
-import { readThreadTool } from '../threads/handoff.js';
-import { readMentionedThread } from '../threads/threadMentions.js';
-import { startThreadTool } from '../threads/startThread.js';
-import { Projects } from '../projects/projects.js';
-import { Spaces, refused } from '../spaces/spaces.js';
-import { NewHomes } from '../spaces/newHome.js';
-import { SpaceContext } from '../spaces/spaceContext.js';
-import { SiblingThreads } from '../spaces/siblingThreads.js';
-import { MissingCheckouts } from '../spaces/missingCheckouts.js';
-import { registerProjectChangelog } from '../projects/projectChangelog.js';
-import { Threads } from '../threads/threads.js';
-import type { Harness } from '../threads/harness.js';
-import { AccioTools } from '../tools/tools.js';
-import { offerChoice } from '../threads/choice.js';
-import { ResourceManager } from '../resources/resources.js';
-import { addCliTool } from '../resources/addCli.js';
-import type { CommandRunner } from '../resources/process.js';
-import type { DeliveryHosting } from '../threads/delivery.js';
-import { GitHubAccounts, type GhRunner } from '../github/accounts.js';
-import { ClaudeModels } from '../harnesses/claudeModels.js';
-import type { ClaudeModelSource } from '../harnesses/catalog.js';
-import { harnessEnv } from '../threads/harnessEnv.js';
-import { configFolderOf } from '../profiles/claudeConfigFolder.js';
-import { Relay } from '../relay/relay.js';
-import type { Updates } from '../machine/update.js';
-import { findMachine, machineTools } from '../machine/machineTools.js';
-import { imageTool } from '../images/imageTool.js';
+import { hubAddress } from '@accio/hub';
+import type { HubConnectionView } from '@accio/protocol';
+import { Router, UserError } from '../rpc/router.js';
+import { openWorkspace, type HubWorkspace, type SavedHub, type WorkspaceDeps } from './workspace.js';
 
-export type SavedHub = { id: string; name: string; url: string; token: string; home: string; local: boolean; managed?: boolean; snapshot?: HubSnapshot };
-export type HubWorkspace = { client: HubClient; router: Router; relay: Relay; profiles: Profiles; machines: Machines; models: Models; projects: Projects; spaces: Spaces; threads: Threads; tools: AccioTools; resources: ResourceManager; secrets: SecretsAccess; home: string; initialize(origin: string): void; close(): Promise<void> };
+export type { HubWorkspace, SavedHub } from './workspace.js';
 
 /** One local workspace per hub: identical profile IDs cannot alias local work or configuration. */
 export class HubConnections {
@@ -51,11 +18,9 @@ export class HubConnections {
   private queue: Promise<unknown> = Promise.resolve();
   private cacheTimer?: ReturnType<typeof setTimeout>;
   private closing = false;
-  private origin?: string;
   private asleep = false;
-  initialized = false;
-  constructor(private home: string, private here: MachineInfo, private harnesses: HarnessInstall[], private runners: Record<string, Harness>, private send: (event: any, data: any, hubId?: string) => void, private resourceCommand?: CommandRunner, private claudeModelSource?: ClaudeModelSource, private deliveryHosting?: DeliveryHosting, private updates?: Updates, private github?: GhRunner) {
-    this.file = new JsonFile(join(home, 'hub-connections.json'), () => []);
+  constructor(private deps: WorkspaceDeps) {
+    this.file = new JsonFile(join(deps.home, 'hub-connections.json'), () => []);
     this.register();
   }
   /** GLOSSARY: Snooze. Keeps this machine away from every hub while the system sleeps. */
@@ -63,179 +28,24 @@ export class HubConnections {
     this.asleep = asleep;
     for (const workspace of this.workspaces.values()) { workspace.client.setAsleep(asleep); workspace.relay.setAsleep(asleep); }
   }
-  async load() { this.initialized = await access(this.file.path).then(() => true, () => false); this.saved = await this.file.read(); }
+  /** Reads the saved hubs; false when this home has never saved any. */
+  async load() { const found = await access(this.file.path).then(() => true, () => false); this.saved = await this.file.read(); return found; }
   get defaultId() { return this.saved[0]?.id; }
   views(): HubConnectionView[] { return this.saved.map((record) => { const workspace = this.workspaces.get(record.id); return { id: record.id, name: record.name, url: record.url, local: record.local, status: workspace?.client.status ?? 'connecting', error: workspace?.client.error, running: workspace?.threads.runningCount ?? 0, ...(workspace?.client.snapshot?.version ? { version: workspace.client.snapshot.version } : {}) }; }); }
   private async persist() { await this.file.write(this.saved.map((s) => ({ ...s, snapshot: this.workspaces.get(s.id)?.client.snapshot ?? s.snapshot }))); }
-  private announce() { if (this.closing) return; this.send('hubs.changed', this.views()); clearTimeout(this.cacheTimer); this.cacheTimer = setTimeout(() => { void this.persist().catch(() => {}); }, 250); this.cacheTimer.unref(); }
+  private announce = () => { if (this.closing) return; this.deps.send('hubs.changed', this.views()); clearTimeout(this.cacheTimer); this.cacheTimer = setTimeout(() => { void this.persist().catch(() => {}); }, 250); this.cacheTimer.unref(); };
   async add(record: SavedHub) {
     if (this.saved.some((s) => s.id === record.id)) throw new UserError('This hub is already saved. Select its existing connection.');
     this.saved.push(record);
     try { await this.open(record); await this.persist(); this.announce(); } catch (error) { this.saved = this.saved.filter((s) => s !== record); throw error; }
   }
   async open(record: SavedHub) {
-    const client = new HubClient(record.url, record.id, record.token, { ...this.here, harnesses: this.harnesses });
-    if (record.snapshot) client.snapshot = record.snapshot;
-    client.setAsleep(this.asleep);
-    await client.start();
-    const settings = remoteSettings(client);
-    const router = new Router(this.global);
-    let workspace: HubWorkspace | undefined;
-    const refs: { threads?: Threads; projects?: Projects; machines?: Machines } = {};
-    const relay = new Relay(record.home, {
-      here: this.here.id,
-      threads: () => refs.threads?.views() ?? [],
-      projects: () => refs.projects?.state() ?? { projects: [], checkouts: [] },
-      machines: () => refs.machines?.views() ?? [],
-      router: () => router,
-      assets: () => refs.threads?.assets,
-      machineName: (id) => settings.machine(id)?.name,
-      offlineSnoozes: () => settings.offlineSnoozes(),
-      setOfflineSnooze: (threadId, snooze) => settings.setOfflineSnooze(threadId, snooze),
-      send: (event, data) => { if (event === 'threads.changed') refs.threads?.threadsChanged(); this.send(event, data, record.id); },
+    const workspace = await openWorkspace(record, this.deps, {
+      global: this.global, asleep: this.asleep, closing: () => this.closing, changed: this.announce,
+      toolsOrigin: record.id === this.defaultId ? this.deps.origin : `${this.deps.origin}/hubs/${record.id}`,
     });
-    // A snooze set from another machine, or dropped by the hub, changes how these threads look.
-    settings.onMachinesChanged(() => relay.announce());
-    const broadcast: Broadcast = (event, data) => {
-      if (event === 'threads.changed') { relay.localChanged(); refs.threads?.threadsChanged(); this.send(event, relay.merged(data as Events['threads.changed']), record.id); }
-      else {
-        if (event === 'thread.item' || event === 'thread.delta') relay.transcriptEvent(event, data as Events['thread.item']);
-        if (event === 'projects.changed') { relay.localChanged(); relay.announce(); }
-        this.send(event, event === 'machines.changed' ? relay.machines(data as Events['machines.changed']) : data, record.id);
-      }
-      if ((event === 'projects.changed' || event === 'threads.changed') && workspace) {
-        void workspace.profiles.syncReferences().catch(() => {}); this.announce();
-      }
-    };
-    const profiles = new Profiles(record.home, client, broadcast);
-    const machines: Machines = refs.machines = new Machines(this.here, settings, broadcast,
-      this.github && new GitHubAccounts((profileId) => settings.machine(this.here.id)?.profileGitHub?.[profileId], this.github));
-    const claudeModels = new ClaudeModels(this.claudeModelSource,
-      async (profileId) => harnessEnv(process.env, await profiles.hubAccess(profileId, 'anthropic'), configFolderOf(record.home, profileId)),
-      () => broadcast('models.changed', null));
-    const models = new Models(profiles, settings, this.here.id, claudeModels);
-    profiles.register(router); machines.register(router); models.register(router, broadcast);
-    const projects = refs.projects = new Projects(record.home, profiles, machines, broadcast); await projects.load(); projects.register(router);
-    registerProjectChangelog(router, projects);
-    const spaces = new Spaces(settings, broadcast); spaces.register(router);
-    const tools = new AccioTools([offerChoice, finishGoalTool((id, outcome, summary) => threads.finishGoal(id, outcome, summary), (id) => threads.goalActive(id)),
-      deliveryStepTool((id, step, note) => threads.reportDeliveryStep(id, step, note), (id) => threads.deliveryRunning(id)),
-      shippedNoteTool((id, note) => threads.recordShippedNote(id, note), (id) => threads.deliveryRunning(id)),
-      readThreadTool((id, handle, offset, limit) => handle
-        ? readMentionedThread({ threads: () => relay.merged(), transcript: async (threadId) => {
-          const response = await router.handle({ id: 0, method: 'threads.transcript', params: { threadId } });
-          if (!response?.ok) throw new Error(response?.error ?? 'Invalid request');
-          return response.result as TranscriptItem[];
-        } }, id, handle, offset, limit)
-        : threads.readThread(id, offset, limit))]);
-    tools.add(imageTool({
-      thread: (id) => threads.toolContext(id),
-      canMakeImages: (profileId) => {
-        const profile = profiles.get(profileId) && profiles.profileView(profileId);
-        return !!profile?.house && !!profile.providers.find((p) => p.id === 'openai')?.accounts.some((a) => a.signedIn);
-      },
-      access: (profileId) => profiles.hubAccess(profileId, 'openai'),
-      folder: join(record.home, 'images'),
-    }));
-    registerHarnesses(router, settings, models, this.runners, tools);
-    const updates = this.updates;
-    if (updates) {
-      router.on('update.status', () => updates.status())
-        .on('update.start', () => updates.start())
-        .on('app.screenshot', async ({ script }) => {
-          const { png, note } = await updates.screenshot(script);
-          return { png: png.toString('base64'), ...(note ? { note } : {}) };
-        });
-      tools.add(...machineTools({
-        here: this.here.id,
-        machines: () => settings.machines(),
-        folder: join(this.home, 'screenshots'),
-        call: async (method, params) => {
-          const response = await router.handle({ id: 0, method, params });
-          if (!response?.ok) throw new Error(response?.error ?? 'Invalid request');
-          return response.result as never;
-        },
-      }));
-    }
-    // GLOSSARY: Space. Checkouts of the space's projects, cloned here when missing, for the Space section and start_thread.
-    const spaceCheckouts = new MissingCheckouts({ projects: () => projects.state(), clone: (repoKey, url, profileId) => projects.clone(repoKey, url, profileId), source: (repoKey) => relay.cloneSource(repoKey) });
-    const siblings = new SiblingThreads({ spaces: () => spaces.list(), projects: () => projects.state(), projectsOn: (machineId) => relay.projectsOn(machineId), checkoutHere: (key) => spaceCheckouts.checkout(key) });
-    tools.add(startThreadTool({
-      here: this.here.id,
-      caller: (id) => threads.views().find((t) => t.id === id),
-      models: (profileId) => models.list(profileId).models,
-      machine: (name) => { if (!name) return undefined; const found = findMachine(settings.machines(), name); return found.id === this.here.id ? undefined : found; },
-      sibling: (projectId, project, machine) => siblings.target(projectId, project, machine),
-      start: async (params) => {
-        const response = await router.handle({ id: 0, method: 'threads.start', params });
-        if (!response?.ok) throw new Error(response?.error ?? 'Invalid request');
-        return response.result as ThreadView;
-      },
-    }));
-    const stopUpdates = updates?.onChange((view) => { relay.emit('update.changed', view); this.send('update.changed', view, record.id); });
-    const secrets = remoteSecrets(client);
-    const threads = refs.threads = new Threads(record.home, profiles, projects, this.runners, broadcast, models, machines, secrets, () => relay.merged(), tools, this.deliveryHosting); await threads.load(); threads.register(router);
-    // GLOSSARY: Home. "New home…" in Settings → Spaces; a user action, not an accio tool.
-    new NewHomes({
-      spaces: () => spaces.list(),
-      saveSpace: (space) => refused(() => settings.saveSpace(space)),
-      projects: () => projects.state(),
-      addFolder: (path, profileId) => projects.addFolder(path, profileId),
-      requireProfile: (profileId) => { profiles.require(profileId); },
-      profileFolder: (profileId) => machines.profileFoldersHere().find((p) => p.id === profileId)?.folders[0],
-      requireThreadsStart: async (profileId) => { await models.ready(profileId); models.require(profileId); },
-      removeCheckout: async (id) => { const response = await router.handle({ id: 0, method: 'checkouts.remove', params: { id } }); if (!response?.ok) throw new Error(response?.error ?? 'Invalid request'); },
-      githubLogin: (profileId) => settings.machine(this.here.id)?.profileGitHub?.[profileId],
-      gh: (profileId, cwd, args) => machines.github.run(profileId, cwd, args),
-      start: (params) => threads.start(params),
-    }).register(router);
-    // GLOSSARY: Relay. The only answer for the thread and machine lists: other machines' threads join
-    // this machine's, and calls about them go to their machine.
-    await relay.load();
-    router.on('threads.list', () => relay.merged());
-    // A gh sign-in made since startup shows up in machine settings without a restart.
-    router.on('machines.list', async () => { await machines.refresh(); await machines.reportGitHub().catch(() => {}); return relay.machines(); });
-    void machines.reportGitHub().catch(() => {});
-    router.forward = (method, params) => relay.forward(method, params);
-    const resources = new ResourceManager(record.home, this.here.id, remoteResources(client), remoteMcp(client), profiles, projects, broadcast, async (tool, detail) => {
-      const candidates = tool.repairProfileId ? [profiles.require(tool.repairProfileId)] : profiles.all();
-      const profile = candidates.find(p => models.list(p.id).models.length > 0);
-      if (!profile) throw new Error('Sign in to a provider and select its account in a profile to start a repair thread.');
-      const folder = resources.tools.folder(tool);
-      return (await threads.start({ profileId: profile.id, machineId: this.here.id, text: `Repair ${tool.name} on this machine\n\nDiagnose the failure, fix the installation, test it and verify the result. Work on this machine only.\nPackage: ${tool.package}@${tool.version}\nExecutable: ${tool.executable}\nManaged installation folder: ${folder}\nInstall with pnpm add --dir <that folder> --ignore-workspace --config.dangerously-allow-all-builds=true ${tool.package}@${tool.version}. Keep the installation inside that folder.\nHealth check arguments: ${JSON.stringify(tool.checkArgs)}\nFailure:\n${detail}\n\nAccio will rerun the health check after this thread completes. Report what you changed and the commands and results that prove it works.` }, { repairToolId: tool.id })).id;
-    }, this.resourceCommand);
-    resources.spaces = () => spaces.list();
-    tools.add(addCliTool({
-      caller: (id) => threads.views().find((t) => t.id === id),
-      levelContext: (profileId, projectId) => resources.levelContext(profileId, projectId),
-      names: (at) => ({ profile: profiles.all().find((p) => p.id === at.profileId)?.name, space: spaces.list().find((s) => s.id === at.spaceId)?.name,
-        project: projects.state().projects.find((p) => at.projectKey && projectKey(p) === at.projectKey)?.name }),
-      tools: () => resources.state().tools,
-      save: async (tool) => (await resources.saveTool(tool)).check,
-      bin: (tool) => resources.tools.bin(tool),
-      confirm: async (threadId, request, signal) => {
-        const turnId = threads.runningTurn(threadId);
-        if (!turnId) return 'cancelled';
-        return threads.confirmations.ask(threadId, turnId, request, signal);
-      },
-    }));
-    resources.register(router); threads.resources = resources; threads.toolOverrides = () => settings.harnessTools(); threads.onRepairFinished = id => resources.tools.afterRepair(id); threads.spaceContext = new SpaceContext({ spaces: () => spaces.list(), projects: () => projects.state(), checkouts: spaceCheckouts });
-    // GLOSSARY: Home. Its skill files are the Space level; a missing home is cloned like the Space section's.
-    resources.homeCheckout = async (key, wait) => { const found = wait ? await spaceCheckouts.checkout(key) : await spaceCheckouts.lookup(key); return 'checkout' in found ? found.checkout.path : undefined; };
-    profiles.setReferenceSource(() => [...projects.state().projects.map((p) => p.profileId), ...threads.profileReferences()]);
-    let reconciliation: Promise<unknown> = Promise.resolve();
-    let initialized = false;
-    const continueAfterRestart = () => {
-      if (initialized && !this.closing) void threads.continueAfterRestart().catch(error => console.error('[threads] startup recovery failed', error));
-    };
-    workspace = { client, router, relay, profiles, machines, models, projects, spaces, threads, tools, resources, secrets, home: record.home,
-      initialize: origin => { if (!initialized) relay.start(record.url, record.token); tools.listen(record.id === this.defaultId ? origin : `${origin}/hubs/${record.id}`); initialized = true; continueAfterRestart(); if (client.status === 'connected') reconciliation = resources.reconcile().catch(error => console.error('[resources] startup check failed', error)); },
-      close: async () => { stopUpdates?.(); await relay.close(); await threads.close(); await secrets.close(); await resources.close(); await reconciliation; await profiles.close(); await projects.close(); await client.close(); } };
-    relay.setAsleep(this.asleep);
     this.workspaces.set(record.id, workspace);
-    client.onChanged(() => { this.announce(); broadcast('resources.changed', resources.state()); if (initialized && client.status === 'connected') resources.syncTools(); relay.announce(); continueAfterRestart(); });
-    if (client.status === 'connected') { await profiles.load(); await profiles.syncReferences(); }
-    if (this.origin) workspace.initialize(this.origin);
+    this.announce();
     return workspace;
   }
   private register() {
@@ -244,11 +54,11 @@ export class HubConnections {
         const url = hubAddress(params.url);
         const health = await fetch(url + '/healthz', { redirect: 'error', signal: AbortSignal.timeout(10_000) }).then((response) => response.json()) as any;
         if (this.saved.some((s) => s.id === health.hubId)) throw new UserError('This hub is already saved. Select its existing connection.');
-        const response = await fetch(url + '/pair', { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(15_000), headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code: params.code, machineId: this.here.id }) });
+        const response = await fetch(url + '/pair', { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(15_000), headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code: params.code, machineId: this.deps.here.id }) });
         const result = await response.json() as any;
         if (!response.ok) throw new UserError(result.error ?? 'Could not pair with this hub');
         if (typeof result.hubId !== 'string' || !/^[\da-f-]{36}$/i.test(result.hubId) || typeof result.token !== 'string') throw new UserError('The address did not return a valid hub pairing');
-        await this.add({ id: result.hubId, name: params.name, url, token: result.token, local: ['localhost', '127.0.0.1', '[::1]'].includes(new URL(url).hostname), home: join(this.home, 'hubs', result.hubId) });
+        await this.add({ id: result.hubId, name: params.name, url, token: result.token, local: ['localhost', '127.0.0.1', '[::1]'].includes(new URL(url).hostname), home: join(this.deps.home, 'hubs', result.hubId) });
         return this.views().find((v) => v.id === result.hubId)!;
       }))
       .on('hubs.rename', ({ id, name }) => this.change(async () => { const record = this.require(id); record.name = name; await this.persist(); this.announce(); return this.views().find((v) => v.id === id)!; }))
@@ -263,24 +73,15 @@ export class HubConnections {
   private require(id: string) { const record = this.saved.find((s) => s.id === id); if (!record) throw new UserError('No such saved hub'); return record; }
   workspace(id: string) { const workspace = this.workspaces.get(id); if (!workspace) throw new UserError('This hub connection is unavailable'); return workspace; }
   router(id: string | null) { return this.workspaces.get(id ?? this.defaultId ?? '')?.router ?? this.global; }
-  listen(origin: string) { this.origin = origin; for (const workspace of this.workspaces.values()) workspace.initialize(origin); }
-  async asset(req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse) {
+  /** This machine's HTTP routes for a hub: `/hubs/<id>/…` for any hub, the default hub's without the prefix. */
+  async serve(req: IncomingMessage, res: ServerResponse) {
     const original = req.url;
-    const tool = /^\/hubs\/([\da-f-]{36})(\/mcp)(\?.*)?$/.exec(original ?? '');
-    if (tool) {
-      const workspace = this.workspaces.get(tool[1]!); if (!workspace) { res.writeHead(404).end(); return true; }
-      req.url = tool[2]! + (tool[3] ?? '');
-      try { return await workspace.tools.handle(req, res); } finally { req.url = original; }
-    }
-    const match = /^\/hubs\/([\da-f-]{36})(\/thread-assets\/[^?]+)(\?.*)?$/.exec(original ?? '');
-    if (match) {
-      const workspace = this.workspaces.get(match[1]!); if (!workspace) { res.writeHead(404).end(); return true; }
-      req.url = match[2]! + (match[3] ?? '');
-      try { return await workspace.threads.assets.handle(req, res); } finally { req.url = original; }
-    }
-    if (!this.defaultId) return false;
-    const workspace = this.workspace(this.defaultId);
-    return await workspace.tools.handle(req, res) || workspace.threads.assets.handle(req, res);
+    const match = /^\/hubs\/([\da-f-]{36})(\/mcp|\/thread-assets\/[^?]+)(\?.*)?$/.exec(original ?? '');
+    const workspace = match ? this.workspaces.get(match[1]!) : this.defaultId ? this.workspace(this.defaultId) : undefined;
+    if (match && !workspace) { res.writeHead(404).end(); return true; }
+    if (!workspace) return false;
+    if (match) req.url = match[2]! + (match[3] ?? '');
+    try { return await workspace.serve(req, res); } finally { req.url = original; }
   }
   private change<T>(fn: () => Promise<T>) { const result = this.queue.then(fn); this.queue = result.catch(() => {}); return result; }
   stopAccepting() { for (const workspace of this.workspaces.values()) workspace.profiles.stopAccepting(); }
