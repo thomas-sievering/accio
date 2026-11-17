@@ -60,7 +60,7 @@ export type TurnDeps = {
   /** GLOSSARY: Image attachment. */
   images: { claim: (threadId: string, uploadIds: string[]) => Promise<ThreadAsset[]>; file: (threadId: string, asset: ThreadAsset) => Promise<string> };
   /** GLOSSARY: Thread mention. Every thread a message can mention, other machines' included. */
-  knownThreads?: () => readonly ThreadView[];
+  knownThreads: () => readonly ThreadView[];
   /** GLOSSARY: Issue offer. The offered references as the thread's tracker lists them; throws for any it doesn't. */
   offeredIssues?: (threadId: string, refs: string[]) => Promise<OfferedIssue[]>;
 };
@@ -146,8 +146,7 @@ export class Turns {
 
   /** The message with a line about each thread it mentions, which the agent can then read. */
   private withMentionedThreads(thread: Thread, text: string) {
-    const known = this.deps.knownThreads?.();
-    return known ? withThreadMentions(text, threadMentionContext(text, known, thread)) : text;
+    return withThreadMentions(text, threadMentionContext(text, this.deps.knownThreads(), thread));
   }
 
   private async imageFiles(threadId: string, images: readonly ThreadAsset[]): Promise<HarnessImage[]> {
