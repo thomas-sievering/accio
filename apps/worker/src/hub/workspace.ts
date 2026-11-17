@@ -38,6 +38,17 @@ import type { Updates } from '../machine/update.js';
 import { findMachine, machineTools } from '../machine/machineTools.js';
 import { imageTool } from '../images/imageTool.js';
 
+/**
+ * The snapshot saved with a hub connection, for use until the hub answers. One
+ * this build can't read, such as from before profiles named their accounts by
+ * id (#232), is dropped: the hub sends a current one on connect.
+ */
+export function cachedSnapshot(snapshot: HubSnapshot | undefined): HubSnapshot | undefined {
+  const readable = Array.isArray(snapshot?.accounts) && Array.isArray(snapshot?.profiles)
+    && snapshot.profiles.every((p) => Array.isArray(p?.providers) && p.providers.every((provider) => Array.isArray(provider?.accountIds)));
+  return readable ? snapshot : undefined;
+}
+
 export type SavedHub = { id: string; name: string; url: string; token: string; home: string; local: boolean; managed?: boolean; snapshot?: HubSnapshot };
 export type HubWorkspace = { client: HubClient; router: Router; relay: Relay; profiles: Profiles; machines: Machines; models: Models; projects: Projects; spaces: Spaces; threads: Threads; tools: AccioTools; resources: ResourceManager; secrets: SecretsAccess; home: string;
   /** Answers this hub's accio tools and thread media; resolves false for any other request. */
@@ -82,7 +93,8 @@ export type WorkspaceSlot = {
 export async function openWorkspace(record: SavedHub, deps: WorkspaceDeps, slot: WorkspaceSlot): Promise<HubWorkspace> {
   const { here } = deps;
   const client = new HubClient(record.url, record.id, record.token, { ...here, harnesses: deps.harnesses });
-  if (record.snapshot) client.snapshot = record.snapshot;
+  const cached = cachedSnapshot(record.snapshot);
+  if (cached) client.snapshot = cached;
   client.setAsleep(slot.asleep());
   await client.start();
   const settings = remoteSettings(client);
@@ -119,7 +131,7 @@ export async function openWorkspace(record: SavedHub, deps: WorkspaceDeps, slot:
       thread: (id) => threads.toolContext(id),
       canMakeImages: (profileId) => {
         const profile = profiles.get(profileId) && profiles.profileView(profileId);
-        return !!profile?.house && !!profile.providers.find((p) => p.id === 'openai')?.accounts.some((a) => a.signedIn);
+        return !!profile?.house && profiles.providerAccounts(profileId, 'openai').some((a) => a.signedIn);
       },
       access: (profileId) => profiles.hubAccess(profileId, 'openai'),
       folder: join(record.home, 'images'),

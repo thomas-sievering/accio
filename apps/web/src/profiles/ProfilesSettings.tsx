@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { accountInUse, noSortingHatMessage, type AccountView, type ProfileView } from '@accio/protocol';
+import { accountInUse, noSortingHatMessage, providerAccounts, type AccountView, type ProfileView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { ArrowUp, Close, ProviderLogo, User } from '../app/icons';
 import { NEW, SettingLink, SettingsFooter, SettingsSection, type SettingsNav } from '../app/Settings';
@@ -27,12 +27,13 @@ export function ProfileDetail({ nav, item }: Props & { item: ProfileView }) {
 
 /** Profiles select accounts configured in Accounts settings. */
 export function ProfilesList({ nav, data }: Props) {
+  const { accounts } = useProfiles();
   return (<>
     <p className="note">A profile groups the accounts and projects for one side of your life, such as personal or work.</p>
     <SettingsSection add={{ label: 'Add profile', onClick: () => nav.open(NEW) }}>
       {data.items!.map((p) => (
-        <SettingLink key={p.id} icon={<User />} title={p.name} warn={!hasSignedInAccount(p)} onClick={() => nav.open(p.id)}
-          description={p.house === null ? 'No house on the Sorting Hat' : [p.house && `House ${p.house.name}`, p.providers.flatMap((provider) => provider.accounts.map((a) => `${a.name}${a.signedIn ? '' : ' · Signed out'}`)).join(', ') || 'No account in its house'].filter(Boolean).join(' · ')} />
+        <SettingLink key={p.id} icon={<User />} title={p.name} warn={!hasSignedInAccount(p, accounts)} onClick={() => nav.open(p.id)}
+          description={p.house === null ? 'No house on the Sorting Hat' : [p.house && `House ${p.house.name}`, p.providers.flatMap((provider) => providerAccounts(provider, accounts ?? []).map((a) => `${a.name}${a.signedIn ? '' : ' · Signed out'}`)).join(', ') || 'No account in its house'].filter(Boolean).join(' · ')} />
       ))}
     </SettingsSection>
   </>);
@@ -95,7 +96,7 @@ function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: Pr
           )}
           {sortingHat && house && !relinked && !sortingHat.problem && PROVIDERS.map((provider) => (
             <ProviderAccounts key={provider.id} provider={provider} accounts={accounts} selected={selection[provider.id]}
-              inUseId={profile && accountInUse(profile.providers.find((p) => p.id === provider.id))?.id}
+              inUseId={profile && accountInUse(profile.providers.find((p) => p.id === provider.id), accounts ?? [])?.id}
               onChange={(ids) => setSelection((s) => ({ ...s, [provider.id]: ids }))} />
           ))}
           {error && <p className="error">{error}</p>}

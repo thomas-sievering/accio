@@ -16,12 +16,12 @@ export function LimitsView({ scope, onScope, onClose, onOpenAccount }: {
   onClose: () => void;
   onOpenAccount: (accountId: string) => void;
 }) {
-  const { profiles, sortingHat } = useProfiles();
+  const { profiles, accounts, sortingHat } = useProfiles();
   const heading = useRef<HTMLElement>(null);
   useEffect(() => { heading.current?.focus(); }, []);
   const { views, loadError, retryLoad, refreshError, refresh, status, now } = useLimits();
   const missing = scope !== 'all' && profiles !== undefined && !profiles.some((p) => p.id === scope);
-  const groups = profiles && !missing ? limitsLayout(profiles, scope) : [];
+  const groups = profiles && !missing ? limitsLayout(profiles, accounts ?? [], scope) : [];
   const drawn = groups.flatMap((g) => g.entries.flatMap((e) => e.kind === 'account' ? [e.account] : []));
   useWatchLimits(drawn.map((a) => a.id));
   const signedIn = drawn.filter((a) => a.signedIn).map((a) => a.id);

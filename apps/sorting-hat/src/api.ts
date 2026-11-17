@@ -1,10 +1,9 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { MAX_MANAGEMENT_BODY } from './bodies.js';
-import { SIGN_IN_TTL_MS } from './claudeOAuth.js';
 import { HatError } from './errors.js';
 import type { AccountSelection, SortingHat } from './sortingHat.js';
-import type { AccountView, ProviderId } from './types.js';
+import type { ProviderId } from './types.js';
 import { USAGE_DIMENSIONS, type UsageDimension, type UsageQuery } from './usage.js';
 
 /** Where the management API lives; everything else on the server is a model route. */
@@ -28,13 +27,6 @@ type Route = (params: string[], body: any, query: URLSearchParams) => Promise<Re
  */
 export function manageSortingHat(hat: SortingHat, adminToken: string, opts: ManagementOptions = {}) {
   const admin = digest(adminToken);
-  /** Sign-ins that finished, so a late status poll still sees the account. */
-  const completed = new Map<string, { account: AccountView; at: number }>();
-  const complete = (signInId: string, account: AccountView) => {
-    for (const [id, c] of completed) if (Date.now() - c.at > SIGN_IN_TTL_MS) completed.delete(id);
-    completed.set(signInId, { account, at: Date.now() });
-    return { status: 'complete' as const, account };
-  };
   const ok = (body: unknown, status = 200): Reply => ({ status, body });
   const none: Reply = { status: 204 };
 
@@ -50,36 +42,22 @@ export function manageSortingHat(hat: SortingHat, adminToken: string, opts: Mana
     'DELETE accounts/:id': ([id]) => hat.deleteAccount(id!).then(() => none),
     'POST accounts/:id/sign-out': ([id]) => hat.signOutAccount(id!).then(ok),
     'POST accounts/:id/sign-in': async ([id], b) => {
-      const account = hat.accountView(id!);
-      if (account.providerId === 'openai') {
-        if (b.flow !== undefined && b.flow !== 'browser' && b.flow !== 'device') throw new HatError('flow must be browser or device.');
-        return ok({ providerId: 'openai', ...await hat.beginOpenAISignIn(id!, b.flow !== 'device') }, 201);
-      }
-      if (b.redirectUri !== undefined) claudeRedirect(b.redirectUri);
-      return ok({ providerId: 'anthropic', ...hat.beginAccountSignIn(id!, b.redirectUri) }, 201);
+      if (b.flow !== undefined && b.flow !== 'browser' && b.flow !== 'device') throw new HatError('flow must be browser or device.');
+      if (b.redirectUri !== undefined) browserCallback(b.redirectUri);
+      return ok(await hat.beginSignIn(id!, { redirectUri: b.redirectUri, browser: b.flow !== 'device' }), 201);
     },
 
     // Sign-ins in progress
-    'GET sign-ins/:id': async ([id]) => {
-      const done = completed.get(id!);
-      if (done) return ok({ status: 'complete', account: done.account });
-      const provider = signInProvider(id!);
-      if (provider === 'anthropic') return ok({ status: 'pending' });
-      const result = await hat.openaiSignInStatus(id!);
-      return ok(result.status === 'complete' ? complete(id!, result.account) : result);
-    },
-    'POST sign-ins/:id/complete': async ([id], b) => {
-      if (completed.has(id!)) throw new HatError('This sign-in is already complete.', 409);
-      if (signInProvider(id!) === 'anthropic') return ok(complete(id!, await hat.completeAccountSignIn(id!, text(b.code, 'code', 16_384))));
-      // ChatGPT in the browser lands on a localhost page that may not exist here: paste its address, or its code and state.
+    'GET sign-ins/:id': ([id]) => hat.signInStatus(id!).then(ok),
+    'POST sign-ins/:id/complete': ([id], b) => {
+      // A browser sign-in lands on a localhost page that may not exist here: paste its address, or its code and state.
       let { code, state } = b;
       if (typeof b.url === 'string') {
         let url: URL;
         try { url = new URL(b.url); } catch { throw new HatError('url is not an address.'); }
         code = url.searchParams.get('code'); state = url.searchParams.get('state');
       }
-      await hat.completeOpenAICallback(id!, text(code, 'code', 16_384), text(state, 'state', 1024));
-      return ok({ status: 'pending' });
+      return hat.completeAccountSignIn(id!, text(code, 'code', 16_384), state == null ? undefined : text(state, 'state', 1024)).then(ok);
     },
     'DELETE sign-ins/:id': ([id]) => hat.cancelAccountSignIn(id!).then(() => none),
 
@@ -120,12 +98,6 @@ export function manageSortingHat(hat: SortingHat, adminToken: string, opts: Mana
     // Usage
     'GET usage': (_, __, q) => ok(hat.usageReport(usageQuery(q))),
   };
-
-  function signInProvider(id: string) {
-    const provider = hat.signInProvider(id);
-    if (!provider) throw new HatError('This sign-in has expired or was cancelled. Start it again.', 404);
-    return provider;
-  }
 
   async function handle(req: IncomingMessage, res: ServerResponse) {
     const url = new URL(req.url ?? '/', 'http://sorting-hat');
@@ -202,8 +174,8 @@ function usageQuery(q: URLSearchParams): UsageQuery {
   return { from: time('from'), to: time('to'), groupBy: groupBy as UsageDimension[], bucket, where };
 }
 
-/** The hub's rule for Claude's browser callback: a localhost page on the caller's own machine. */
-function claudeRedirect(value: unknown) {
+/** The hub's rule for a browser callback, which Claude's sign-in may name: a localhost page on the caller's own machine. */
+function browserCallback(value: unknown) {
   let u: URL;
   try { u = new URL(String(value)); } catch { throw new HatError('redirectUri is not an address.'); }
   if (u.protocol !== 'http:' || u.hostname !== 'localhost' || u.pathname !== '/callback' || !u.port || u.search || u.hash || u.username || u.password) throw new HatError('redirectUri must be http://localhost:<port>/callback.');

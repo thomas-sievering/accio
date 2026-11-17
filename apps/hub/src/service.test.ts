@@ -68,7 +68,7 @@ describe('standalone hub trust and network boundary', () => {
     const { service, pair } = await fixture();
     const { client } = await pair('first');
     const profile = await client.call('profiles.save', { name: 'Personal' });
-    expect(profile).toMatchObject({ house: null, providers: [{ accounts: [], inUseId: null }, { accounts: [], inUseId: null }] });
+    expect(profile).toMatchObject({ house: null, providers: [{ accountIds: [], inUseId: null }, { accountIds: [], inUseId: null }] });
     expect(client.snapshot).toMatchObject({ accounts: [], limits: [], models: { [profile.id]: [] } });
     expect(client.snapshot.sortingHat).toBeUndefined();
     await expect(client.call('accounts.save', { name: 'Claude' })).rejects.toThrow(noSortingHatMessage);

@@ -26,12 +26,12 @@ export function ThreadNotice({
   const client = useClient();
   const { unavailable } = useThreadAvailability(thread);
   const { busy, error, run } = useAction();
-  const { sortingHat } = useProfiles();
+  const { sortingHat, accounts } = useProfiles();
 
   let text: React.ReactNode;
   let action: { label: string; run: () => unknown } | undefined;
   let tone = 'warn';
-  const selected = model ?? thread?.model ?? defaultModel(profile);
+  const selected = model ?? thread?.model ?? defaultModel(profile, accounts);
   if (unavailable) {
     text = unavailable;
   } else if (!profile) {
@@ -46,7 +46,7 @@ export function ThreadNotice({
       </>
     );
     action = { label: 'Choose house', run: () => onOpenProfile(profile.id) };
-  } else if (!accountForModel(profile, selected)?.signedIn) {
+  } else if (!accountForModel(profile, selected, accounts)?.signedIn) {
     text = (
       <>
         <b>{profile.name}</b> isn’t signed in with {selected.harnessId === 'codex' ? 'ChatGPT' : 'Claude'}, so this thread can’t run yet.

@@ -60,7 +60,7 @@ export function App() {
  * thread can do is on its right-click menu.
  */
 function Shell({ page, setPage }: { page: Page; setPage: Dispatch<SetStateAction<Page>> }) {
-  const { profiles, filter, setFilter } = useProfiles();
+  const { profiles, accounts, filter, setFilter } = useProfiles();
   const { state } = useProjects();
   const { spaces } = useSpaces();
   const { threads, selectedId, select, draft, projectScope, setProjectScope } = useThreads();
@@ -129,9 +129,9 @@ function Shell({ page, setPage }: { page: Page; setPage: Dispatch<SetStateAction
   };
   const draftProfileId = draft && (draft.profileId ?? state?.projects.find((p) => p.id === state.checkouts.find((c) => c.id === draft.checkoutId)?.projectId)?.profileId);
   const currentProfileId = draft ? draftProfileId ?? undefined : thread?.profileId;
-  const setUp = profiles && state && profiles.length > 0 && profiles.some(hasSignedInAccount) && state.checkouts.length > 0;
+  const setUp = profiles && state && profiles.length > 0 && profiles.some((p) => hasSignedInAccount(p, accounts)) && state.checkouts.length > 0;
   // Until setup is done there is nothing to search, filter or start a thread in.
-  const settingUp = !!profiles && !!state && !setUp;
+  const settingUp = !!profiles && !!accounts && !!state && !setUp;
   const inSettings = settings !== null;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

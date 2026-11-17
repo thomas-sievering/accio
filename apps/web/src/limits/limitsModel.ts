@@ -1,4 +1,4 @@
-import { accountInUse, type AccountLimitsView, type AccountView, type LimitWindow, type LimitsSnapshot, type ProfileProviderView, type ProfileView } from '@accio/protocol';
+import { accountInUse, providerAccounts, type AccountLimitsView, type AccountView, type LimitWindow, type LimitsSnapshot, type ProfileProviderView, type ProfileView } from '@accio/protocol';
 
 /** 'all' or a profile id. */
 export type LimitsScope = 'all' | (string & {});
@@ -34,24 +34,26 @@ export type LimitsEntry =
 export type LimitsGroup = { profile: ProfileView; entries: LimitsEntry[] };
 
 /**
- * Profile → provider → account. A shared account keeps its place under every
- * profile, but All profiles draws its meters only once, under the first profile.
+ * Profile → provider → account, with each account's details from the account
+ * list. A shared account keeps its place under every profile, but All profiles
+ * draws its meters only once, under the first profile.
  */
-export function limitsLayout(profiles: ProfileView[], scope: LimitsScope): LimitsGroup[] {
+export function limitsLayout(profiles: ProfileView[], accounts: readonly AccountView[], scope: LimitsScope): LimitsGroup[] {
   const users = new Map<string, Named[]>();
-  for (const p of profiles) for (const provider of p.providers) for (const a of provider.accounts) {
-    const list = users.get(a.id) ?? [];
+  for (const p of profiles) for (const provider of p.providers) for (const id of provider.accountIds) {
+    const list = users.get(id) ?? [];
     if (!list.some((u) => u.id === p.id)) list.push({ id: p.id, name: p.name });
-    users.set(a.id, list);
+    users.set(id, list);
   }
   const drawnUnder = new Map<string, Named>();
   return profiles.filter((p) => scope === 'all' || p.id === scope).map((profile) => ({
     profile,
     entries: profile.providers.flatMap((provider): LimitsEntry[] => {
-      const inUse = accountInUse(provider);
-      return provider.accounts.map((account) => {
+      const inUse = accountInUse(provider, accounts);
+      const listed = providerAccounts(provider, accounts);
+      return listed.map((account) => {
         const sharedWith = (users.get(account.id) ?? []).filter((u) => u.id !== profile.id);
-        const role: AccountRole = provider.accounts.length === 1 ? 'only' : account.id === inUse?.id ? 'inUse' : 'standby';
+        const role: AccountRole = listed.length === 1 ? 'only' : account.id === inUse?.id ? 'inUse' : 'standby';
         const first = drawnUnder.get(account.id);
         if (first) return { kind: 'reference', provider, account, role, shownUnder: first, sharedWith };
         drawnUnder.set(account.id, { id: profile.id, name: profile.name });

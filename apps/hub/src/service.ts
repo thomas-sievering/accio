@@ -116,8 +116,7 @@ function invalid(error: z.ZodError) {
   const where = issue?.path.length ? `${issue.path.join('.')}: ` : '';
   return new HubError(`Invalid hub request parameters${issue ? ` (${where}${issue.message})` : ''}`);
 }
-type Login = { machineId: string; accountId: string; providerId: ProviderId; startedAt: number; complete?: AccountView };
-/** How long a machine may finish a sign-in it started; the Sorting Hat expires its own too. */
+/** How long the hub remembers who started a sign-in; the Sorting Hat expires the sign-in itself. */
 const SIGN_IN_TTL_MS = 15 * 60_000;
 
 /** The same service runs on loopback for development and behind HTTPS at home. */
@@ -156,7 +155,8 @@ export async function startHubService(opts: HubServiceOptions) {
       relays.get(from)?.send(JSON.stringify({ kind: 'undeliverable', from: 'hub', id: frame.id }));
     }
   }
-  const logins = new Map<string, Login>();
+  /** GLOSSARY: Sign-in. Only which machine started each one, so another can't poll, finish or cancel it; the Sorting Hat holds the rest. */
+  const signInOwners = new Map<string, { machineId: string; at: number }>();
   const pairingAttempts = new Map<string, { count: number; until: number }>();
   let revision = 0;
   const epoch = randomUUID();
@@ -176,10 +176,8 @@ export async function startHubService(opts: HubServiceOptions) {
   link.onChanged(announce);
   secrets.onChanged(announce);
   function auth(req: IncomingMessage) { const token = /^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1]; return token ? trust.authenticate(token) : undefined; }
-  function login(id: string, machineId: string) {
-    const pending = logins.get(id);
-    if (!pending || pending.machineId !== machineId || Date.now() - pending.startedAt > SIGN_IN_TTL_MS) throw new HubError('This sign-in has expired or was cancelled. Start it again.');
-    return pending;
+  function ownSignIn(id: string, machineId: string) {
+    if (signInOwners.get(id)?.machineId !== machineId) throw new HubError('This sign-in has expired or was cancelled. Start it again.');
   }
   async function execute(machineId: string, method: string, raw: any): Promise<unknown> {
     const schema: z.ZodType | undefined = (machineCalls as Record<string, z.ZodType>)[method] ?? (methods as Record<string, any>)[method]?.params ?? (secretCalls as Record<string, z.ZodType>)[method] ?? (settingCalls as Record<string, z.ZodType>)[method];
@@ -249,27 +247,24 @@ export async function startHubService(opts: HubServiceOptions) {
       case 'accounts.signOut': return link.write((c) => c.signOut(p.id));
       case 'accounts.beginSignIn': {
         const result = await link.write((c) => c.beginSignIn(p.id, p.redirectUri));
-        logins.set(result.signInId, { machineId, accountId: p.id, providerId: result.providerId, startedAt: Date.now() });
+        signInOwners.set(result.signInId, { machineId, at: Date.now() });
         return result;
       }
       case 'accounts.signInStatus': {
-        const pending = login(p.signInId, machineId);
-        if (pending.complete) return { status: 'complete', account: pending.complete };
-        if (pending.providerId !== 'openai') return { status: 'pending' };
+        ownSignIn(p.signInId, machineId);
         const result = await link.require().signInStatus(p.signInId);
-        if (result.status === 'complete') { pending.complete = result.account; await link.poll(); }
+        // Read back at once, so the snapshot answering this call has the signed-in account.
+        if (result.status === 'complete') await link.poll();
         return result;
       }
-      case 'accounts.callback': {
-        const pending = login(p.signInId, machineId);
-        if (pending.complete) throw new HubError('This sign-in is already complete.');
-        pending.complete = await completeRemote(p.signInId, pending.providerId === 'anthropic' ? { code: p.code } : { code: p.code, state: p.state });
+      case 'accounts.callback':
+        ownSignIn(p.signInId, machineId);
+        await link.write((c) => c.completeSignIn(p.signInId, { code: p.code, ...(p.state ? { state: p.state } : {}) }));
         return null;
-      }
       case 'accounts.cancelSignIn':
-        login(p.signInId, machineId);
+        ownSignIn(p.signInId, machineId);
         await link.require().cancelSignIn(p.signInId);
-        logins.delete(p.signInId); return null;
+        signInOwners.delete(p.signInId); return null;
       case 'profiles.list': return profileViews(settings.profiles(), link);
       case 'profiles.save': return saveProfile(p);
       case 'profiles.delete': {
@@ -324,11 +319,6 @@ export async function startHubService(opts: HubServiceOptions) {
     // Read again for the house's models, now that a profile links it.
     if (moved) { await link.forgetStale((id) => settings.profiles().find((profile) => profile.id === id)?.houseId); await link.poll(); }
     return profileViews([saved], link)[0];
-  }
-  /** Finishes a sign-in on the Sorting Hat; ChatGPT's browser callback stays pending until its status says complete. */
-  async function completeRemote(signInId: string, body: { code: string; state?: string }) {
-    const result = await link.write((c) => c.completeSignIn(signInId, body));
-    return result.status === 'complete' ? result.account : undefined;
   }
   const server = createServer((req, res) => { void handle(req, res).catch((error) => {
     if (res.headersSent) { res.destroy(); return; }
@@ -410,18 +400,18 @@ export async function startHubService(opts: HubServiceOptions) {
       ws.send(JSON.stringify({ revision }));
     });
   });
-  // The Sorting Hat expires its own sign-ins.
-  const loginSweep = setInterval(() => {
-    for (const [id, pending] of logins) if (Date.now() - pending.startedAt > SIGN_IN_TTL_MS) logins.delete(id);
+  // The Sorting Hat expires its own sign-ins, and keeps a finished one about as long.
+  const signInSweep = setInterval(() => {
+    for (const [id, owner] of signInOwners) if (Date.now() - owner.at > 2 * SIGN_IN_TTL_MS) signInOwners.delete(id);
   }, 25_000);
-  loginSweep.unref();
+  signInSweep.unref();
   await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(opts.port ?? 47322, opts.host ?? '127.0.0.1', resolve); });
   const address = server.address();
   const port = typeof address === 'object' && address ? address.port : opts.port!;
   const url = `http://${opts.host ?? '127.0.0.1'}:${port}`;
   mcp.setUrl(opts.publicUrl ?? url);
   return { sortingHatLink: link, settings, resources, secrets, trust, port, url, snapshot, createPairingCode: () => HubTrust.createCode(opts.home),
-    async close() { closing = true; clearInterval(loginSweep); for (const ws of sockets.clients) ws.terminate(); for (const ws of relay.clients) ws.terminate();
+    async close() { closing = true; clearInterval(signInSweep); for (const ws of sockets.clients) ws.terminate(); for (const ws of relay.clients) ws.terminate();
       // server.close() drops only the connections idle right now; a request finishing later would keep its socket open until the client's keep-alive timeout (~3s).
       const sweep = setInterval(() => server.closeIdleConnections(), 25);
       await new Promise<void>((resolve) => server.close(() => resolve())).finally(() => clearInterval(sweep)); sockets.close(); relay.close(); await queue; for (const grant of grants.values()) grant.release(); await link.close(); await secrets.close(); await resources.close(); await settings.close(); await trust.close(); } };

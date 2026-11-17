@@ -7,7 +7,7 @@ export type ProviderId = 'anthropic' | 'openai';
 /** GLOSSARY: Account. Who it is; its tokens never leave the Sorting Hat. */
 export type AccountView = { id: string; name: string; providerId: ProviderId; signedIn: boolean; email: string | null; organization: string | null };
 
-/** One provider as a profile uses it, with the profile's accounts there. */
+/** One provider as a profile uses it, with the ids of the profile's accounts there; their details are in the hub's account list. */
 export type ProfileProviderView = {
   id: ProviderId;
   name: string;
@@ -16,19 +16,24 @@ export type ProfileProviderView = {
   /** Whether accio can sign in to it yet. */
   available: boolean;
   /** In its house's order, which breaks ties when the Sorting Hat chooses among them. */
-  accounts: AccountView[];
+  accountIds: string[];
   /** GLOSSARY: Account in use. The signed-in account the Sorting Hat chose for the next request, by limits and reset times. */
   inUseId: string | null;
 };
 
-/** The account a profile's turns use at a provider. */
-export function accountInUse(provider: ProfileProviderView | undefined): AccountView | null {
-  return provider?.accounts.find((a) => a.id === provider.inUseId) ?? null;
+/** The profile's accounts at a provider, in order, as the hub's account list describes them. */
+export function providerAccounts(provider: ProfileProviderView | undefined, accounts: readonly AccountView[]): AccountView[] {
+  return (provider?.accountIds ?? []).flatMap((id) => accounts.filter((a) => a.id === id));
+}
+
+/** The account a profile's turns use at a provider, from the hub's account list. */
+export function accountInUse(provider: ProfileProviderView | undefined, accounts: readonly AccountView[]): AccountView | null {
+  return provider?.inUseId && provider.accountIds.includes(provider.inUseId) ? accounts.find((a) => a.id === provider.inUseId) ?? null : null;
 }
 
 /**
- * GLOSSARY: Profile, as clients see it: profile → providers → accounts. It lives
- * on the hub; clients only learn who each account is. Profile folders are per
+ * GLOSSARY: Profile, as clients see it: profile → providers → account ids. It
+ * lives on the hub; clients only learn who each account is, from the hub's account list. Profile folders are per
  * machine, so they are on MachineView.
  */
 export type ProfileView = {

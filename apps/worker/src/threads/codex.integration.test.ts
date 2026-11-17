@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FakeCodex, testJWT } from '../testing/fakeCodex.js';
 import { startTestApp, type TestClient } from '../testing/testApp.js';
+import { providerAccounts } from '@accio/protocol';
 
 describe('Codex and ChatGPT accounts', () => {
   let t: Awaited<ReturnType<typeof startTestApp>>;
@@ -146,10 +147,11 @@ describe('Codex and ChatGPT accounts', () => {
     const { profile, account } = await signIn(c, fake, 'Other');
     await c.call('profiles.save', { id: claude.id, name: claude.name, accountIds: { openai: [account.id] } });
     const [selected] = (await c.call('profiles.list', {})).filter((p) => p.id === claude.id);
-    expect(selected?.providers.flatMap((p) => p.accounts).map((a) => a.providerId)).toEqual(['anthropic', 'openai']);
+    const accounts = await c.call('accounts.list', {});
+    expect(selected?.providers.flatMap((p) => providerAccounts(p, accounts)).map((a) => a.providerId)).toEqual(['anthropic', 'openai']);
     await expect(c.call('profiles.save', { id: profile.id, name: profile.name, accountIds: { anthropic: [account.id] } })).rejects.toThrow(/anthropic/);
     await expect(c.call('accounts.signInStatus', { signInId: 'not-claude' })).rejects.toThrow(/expired/);
-    expect((await c.call('profiles.list', {})).find((p) => p.id === profile.id)?.providers[0]?.accounts).toEqual([]);
+    expect((await c.call('profiles.list', {})).find((p) => p.id === profile.id)?.providers[0]?.accountIds).toEqual([]);
   });
 
   it('cancels logins and refuses late completion after sign-out or deletion', async () => {

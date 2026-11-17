@@ -1,4 +1,4 @@
-import { accountInUse, noHouseMessage, type AccountLimitsView, type LimitWindow, type ProfileView, type ProviderId } from '@accio/protocol';
+import { accountInUse, noHouseMessage, providerAccounts, type AccountLimitsView, type AccountView, type LimitWindow, type ProfileView, type ProviderId } from '@accio/protocol';
 import { HubClient } from '@accio/hub';
 import type { Broadcast, Router } from '../rpc/router.js';
 import { UserError } from '../rpc/router.js';
@@ -35,12 +35,19 @@ export class Profiles {
   get(id: string) { return this.all().find((p) => p.id === id); }
   require(id: string) { const profile = this.get(id); if (!profile) throw new UserError(`No profile ${id}`); return profile; }
   profileView(id: string): ProfileView { return this.require(id); }
+  /** GLOSSARY: Account. Each account once, as the hub's snapshot lists them; profiles name theirs by id. */
+  accounts(): readonly AccountView[] { return this.client.snapshot?.accounts ?? []; }
+  /** The profile's accounts at a provider, in order. */
+  providerAccounts(id: string, providerId: ProviderId) { return providerAccounts(this.provider(id, providerId), this.accounts()); }
+  /** GLOSSARY: Account in use. The profile's account at the provider that the Sorting Hat chose for the next request. */
+  accountInUse(id: string, providerId: ProviderId) { return accountInUse(this.provider(id, providerId), this.accounts()); }
+  private provider(id: string, providerId: ProviderId) { return this.profileView(id).providers.find((p) => p.id === providerId); }
   codexModels(id: string) { this.require(id); return this.client.snapshot.models[id] ?? []; }
   limitWindows(accountId: string): LimitWindow[] {
     return this.limitViews().find((v) => v.accountId === accountId)?.snapshot?.windows ?? [];
   }
   refreshLimits(profileId: string, providerId: ProviderId) {
-    const account = accountInUse(this.profileView(profileId).providers.find((p) => p.id === providerId));
+    const account = this.accountInUse(profileId, providerId);
     if (!account) return;
     void this.client.call('accounts.refreshLimits', { accountIds: [account.id] }).catch((error) => console.error('[limits] background refresh failed', (error as Error).message));
   }
@@ -49,7 +56,7 @@ export class Profiles {
   async hubAccess(id: string, providerId: ProviderId = 'anthropic'): Promise<HubAccess> {
     const profile = this.profileView(id);
     if (profile.house === null) throw new UserError(noHouseMessage(profile.name));
-    if (!profile.providers.find((p) => p.id === providerId)?.accounts.some((a) => a.signedIn)) throw new UserError(`Select a signed-in ${providerId === 'openai' ? 'ChatGPT' : 'Claude'} account for ${profile.name} in Profiles.`);
+    if (!this.providerAccounts(id, providerId).some((a) => a.signedIn)) throw new UserError(`Select a signed-in ${providerId === 'openai' ? 'ChatGPT' : 'Claude'} account for ${profile.name} in Profiles.`);
     await this.syncReferences(); return this.connect(id);
   }
   syncReferences() {

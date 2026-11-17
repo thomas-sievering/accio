@@ -38,13 +38,13 @@ import { lastSentText } from './lastMessage';
 
 /** Where a thread runs, looked up once for the header, the notice and the composer. */
 function usePlace(checkoutId: string, profileId?: string, projectId?: string) {
-  const { profiles = [] } = useProfiles();
+  const { profiles = [], accounts } = useProfiles();
   const { state } = useProjects();
   const checkout = state?.checkouts.find((c) => c.id === checkoutId);
   // Another machine's thread has no checkout here; it names this machine's project for the same repository.
   const project = state?.projects.find((p) => p.id === (checkout?.projectId ?? projectId));
   const profile = profiles.find((p) => p.id === (profileId ?? project?.profileId));
-  return { checkout, project, profile };
+  return { checkout, project, profile, accounts };
 }
 
 export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits, onOpenSecrets }: { thread: ThreadView; active?: boolean; onOpenProfile: (profileId: string) => void; onOpenLimits: (profileId: string) => void; onOpenSecrets?: (profileId: string) => void }) {
@@ -91,8 +91,8 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
       <Composer
         key={thread.id}
         imagesUnavailable={imagesUnavailable}
-        disabled={!!unavailable || savingModel || thread.delivery?.status === 'queued' || thread.delivery?.status === 'running' || !place.profile || !accountForModel(place.profile, thread.model)?.signedIn}
-        actions={<><DeliveryActions key={thread.id} thread={thread} project={place.project} canRun={!!place.profile && !!accountForModel(place.profile, thread.model)?.signedIn} /><GoalBar thread={thread} /><WaitBar thread={thread} /><QueueTray thread={thread} /></>}
+        disabled={!!unavailable || savingModel || thread.delivery?.status === 'queued' || thread.delivery?.status === 'running' || !place.profile || !accountForModel(place.profile, thread.model, place.accounts)?.signedIn}
+        actions={<><DeliveryActions key={thread.id} thread={thread} project={place.project} canRun={!!place.profile && !!accountForModel(place.profile, thread.model, place.accounts)?.signedIn} /><GoalBar thread={thread} /><WaitBar thread={thread} /><QueueTray thread={thread} /></>}
         target={thread.id}
         draftId={`thread:${thread.id}`}
         lastMessage={lastSentText(items)}
@@ -113,7 +113,7 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
             try { await client.call('threads.setModel', { threadId: thread.id, model }); }
             finally { setSavingModel(false); }
           }} />
-          <ContextMeter items={items ?? []} limits={place.profile && <LimitsIndicator active={active} account={accountForModel(place.profile, thread.model)} onOpen={() => onOpenLimits(place.profile!.id)} />} />
+          <ContextMeter items={items ?? []} limits={place.profile && <LimitsIndicator active={active} account={accountForModel(place.profile, thread.model, place.accounts)} onOpen={() => onOpenLimits(place.profile!.id)} />} />
         </>}
       />
     </>
@@ -129,7 +129,7 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
   const { select, threads } = useThreads();
   const place = usePlace(checkoutId, profileId);
   const [choice, setChoice] = useState<{ checkoutId: string; profileId?: string; model: ModelSelection }>();
-  const model = choice?.checkoutId === checkoutId && choice.profileId === place.profile?.id ? choice.model : defaultModel(place.profile);
+  const model = choice?.checkoutId === checkoutId && choice.profileId === place.profile?.id ? choice.model : defaultModel(place.profile, place.accounts);
   useShareDraftHarness(model.harnessId);
   const machines = useLive(() => client.call('machines.list', {}), 'machines.changed');
   const [chosenMachineId, setChosenMachineId] = useState<string>();
@@ -184,7 +184,7 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
           skills={checkoutId ? { checkoutId, ...(place.profile ? { profileId: place.profile.id } : {}), harnessId: model.harnessId } : place.profile ? { profileId: place.profile.id, harnessId: model.harnessId } : undefined}
           imagesUnavailable={machine && !machine.thisMachine ? remoteImagesReason : undefined}
           handsOffImages
-          disabled={!!starting || !place.profile || !accountForModel(place.profile, model)?.signedIn || unavailable}
+          disabled={!!starting || !place.profile || !accountForModel(place.profile, model, place.accounts)?.signedIn || unavailable}
           placeholder={`Ask ${model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}
           model={model}
           attachment={offersIssues && issue ? { label: `${issue.label} ${issue.title}`, icon: <span className="issue-chip-mark"><Issue /></span>, onRemove: () => setPicked(undefined) } : undefined}
@@ -207,7 +207,7 @@ export function DraftPane({ checkoutId, profileId, active = true, onOpenProfile,
           }}
           toolbar={<>
             <ModelPicker profileId={place.profile?.id} value={model} onChange={async (model) => setChoice({ checkoutId, profileId: place.profile?.id, model })} />
-            {place.profile && <LimitsIndicator active={active} account={accountForModel(place.profile, model)} onOpen={() => onOpenLimits(place.profile!.id)} />}
+            {place.profile && <LimitsIndicator active={active} account={accountForModel(place.profile, model, place.accounts)} onOpen={() => onOpenLimits(place.profile!.id)} />}
           </>}
         />
         <div className="draft-machine draft-context">

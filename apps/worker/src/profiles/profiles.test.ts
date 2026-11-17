@@ -1,8 +1,8 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { JsonFile } from '@accio/persistence';
-import { claudeAccount, claudeCallback, startTestApp } from '../testing/testApp.js';
+import { claudeAccount, claudeAccountId, claudeCallback, startTestApp } from '../testing/testApp.js';
 
 describe('profiles slice', () => {
   let t: Awaited<ReturnType<typeof startTestApp>>;
@@ -14,7 +14,7 @@ describe('profiles slice', () => {
     const hrc = await c.call('profiles.save', { name: 'HRC', createHouse: true });
     const personal = await c.call('profiles.save', { name: 'Personal', createHouse: true });
     expect(hrc).toMatchObject({ id: 'hrc', name: 'HRC' });
-    expect(claudeAccount(hrc)).toBeNull();
+    expect(claudeAccount(hrc, await c.call('accounts.list', {}))).toBeNull();
 
     const settingsOf = async (id: string) =>
       JSON.parse(await readFile(join(t.home, 'profiles', id, 'claude', 'settings.json'), 'utf8')).env;
@@ -40,7 +40,8 @@ describe('profiles slice', () => {
     expect((await fetch(claudeCallback(url, 'me'))).status).toBe(200);
     const signed = await a.call('accounts.signInStatus', { signInId });
     expect(signed).toMatchObject({ status: 'complete', account: { email: 'me@example.com', organization: null } });
-    const pushed = await b.waitFor('profiles.changed', (list) => !!list[0] && claudeAccount(list[0]) !== null);
+    const profiles = await b.waitFor('profiles.changed', (list) => !!list[0] && claudeAccountId(list[0]) === account.id);
+    const pushed = [profiles, await b.waitFor('accounts.changed', (list) => list.some((a) => a.id === account.id && a.email === 'me@example.com'))];
     expect(JSON.stringify(pushed)).not.toMatch(/oauth-|refresh-|hat-/);
 
     const out = await a.call('accounts.signOut', { id: account.id });
@@ -56,15 +57,17 @@ describe('profiles slice', () => {
     await c.claudeSignIn(account.id, 'team');
     const personal = await c.call('profiles.save', { createHouse: true, name: 'Personal', accountIds: { anthropic: [account.id] } });
     const work = await c.call('profiles.save', { createHouse: true, name: 'Work', accountIds: { anthropic: [account.id] } });
-    expect(claudeAccount(personal)?.id).toBe(account.id);
-    expect(claudeAccount(work)?.id).toBe(account.id);
+    expect(claudeAccountId(personal)).toBe(account.id);
+    expect(claudeAccountId(work)).toBe(account.id);
     await c.call('accounts.save', { id: account.id, name: 'Family account' });
     const pushed = await other.waitFor('accounts.changed', (list) => list.some((a) => a.name === 'Family account'));
     expect(JSON.stringify(pushed)).not.toMatch(/oauth-|refresh-|hat-/);
-    expect((await c.call('profiles.list', {})).every((p) => claudeAccount(p)?.name === 'Family account')).toBe(true);
+    const renamed = await c.call('accounts.list', {});
+    expect((await c.call('profiles.list', {})).every((p) => claudeAccount(p, renamed)?.name === 'Family account')).toBe(true);
     await expect(c.call('accounts.delete', { id: account.id })).rejects.toThrow(/profiles/);
     await c.call('accounts.signOut', { id: account.id });
-    expect((await c.call('profiles.list', {})).every((p) => claudeAccount(p)?.signedIn === false)).toBe(true);
+    const signedOut = await c.call('accounts.list', {});
+    expect((await c.call('profiles.list', {})).every((p) => claudeAccount(p, signedOut)?.signedIn === false)).toBe(true);
     await c.call('profiles.save', { id: personal.id, name: personal.name, accountIds: { anthropic: [] } });
     // A deleted profile's house stays on the Sorting Hat, with its accounts.
     await c.call('profiles.save', { id: work.id, name: work.name, accountIds: { anthropic: [] } });
@@ -83,11 +86,35 @@ describe('profiles slice', () => {
     const home = t.home;
     await t.stop({ keepHome: true });
     t = await startTestApp({}, home);
-    const list = await (await t.connect()).call('profiles.list', {});
-    expect(list.map((p) => [p.id, p.name, claudeAccount(p)?.email])).toEqual([
+    const client = await t.connect();
+    const list = await client.call('profiles.list', {});
+    const accounts = await client.call('accounts.list', {});
+    expect(list.map((p) => [p.id, p.name, claudeAccount(p, accounts)?.email])).toEqual([
       ['personal', 'Personal', 'claude-personal@example.com'],
     ]);
   });
+  it('starts from a hub connection cached before profiles named their accounts by id', async () => {
+    t = await startTestApp();
+    const c = await t.connect();
+    const signed = await c.signedIn('Personal');
+    const home = t.home;
+    await t.stop({ keepHome: true });
+    // An older build saved each profile's accounts in full inside its providers.
+    const file = join(home, 'hub-connections.json');
+    const saved = JSON.parse(await readFile(file, 'utf8'));
+    expect(saved[0].snapshot.profiles[0].providers[0].accountIds).toEqual([claudeAccountId(signed)]);
+    for (const hub of saved) for (const profile of hub.snapshot.profiles) for (const provider of profile.providers) {
+      provider.accounts = hub.snapshot.accounts.filter((a: { id: string }) => provider.accountIds.includes(a.id));
+      delete provider.accountIds;
+    }
+    await writeFile(file, JSON.stringify(saved));
+    t = await startTestApp({}, home);
+    const again = await t.connect();
+    const list = await again.call('profiles.list', {});
+    const accounts = await again.call('accounts.list', {});
+    expect(list.map((p) => [p.name, claudeAccount(p, accounts)?.email])).toEqual([['Personal', 'claude-personal@example.com']]);
+  });
+
   it('preserves simultaneous creates and validates later renames against the committed list', async () => {
     t = await startTestApp();
     const a = await t.connect();
@@ -123,13 +150,13 @@ describe('profiles slice', () => {
     const eventCount = c.events.filter((e) => e.event === 'profiles.changed').length;
     await expect(c.call('profiles.save', { id: profile.id, name: 'Changed' })).rejects.toThrow('Hub request failed');
     expect((await c.call('profiles.list', {}))[0]).toMatchObject({ name: 'Personal' });
-    expect(claudeAccount((await c.call('profiles.list', {}))[0]!)?.id).toBe(first.id);
+    expect(claudeAccountId((await c.call('profiles.list', {}))[0]!)).toBe(first.id);
     expect(c.events.filter((e) => e.event === 'profiles.changed')).toHaveLength(eventCount);
     await expect(c.call('profiles.delete', { id: profile.id })).rejects.toThrow('Hub request failed');
     expect((await c.call('profiles.list', {}))[0]?.name).toBe('Personal');
     vi.restoreAllMocks();
     await c.call('profiles.save', { id: profile.id, name: 'Changed', accountIds: { anthropic: [second.id] } });
-    expect(claudeAccount((await c.call('profiles.list', {}))[0]!)?.id).toBe(second.id);
+    expect(claudeAccountId((await c.call('profiles.list', {}))[0]!)).toBe(second.id);
   });
 
 });

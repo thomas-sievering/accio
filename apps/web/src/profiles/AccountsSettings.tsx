@@ -51,7 +51,7 @@ function AccountForm({ account, providerId, onSaved, onDone }: { account?: Accou
   const [touched, setTouched] = useState(false);
   const { busy, error, run, attempt } = useAction();
   const limitsView = useLimits().views?.get(account?.id ?? '');
-  const usedBy = profiles?.filter((p) => p.providers.some((provider) => provider.accounts.some((a) => a.id === account?.id))) ?? [];
+  const usedBy = profiles?.filter((p) => p.providers.some((provider) => !!account && provider.accountIds.includes(account.id))) ?? [];
   useWatchLimits(account?.signedIn ? [account.id] : []);
   const submit = async (e: FormEvent) => {
     e.preventDefault();

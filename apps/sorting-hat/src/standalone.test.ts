@@ -83,6 +83,24 @@ describe('the standalone Sorting Hat', () => {
     expect((await admin('GET', 'houses/missing')).status).toBe(404);
   });
 
+  it('answers one sign-in status for either provider, keeps a finished one for late polls, and cancels', async () => {
+    const { api, admin } = await start();
+    const account = await api('POST', 'accounts', { name: 'Mine', providerId: 'anthropic' });
+    const signIn = await api('POST', `accounts/${account.id}/sign-in`, { redirectUri: 'http://localhost:4567/callback' });
+    expect(await api('GET', `sign-ins/${signIn.signInId}`)).toEqual({ status: 'pending' });
+    const state = new URL(signIn.url).searchParams.get('state');
+    // A browser callback's code and state, given apart.
+    expect(await api('POST', `sign-ins/${signIn.signInId}/complete`, { code: 'pasted', state })).toMatchObject({ status: 'complete', account: { id: account.id, signedIn: true } });
+    for (let poll = 0; poll < 2; poll++) expect(await api('GET', `sign-ins/${signIn.signInId}`)).toMatchObject({ status: 'complete', account: { id: account.id, signedIn: true } });
+    expect(await admin('POST', `sign-ins/${signIn.signInId}/complete`, { code: `pasted#${state}` })).toMatchObject({ status: 409, body: { error: { type: 'conflict_error' } } });
+
+    const again = await api('POST', `accounts/${account.id}/sign-in`);
+    await api('DELETE', `sign-ins/${again.signInId}`);
+    expect(await admin('GET', `sign-ins/${again.signInId}`)).toMatchObject({ status: 404, body: { error: { message: expect.stringMatching(/expired or was cancelled/) } } });
+    expect(await admin('POST', `sign-ins/${again.signInId}/complete`, { code: 'pasted' })).toMatchObject({ status: 404 });
+    expect(await admin('POST', `accounts/${account.id}/sign-in`, { redirectUri: 'https://example.com/callback' })).toMatchObject({ status: 400 });
+  });
+
   it('sets up accounts, a house and a hat key, and forwards with the real credential', async () => {
     const { api, claude, responses, anthropic, chatgpt, codex, claudeAccount } = await start();
     const mine = await claudeAccount('Mine');

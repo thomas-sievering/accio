@@ -36,6 +36,10 @@ export type HouseView = {
   /** Per provider, the account in use, or null when none is signed in. */
   inUse: Record<ProviderId, string | null>;
 };
+/** Where a sign-in stands, as its status poll and completion answer. */
+export type SignInStatus = { status: 'pending' } | { status: 'complete'; account: AccountView };
+/** A sign-in in progress, or finished: then `done` holds the account, so a late status poll still sees it. */
+type SignIn = { accountId: string; providerId: ProviderId; at: number; claude?: PendingSignIn; done?: AccountView };
 /** GLOSSARY: Hat key, without its secret. */
 export type HatKeyView = Omit<StoredHatKey, 'hash'>;
 
@@ -53,9 +57,8 @@ export class SortingHat implements Forwarding {
   private readonly claudeModelLists: ClaudeModelLists;
   private readonly usage: UsageLedger;
   private store: JsonStore<HatState>;
-  private pending = new Map<string, PendingSignIn & { accountId: string; startedAt: number }>();
+  private signIns = new Map<string, SignIn>();
   private refreshing = new Map<string, Promise<ClaudeAccount>>();
-  private openaiPending = new Map<string, string>();
 
   /** `dir` holds the Sorting Hat's state: sorting-hat.json and each ChatGPT account's credential home. */
   constructor(
@@ -190,75 +193,115 @@ export class SortingHat implements Forwarding {
     });
   }
 
-  beginAccountSignIn(accountId: string, redirectUri?: string): { signInId: string; url: string } {
-    this.requireProvider(accountId, 'anthropic');
-    const now = Date.now();
-    for (const [key, p] of this.pending) if (now - p.startedAt > SIGN_IN_TTL_MS || p.accountId === accountId) this.pending.delete(key);
-    const signInId = randomUUID();
-    const p = beginSignIn(undefined, redirectUri);
-    this.pending.set(signInId, { ...p, accountId, startedAt: now });
-    return { signInId, url: p.url };
-  }
-
-  async completeAccountSignIn(signInId: string, pasted: string) {
-    const p = this.pending.get(signInId);
-    if (!p || Date.now() - p.startedAt > SIGN_IN_TTL_MS) throw new SignInError('This sign-in has expired. Start it again.');
-    const code = readPastedCode(pasted, p);
-    const account = await exchangeCode(this.fetchImpl, p, code);
-    return this.change(async () => {
-      if (this.pending.get(signInId) !== p) throw new SignInError('This sign-in was cancelled. Start it again.');
-      await this.setAccount(p.accountId, account);
-      this.signInChanged(p.accountId);
-      this.pending.delete(signInId);
-      return this.accountView(p.accountId);
-    });
-  }
-
-  async beginOpenAISignIn(accountId: string, browser = false) {
+  /**
+   * GLOSSARY: Sign-in. Starts one for the account at its provider: Claude may name
+   * the caller's browser callback, ChatGPT uses its browser flow unless asked for
+   * the device flow. A new sign-in for an account cancels its earlier one.
+   */
+  async beginSignIn(accountId: string, opts: { redirectUri?: string; browser?: boolean } = {}): Promise<{ providerId: ProviderId; signInId: string; url: string; userCode?: string }> {
+    if (this.providerOf(accountId) !== 'openai') return { providerId: 'anthropic', ...this.beginAccountSignIn(accountId, opts.redirectUri) };
     return this.change(async () => {
       this.requireProvider(accountId, 'openai');
-      await this.cancelOpenAISignIn(accountId);
-      const result = await this.openai.begin(browser);
-      this.openaiPending.set(result.signInId, accountId);
-      return result;
+      await this.dropSignIns(accountId);
+      const result = await this.openai.begin(opts.browser ?? true);
+      this.signIns.set(result.signInId, { accountId, providerId: 'openai', at: Date.now() });
+      return { providerId: 'openai' as const, ...result };
     });
   }
 
-  async completeOpenAICallback(signInId: string, code: string, state: string) {
-    if (!this.openaiPending.has(signInId)) throw new SignInError('This sign-in has expired or was cancelled. Start it again.');
-    await this.openai.callback(signInId, code, state);
+  /** Claude's half of beginSignIn, which needs no Codex app-server and so answers at once. */
+  beginAccountSignIn(accountId: string, redirectUri?: string): { signInId: string; url: string } {
+    this.requireProvider(accountId, 'anthropic');
+    this.sweepSignIns();
+    for (const [key, s] of this.signIns) if (s.accountId === accountId) this.signIns.delete(key);
+    const signInId = randomUUID();
+    const claude = beginSignIn(undefined, redirectUri);
+    this.signIns.set(signInId, { accountId, providerId: 'anthropic', at: Date.now(), claude });
+    return { signInId, url: claude.url };
   }
 
-  openaiSignInStatus(signInId: string) {
+  /**
+   * Where the sign-in stands. Claude's stays pending until completed with its
+   * code; ChatGPT's asks Codex, which hears of the browser approval itself. A
+   * finished one answers complete for a while, so a late poll still sees it.
+   */
+  signInStatus(signInId: string): Promise<SignInStatus> {
     return this.change(async () => {
-      const id = this.openaiPending.get(signInId);
-      if (!id) throw new SignInError('This sign-in has expired or was cancelled. Start it again.');
-      this.requireProvider(id, 'openai');
+      const s = this.requireSignIn(signInId);
+      if (s.done) return { status: 'complete', account: s.done };
+      if (s.providerId === 'anthropic') return { status: 'pending' };
       const result = await this.openai.status(signInId);
       if (result.status === 'pending') return result;
+      const id = s.accountId;
       const previous = this.requireAccount(id).openai;
       await this.commit({ accounts: this.accounts.map((a) => a.id === id ? { ...a, openai: result.account } : a) });
       this.signInChanged(id);
-      this.openaiPending.delete(signInId);
       await this.openai.finish(signInId);
       if (previous) await this.openai.remove(previous.credentialId);
-      return { status: 'complete' as const, account: this.accountView(id) };
+      return this.finishSignIn(signInId, s);
     });
   }
 
-  /** Which provider a sign-in still in progress belongs to, if any. */
-  signInProvider(signInId: string): ProviderId | undefined {
-    if (this.pending.has(signInId)) return 'anthropic';
-    if (this.openaiPending.has(signInId)) return 'openai';
-    return undefined;
+  /**
+   * Finishes a sign-in with what the provider's page gave: Claude's pasted code
+   * (`code#state`, a redirect address or a bare code) completes it; ChatGPT's
+   * browser callback `code` and `state` reach Codex, and its status then says complete.
+   */
+  async completeAccountSignIn(signInId: string, code: string, state?: string): Promise<SignInStatus> {
+    const s = this.requireSignIn(signInId);
+    if (s.done) throw new HatError('This sign-in is already complete.', 409);
+    if (!s.claude) {
+      if (!state) throw new SignInError('Give the state from the address ChatGPT’s page went to.');
+      await this.openai.callback(signInId, code, state);
+      return { status: 'pending' };
+    }
+    const p = s.claude;
+    // A code given apart from its state, as a browser callback's address holds them, is checked as `code#state`.
+    const pasted = state && !code.includes('#') && !/^https?:\/\//.test(code.trim()) ? `${code}#${state}` : code;
+    const account = await exchangeCode(this.fetchImpl, p, readPastedCode(pasted, p));
+    return this.change(async () => {
+      if (this.signIns.get(signInId) !== s) throw new SignInError('This sign-in was cancelled. Start it again.');
+      await this.setAccount(s.accountId, account);
+      this.signInChanged(s.accountId);
+      return this.finishSignIn(signInId, s);
+    });
   }
 
   cancelAccountSignIn(signInId: string) {
     return this.change(async () => {
-      this.pending.delete(signInId);
-      this.openaiPending.delete(signInId);
+      this.signIns.delete(signInId);
       await this.openai.cancel(signInId);
     });
+  }
+
+  private requireSignIn(signInId: string) {
+    this.sweepSignIns();
+    const s = this.signIns.get(signInId);
+    if (!s) throw new HatError('This sign-in has expired or was cancelled. Start it again.', 404);
+    return s;
+  }
+
+  private finishSignIn(signInId: string, s: SignIn): SignInStatus {
+    const account = this.accountView(s.accountId);
+    this.signIns.set(signInId, { accountId: s.accountId, providerId: s.providerId, at: Date.now(), done: account });
+    return { status: 'complete', account };
+  }
+
+  /** A sign-in expires SIGN_IN_TTL_MS after it started, or after it finished. */
+  private sweepSignIns() {
+    const now = Date.now();
+    for (const [key, s] of this.signIns) if (now - s.at > SIGN_IN_TTL_MS) {
+      this.signIns.delete(key);
+      if (s.providerId === 'openai' && !s.done) void this.openai.cancel(key);
+    }
+  }
+
+  /** Inside a change: forgets the account's sign-ins, finished or not, as when it signs out, is deleted or starts another. */
+  private async dropSignIns(accountId: string) {
+    for (const [key, s] of this.signIns) if (s.accountId === accountId) {
+      this.signIns.delete(key);
+      if (s.providerId === 'openai' && !s.done) await this.openai.cancel(key);
+    }
   }
 
   /** The models the house's Claude account in use can use, as Anthropic lists them; empty without a signed-in one. */
@@ -437,6 +480,8 @@ export class SortingHat implements Forwarding {
     // A refresh still under way stores its rotated token before the state is final.
     await Promise.allSettled(this.refreshing.values());
     await this.store.idle();
+    // Codex's sign-in servers close with it, so no sign-in outlives it.
+    this.signIns.clear();
     await this.openai.close();
   }
 
@@ -466,17 +511,6 @@ export class SortingHat implements Forwarding {
     const a = this.requireAccount(id);
     if (a.providerId === 'openai') return { id: a.id, name: a.name, providerId: 'openai' as const, signedIn: !!a.openai, email: a.openai?.email ?? null, organization: null };
     return { id: a.id, name: a.name, providerId: 'anthropic' as const, signedIn: !!a.account, email: a.account?.email ?? null, organization: a.account?.organization ?? null };
-  }
-
-  /** The house's accounts at this provider, in order of use. */
-  selectedAccounts(houseId: string, providerId: ProviderId) {
-    return this.selectedIds(houseId, providerId).map((id) => this.accountView(id));
-  }
-
-  /** The account serving the house's requests at this provider. */
-  selectedAccount(houseId: string, providerId: ProviderId = 'anthropic') {
-    const id = this.accountIdInUse(houseId, providerId);
-    return id ? this.accountView(id) : null;
   }
 
   /** The signed-in account chosen for the house's next request at this provider (see chooseAccount). */
@@ -540,8 +574,7 @@ export class SortingHat implements Forwarding {
       if (this.houses.some((p) => p.accountIds.includes(id))) throw new HatError('Remove this account from its houses before deleting it.', 409);
       await this.commit({ accounts: this.accounts.filter((a) => a.id !== id) });
       this.signInChanged(id);
-      this.cancelSignIn(id);
-      await this.cancelOpenAISignIn(id);
+      await this.dropSignIns(id);
       if (account.openai) await this.openai.remove(account.openai.credentialId);
     });
   }
@@ -551,21 +584,10 @@ export class SortingHat implements Forwarding {
       const account = this.requireAccount(id);
       await this.commit({ accounts: this.accounts.map((a) => a.id === id ? { ...a, account: null, openai: null } : a) });
       this.signInChanged(id);
-      this.cancelSignIn(id);
-      await this.cancelOpenAISignIn(id);
+      await this.dropSignIns(id);
       if (account.openai) await this.openai.remove(account.openai.credentialId);
       return this.accountView(id);
     });
-  }
-
-  private cancelSignIn(id: string) {
-    for (const [key, p] of this.pending) if (p.accountId === id) this.pending.delete(key);
-  }
-
-  private async cancelOpenAISignIn(id: string) {
-    for (const [key, accountId] of this.openaiPending) if (accountId === id) {
-      this.openaiPending.delete(key); await this.openai.cancel(key);
-    }
   }
 
   private requireProvider(id: string, providerId: ProviderId) {
