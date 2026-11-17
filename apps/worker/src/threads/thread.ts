@@ -33,7 +33,7 @@ export function newThread(input: { checkoutId: string; projectId: string; profil
 }
 
 /** A thread as loaded: a new thread has no work version until its first turn. */
-export function fromStored(t: Thread): Thread {
+export function fromStored({ organizationVersion: _retired, ...t }: Thread & { organizationVersion?: number }): Thread {
   return { ...t, workVersion: t.workVersion ?? 0, ...(t.delivery ? { delivery: withPullRequest(t.delivery) } : {}) };
 }
 

@@ -288,10 +288,13 @@ it('loads a delivery saved with only its PR URL with that PR intact, and keeps t
   const stored = JSON.parse(await readFile(join(home, 'threads.json'), 'utf8'));
   stored[0].delivery.pullRequestUrl = stored[0].delivery.pullRequest.url;
   delete stored[0].delivery.pullRequest;
+  stored[0].organizationVersion = 3;
   await writeFile(join(home, 'threads.json'), JSON.stringify(stored));
   app = await startTestApp({ harness: new FakeHarness() }, home);
   const next = await app.connect();
-  const loaded = (await view(next, thread.id)).delivery!;
+  const loadedThread = await view(next, thread.id);
+  expect(loadedThread).not.toHaveProperty('organizationVersion');
+  const loaded = loadedThread.delivery!;
   expect(loaded.pullRequest).toMatchObject({ host: 'github.com', repository: 'test/fixture', number: 123, url: 'https://github.com/test/fixture/pull/123', state: 'open' });
   expect(loaded).not.toHaveProperty('pullRequestUrl');
   reads.length = 0;
@@ -300,6 +303,9 @@ it('loads a delivery saved with only its PR URL with that PR intact, and keeps t
   // The loaded PR is the one checked; no search for another.
   expect(reads.filter(args => args[0] === 'pr').map(args => args.slice(0, 3))).toEqual([['pr', 'view', '123']]);
   expect((await view(next, thread.id)).delivery).toMatchObject({ status: 'blocked', pullRequest: { number: 123, state: 'closed' } });
+  const saved = JSON.parse(await readFile(join(home, 'threads.json'), 'utf8'))[0];
+  expect(saved).not.toHaveProperty('organizationVersion');
+  expect(saved.delivery).not.toHaveProperty('pullRequestUrl');
 });
 
 it('names the gh command whose output no longer matches on the thread, and retries it', async () => {
