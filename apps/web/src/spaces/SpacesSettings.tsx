@@ -3,7 +3,7 @@ import { projectKey, type ProjectView, type Space } from '@accio/protocol';
 import { emitAppEvent } from '../app/appEvents';
 import { useClient } from '../app/connection';
 import { Spaces as SpacesIcon } from '../app/icons';
-import { SettingRow, SettingsFooter, SettingsSection } from '../app/Settings';
+import { NEW, SettingRow, SettingsFooter, SettingsSection, type SettingsNav } from '../app/Settings';
 import { useAction } from '../app/useAction';
 import { Field, focusFirstInvalid } from '../resources/Field';
 import { useProfiles } from '../profiles/profiles';
@@ -12,23 +12,32 @@ import { MenuSelect } from '../ui/MenuSelect';
 import { NewHomeSheet } from './NewHomeSheet';
 import { useSpaces } from './spaces';
 
-/** GLOSSARY: Space. Every space of the hub, each opening its editor as a detail page ('new' adds one) or its space view. */
-export function SpacesSettings({ spaceId, onOpen, onBack }: { spaceId?: string; onOpen: (id: string) => void; onBack: () => void }) {
+/** The spaces, once the projects they name have loaded too. */
+export function useSpacesData() {
   const { spaces } = useSpaces();
   const { state } = useProjects();
-  if (!spaces || !state) return <p className="note" role="status">Loading spaces…</p>;
-  if (spaceId === 'new') return <SpaceForm onDone={onBack} />;
-  const open = spaceId ? spaces.find((s) => s.id === spaceId) : undefined;
-  if (spaceId && !open) return <><p className="note">This space no longer exists.</p><button type="button" className="link" onClick={onBack}>All spaces</button></>;
-  if (open) return <SpaceForm key={open.id} space={open} onDone={onBack} />;
-  const nameOf = (key: string) => projectName(state.projects, key);
+  return { items: state ? spaces : undefined, projects: state?.projects ?? [] };
+}
+type Props = { nav: SettingsNav; data: ReturnType<typeof useSpacesData> };
+
+export function NewSpace({ nav }: Props) {
+  return <SpaceForm onDone={nav.back} />;
+}
+
+export function SpaceDetail({ nav, item }: Props & { item: Space }) {
+  return <SpaceForm space={item} onDone={nav.back} />;
+}
+
+/** GLOSSARY: Space. Every space of the hub, each opening its editor as a detail page or its space view. */
+export function SpacesList({ nav, data }: Props) {
+  const nameOf = (key: string) => projectName(data.projects, key);
   return (<>
     <p className="note">A space groups projects that share context, such as everything about one product. Its projects may belong to different profiles. Its home holds what applies to the whole space.</p>
-    <SettingsSection add={{ label: 'Add space', onClick: () => onOpen('new') }}>
-      {spaces.map((space) => (
+    <SettingsSection add={{ label: 'Add space', onClick: () => nav.open(NEW) }}>
+      {data.items!.map((space) => (
         <SettingRow key={space.id} icon={<SpacesIcon />} title={space.name}
           description={[`${space.projectKeys.length} project${space.projectKeys.length === 1 ? '' : 's'}`, space.homeProjectKey ? `Home ${nameOf(space.homeProjectKey)}` : 'No home'].join(' · ')}>
-          <button type="button" className="ghost" aria-label={`Edit ${space.name}`} onClick={() => onOpen(space.id)}>Edit</button>
+          <button type="button" className="ghost" aria-label={`Edit ${space.name}`} onClick={() => nav.open(space.id)}>Edit</button>
           <button type="button" className="ghost" aria-label={`Open ${space.name}`} onClick={() => emitAppEvent('space.open', { id: space.id })}>Open</button>
         </SettingRow>
       ))}
@@ -55,7 +64,7 @@ function SpaceForm({ space, onDone }: { space?: Space; onDone: () => void }) {
   const [home, setHome] = useState(space?.homeProjectKey ?? NO_HOME);
   const [touched, setTouched] = useState(false);
   const [creatingHome, setCreatingHome] = useState(false);
-  const { busy, error, run } = useAction();
+  const { busy, error, run, attempt } = useAction();
   const projects = [...(state?.projects ?? [])].sort((a, b) => a.name.localeCompare(b.name));
   const here = new Set(projects.map(projectKey));
   // Members whose checkout is on another machine stay listed, so saving keeps them.
@@ -76,7 +85,7 @@ function SpaceForm({ space, onDone }: { space?: Space; onDone: () => void }) {
     if (saved) onDone();
   };
   const remove = async () => {
-    if (space && (await run(async () => (await client.call('spaces.delete', { id: space.id }), true)))) onDone();
+    if (space && (await attempt(() => client.call('spaces.delete', { id: space.id })))) onDone();
   };
   const profileName = (id: string) => profiles.find((p) => p.id === id)?.name;
   return (<>

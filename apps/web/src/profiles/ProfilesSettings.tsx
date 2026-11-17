@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { accountInUse, noSortingHatMessage, type AccountView, type ProfileView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { ArrowUp, Close, ProviderLogo, User } from '../app/icons';
-import { SettingLink, SettingsFooter, SettingsSection } from '../app/Settings';
+import { NEW, SettingLink, SettingsFooter, SettingsSection, type SettingsNav } from '../app/Settings';
 import { useAction } from '../app/useAction';
 import { ResourcePicker } from '../resources/ResourcePicker';
 import { Field, focusFirstInvalid } from '../resources/Field';
@@ -10,32 +10,28 @@ import { toggled, useResources } from '../resources/resources';
 import { hasSignedInAccount, profileSave, selectionOf, useProfiles } from './profiles';
 import { MenuSelect } from '../ui/MenuSelect';
 
-/** Profiles select accounts configured in Accounts settings. */
-export function ProfilesSettings({
-  profileId,
-  onOpen,
-  onBack,
-  onOpenSecrets,
-}: {
-  /** The profile being edited, 'new' to add one, or none for the list. */
-  profileId?: string;
-  onOpen: (id: string) => void;
-  onBack: () => void;
-  /** Opens Settings / Secrets filtered to a profile. */
-  onOpenSecrets?: (profileId: string) => void;
-}) {
-  const { profiles } = useProfiles();
-  if (!profiles) return null;
-  if (profileId === 'new') return <ProfileForm onSaved={(p) => onOpen(p.id)} onDone={onBack} />;
-  // Always the latest view, so sign-in changes show up while the form is open.
-  const current = profileId ? profiles.find((p) => p.id === profileId) : undefined;
-  if (current) return <ProfileForm key={current.id} profile={current} onSaved={onBack} onDone={onBack} onOpenSecrets={onOpenSecrets} />;
+/** Always the latest views, so sign-in changes show up while a profile's form is open. */
+export function useProfilesData() {
+  return { items: useProfiles().profiles };
+}
+type Props = { nav: SettingsNav; data: ReturnType<typeof useProfilesData> };
 
+export function NewProfile({ nav }: Props) {
+  return <ProfileForm onSaved={(p) => nav.open(p.id)} onDone={nav.back} />;
+}
+
+/** Saved secrets opens Settings / Secrets filtered to the profile. */
+export function ProfileDetail({ nav, item }: Props & { item: ProfileView }) {
+  return <ProfileForm profile={item} onSaved={nav.back} onDone={nav.back} onOpenSecrets={(profileId) => nav.navigate({ section: 'secrets', extra: { profileId } })} />;
+}
+
+/** Profiles select accounts configured in Accounts settings. */
+export function ProfilesList({ nav, data }: Props) {
   return (<>
     <p className="note">A profile groups the accounts and projects for one side of your life, such as personal or work.</p>
-    <SettingsSection add={{ label: 'Add profile', onClick: () => onOpen('new') }}>
-      {profiles.map((p) => (
-        <SettingLink key={p.id} icon={<User />} title={p.name} warn={!hasSignedInAccount(p)} onClick={() => onOpen(p.id)}
+    <SettingsSection add={{ label: 'Add profile', onClick: () => nav.open(NEW) }}>
+      {data.items!.map((p) => (
+        <SettingLink key={p.id} icon={<User />} title={p.name} warn={!hasSignedInAccount(p)} onClick={() => nav.open(p.id)}
           description={p.house === null ? 'No house on the Sorting Hat' : [p.house && `House ${p.house.name}`, p.providers.flatMap((provider) => provider.accounts.map((a) => `${a.name}${a.signedIn ? '' : ' · Signed out'}`)).join(', ') || 'No account in its house'].filter(Boolean).join(' · ')} />
       ))}
     </SettingsSection>
@@ -59,7 +55,7 @@ function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: Pr
   // Skill choices wait here until Save, keyed by skill id.
   const [skills, setSkills] = useState<Record<string, boolean>>({});
   const [touched, setTouched] = useState(false);
-  const { busy, error, run } = useAction();
+  const { busy, error, run, attempt } = useAction();
   const skillChanges = Object.entries(skills).flatMap(([id, on]) => {
     const skill = resources?.skills.find((s) => s.id === id);
     return skill && profile && skill.scope.profileIds.includes(profile.id) !== on ? [{ skill, on }] : [];
@@ -78,7 +74,7 @@ function ProfileForm({ profile, onSaved, onDone, onOpenSecrets }: { profile?: Pr
     if (saved) onSaved(saved);
   };
   const remove = async () => {
-    if (profile && (await run(async () => (await client.call('profiles.delete', { id: profile.id }), true)))) onDone();
+    if (profile && (await attempt(() => client.call('profiles.delete', { id: profile.id })))) onDone();
   };
 
   return (

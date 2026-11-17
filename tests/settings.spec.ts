@@ -108,3 +108,40 @@ test('a project preview command saves on Enter like the profile form', async ({ 
   await command.press('Enter');
   await expect(row).toBeVisible();
 });
+
+test('a Settings page whose item was deleted elsewhere says so and leads back; Delete asks first and Escape cancels', async ({ page, context, baseURL }) => {
+  const url = `${baseURL}/#token=isolated-chat-test-token`;
+  await page.goto(url);
+  const button = (name: string) => page.getByRole('button', { name, exact: true });
+  const section = (name: string) => page.locator('.sidebar nav').getByRole('button', { name, exact: true });
+  await button('Settings').click();
+  await section('Profiles').click();
+  await page.getByRole('button', { name: /^Add profile/ }).click();
+  await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Deleted elsewhere');
+  await button('Add profile').click();
+  await expect(page.locator('.main-top .crumbs')).toHaveText('Settings/Profiles/Deleted elsewhere');
+
+  const other = await context.newPage();
+  await other.goto(url);
+  const nav = other.locator('.sidebar nav');
+  await expect(nav.getByRole('button', { name: /^Hub: / }).or(other.getByRole('button', { name: 'Settings', exact: true })).first()).toBeVisible();
+  if (await other.getByRole('button', { name: 'Settings', exact: true }).isVisible()) await other.getByRole('button', { name: 'Settings', exact: true }).click();
+  await nav.getByRole('button', { name: 'Profiles', exact: true }).click();
+  await other.getByRole('button', { name: /^Deleted elsewhere/ }).click();
+  await other.getByRole('button', { name: 'Delete', exact: true }).click();
+  const confirm = other.getByRole('group', { name: 'Delete Deleted elsewhere?', exact: true });
+  await expect(confirm.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused();
+  await other.keyboard.press('Escape');
+  await expect(confirm).toHaveCount(0);
+  await expect(other.locator('.main-top .crumbs')).toHaveText('Settings/Profiles/Deleted elsewhere');
+  await other.getByRole('button', { name: 'Delete', exact: true }).click();
+  await confirm.getByRole('button', { name: 'Delete Deleted elsewhere', exact: true }).click();
+  await expect(other.getByRole('button', { name: /^Add profile/ })).toBeVisible();
+  await other.close();
+
+  await expect(page.locator('.settings-page')).toContainText('This profile no longer exists.');
+  await expect(page.locator('.main-top .crumbs')).toHaveText('Settings/Profiles');
+  await button('All profiles').click();
+  await expect(page.getByRole('button', { name: /^Add profile/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Deleted elsewhere/ })).toHaveCount(0);
+});

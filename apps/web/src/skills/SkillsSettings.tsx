@@ -2,12 +2,12 @@ import { useMemo, useState, type FormEvent } from 'react';
 import type { ResourceScope, ResourcesState, SkillEntry, SkillSource } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { BookOpen } from '../app/icons';
-import { SettingLink, SettingRow, SettingsFooter, SettingsSection } from '../app/Settings';
+import { NEW, SettingLink, SettingRow, SettingsFooter, SettingsSection, type SettingsNav } from '../app/Settings';
 import { useAction } from '../app/useAction';
 import { useProfiles } from '../profiles/profiles';
 import { useProjects } from '../projects/projects';
 import { useSpaces } from '../spaces/spaces';
-import { isOptional, LoadError, scopeSummary, shortRevision, slugId, useResources } from '../resources/resources';
+import { isOptional, scopeSummary, shortRevision, slugId, useResources } from '../resources/resources';
 import { ScopeEditor } from '../resources/ScopeEditor';
 import { Field, focusFirstInvalid } from '../resources/Field';
 import { MidPath } from '../projects/MidPath';
@@ -16,19 +16,29 @@ import { MenuSelect } from '../ui/MenuSelect';
 const activeRevision = (state: ResourcesState, sourceId: string) => state.skills.find((s) => s.sourceId === sourceId)?.revision;
 
 /** Git repositories of skills. The hub keeps each fetched revision; nothing updates until you apply it. */
-export function SkillsSettings({ sourceId, onOpen, onBack }: { sourceId?: string; onOpen: (id: string) => void; onBack: () => void }) {
+export function useSkillsData() {
   const { state, loadError, retry } = useResources();
-  if (!state) return loadError ? <LoadError error={loadError} retry={retry} /> : <p className="note" role="status">Loading skills…</p>;
-  if (sourceId === 'new') return <AddSource taken={state.sources.map((s) => s.id)} onAdded={(s) => onOpen(s.id)} onCancel={onBack} />;
-  const source = state.sources.find((s) => s.id === sourceId);
-  if (sourceId && !source) return <><p className="note">This skill source was deleted.</p><button className="link" onClick={onBack}>All skill sources</button></>;
-  if (source) return <SourceDetail key={source.id} source={source} state={state} onDeleted={onBack} />;
+  return { items: state?.sources, error: loadError, retry, state };
+}
+type Props = { nav: SettingsNav; data: ReturnType<typeof useSkillsData> };
+
+export function NewSource({ nav, data }: Props) {
+  return <AddSource taken={data.items!.map((s) => s.id)} onAdded={(s) => nav.open(s.id)} onCancel={nav.back} />;
+}
+
+export function SourcePage({ nav, data, item }: Props & { item: SkillSource }) {
+  return <SourceDetail source={item} state={data.state!} onDeleted={nav.back} />;
+}
+
+export function SkillsList({ nav, data }: Props) {
+  const state = data.state!;
+  const onOpen = nav.open;
   return (
     <>
       <p className="note">
         Skills come from Git repositories. A new skill is optional until you enable it for everything, a profile, a space, or a project. Enabled skills are synced: threads read them from the hub’s copy at the revision you applied.
       </p>
-      <SettingsSection add={{ label: 'Add skill source', onClick: () => onOpen('new') }}>
+      <SettingsSection add={{ label: 'Add skill source', onClick: () => onOpen(NEW) }}>
         {[...state.sources].sort((a, b) => a.name.localeCompare(b.name)).map((s) => {
           const skills = state.skills.filter((k) => k.sourceId === s.id);
           const enabled = skills.filter((k) => !isOptional(k.scope)).length;
@@ -186,7 +196,7 @@ function SourceDetail({ source, state, onDeleted }: { source: SkillSource; state
       </section>
 
       {del.error && <p className="error" role="alert">{del.error}</p>}
-      <SettingsFooter remove={{ name: source.name, run: async () => { if (await del.run(async () => (await client.call('skills.deleteSource', { id: source.id }), true))) onDeleted(); }, consequence: `Also removes its ${skills.length} skill${skills.length === 1 ? '' : 's'}.` }} busy={del.busy} onCancel={onDeleted} />
+      <SettingsFooter remove={{ name: source.name, run: async () => { if (await del.attempt(() => client.call('skills.deleteSource', { id: source.id }))) onDeleted(); }, consequence: `Also removes its ${skills.length} skill${skills.length === 1 ? '' : 's'}.` }} busy={del.busy} onCancel={onDeleted} />
 
     </>
   );

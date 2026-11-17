@@ -2,11 +2,11 @@ import { useState, type FormEvent, type ReactNode } from 'react';
 import { ToolDefinition, type MachineView, type ResourceScope, type ToolEntry, type ToolStatus } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { Wrench } from '../app/icons';
-import { SettingLink, SettingsFooter, SettingsSection } from '../app/Settings';
+import { NEW, SettingLink, SettingsFooter, SettingsSection, type SettingsNav } from '../app/Settings';
 import { useAction } from '../app/useAction';
 import { useLive } from '../app/useLive';
 import { hasSignedInAccount, useProfiles } from '../profiles/profiles';
-import { LoadError, scopeSummary, slugId, useDraft, useResources } from '../resources/resources';
+import { scopeSummary, slugId, useDraft, useResources } from '../resources/resources';
 import { ScopeEditor } from '../resources/ScopeEditor';
 import { useProjects } from '../projects/projects';
 import { useSpaces } from '../spaces/spaces';
@@ -21,41 +21,51 @@ type Draft = Omit<ToolDefinition, 'id'> & { id: string; scope: ResourceScope };
 const everywhere = (): ResourceScope => ({ global: true, profileIds: [], spaceIds: [], projectKeys: [] });
 const blank = (): Draft => ({ id: '', name: '', package: '', version: '', executable: '', checkArgs: ['--version'], description: '', repairProfileId: undefined, scope: everywhere() });
 
-/** GLOSSARY: CLI. Command-line programs the hub has each machine install with pnpm and lists to threads at their levels. */
-export function ToolsSettings({ toolId, onOpen, onBack, onOpenThread }: { toolId?: string; onOpen: (id: string) => void; onBack: () => void; onOpenThread: (id: string) => void }) {
+/** The CLIs and machines, for Settings / CLIs. */
+export function useToolsData() {
   const client = useClient();
   const { state, loadError, retry } = useResources();
   const machines = useLive(() => client.call('machines.list', {}), 'machines.changed');
+  return { items: state?.tools, error: loadError, retry, state, machines };
+}
+type Props = { nav: SettingsNav; data: ReturnType<typeof useToolsData> };
+
+/** GLOSSARY: CLI. Command-line programs the hub has each machine install with pnpm and lists to threads at their levels. */
+export function ToolsList({ nav, data }: Props) {
   const { profiles = [] } = useProfiles();
   const { state: projects } = useProjects();
   const { spaces = [] } = useSpaces();
-  if (!state) return loadError ? <LoadError error={loadError} retry={retry} /> : <p className="note" role="status">Loading CLIs…</p>;
-  if (toolId === 'new') return <ToolForm all={state.tools} taken={state.tools.map((t) => t.id)} onSaved={(t) => onOpen(t.id)} onDone={onBack} />;
-  const tool = state.tools.find((t) => t.id === toolId);
-  if (toolId && !tool) return <><p className="note">This CLI was deleted.</p><button className="link" onClick={onBack}>All CLIs</button></>;
-  if (tool) {
-    const here = machines?.find((m) => m.thisMachine);
-    return (
-      <ToolForm key={tool.id} tool={tool} all={state.tools} packageDescription={state.toolStatuses.find((s) => s.toolId === tool.id && s.machineId === here?.id)?.description} taken={[]} onSaved={() => {}} onDone={onBack}
-        after={<MachineStatuses tool={tool} machines={machines} statuses={state.toolStatuses} onOpenThread={onOpenThread} />} />
-    );
-  }
-  const here = machines?.find((m) => m.thisMachine);
+  const state = data.state!;
+  const here = data.machines?.find((m) => m.thisMachine);
   return (
     <>
       <p className="note">Command-line programs from npm. Accio installs each CLI’s exact version with pnpm once on every machine, checks it, and lists it to the threads at its levels, with its description, on their PATH. A program you installed yourself isn’t available to threads until you add it here. A failed check starts a repair thread; threads keep running without that CLI.</p>
-      <SettingsSection add={{ label: 'Add CLI', onClick: () => onOpen('new') }}>
+      <SettingsSection add={{ label: 'Add CLI', onClick: () => nav.open(NEW) }}>
         {[...state.tools].sort((a, b) => a.name.localeCompare(b.name)).map((t) => {
           const status = state.toolStatuses.find((s) => s.toolId === t.id && s.machineId === here?.id);
           const r = readiness(here, status);
           return (
-            <SettingLink key={t.id} icon={<Wrench />} title={t.name} description={`${t.package}@${t.version} · ${scopeSummary(t.scope, profiles, projects?.projects, spaces)}`} onClick={() => onOpen(t.id)}>
+            <SettingLink key={t.id} icon={<Wrench />} title={t.name} description={`${t.package}@${t.version} · ${scopeSummary(t.scope, profiles, projects?.projects, spaces)}`} onClick={() => nav.open(t.id)}>
               {here && <span className={`pill ${r.tone}`} title="On this machine"><span className="dot" />{r.label}</span>}
             </SettingLink>
           );
         })}
       </SettingsSection>
     </>
+  );
+}
+
+export function NewTool({ nav, data }: Props) {
+  const tools = data.state!.tools;
+  return <ToolForm all={tools} taken={tools.map((t) => t.id)} onSaved={(t) => nav.open(t.id)} onDone={nav.back} />;
+}
+
+export function ToolDetail({ nav, data, item: tool }: Props & { item: ToolEntry }) {
+  const state = data.state!;
+  const here = data.machines?.find((m) => m.thisMachine);
+  return (
+    <ToolForm tool={tool} all={state.tools} packageDescription={state.toolStatuses.find((s) => s.toolId === tool.id && s.machineId === here?.id)?.description} taken={[]} onSaved={() => {}} onDone={nav.back}
+      after={<MachineStatuses tool={tool} machines={data.machines} statuses={state.toolStatuses} onOpenThread={nav.openThread} />} />
   );
 }
 
@@ -89,7 +99,7 @@ function ToolForm({ tool, all, packageDescription, taken, onSaved, onDone, after
   const sameExecutable = all.filter((t) => t.id !== tool?.id && t.executable === value.executable.trim());
   const [args, setArgs] = useState<string>();
   const [touched, setTouched] = useState(false);
-  const { busy, error, run } = useAction();
+  const { busy, error, run, attempt } = useAction();
   const argsText = args ?? value.checkArgs.join(' ');
   const checkArgs = argsText.split(/\s+/).filter(Boolean);
   const changed = dirty || (args !== undefined && JSON.stringify(checkArgs) !== JSON.stringify(tool?.checkArgs ?? ['--version']));
@@ -121,7 +131,7 @@ function ToolForm({ tool, all, packageDescription, taken, onSaved, onDone, after
     if (saved) { reset(); setArgs(undefined); onSaved(saved); }
   };
   const remove = async () => {
-    if (tool && (await run(async () => (await client.call('tools.delete', { id: tool.id }), true)))) onDone();
+    if (tool && (await attempt(() => client.call('tools.delete', { id: tool.id })))) onDone();
   };
   const preset = () => {
     for (const [k, v] of Object.entries(PLAYWRIGHT_CLI)) set(k as keyof Draft, v as never);

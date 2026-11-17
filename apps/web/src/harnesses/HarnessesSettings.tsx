@@ -2,11 +2,11 @@ import { useEffect, useState } from 'react';
 import type { HarnessView } from '@accio/protocol';
 import { useClient, useConnectionStatus } from '../app/connection';
 import { useLive } from '../app/useLive';
-import { SettingLink, SettingRow, SettingsSection, StatusPill } from '../app/Settings';
+import { SettingLink, SettingRow, SettingsSection, StatusPill, type SettingsNav } from '../app/Settings';
 import { BuiltinToolsSettings, toolCount } from './BuiltinToolsSettings';
 
 /** Shared harness catalogue and the installations each machine reports. */
-export function HarnessesSettings({ harnessId, onOpen, onBack }: { harnessId?: string; onOpen: (harnessId: string) => void; onBack: () => void }) {
+export function useHarnessesData() {
   const client = useClient();
   const status = useConnectionStatus();
   const machines = useLive(() => client.call('machines.list', {}), 'machines.changed');
@@ -24,21 +24,25 @@ export function HarnessesSettings({ harnessId, onOpen, onBack }: { harnessId?: s
     );
     return () => { active = false; };
   }, [client, status, machines, revision]);
-  if (harnessId) {
-    const harness = harnesses?.find((h) => h.id === harnessId);
-    if (!harnesses) return error ? <p className="error">{error}</p> : <p className="note" role="status">Loading tools…</p>;
-    if (!harness) return <><p className="note">This harness is not available.</p><button className="link" onClick={onBack}>All harnesses</button></>;
-    return <BuiltinToolsSettings harness={harness} onChanged={setHarnesses} />;
-  }
+  return { items: harnesses, error, machines, setHarnesses };
+}
+type Props = { nav: SettingsNav; data: ReturnType<typeof useHarnessesData> };
+
+export function HarnessDetail({ data, item }: Props & { item: HarnessView }) {
+  return <BuiltinToolsSettings harness={item} onChanged={data.setHarnesses} />;
+}
+
+export function HarnessesList({ nav, data }: Props) {
+  const { machines } = data;
   return (
     <>
       <p className="note">Harnesses run your threads. Each uses models from the providers listed below.</p>
-      {error && <p className="error">{error}</p>}
-      {harnesses?.map((h) => (
+      {data.error && <p className="error">{data.error}</p>}
+      {data.items!.map((h) => (
         <SettingsSection key={h.id} title={h.name}>
           <SettingRow title="Providers"><span>{h.providers.map((p) => p === 'anthropic' ? 'Anthropic' : 'OpenAI').join(', ')}</span></SettingRow>
           <SettingRow title="Models" description={h.id === 'codex' ? 'Available models come from the signed-in ChatGPT account.' : "Model aliases follow Claude Code's current versions."}><span>{h.models.length ? h.models.map((m) => m.name).join(', ') : 'Per account'}</span></SettingRow>
-          <SettingLink title="Built-in tools" onClick={() => onOpen(h.id)}><span className="tool-required">{toolCount(h.tools)}</span></SettingLink>
+          <SettingLink title="Built-in tools" onClick={() => nav.open(h.id)}><span className="tool-required">{toolCount(h.tools)}</span></SettingLink>
           {h.machines.length === 0 && <SettingRow title="No installations reported" />}
           {h.machines.map((install) => {
             const machine = machines?.find((m) => m.id === install.machineId);
@@ -54,4 +58,3 @@ export function HarnessesSettings({ harnessId, onOpen, onBack }: { harnessId?: s
     </>
   );
 }
-

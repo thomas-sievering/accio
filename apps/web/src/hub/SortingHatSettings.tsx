@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useClient } from '../app/connection';
 import { Hub } from '../app/icons';
-import { SettingRow, SettingsSection, StatusPill, useEscape } from '../app/Settings';
+import { ConfirmAction, SettingRow, SettingsSection, StatusPill } from '../app/Settings';
 import { useAction } from '../app/useAction';
 import { Field, focusFirstInvalid } from '../resources/Field';
 import { useProfiles } from '../profiles/profiles';
@@ -17,18 +17,17 @@ export function SortingHatSettings({ hubName }: { hubName: string }) {
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const { busy, error, run } = useAction();
-  useEscape(confirming, () => setConfirming(false));
   if (sortingHat === undefined) return null;
   const linked = sortingHat !== null;
   return (
     <SettingsSection title="Sorting Hat">
       {linked && !editing ? <>
         <SettingRow icon={<Hub />} title={new URL(sortingHat.url).host}
-          description={confirming ? 'Threads can’t run until this hub has a Sorting Hat again; its hat keys there are deleted.' : `${sortingHat.threadUrl ? `Threads use ${new URL(sortingHat.threadUrl).host}. ` : ''}Hat keys are named “Accio · ${sortingHat.hubName} · …”.`}>
-          {confirming ? <>
-            <button type="button" className="ghost" disabled={busy} autoFocus onClick={() => setConfirming(false)}>Cancel</button>
-            <button type="button" className="ghost danger" disabled={busy} onClick={() => void run(async () => { await client.call('sortingHat.disconnect', {}); setConfirming(false); })}>Disconnect</button>
-          </> : <>
+          description={`${sortingHat.threadUrl ? `Threads use ${new URL(sortingHat.threadUrl).host}. ` : ''}Hat keys are named “Accio · ${sortingHat.hubName} · …”.`}>
+          {confirming ? (
+            <ConfirmAction question="Disconnect the Sorting Hat?" consequence="Threads can’t run until this hub has a Sorting Hat again; its hat keys there are deleted." action="Disconnect" busy={busy}
+              onConfirm={() => void run(async () => { await client.call('sortingHat.disconnect', {}); setConfirming(false); })} onCancel={() => setConfirming(false)} />
+          ) : <>
             <StatusPill tone={sortingHat.problem ? 'bad' : 'ok'}>{sortingHat.problem ? 'Unreachable' : `${sortingHat.houses.length} ${sortingHat.houses.length === 1 ? 'house' : 'houses'}`}</StatusPill>
             <button type="button" className="ghost" onClick={() => setEditing(true)}>Change</button>
             <button type="button" className="ghost" onClick={() => setConfirming(true)}>Disconnect</button>

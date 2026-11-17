@@ -2,9 +2,9 @@ import { useEffect, useState, type FormEvent } from 'react';
 import type { McpDefinition, McpView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { Plug } from '../app/icons';
-import { SettingLink, SettingsFooter, SettingsSection, StatusPill } from '../app/Settings';
+import { NEW, SettingLink, SettingsFooter, SettingsSection, StatusPill, type SettingsNav } from '../app/Settings';
 import { useAction } from '../app/useAction';
-import { LoadError, slugId, useDraft, useResources } from '../resources/resources';
+import { slugId, useDraft, useResources } from '../resources/resources';
 import { Field, focusFirstInvalid } from '../resources/Field';
 import { mcpDefinition } from './mcp';
 import { MenuSelect } from '../ui/MenuSelect';
@@ -13,25 +13,33 @@ const blank = (): McpDefinition => ({ id: '', name: '', transport: 'http', url: 
 const authLabel = { none: 'No sign-in', bearer: 'Bearer token', oauth: 'OAuth sign-in' } as const;
 
 /** MCP servers threads can use. Remote servers go through the hub, which keeps their credentials. */
-export function McpSettings({ mcpId, onOpen, onBack }: { mcpId?: string; onOpen: (id: string) => void; onBack: () => void }) {
+export function useMcpData() {
   const { state, loadError, retry } = useResources();
-  if (!state) return loadError ? <LoadError error={loadError} retry={retry} /> : <p className="note" role="status">Loading MCP servers…</p>;
-  if (mcpId === 'new') return <McpForm taken={state.mcps.map((m) => m.id)} onSaved={(m) => onOpen(m.id)} onDone={onBack} />;
-  const mcp = state.mcps.find((m) => m.id === mcpId);
-  if (mcpId && !mcp) return <><p className="note">This MCP server was deleted.</p><button className="link" onClick={onBack}>All MCP servers</button></>;
-  if (mcp) return <McpForm key={mcp.id} mcp={mcp} taken={[]} onSaved={() => {}} onDone={onBack} />;
+  return { items: state?.mcps, error: loadError, retry };
+}
+type Props = { nav: SettingsNav; data: ReturnType<typeof useMcpData> };
+
+export function McpList({ nav, data }: Props) {
   return (
     <>
       <p className="note">Remote (HTTP) servers are reached through the hub, which holds their tokens; machines never see them. Local (stdio) servers run as a command on the machine running the thread.</p>
-      <SettingsSection add={{ label: 'Add MCP server', onClick: () => onOpen('new') }}>
-        {[...state.mcps].sort((a, b) => a.name.localeCompare(b.name)).map((m) => (
-          <SettingLink key={m.id} icon={<Plug />} title={m.name} description={m.transport === 'http' ? m.url : [m.command, ...m.args].join(' ')} onClick={() => onOpen(m.id)}>
+      <SettingsSection add={{ label: 'Add MCP server', onClick: () => nav.open(NEW) }}>
+        {[...data.items!].sort((a, b) => a.name.localeCompare(b.name)).map((m) => (
+          <SettingLink key={m.id} icon={<Plug />} title={m.name} description={m.transport === 'http' ? m.url : [m.command, ...m.args].join(' ')} onClick={() => nav.open(m.id)}>
             <McpPill mcp={m} />
           </SettingLink>
         ))}
       </SettingsSection>
     </>
   );
+}
+
+export function NewMcp({ nav, data }: Props) {
+  return <McpForm taken={data.items!.map((m) => m.id)} onSaved={(m) => nav.open(m.id)} onDone={nav.back} />;
+}
+
+export function McpDetail({ nav, item }: Props & { item: McpView }) {
+  return <McpForm mcp={item} taken={[]} onSaved={() => {}} onDone={nav.back} />;
 }
 
 function McpPill({ mcp }: { mcp: McpView }) {
@@ -55,7 +63,7 @@ function McpForm({ mcp, taken, onSaved, onDone }: { mcp?: McpView; taken: string
   const { value, dirty, set, reset } = useDraft<McpDefinition>(mcp ? mcpDefinition(mcp) : blank());
   const [argsText, setArgsText] = useState<string>();
   const [touched, setTouched] = useState(false);
-  const { busy, error, run, clear } = useAction();
+  const { busy, error, run, attempt, clear } = useAction();
   const http = value.transport === 'http';
   const args = (argsText ?? value.args.join('\n')).split(/\r?\n/).map((a) => a.trim()).filter(Boolean);
   const changed = dirty || (argsText !== undefined && JSON.stringify(args) !== JSON.stringify(mcp?.args ?? []));
@@ -79,7 +87,7 @@ function McpForm({ mcp, taken, onSaved, onDone }: { mcp?: McpView; taken: string
     if (saved) { reset(); setArgsText(undefined); setTouched(false); onSaved(saved); }
   };
   const remove = async () => {
-    if (mcp && (await run(async () => (await client.call('mcp.delete', { id: mcp.id }), true)))) onDone();
+    if (mcp && (await attempt(() => client.call('mcp.delete', { id: mcp.id })))) onDone();
   };
 
   return (
@@ -148,7 +156,7 @@ const SIGN_IN_TIMEOUT = 10 * 60_000;
 function McpCredentials({ mcp }: { mcp: McpView }) {
   const client = useClient();
   const { refresh } = useResources();
-  const { busy, error, run } = useAction();
+  const { busy, error, run, attempt } = useAction();
   const [token, setToken] = useState('');
   const [replacing, setReplacing] = useState(false);
   const [pending, setPending] = useState<{ url: string; started: number }>();
@@ -183,12 +191,12 @@ function McpCredentials({ mcp }: { mcp: McpView }) {
   });
   const complete = async (e: FormEvent) => {
     e.preventDefault();
-    const done = await run(async () => (await client.call('mcp.completeSignIn', { id: mcp.id, callbackUrl: callback.trim() }), true));
+    const done = await attempt(() => client.call('mcp.completeSignIn', { id: mcp.id, callbackUrl: callback.trim() }));
     if (done) { setPending(undefined); setCallback(''); }
   };
   const saveToken = async (e: FormEvent) => {
     e.preventDefault();
-    const done = await run(async () => (await client.call('mcp.setToken', { id: mcp.id, token: token.trim() }), true));
+    const done = await attempt(() => client.call('mcp.setToken', { id: mcp.id, token: token.trim() }));
     if (done) { setToken(''); setReplacing(false); }
   };
   const signOut = () => run(() => client.call('mcp.signOut', { id: mcp.id }));
