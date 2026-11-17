@@ -70,3 +70,30 @@ test('automatic naming, inline and sidebar rename, regeneration and settings pre
   await page.getByRole('button', { name: 'Save naming settings', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('Naming settings saved');
 });
+
+test('the header menu opens the same title editor as the header title', async ({ page, baseURL }) => {
+  await page.goto(`${baseURL}/#token=isolated-chat-test-token`);
+  await newChatDraft(page);
+  await page.locator('.composer textarea').fill('Header rename fixture');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  const header = page.getByRole('button', { name: /^Rename thread:/ });
+  await expect(header).toBeVisible();
+  const original = (await header.getAttribute('aria-label'))!;
+  const field = page.locator('.thread-title-form').getByRole('textbox', { name: 'Thread title', exact: true });
+  await page.getByRole('button', { name: 'Thread actions', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Rename…', exact: true }).click();
+  await expect(field).toBeFocused();
+  await field.fill('Discarded header title');
+  await page.locator('.thread-title-form').getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(page.getByRole('button', { name: original, exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Thread actions', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Rename…', exact: true }).click();
+  await field.fill('  Header menu title  ');
+  await field.press('Enter');
+  await expect(page.getByRole('button', { name: 'Rename thread: Header menu title', exact: true })).toBeVisible();
+  await expect(page.locator('.sidebar .row-main').filter({ hasText: 'Header menu title' })).toHaveCount(1);
+  await page.getByRole('button', { name: 'Rename thread: Header menu title', exact: true }).click();
+  await field.fill('Escaped header title');
+  await field.press('Escape');
+  await expect(page.getByRole('button', { name: 'Rename thread: Header menu title', exact: true })).toBeVisible();
+});

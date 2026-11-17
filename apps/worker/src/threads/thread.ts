@@ -1,18 +1,19 @@
 import { randomUUID } from 'node:crypto';
-import type { ChoicePick, ThreadAsset, ThreadView, TranscriptItem } from '@accio/protocol';
+import type { ChoicePick, ThreadAsset, ThreadDelivery, ThreadView, TranscriptItem } from '@accio/protocol';
 import { DEFAULT_MODEL, pasteGist, pastesIn, typedText } from '@accio/protocol';
 import { UserError } from '../rpc/router.js';
+import { pullRequestIdentity } from './delivery.js';
 import type { LeftHarness, PendingHandoff } from './handoff.js';
 
 /**
  * A thread as stored: what clients see, plus the harness session it continues, the
  * sessions of harnesses it has left and a handoff waiting for the next turn (ADR 0017).
  */
-export type Thread = ThreadView & { sessionId: string | null; leftHarnesses?: Record<string, LeftHarness>; handoff?: PendingHandoff; organizationVersion?: number; resumeAfterRestart?: boolean; titleManual?: boolean; titleNeedsRefinement?: boolean };
+export type Thread = ThreadView & { sessionId: string | null; leftHarnesses?: Record<string, LeftHarness>; handoff?: PendingHandoff; resumeAfterRestart?: boolean; titleManual?: boolean; titleNeedsRefinement?: boolean };
 
 const NEW_THREAD_TITLE = 'New thread';
 
-export function toView({ sessionId: _s, leftHarnesses: _l, handoff: _h, organizationVersion: _o, resumeAfterRestart: _r, titleManual: _m, titleNeedsRefinement: _n, ...view }: Thread): ThreadView {
+export function toView({ sessionId: _s, leftHarnesses: _l, handoff: _h, resumeAfterRestart: _r, titleManual: _m, titleNeedsRefinement: _n, ...view }: Thread): ThreadView {
   return view;
 }
 
@@ -31,9 +32,18 @@ export function newThread(input: { checkoutId: string; projectId: string; profil
   };
 }
 
-/** A thread as loaded: a new thread has no work or organization version until its first turn or change. */
+/** A thread as loaded: a new thread has no work version until its first turn. */
 export function fromStored(t: Thread): Thread {
-  return { ...t, workVersion: t.workVersion ?? 0, organizationVersion: t.organizationVersion ?? 0 };
+  return { ...t, workVersion: t.workVersion ?? 0, ...(t.delivery ? { delivery: withPullRequest(t.delivery) } : {}) };
+}
+
+/**
+ * Deliveries used to keep their PR's URL in a field of its own, sometimes without the PR.
+ * The PR is now the one record: an unfinished delivery's PR was still open, a delivered one's merged.
+ */
+function withPullRequest({ pullRequestUrl, ...d }: ThreadDelivery & { pullRequestUrl?: string }): ThreadDelivery {
+  const identity = d.pullRequest ? undefined : pullRequestIdentity(pullRequestUrl);
+  return identity ? { ...d, pullRequest: { ...identity, state: d.status === 'delivered' ? 'merged' : 'open', headRevision: d.revision ?? '', baseBranch: d.baseBranch } } : d;
 }
 
 /**

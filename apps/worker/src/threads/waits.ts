@@ -67,15 +67,15 @@ export function threadReached(view: ThreadView | undefined, until: WaitThreadSta
   // Unknown for now, such as before its machine's snapshot arrives: keep waiting.
   if (!view) return undefined;
   const delivery = view.delivery;
-  const pr = delivery?.pullRequest?.url ?? delivery?.pullRequestUrl;
-  const prNote = pr ? `, PR ${pr}${delivery?.pullRequest ? ` ${delivery.pullRequest.state}` : ''}` : '';
+  const pr = delivery?.pullRequest;
+  const prNote = pr ? `, PR ${pr.url} ${pr.state}` : '';
   const busy = view.status === 'running' || !!view.queuedMessages?.length || view.goal?.status === 'active'
     || delivery?.status === 'queued' || delivery?.status === 'running' || !!view.wait;
   // A thread that needs attention wakes every Wait on it, whatever it was waiting for.
   if (!busy && view.status === 'failed') return `failed${prNote}`;
   if (!busy && view.status === 'interrupted') return `was interrupted${prNote}`;
   if (delivery?.status === 'blocked' && !busy) return `delivery is blocked: ${delivery.detail ?? 'see the thread'}${prNote}`;
-  if (until === 'pr_open') return pr ? `opened PR ${pr}${delivery?.pullRequest ? ` (${delivery.pullRequest.state})` : ''}` : undefined;
+  if (until === 'pr_open') return pr ? `opened PR ${pr.url} (${pr.state})` : undefined;
   if (until === 'delivered') return delivery?.status === 'delivered' ? `delivered to ${delivery.baseBranch}${prNote}` : undefined;
   if (busy) return undefined;
   return `stopped and is idle${prNote}${delivery ? `, delivery ${delivery.status}` : ''}`;

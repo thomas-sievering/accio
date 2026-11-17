@@ -80,10 +80,6 @@ describe('waiting on GitHub', () => {
     expect(stopped).toMatchObject({ label: 'Waiting for merge', detail: 'Automatic fixes stopped · still tracking #123', canStopFollowUps: false, canCheck: true });
   });
 
-  it('reads the PR number from a legacy URL', () => {
-    expect(sidebar(thread({ delivery: delivery({ pullRequestUrl: 'https://github.com/acme/app/pull/7' }) })).label).toBe('Waiting for checks · #7');
-  });
-
   it('legacy waiting without a PR can still be cancelled', () => {
     expect(deliveryStatus(thread({ delivery: delivery({ policy: 'direct', workVersion: undefined }) }))).toMatchObject({ glyph: 'ship', canCancel: true, published: false });
   });

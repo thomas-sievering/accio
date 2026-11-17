@@ -91,14 +91,13 @@ export class Deliveries {
       if (thread.delivery && ['queued', 'running', 'waiting'].includes(thread.delivery.status)) throw new UserError('Delivery is already requested.');
       const baseBranch = await this.git.target(thread.workspace);
       const project = this.projects.projectOf(this.projects.checkout(thread.checkoutId));
-      const openPr = thread.delivery?.pullRequest?.state === 'open' || !!(thread.delivery?.pullRequestUrl && !thread.delivery.pullRequest && thread.delivery.status !== 'delivered');
+      const openPr = thread.delivery?.pullRequest?.state === 'open';
       // A PR the agent opened outside Ship, or target rules a direct push could only bypass, route through the PR.
       const host = openPr ? {} : await this.git.hostRoute(thread.workspace, baseBranch, await this.githubEnv(thread));
-      const linked = openPr ? { pullRequest: thread.delivery?.pullRequest, pullRequestUrl: thread.delivery?.pullRequestUrl }
-        : host.pullRequestUrl ? { pullRequest: host.pullRequest, pullRequestUrl: host.pullRequestUrl } : {};
-      const viaPr = openPr || !!host.pullRequestUrl || !!host.requiresPullRequest;
+      const pullRequest = openPr ? thread.delivery?.pullRequest : host.pullRequest;
+      const viaPr = !!pullRequest || !!host.requiresPullRequest;
       const delivery: ThreadDelivery = { id: randomUUID(), workVersion: thread.workVersion ?? 0, autoSettle: true,
-        mode, policy: viaPr ? 'pull-request' : project.deliveryPolicy ?? 'direct', baseBranch, requestedAt: now(), status: 'queued', ...linked };
+        mode, policy: viaPr ? 'pull-request' : project.deliveryPolicy ?? 'direct', baseBranch, requestedAt: now(), status: 'queued', ...(pullRequest ? { pullRequest } : {}) };
       try { await this.state.update(threadId, t => ({ ...t, delivery })); }
       catch (error) {
         // A rejected request must never become an in-memory publication grant.
@@ -124,8 +123,8 @@ export class Deliveries {
     const thread = this.state.require(threadId);
     if (!thread.delivery || !['queued', 'waiting', 'blocked', 'ready'].includes(thread.delivery.status)) throw new UserError('Only a queued or paused delivery can be cancelled.');
     this.clearCheck(threadId);
-    const published = !!(thread.delivery.pullRequest || thread.delivery.pullRequestUrl || thread.delivery.integratedAt);
-    const updated = await this.state.update(threadId, t => ({ ...t, organizationVersion: (t.organizationVersion ?? 0) + 1,
+    const published = !!(thread.delivery.pullRequest || thread.delivery.integratedAt);
+    const updated = await this.state.update(threadId, t => ({ ...t,
       delivery: published ? { ...t.delivery!, status: t.delivery!.status === 'queued' ? 'waiting' : t.delivery!.status,
         followUpsStoppedAt: now(), keepOpen: true } : undefined }));
     this.scheduleCheck(threadId);
@@ -265,13 +264,13 @@ export class Deliveries {
     if (!d || !thread.workspace || thread.workspace.releasedAt || (d.workVersion ?? 0) !== (thread.workVersion ?? 0)) return false;
     if (d.status === 'delivered') return !!(d.autoSettle && !d.keepOpen && !thread.settledAt);
     if (d.status === 'queued' || d.status === 'running' || d.pullRequest?.state === 'closed') return false;
-    return d.status === 'waiting' || d.status === 'ready' || !!(d.pullRequest || d.pullRequestUrl || d.integratedAt || d.observationError);
+    return d.status === 'waiting' || d.status === 'ready' || !!(d.pullRequest || d.integratedAt || d.observationError);
   }
 
   private matches(thread: Thread, expected: Thread, ownTurn = false) {
     return !!thread.delivery && thread.delivery.id === expected.delivery?.id && thread.delivery.requestedAt === expected.delivery?.requestedAt
       && (thread.workVersion ?? 0) === (expected.workVersion ?? 0) && (thread.delivery.workVersion ?? 0) === (thread.workVersion ?? 0)
-      && (thread.organizationVersion ?? 0) === (expected.organizationVersion ?? 0)
+      && sameOrganization(thread, expected)
       && (ownTurn || (!this.state.running.has(thread.id) && !this.state.lifecycle.has(thread.id)));
   }
 
@@ -336,7 +335,7 @@ export class Deliveries {
         continuationAttempts: (d.continuationAttempts ?? 0) + 1,
         // A published failure needs a new revision (and a new PR under PR policy).
         ...(d.integratedAt ? { integratedAt: undefined, publishedRevision: undefined, revision: undefined,
-          pullRequest: undefined, pullRequestUrl: undefined, completedAt: undefined } : {}),
+          pullRequest: undefined, completedAt: undefined } : {}),
         detail: d.integratedAt ? `Checks failed on published revision ${d.publishedRevision}. ${error.message} Fix the failure and publish a follow-up using the original delivery policy. If a PR already merged, open a new PR for the fix.` : (error as Error).message } }));
       else await this.recordWait(threadId, error as Error);
       return;
@@ -372,4 +371,10 @@ export class Deliveries {
     const path = thread.workspace!.path;
     if (this.projects.state().checkouts.some(c => samePath(c.path, path)) || this.state.list.some(t => t.id !== thread.id && t.workspace && !t.workspace.releasedAt && (samePath(t.workspace.path, path) || samePath(t.workspace.sourcePath, path)))) throw new UserError('Another checkout or thread still uses this workspace.');
   }
+}
+
+/** Snooze, settle, reopen and cancel each change one of these, so a check that sees them unchanged hasn’t raced one. */
+function sameOrganization(a: Thread, b: Thread) {
+  return a.settledAt === b.settledAt && a.snoozedUntil === b.snoozedUntil
+    && a.delivery?.keepOpen === b.delivery?.keepOpen && a.delivery?.followUpsStoppedAt === b.delivery?.followUpsStoppedAt;
 }

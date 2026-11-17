@@ -21,11 +21,12 @@ describe('Wait conditions', () => {
   });
 
   it('meets "pr_open" and "delivered" from the started thread\'s delivery', () => {
-    const delivery = { mode: 'ship', policy: 'pull-request', status: 'waiting', baseBranch: 'main', requestedAt: '', pullRequestUrl: 'https://github.com/o/r/pull/7' } as const;
+    const delivery = { mode: 'ship', policy: 'pull-request', status: 'waiting', baseBranch: 'main', requestedAt: '',
+      pullRequest: { host: 'github.com', repository: 'o/r', number: 7, url: 'https://github.com/o/r/pull/7', state: 'open', headRevision: 'abc', baseBranch: 'main' } } as const;
     expect(threadReached(view({ status: 'running' }), 'pr_open')).toBeUndefined();
-    expect(threadReached(view({ status: 'running', delivery }), 'pr_open')).toBe('opened PR https://github.com/o/r/pull/7');
+    expect(threadReached(view({ status: 'running', delivery }), 'pr_open')).toBe('opened PR https://github.com/o/r/pull/7 (open)');
     expect(threadReached(view({ delivery }), 'delivered')).toBeUndefined();
-    expect(threadReached(view({ delivery: { ...delivery, status: 'delivered' } }), 'delivered')).toBe('delivered to main, PR https://github.com/o/r/pull/7');
+    expect(threadReached(view({ delivery: { ...delivery, status: 'delivered' } }), 'delivered')).toBe('delivered to main, PR https://github.com/o/r/pull/7 open');
   });
 
   it('meets "checks_done" when every check finished, and "merged" on merge or close', () => {

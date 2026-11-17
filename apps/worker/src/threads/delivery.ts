@@ -26,7 +26,7 @@ export type DeliveryHosting = (cwd: string, args: string[], env?: Record<string,
 type Host = <T>(cwd: string, args: string[], schema: z.ZodType<T>) => Promise<T>;
 /** Environment for gh on behalf of the owning thread's profile. */
 export type GitHubEnv = Record<string, string>;
-export type HostRoute = { pullRequest?: DeliveryPullRequest; pullRequestUrl?: string; requiresPullRequest?: boolean };
+export type HostRoute = { pullRequest?: DeliveryPullRequest; requiresPullRequest?: boolean };
 const PR_FIELDS = 'number,url,state,headRefOid,baseRefName,isDraft,mergeCommit,mergedAt,statusCheckRollup,reviewDecision,autoMergeRequest,mergeStateStatus,mergeable';
 
 /**
@@ -130,7 +130,7 @@ export class DeliveryGit {
       const pr = prs.find(p => p.baseRefName === baseBranch);
       const identity = pullRequestIdentity(pr?.url);
       if (pr && identity && identity.repository.toLowerCase() === slug.toLowerCase())
-        Object.assign(route, { pullRequestUrl: pr.url, pullRequest: { ...identity, state: 'open', headRevision: pr.headRefOid, baseBranch: pr.baseRefName } });
+        Object.assign(route, { pullRequest: { ...identity, state: 'open', headRevision: pr.headRefOid, baseBranch: pr.baseRefName } });
     } catch { /* Ship still proceeds under the project's policy. */ }
     try {
       const branch = encodeURIComponent(baseBranch);
@@ -196,7 +196,7 @@ export class DeliveryGit {
     // Read a known PR even if its source branch/worktree disappeared. Host facts survive local errors.
     if (delivery.mode === 'review' || delivery.policy === 'pull-request') {
       if (!slug) throw new UserError('PR verification currently requires a GitHub origin and authenticated gh CLI.');
-      const linked = delivery.pullRequest ?? pullRequestIdentity(delivery.pullRequestUrl);
+      const linked = delivery.pullRequest;
       if (linked && linked.repository.toLowerCase() !== slug.toLowerCase()) throw new UserError('The PR repository no longer matches origin. Request Ship again.');
       if (linked) pr = await host(workspace.sourcePath, ['pr', 'view', String(linked.number), '--repo', slug, '--json', PR_FIELDS], GhPullRequest);
       else {
@@ -210,7 +210,7 @@ export class DeliveryGit {
       const pullRequest: DeliveryPullRequest = { ...identity, state, headRevision: pr.headRefOid, baseBranch: pr.baseRefName,
         ...(pr.mergeCommit?.oid ? { mergeRevision: pr.mergeCommit.oid } : {}), ...(pr.mergedAt ? { mergedAt: pr.mergedAt } : {}) };
       // Persist the link before readiness checks, including pending/failing check results.
-      await record({ pullRequest, pullRequestUrl: pr.url, checkedAt, ...(revision ? { revision } : {}),
+      await record({ pullRequest, checkedAt, ...(revision ? { revision } : {}),
         ...(state === 'merged' ? { publishedRevision: pr.mergeCommit?.oid, integratedAt: pr.mergedAt ?? result.integratedAt ?? checkedAt } : {}) });
       if (pr.baseRefName !== delivery.baseBranch) throw new UserError('The PR targets a different branch. Request Ship again with the intended target.');
       if (state === 'closed') throw new UserError('The PR was closed without merging. The workspace has been kept.');
@@ -300,7 +300,8 @@ export class DeliveryGit {
 function githubRepo(origin: string) {
   return origin.match(/(?:github\.com[/:])([^/]+\/[^/]+?)(?:\.git)?\/?$/i)?.[1];
 }
-function pullRequestIdentity(url?: string): Pick<DeliveryPullRequest, 'host' | 'repository' | 'number' | 'url'> | undefined {
+/** The GitHub repository and number in a pull request URL. */
+export function pullRequestIdentity(url?: string): Pick<DeliveryPullRequest, 'host' | 'repository' | 'number' | 'url'> | undefined {
   const match = url?.match(/^https:\/\/github\.com\/([^/]+\/[^/]+)\/pull\/([1-9]\d*)\/?$/i);
   if (!match || !Number.isSafeInteger(Number(match[2]))) return undefined;
   return { host: 'github.com', repository: match[1]!, number: Number(match[2]), url: url! };

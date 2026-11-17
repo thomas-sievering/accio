@@ -262,8 +262,6 @@ export class Threads {
         return harness?.skills ? harness.skills({ cwd, env: harnessHomeEnv(state.home, profileId, harnessId) }) : undefined;
       },
       withLifecycle: (threadId, action) => this.withLifecycle(threadId, action) });
-    const organize = (threadId: string, change: (t: Thread) => Thread) =>
-      state.update(threadId, t => change({ ...t, organizationVersion: (t.organizationVersion ?? 0) + 1 })).then(toView);
     /** The thread's working folder, once `path` is a file explicitly linked in it. */
     const linkedCwd = async (threadId: string, path: string) => {
       const thread = state.require(threadId);
@@ -413,15 +411,15 @@ export class Threads {
         await turns.begin(threadId, '', { retry: true });
         return null;
       })
-      .on('threads.snooze', ({ threadId, until }) => organize(threadId, t => snooze(t, until)))
+      .on('threads.snooze', ({ threadId, until }) => state.update(threadId, t => snooze(t, until)).then(toView))
       .on('threads.settle', async ({ threadId }) => {
         // GLOSSARY: Wait. A settled thread is done: its Wait, and any command it runs, stop.
         if (state.require(threadId).wait) await this.waits.cancel(threadId);
-        const view = await organize(threadId, t => settle(t, now()));
+        const view = toView(await state.update(threadId, t => settle(t, now())));
         void deliveries.releaseIfUnchanged(threadId);
         return view;
       })
-      .on('threads.reopen', ({ threadId }) => organize(threadId, t => reopen({ ...t, ...(t.delivery ? { delivery: { ...t.delivery, keepOpen: true } } : {}) })))
+      .on('threads.reopen', ({ threadId }) => state.update(threadId, t => reopen({ ...t, ...(t.delivery ? { delivery: { ...t.delivery, keepOpen: true } } : {}) })).then(toView))
       .on('threads.rename', async ({ threadId, title }) => {
         this.naming.cancel(threadId);
         return toView(await state.updateDurably(threadId, t => ({ ...t, title, titleManual: true, titleNeedsRefinement: false })));

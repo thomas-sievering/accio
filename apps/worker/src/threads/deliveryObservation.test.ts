@@ -281,6 +281,27 @@ it('keeps review-only tracking past its agent budget and restart, then settles a
   expect(receipts).toHaveLength(0);
 });
 
+it('loads a delivery saved with only its PR URL with that PR intact, and keeps tracking it', async () => {
+  const { thread, host, reads } = await reviewProject();
+  const home = app.home;
+  await app.stop({ keepHome: true });
+  const stored = JSON.parse(await readFile(join(home, 'threads.json'), 'utf8'));
+  stored[0].delivery.pullRequestUrl = stored[0].delivery.pullRequest.url;
+  delete stored[0].delivery.pullRequest;
+  await writeFile(join(home, 'threads.json'), JSON.stringify(stored));
+  app = await startTestApp({ harness: new FakeHarness() }, home);
+  const next = await app.connect();
+  const loaded = (await view(next, thread.id)).delivery!;
+  expect(loaded.pullRequest).toMatchObject({ host: 'github.com', repository: 'test/fixture', number: 123, url: 'https://github.com/test/fixture/pull/123', state: 'open' });
+  expect(loaded).not.toHaveProperty('pullRequestUrl');
+  reads.length = 0;
+  host.state = 'CLOSED';
+  await next.call('threads.checkDelivery', { threadId: thread.id });
+  // The loaded PR is the one checked; no search for another.
+  expect(reads.filter(args => args[0] === 'pr').map(args => args.slice(0, 3))).toEqual([['pr', 'view', '123']]);
+  expect((await view(next, thread.id)).delivery).toMatchObject({ status: 'blocked', pullRequest: { number: 123, state: 'closed' } });
+});
+
 it('names the gh command whose output no longer matches on the thread, and retries it', async () => {
   const { client, thread, host, harness } = await reviewProject();
   host.malformed = true;
