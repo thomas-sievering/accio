@@ -1,4 +1,3 @@
-import { SECRET_MCP_SERVER } from '../secrets/secrets.js';
 import { join } from 'node:path';
 import { projectKey, type LevelContext, type McpDefinition, type ResourceScope, type ResourcesState, type Space, type ToolDefinition, type WorkspaceSkill, type SkillEntry } from '@accio/protocol';
 import type { McpAccess, ResourceAccess } from '@accio/hub';
@@ -161,7 +160,7 @@ export class ResourceManager {
     this.sourceJobs.set(id, job); this.sourceOperations.add(job); void job.finally(() => this.sourceOperations.delete(job)).catch(() => {}); return job;
   }
   private validateMcp(mcp: McpDefinition) {
-    if ([ACCIO_MCP_SERVER, SECRET_MCP_SERVER].includes(mcp.id)) throw new Error('This MCP name is reserved for built-in tools; choose another name');
+    if (mcp.id === ACCIO_MCP_SERVER) throw new Error('This MCP name is reserved for built-in tools; choose another name');
     if (mcp.transport === 'http') { if (!mcp.url || !['https:', 'http:'].includes(new URL(mcp.url).protocol)) throw new Error('Remote MCP servers need an HTTP or HTTPS URL'); }
     else { if (!mcp.command) throw new Error('Local MCP servers need a command'); if (mcp.auth !== 'none') throw new Error('Local MCP sign-in is managed by that server; use a remote MCP for hub-owned credentials'); }
   }
@@ -212,7 +211,7 @@ export class ResourceManager {
     const releases: (() => void)[] = [];
     const mcps: Record<string, HarnessMcp> = {};
     for (const mcp of state.mcps) {
-      if ([ACCIO_MCP_SERVER, SECRET_MCP_SERVER].includes(mcp.id)) throw new Error('Rename this managed MCP server: that name is reserved for built-in tools');
+      if (mcp.id === ACCIO_MCP_SERVER) throw new Error('Rename this managed MCP server: that name is reserved for built-in tools');
       if (mcp.transport === 'http') { const grant = await this.gateway.grant(mcp.id, profileId, key); releases.push(grant.release); mcps[mcp.id] = { type: 'http', url: grant.url, headers: { Authorization: `Bearer ${grant.token}` } }; }
       else mcps[mcp.id] = { type: 'stdio', command: mcp.command!, args: mcp.args };
     }

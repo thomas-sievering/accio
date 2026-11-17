@@ -80,13 +80,8 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
         to: [],
       },
       {
-        reason: 'Client requests serve Accio tools on threads, which the Sorting Hat never starts.',
-        from: block`  onRequest?(handler: (method: string, params: Record<string, any>) => Promise<unknown>): () => void;`,
-        to: [],
-      },
-      {
-        reason: 'Accounts need no extra environment, configuration or experimental API.',
-        from: block`export type CodexFactory = (options: { home: string; cwd?: string; env?: NodeJS.ProcessEnv; config?: string[]; signal?: AbortSignal; experimental?: boolean }) => Promise<CodexClient>;`,
+        reason: 'Accounts need no extra environment or configuration.',
+        from: block`export type CodexFactory = (options: { home: string; cwd?: string; env?: NodeJS.ProcessEnv; config?: string[]; signal?: AbortSignal }) => Promise<CodexClient>;`,
         to: block`export type CodexFactory = (options: { home: string; cwd?: string; signal?: AbortSignal }) => Promise<CodexClient>;`,
       },
       {
@@ -101,7 +96,7 @@ function codexEnv(base: NodeJS.ProcessEnv, home: string): NodeJS.ProcessEnv {`,
       {
         reason: 'Starts Codex without the options the smaller factory leaves out.',
         from: block`
-export const startCodex: CodexFactory = async ({ home, cwd, env = process.env, config = [], signal, experimental = false }) => {
+export const startCodex: CodexFactory = async ({ home, cwd, env = process.env, config = [], signal }) => {
   if (signal?.aborted) throw new Error('Codex was interrupted before starting');
   const args = ['app-server', ...['cli_auth_credentials_store="file"', ...config].flatMap((c) => ['-c', c])];
   const child = spawn(executable(), args, { cwd, env: codexEnv(env, home), windowsHide: true, stdio: 'pipe' });`,
@@ -112,39 +107,20 @@ export const startCodex: CodexFactory = async ({ home, cwd, signal }) => {
   const child = spawn(executable(), args, { cwd, env: codexEnv(process.env, home), windowsHide: true, stdio: 'pipe' });`,
       },
       {
-        reason: 'Initializes without the experimental API, under the client name Codex already knows.',
+        reason: 'Says why it keeps the client name Codex already knows.',
         from: block`
-    await client.request('initialize', { clientInfo: { name: 'accio', title: 'accio', version: '0.1.0' }, ...(experimental ? { capabilities: { experimentalApi: true } } : {}) });`,
+    await client.request('initialize', { clientInfo: { name: 'accio', title: 'accio', version: '0.1.0' } });`,
         to: block`
     // The client name Codex reports upstream; unchanged from when the hub held accounts.
     await client.request('initialize', { clientInfo: { name: 'accio', title: 'accio', version: '0.1.0' } });`,
       },
       {
-        reason: 'No client request handler, as above.',
-        from: block`  private requestHandler?: (method: string, params: Record<string, any>) => Promise<unknown>;`,
-        to: [],
-      },
-      {
-        reason: 'Refuses every client request, as above.',
+        reason: 'Refuses every client request under its own name.',
         from: block`
-          // Only the machine adapter registers a narrowly scoped client tool handler.
-          const respond = (response: object) => { if (!this.ended) child.stdin.write(JSON.stringify({ id: msg.id, ...response }) + '\n'); };
-          if (this.requestHandler) {
-            void Promise.resolve().then(() => this.requestHandler!(msg.method, msg.params ?? {})).then(
-              result => respond({ result }), () => respond({ error: { code: -32601, message: 'Unsupported or expired Accio tool request' } }),
-            );
-          } else respond({ error: { code: -32601, message: 'accio does not implement this client request' } });`,
+          // Accio's tools reach Codex over MCP (ADR 0011), so it answers no client request.
+          if (!this.ended) child.stdin.write(JSON.stringify({ id: msg.id, error: { code: -32601, message: 'accio does not implement this client request' } }) + '\n');`,
         to: block`
           if (!this.ended) child.stdin.write(JSON.stringify({ id: msg.id, error: { code: -32601, message: 'The Sorting Hat does not implement this client request' } }) + '\n');`,
-      },
-      {
-        reason: 'No client request handler, as above.',
-        from: block`
-  onRequest(handler: (method: string, params: Record<string, any>) => Promise<unknown>) {
-    this.requestHandler = handler;
-    return () => { if (this.requestHandler === handler) this.requestHandler = undefined; };
-  }`,
-        to: [],
       },
       {
         reason: 'The Sorting Hat runs no turns.',

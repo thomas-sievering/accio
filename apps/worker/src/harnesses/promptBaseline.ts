@@ -28,7 +28,8 @@ export async function measureBaseline(harness: Harness, harnessId: string, model
     await mkdir(env.CLAUDE_CONFIG_DIR ?? env.CODEX_HOME!, { recursive: true });
     try {
       for await (const _message of harness.run({ cwd: home, prompt: 'Measure prompt.', sessionId: null, model, env, toolsOff, tools,
-        requestSecret: async () => { throw new Error('Secret requests are disabled during prompt measurement'); }, signal: controller.signal })) { /* No model can answer. */ }
+        // Every turn is told how to request secrets; the tool is contextual, so a baseline doesn't list it.
+        secretPurposes: [], signal: controller.signal })) { /* No model can answer. */ }
     } catch (error) {
       if (!measurement && !controller.signal.aborted) throw error;
     }

@@ -1,16 +1,48 @@
+import { request as httpRequest } from 'node:http';
 import type { Harness, HarnessMessage, HarnessTurn } from '../threads/harness.js';
+import type { SecretDelivery, SecretToolArgs } from '../secrets/secrets.js';
 
-type Script = (run: HarnessTurn, turn: number) => AsyncIterable<HarnessMessage> | Iterable<HarnessMessage>;
+/**
+ * A turn as a script sees it. `requestSecret` calls request_secret through the
+ * turn's accio tools, as a real harness does, and is there only when the turn
+ * has them.
+ */
+export type FakeTurn = HarnessTurn & { requestSecret?: (input: SecretToolArgs) => Promise<SecretDelivery> };
+
+type Script = (run: FakeTurn, turn: number) => AsyncIterable<HarnessMessage> | Iterable<HarnessMessage>;
 
 /** A harness that plays a script per turn and records how it was called. */
 export class FakeHarness implements Harness {
-  readonly runs: HarnessTurn[] = [];
+  readonly runs: FakeTurn[] = [];
   constructor(private script: Script = (_r, n) => replyWith(`reply ${n}`)) {}
 
   async *run(run: HarnessTurn): AsyncIterable<HarnessMessage> {
-    this.runs.push(run);
-    yield* this.script(run, this.runs.length);
+    const tools = run.tools;
+    const turn: FakeTurn = tools ? { ...run, requestSecret: (input) => requestSecret(tools, input) } : run;
+    this.runs.push(turn);
+    yield* this.script(turn, this.runs.length);
   }
+}
+
+/**
+ * Plain node:http, not fetch: a card can wait for its answer longer than fetch's
+ * five-minute limit on response headers, as the real harnesses' tool timeouts allow.
+ */
+async function requestSecret(tools: NonNullable<HarnessTurn['tools']>, input: SecretToolArgs): Promise<SecretDelivery> {
+  const body = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'request_secret', arguments: input } });
+  const { status, text: raw } = await new Promise<{ status: number; text: string }>((resolve, reject) => {
+    const req = httpRequest(tools.url, { method: 'POST', headers: { 'content-type': 'application/json', authorization: tools.authorization } }, (res) => {
+      let text = ''; res.setEncoding('utf8');
+      res.on('data', (chunk: string) => { text += chunk; }).on('end', () => resolve({ status: res.statusCode ?? 0, text })).on('error', reject);
+    });
+    req.on('error', reject).end(body);
+  });
+  if (status !== 200) throw new Error(`request_secret failed: HTTP ${status}`);
+  const answer = JSON.parse(raw) as { result?: { isError?: boolean; content: { text: string }[] }; error?: { message: string } };
+  if (answer.error) throw new Error(answer.error.message);
+  const text = answer.result!.content[0]!.text;
+  if (answer.result!.isError) throw new Error(text);
+  return JSON.parse(text) as SecretDelivery;
 }
 
 export const SESSION = 'session-abc';

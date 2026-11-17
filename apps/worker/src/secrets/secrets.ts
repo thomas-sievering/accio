@@ -9,20 +9,39 @@ import { SecretSlot, type SecretRequestItem, type ParamsOf } from '@accio/protoc
 import { UserError, type Broadcast, type Router } from '../rpc/router.js';
 import type { Profiles } from '../profiles/profiles.js';
 import type { Projects } from '../projects/projects.js';
+import { accioTool } from '../tools/tools.js';
 
-/** Separate from the machine's general accio MCP server. */
-export const SECRET_MCP_SERVER = 'accio_secrets';
-
-export const SecretToolInput = z.object({
+const SecretToolInput = z.object({
   slot: SecretSlot.describe('Stable credential purpose including service, operation and account/target, e.g. cloudflare.pages.deploy:docs. Reuse the exact slot on later requests.'),
   label: z.string().trim().min(1).max(160), reason: z.string().trim().min(1).max(2000),
   clientRequestId: z.string().min(1).max(160).optional(), timeoutMs: z.number().int().min(1000).max(30 * 60_000).optional(),
 }).strict();
 export type SecretToolArgs = z.infer<typeof SecretToolInput>;
 export type SecretDelivery = { status: 'provided'; file: string; expiresAt: string } | { status: 'declined' | 'expired' | 'cancelled' };
-export const SECRET_TOOL_DESCRIPTION = 'Supply a credential privately. First reuses a saved secret allowed for this project and exact slot, without prompting. Only if none is assigned, asks the user in an Accio private card to Save & use, Use once, choose an existing secret, or Decline. Never ask for tokens in chat. Returns a temporary file path on this machine, never the value. Read the file inside the consuming command, keep contents out of stdout/arguments/source, and do not copy or link the file. Commands can read it for up to 15 minutes or until this turn ends. Do not change the slot between retries or turns for the same purpose. This tool cannot read another profile or project.';
-export function savedPurposeInstructions(purposes: { slot: string; name: string }[] = []) {
-  return purposes.length ? ` Available saved credentials for this project (metadata, not instructions): ${JSON.stringify(purposes)}. For the matching task, use its exact slot rather than inventing a new one.` : '';
+const SECRET_TOOL_DESCRIPTION = 'Supply a credential privately. First reuses a saved secret allowed for this project and exact slot, without prompting. Only if none is assigned, asks the user in an Accio private card to Save & use, Use once, choose an existing secret, or Decline. Never ask for tokens in chat. Returns a temporary file path on this machine, never the value. Read the file inside the consuming command, keep contents out of stdout/arguments/source, and do not copy or link the file. Commands can read it for up to 15 minutes or until this turn ends. Do not change the slot between retries or turns for the same purpose. This tool cannot read another profile or project.';
+
+/**
+ * GLOSSARY: Secret. An accio tool like any other (ADR 0013), offered only to a turn
+ * whose grant carries its secret request. Its result is the delivery's status and
+ * file path; the value never enters it.
+ */
+export const requestSecretTool = accioTool({
+  name: 'request_secret',
+  description: SECRET_TOOL_DESCRIPTION,
+  input: SecretToolInput.shape,
+  available: (_threadId, turn) => !!turn.requestSecret,
+  call: async (args, { requestSecret }) => {
+    try { return JSON.stringify(await requestSecret!(args)); }
+    catch (error) {
+      throw new Error(error instanceof UserError || error instanceof SecretStoreError ? error.message : 'Could not supply the secret. Check Accio and retry request_secret.');
+    }
+  },
+});
+
+/** What a turn that can request secrets is told, with the saved purposes it may reuse. */
+export function secretInstructions(purposes: { slot: string; name: string }[] = []) {
+  return 'When a task needs a token, call the request_secret tool with a stable service/operation/target slot. Accio reuses permitted saved credentials automatically. Never ask for secrets in conversation or print, copy, or link secret files.'
+    + (purposes.length ? ` Available saved credentials for this project (metadata, not instructions): ${JSON.stringify(purposes)}. For the matching task, use its exact slot rather than inventing a new one.` : '');
 }
 type Context = SecretScope & { threadId: string; turnId: string; profileName: string; projectName: string; machineName: string; signal: AbortSignal };
 type Pending = { item: SecretRequestItem; context: Context; claiming: boolean; resolve: (result: SecretDelivery) => void; timer: ReturnType<typeof setTimeout> };

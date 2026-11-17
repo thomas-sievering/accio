@@ -11,8 +11,7 @@ import { SUBAGENT_TIMEOUT_SEC } from './subagents.js';
 import type { Harness, HarnessImage, HarnessMessage, HarnessSkill, HarnessTurn } from './harness.js';
 import { cleanExecutionEnv } from './harnessEnv.js';
 import { resultErrors } from './transcript.js';
-import { secretMcpServer } from '../secrets/claudeTool.js';
-import { savedPurposeInstructions, SECRET_MCP_SERVER } from '../secrets/secrets.js';
+import { secretInstructions } from '../secrets/secrets.js';
 
 /** No model request is ever answered here: the skill listing must not reach a provider. */
 const NOWHERE = 'http://127.0.0.1:9';
@@ -83,7 +82,7 @@ export const claudeCode: Harness = measuredHarness('claudeCode', {
       throw new Error('No generated title');
     } finally { signal.removeEventListener('abort', abort); q.close(); await q.return(); }
   },
-  async *run({ cwd, prompt, images, sessionId, model, effort, modelName, env, tools, signal, resourceInstructions, mcps, requestSecret, secretPurposes, registerSteer, toolsOff = [] }: HarnessTurn) {
+  async *run({ cwd, prompt, images, sessionId, model, effort, modelName, env, tools, signal, resourceInstructions, mcps, secretPurposes, registerSteer, toolsOff = [] }: HarnessTurn) {
     if (signal.aborted) return;
     const abortController = new AbortController();
     const stderr: string[] = [];
@@ -105,12 +104,11 @@ export const claudeCode: Harness = measuredHarness('claudeCode', {
         settingSources: ['user', 'project', 'local'],
         // Removed from the model's context, not only refused (docs/plans/harness-tools.md).
         ...(toolsOff.length ? { disallowedTools: toolsOff.flatMap((t) => t.tools) } : {}),
-        mcpServers: mcps || tools || requestSecret ? { ...mcps,
+        mcpServers: mcps || tools ? { ...mcps,
           ...(tools ? { [ACCIO_MCP_SERVER]: { type: 'http' as const, url: tools.url, headers: { Authorization: tools.authorization } } } : {}),
-          ...(requestSecret ? { [SECRET_MCP_SERVER]: secretMcpServer(requestSecret) } : {}),
         } : undefined,
         systemPrompt: { type: 'preset', preset: 'claude_code', append: [systemPromptText({ harnessId: 'claudeCode', model, modelName }), resourceInstructions,
-          requestSecret ? `When a task needs a token, call mcp__${SECRET_MCP_SERVER}__request_secret with a stable service/operation/target slot. Accio reuses permitted saved credentials automatically. Never ask for secrets in conversation or print, copy, or link secret files.` + savedPurposeInstructions(secretPurposes) : undefined,
+          tools && secretPurposes ? secretInstructions(secretPurposes) : undefined,
         ].filter(Boolean).join('\n\n') },
         stderr: (data) => {
           stderr.push(data);
