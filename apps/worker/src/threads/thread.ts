@@ -61,11 +61,10 @@ export function reopen(thread: Thread): Thread {
 }
 
 /**
- * A turn may start only when none is running. Talking to a snoozed or settled thread reopens it.
+ * Talking to a snoozed or settled thread reopens it. `Turns.begin` has already checked that the thread is free.
  * The turn that continues work cut off by a restart keeps the time already run, so downtime never counts.
  */
 export function startTurn(thread: Thread, firstText: string, now: string): Thread {
-  if (thread.status === 'running') throw new UserError('This thread is already working. Stop it or wait for it to finish.');
   const continuing = thread.status === 'interrupted' && thread.resumeAfterRestart;
   return {
     ...reopen(thread),
