@@ -41,12 +41,9 @@ export class SecretsVault {
       this.assertUnique(input.profileId, input.slot, projectIds, profileWide, previous?.id);
       const id = previous?.id ?? randomUUID(); const version = (previous?.version ?? 0) + 1;
       const value = input.value ?? this.decrypt(previous!, key);
-      const nonce = randomBytes(12); const cipher = createCipheriv('aes-256-gcm', key, nonce);
-      cipher.setAAD(Buffer.from(`${id}\0${input.profileId}\0${version}`));
-      const ciphertext = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()]).toString('base64');
       const record: StoredSecret = { id, profileId: input.profileId, name: input.name, slot: input.slot, projectIds, profileWide,
         version, updatedAt: new Date().toISOString(), lastUsedAt: previous?.lastUsedAt ?? null,
-        ciphertext, nonce: nonce.toString('base64'), tag: cipher.getAuthTag().toString('base64') };
+        ...encrypt(key, recordContext({ id, profileId: input.profileId, version }), value) };
       await this.commit([...this.records.filter(r => r.id !== id), record]);
       await this.announce(record);
       return summary(record);
@@ -89,20 +86,12 @@ export class SecretsVault {
   async close() { await this.store.idle(); }
   /** Encrypts a hub-only value, such as the Sorting Hat's admin token, with the vault's key; `purpose` binds it to one use. */
   async seal(purpose: string, value: string): Promise<Sealed> {
-    const key = await this.masterKey();
-    const nonce = randomBytes(12); const cipher = createCipheriv('aes-256-gcm', key, nonce);
-    cipher.setAAD(Buffer.from(`sealed\0${purpose}`));
-    const ciphertext = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()]).toString('base64');
-    return { ciphertext, nonce: nonce.toString('base64'), tag: cipher.getAuthTag().toString('base64') };
+    return encrypt(await this.masterKey(), sealedContext(purpose), value);
   }
   async unseal(purpose: string, sealed: Sealed): Promise<string> {
     const key = await this.masterKey();
-    try {
-      const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(sealed.nonce, 'base64'));
-      decipher.setAAD(Buffer.from(`sealed\0${purpose}`));
-      decipher.setAuthTag(Buffer.from(sealed.tag, 'base64'));
-      return Buffer.concat([decipher.update(Buffer.from(sealed.ciphertext, 'base64')), decipher.final()]).toString('utf8');
-    } catch { throw new SecretStoreError('A saved hub credential could not be unlocked. Check the Hub key.'); }
+    try { return decrypt(key, sealedContext(purpose), sealed); }
+    catch { throw new SecretStoreError('A saved hub credential could not be unlocked. Check the Hub key.'); }
   }
   private assertUnique(profileId: string, slot: string, projectIds: string[], profileWide: boolean, except?: string) {
     if (this.records.some(r => r.id !== except && r.profileId === profileId && r.slot === slot &&
@@ -111,12 +100,8 @@ export class SecretsVault {
     }
   }
   private decrypt(record: StoredSecret, key: Buffer) {
-    try {
-      const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(record.nonce, 'base64'));
-      decipher.setAAD(Buffer.from(`${record.id}\0${record.profileId}\0${record.version}`));
-      decipher.setAuthTag(Buffer.from(record.tag, 'base64'));
-      return Buffer.concat([decipher.update(Buffer.from(record.ciphertext, 'base64')), decipher.final()]).toString('utf8');
-    } catch { throw new SecretStoreError('The saved secret could not be unlocked. Check the Hub key or replace the value.'); }
+    try { return decrypt(key, recordContext(record), record); }
+    catch { throw new SecretStoreError('The saved secret could not be unlocked. Check the Hub key or replace the value.'); }
   }
   private masterKey(): Promise<Buffer> {
     if (!this.key) this.key = this.loadKey().catch(() => { this.key = undefined; throw new SecretStoreError(unavailable); });
@@ -151,6 +136,21 @@ export class SecretsVault {
   private async announce(record: SecretSummary) { for (const listener of this.listeners) await listener(record.id, record.profileId); }
 }
 
+/** AES-256-GCM, bound to `context` so a value can't be moved to another record or use. */
+function encrypt(key: Buffer, context: string, value: string): Sealed {
+  const nonce = randomBytes(12); const cipher = createCipheriv('aes-256-gcm', key, nonce);
+  cipher.setAAD(Buffer.from(context));
+  const ciphertext = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()]).toString('base64');
+  return { ciphertext, nonce: nonce.toString('base64'), tag: cipher.getAuthTag().toString('base64') };
+}
+function decrypt(key: Buffer, context: string, { ciphertext, nonce, tag }: Sealed): string {
+  const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(nonce, 'base64'));
+  decipher.setAAD(Buffer.from(context));
+  decipher.setAuthTag(Buffer.from(tag, 'base64'));
+  return Buffer.concat([decipher.update(Buffer.from(ciphertext, 'base64')), decipher.final()]).toString('utf8');
+}
+const recordContext = (r: Pick<StoredSecret, 'id' | 'profileId' | 'version'>) => `${r.id}\0${r.profileId}\0${r.version}`;
+const sealedContext = (purpose: string) => `sealed\0${purpose}`;
 function summary({ ciphertext: _ciphertext, nonce: _nonce, tag: _tag, ...metadata }: StoredSecret): SecretSummary {
   return { ...metadata, projectIds: [...metadata.projectIds] };
 }

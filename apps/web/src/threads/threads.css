@@ -289,14 +289,15 @@
 .row.renaming .row-actions {
   display: none;
 }
-.header-rename {
+.thread-title-form {
   flex: 1 1 auto;
   min-width: 0;
+  -webkit-app-region: no-drag;
 }
-.header-rename, .row-rename { display: flex; align-items: center; gap: 6px; }
+.thread-title-form, .row-rename { display: flex; align-items: center; gap: 6px; }
 .title-count { flex: none; color: var(--dim); font-size: 10px; white-space: nowrap; }
-.header-rename input, .row-rename input { flex: 1; }
-.header-rename input,
+.thread-title-form input, .row-rename input { flex: 1; }
+.thread-title-form input,
 .row-rename input {
   width: 100%;
   min-width: 0;
@@ -1036,8 +1037,6 @@ div.model-picker-empty b { color: var(--ink); font-weight: 500; }
 .goal-continue { align-self: center; color: var(--dim); font-size: 12px; }
 .editable-thread-title { font: inherit; font-weight: 600; color: inherit; background: none; border: 0; padding: 3px 5px; border-radius: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; -webkit-app-region: no-drag; }
 .editable-thread-title:hover { background: var(--hover); }
-.thread-title-form { display: flex; flex-direction: row; align-items: center; gap: 6px; min-width: 0; -webkit-app-region: no-drag; }
-.thread-title-form input { min-width: 100px; width: 260px; max-width: 35vw; }
 .model-name { overflow: hidden; text-overflow: ellipsis; }
 .model-version { margin-left: 0.35em; color: var(--muted); }
 /* A project dashboard row: the project is implied, so only the title and its state. */
