@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { modelKey, type ModelSelection, type UsedUpLimit } from '@accio/protocol';
 import { useClient, useConnectionStatus } from '../app/connection';
 import { Check, ProviderLogo, Star } from '../app/icons';
@@ -8,6 +8,7 @@ import { useSteps, useWheelSteps } from './steps';
 import { prettyModelName } from './modelName';
 import { useModels } from './useModels';
 import { formatDayTime } from '../ui/dates';
+import { usePopoverMenu } from '../ui/usePopoverMenu';
 
 /**
  * GLOSSARY: Effort. One chip for what a thread runs: the model and a muted effort word.
@@ -23,17 +24,11 @@ export function ModelPicker({ profileId, value, onChange, disabled = false }: {
   const client = useClient();
   const status = useConnectionStatus();
   const id = useId();
-  const panel = useRef<HTMLDivElement>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
-  const effortTrigger = useRef<HTMLButtonElement>(null);
   const effortId = useId();
-  const effortMenu = useRef<HTMLDivElement>(null);
-  const [effortPosition, setEffortPosition] = useState<CSSProperties>({});
   const { data, error: loadError, setError, update } = useModels(profileId);
   const { busy, error: actionError, run, clear } = useAction();
   const error = actionError ?? loadError;
   const [tab, setTab] = useState('favorites');
-  const [position, setPosition] = useState<CSSProperties>({});
 
   useEffect(() => {
     setTab('favorites');
@@ -63,9 +58,19 @@ export function ModelPicker({ profileId, value, onChange, disabled = false }: {
   // Open on the active model's provider, where the choice is likeliest; favourites only when nothing is selected.
   const openingTab = () => selected ? JSON.stringify([selected.providerId, selected.harnessId])
     : favorites.size > 0 ? 'favorites' : groups[0]?.id ?? 'favorites';
-  const focusRow = () => requestAnimationFrame(() => {
-    const rows = panel.current?.querySelectorAll<HTMLButtonElement>('[data-model-choice]');
-    (panel.current?.querySelector<HTMLButtonElement>('[data-model-choice][aria-pressed="true"]') ?? rows?.[0])?.focus();
+  // One height for every tab: the longest list or the rail, whichever is taller.
+  const longest = Math.max(favorites.size * 33, ...groups.map((g) => models.filter((m) => JSON.stringify([m.providerId, m.harnessId]) === g.id).length * 33));
+  const height = Math.min(Math.max(longest + 14, (groups.length + 1) * 40 + 12, 172), 420);
+  const { props: panelProps, trigger, popover: panel, focusItem } = usePopoverMenu({
+    placement: { width: 340, side: 'above', height, gap: 8, fill: (room) => Math.min(height, room) },
+    items: '[data-model-choice]',
+    onToggle: (open) => { if (open) setTab(openingTab()); },
+    // Left and right step through the tabs.
+    onKeyDown: (event) => {
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+      event.preventDefault();
+      switchTab(event.key === 'ArrowRight' ? 1 : -1);
+    },
   });
   // Buttons stay enabled while a call runs so keyboard focus never drops out of the panel.
   const choose = async (model: ModelSelection) => {
@@ -84,40 +89,24 @@ export function ModelPicker({ profileId, value, onChange, disabled = false }: {
   const switchTab = (step: number) => {
     const tabs = ['favorites', ...groups.map((g) => g.id)];
     setTab(tabs[(tabs.indexOf(activeTab) + step + tabs.length) % tabs.length]!);
-    focusRow();
+    focusItem();
   };
-  const move = (event: KeyboardEvent) => {
-    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); switchTab(event.key === 'ArrowRight' ? 1 : -1); return; }
-    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
-    const buttons = [...(panel.current?.querySelectorAll<HTMLButtonElement>('[data-model-choice]') ?? [])];
-    if (!buttons.length) return;
-    event.preventDefault();
-    const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
-    const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (current + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length;
-    buttons[next]?.focus();
-  };
-
   const effort = selected && selected.efforts.length > 0 ? effortSteps(selected, current.effort) : undefined;
   const stepper = useSteps(effort?.steps ?? [], effort?.index ?? -1,
     (next) => onChange({ harnessId: current.harnessId, modelId: current.modelId, ...(next ? { effort: next } : {}) }), (message) => { clear(); setError(message); });
+  const { props: effortProps, trigger: effortTrigger, popover: effortMenu } = usePopoverMenu({
+    placement: { width: 160, side: 'above', height: 12 + (effort?.steps.length ?? 0) * 34, gap: 8 },
+    onToggle: (open) => {
+      if (!open && (effortMenu.current?.contains(document.activeElement) || document.activeElement === document.body)) effortTrigger.current?.focus();
+    },
+  });
   useWheelSteps(effortTrigger, stepper.step, !!effort);
   const shownEffort = effort?.steps[stepper.shown];
   const description = selected?.name ?? fallbackName;
 
   return <span className="model-choice">
     <button type="button" ref={trigger} className="model-trigger" popoverTarget={id}
-      disabled={disabled || busy || !profileId || status !== 'open'} aria-label={`Select model: ${description}`}
-      onClick={(event) => {
-        const rect = event.currentTarget.getBoundingClientRect();
-        const width = Math.min(340, window.innerWidth - 24);
-        const above = rect.top >= window.innerHeight - rect.bottom;
-        const room = (above ? rect.top : window.innerHeight - rect.bottom) - 20;
-        // One height for every tab: the longest list or the rail, whichever is taller.
-        const longest = Math.max(favorites.size * 33, ...groups.map((g) => models.filter((m) => JSON.stringify([m.providerId, m.harnessId]) === g.id).length * 33));
-        const height = Math.min(Math.max(longest + 14, (groups.length + 1) * 40 + 12, 172), 420, room);
-        setPosition({ width, height, left: Math.max(12, Math.min(rect.left, window.innerWidth - width - 12)),
-          ...(above ? { bottom: window.innerHeight - rect.top + 8, top: 'auto' } : { top: rect.bottom + 8, bottom: 'auto' }) });
-      }}>
+      disabled={disabled || busy || !profileId || status !== 'open'} aria-label={`Select model: ${description}`}>
       <ProviderLogo providerId={selected?.providerId ?? (value.harnessId === 'codex' ? 'openai' : 'anthropic')} />
       <span>{shortName}</span>
     </button>
@@ -127,34 +116,17 @@ export function ModelPicker({ profileId, value, onChange, disabled = false }: {
         onKeyDown={(event) => {
           if (event.key === 'ArrowUp') { event.preventDefault(); stepper.step(1); }
           if (event.key === 'ArrowDown') { event.preventDefault(); stepper.step(-1); }
-        }}
-        onClick={(event) => {
-          const rect = event.currentTarget.getBoundingClientRect();
-          setEffortPosition({ left: Math.max(12, Math.min(rect.left, window.innerWidth - 172)), bottom: window.innerHeight - rect.top + 8, top: 'auto' });
         }}>
         <EffortWord key={modelKey(current)} steps={effort.steps} index={stepper.shown} />
       </button>
-      <div id={effortId} ref={effortMenu} popover="auto" className="menu effort-menu" role="menu" aria-label="Effort" style={effortPosition}
-        onToggle={(event) => {
-          if (event.newState === 'open') requestAnimationFrame(() => (effortMenu.current?.querySelector<HTMLButtonElement>('[aria-checked="true"]') ?? effortMenu.current?.querySelector<HTMLButtonElement>('button'))?.focus());
-          else if (effortMenu.current?.contains(document.activeElement) || document.activeElement === document.body) effortTrigger.current?.focus();
-        }}
-        onKeyDown={(event) => {
-          if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
-          event.preventDefault();
-          const items = [...(effortMenu.current?.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]') ?? [])];
-          const current = items.indexOf(document.activeElement as HTMLButtonElement);
-          const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (current + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
-          items[next]?.focus();
-        }}>
+      <div id={effortId} {...effortProps} popover="auto" className="menu effort-menu" role="menu" aria-label="Effort">
         {effort.steps.map((step, i) => <button type="button" key={step.label} role="menuitemradio" className="menu-item" aria-checked={i === stepper.shown}
           onClick={() => { stepper.commit(i); effortMenu.current?.hidePopover(); }}>
           <span>{step.label}</span><span className="model-picker-check" aria-hidden>{i === stepper.shown && <Check />}</span>
         </button>)}
       </div>
     </>}
-    <div id={id} ref={panel} popover="auto" className="model-picker" style={position} role="dialog" aria-label="Choose a model" onKeyDown={move}
-      onToggle={(event) => { if (event.newState === 'open') { setTab(openingTab()); focusRow(); } }}>
+    <div id={id} {...panelProps} popover="auto" className="model-picker" role="dialog" aria-label="Choose a model">
       <nav className="model-picker-tabs" aria-label="Model groups">
         <button type="button" className="favorite" aria-pressed={activeTab === 'favorites'} aria-label="Favourites" title="Favourites" onClick={() => setTab('favorites')}>
           <Star filled />

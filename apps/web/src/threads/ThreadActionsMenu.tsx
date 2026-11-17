@@ -1,9 +1,9 @@
-import { useId, useRef, useState } from 'react';
+import { useId, useState } from 'react';
 import type { ThreadView, ToolDetails, TranscriptItem } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { More } from '../app/icons';
 import { useAction } from '../app/useAction';
-import { focusMenuItem, onMenuKeyDown } from '../ui/menuKeys';
+import { usePopoverMenu } from '../ui/usePopoverMenu';
 import { ThreadMenuItems } from './ThreadMenu';
 
 export function ThreadActionsMenu({ thread, items, onRename }: { thread: ThreadView; items?: TranscriptItem[]; onRename?: () => void }) {
@@ -11,9 +11,11 @@ export function ThreadActionsMenu({ thread, items, onRename }: { thread: ThreadV
   const id = useId();
   const { busy, error, run, clear } = useAction();
   const [copied, setCopied] = useState(false);
-  const menu = useRef<HTMLDivElement>(null);
   // A fresh set of items each time the menu opens, so a half-done rename or delete never lingers.
   const [opened, setOpened] = useState(0);
+  const { props, popover: menu } = usePopoverMenu({
+    onToggle: (open) => { if (open) { clear(); setCopied(false); setOpened((n) => n + 1); } },
+  });
 
   const copy = () => void run(async () => {
     if (!items) return;
@@ -40,9 +42,7 @@ export function ThreadActionsMenu({ thread, items, onRename }: { thread: ThreadV
     <button className="row-action thread-actions-trigger" popoverTarget={id} aria-label="Thread actions" title="Thread actions" aria-haspopup="menu">
       <More />
     </button>
-    <div id={id} ref={menu} className="menu thread-actions-menu" popover="auto" role="menu" aria-label="Thread actions"
-      onKeyDown={onMenuKeyDown}
-      onToggle={(e) => { if (e.newState === 'open') { clear(); setCopied(false); setOpened((n) => n + 1); focusMenuItem(menu.current); } }}>
+    <div id={id} {...props} className="menu thread-actions-menu" popover="auto" role="menu" aria-label="Thread actions">
       <ThreadMenuItems key={opened} thread={thread} close={() => menu.current?.hidePopover()} onRename={onRename} before={<>
         <button className="menu-item" role="menuitem" disabled={!items || busy} onClick={copy}>
           <span className="menu-text">{busy ? 'Copying…' : 'Copy as Markdown'}</span>

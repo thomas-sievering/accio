@@ -1,9 +1,9 @@
-import { useId, useRef } from 'react';
+import { useId } from 'react';
 import { projectKey, type ProjectView } from '@accio/protocol';
 import { emitAppEvent } from '../app/appEvents';
 import { useAction } from '../app/useAction';
 import { useSpaces } from '../spaces/spaces';
-import { focusMenuItem, onMenuKeyDown } from '../ui/menuKeys';
+import { usePopoverMenu } from '../ui/usePopoverMenu';
 
 /**
  * The thread header's project name: a menu to open the project dashboard, its space's view
@@ -12,8 +12,8 @@ import { focusMenuItem, onMenuKeyDown } from '../ui/menuKeys';
  */
 export function ProjectCrumbMenu({ project, path }: { project: ProjectView; path?: string }) {
   const id = useId();
-  const menu = useRef<HTMLDivElement>(null);
   const { error, run, clear } = useAction();
+  const { props, popover: menu } = usePopoverMenu({ onToggle: (open) => { if (open) clear(); } });
   const space = useSpaces().spaceOf(projectKey(project));
   const canOpenFolder = !!path && window.accioDesktop?.serverOrigin === window.location.origin;
   const close = () => menu.current?.hidePopover();
@@ -29,9 +29,7 @@ export function ProjectCrumbMenu({ project, path }: { project: ProjectView; path
     <button type="button" className="thread-project-link" popoverTarget={id} aria-haspopup="menu" title={path ? `${project.name} · ${path}` : project.name}>
       {project.name}
     </button>
-    <div id={id} ref={menu} className="menu project-crumb-menu" popover="auto" role="menu" aria-label={project.name}
-      onKeyDown={onMenuKeyDown}
-      onToggle={(e) => { if (e.newState === 'open') { clear(); focusMenuItem(menu.current); } }}>
+    <div id={id} {...props} className="menu project-crumb-menu" popover="auto" role="menu" aria-label={project.name}>
       {item('Dashboard', () => { close(); emitAppEvent('project.dashboard', { id: project.id }); })}
       {space && item('Space', () => { close(); emitAppEvent('space.open', { id: space.id }); })}
       {canOpenFolder && item('Open in Explorer', () => void openFolder())}

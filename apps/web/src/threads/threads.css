@@ -862,7 +862,6 @@
 /* A turn starting or ending dims and restores the chips gently; the press keeps its scale. */
 .composer-bar :is(.model-trigger, .effort-trigger) { transition: opacity 200ms ease, scale 420ms var(--ease-settle); }
 .effort-menu .menu-item { justify-content: space-between; }
-.menu.effort-menu { position: fixed; inset: auto; position-area: none; position-try-fallbacks: none; width: 160px; margin: 0; }
 .model-picker {
   position: fixed;
   margin: 0;
@@ -930,7 +929,6 @@ div.model-picker-empty b { color: var(--ink); font-weight: 500; }
 .machine-trigger:hover:not(:disabled) { background: var(--hover); color: var(--ink); }
 .machine-trigger:disabled { cursor: default; opacity: 0.6; }
 .machine-trigger.offline { color: var(--amber); }
-.menu.machine-menu { position: fixed; inset: auto; position-area: none; position-try-fallbacks: none; margin: 0; }
 .machine-menu .menu-item > svg { color: var(--muted); }
 .machine-menu .menu-item[aria-checked="true"] .menu-text b { color: var(--ink-strong); }
 .machine-check { display: grid; place-items: center; flex: none; width: 16px; color: var(--muted); }
