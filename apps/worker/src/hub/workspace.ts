@@ -37,6 +37,7 @@ import { Relay } from '../relay/relay.js';
 import type { Updates } from '../machine/update.js';
 import { findMachine, machineTools } from '../machine/machineTools.js';
 import { imageTool } from '../images/imageTool.js';
+import { requestSecretTool } from '../secrets/secrets.js';
 
 /**
  * The snapshot saved with a hub connection, for use until the hub answers. One
@@ -135,7 +136,8 @@ export async function openWorkspace(record: SavedHub, deps: WorkspaceDeps, slot:
       },
       access: (profileId) => profiles.hubAccess(profileId, 'openai'),
       folder: join(record.home, 'images'),
-    })], slot.toolsOrigin);
+    }),
+    requestSecretTool], slot.toolsOrigin);
   const { updates } = deps;
   if (updates) tools.add(...machineTools({ here: here.id, machines: () => settings.machines(), folder: join(deps.home, 'screenshots'), call: (method, params) => router.call(method, params) }));
   // GLOSSARY: Space. Checkouts of the space's projects, cloned here when missing, for the Space section and start_thread.

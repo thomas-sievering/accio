@@ -41,7 +41,7 @@ export function isAgentTool(name: string): boolean {
 }
 
 /** What a sub-agent inherits from the parent turn that is running when it starts. */
-export type SubagentTurn = { harness: Harness; run: Omit<HarnessTurn, 'prompt' | 'sessionId' | 'signal' | 'tools' | 'registerSteer' | 'requestSecret'>; signal: AbortSignal };
+export type SubagentTurn = { harness: Harness; run: Omit<HarnessTurn, 'prompt' | 'sessionId' | 'signal' | 'tools' | 'registerSteer' | 'secretPurposes'>; signal: AbortSignal };
 
 /**
  * Runs one sub-agent to completion. Each of its tool calls is reported as the

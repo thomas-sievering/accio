@@ -3,9 +3,7 @@ import { startCodex, type CodexFactory, type CodexNotification } from '@accio/co
 import { systemPromptText } from '../harnesses/systemPrompt.js';
 import { measuredHarness } from '../harnesses/promptMeasurement.js';
 import type { Harness, HarnessEvent, HarnessImage } from './harness.js';
-import { z } from 'zod';
-import { SecretToolInput, SECRET_TOOL_DESCRIPTION, SECRET_MCP_SERVER, savedPurposeInstructions } from '../secrets/secrets.js';
-import { secretHttpTool } from '../secrets/httpTool.js';
+import { secretInstructions } from '../secrets/secrets.js';
 import { ACCIO_MCP_SERVER } from '../tools/tools.js';
 import { SUBAGENT_TIMEOUT_SEC } from './subagents.js';
 import { summarizeTool } from './transcript.js';
@@ -64,13 +62,12 @@ export function codexHarness(factory: CodexFactory = startCodex): Harness {
         throw new Error('Title response was interrupted');
       } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
     },
-    async *run({ cwd, prompt, images, sessionId, model, effort, modelName, env, tools, signal, resourceInstructions, mcps, requestSecret, secretPurposes, registerSteer, toolsOff = [] }) {
+    async *run({ cwd, prompt, images, sessionId, model, effort, modelName, env, tools, signal, resourceInstructions, mcps, secretPurposes, registerSteer, toolsOff = [] }) {
       if (signal.aborted) return;
       const home = env.CODEX_HOME;
       const baseUrl = env.ACCIO_OPENAI_URL;
       if (!home || !baseUrl || !env.ACCIO_OPENAI_KEY) throw new Error('Codex profile configuration is missing');
       await mkdir(home, { recursive: true });
-      const endpoint = sessionId && requestSecret ? await secretHttpTool(requestSecret) : undefined;
       const config = [
         'model_provider="accio"', 'model_providers.accio.name="accio hub"',
         `model_providers.accio.base_url=${JSON.stringify(baseUrl)}`,
@@ -85,10 +82,8 @@ export function codexHarness(factory: CodexFactory = startCodex): Harness {
           const prefix = `mcp_servers.${id}`;
           return mcp.type === 'http' ? [`${prefix}.url=${JSON.stringify(mcp.url)}`, ...Object.entries(mcp.headers).map(([key, value]) => `${prefix}.http_headers.${key}=${JSON.stringify(value)}`)] : [`${prefix}.command=${JSON.stringify(mcp.command)}`, `${prefix}.args=${JSON.stringify(mcp.args)}`];
         }),
-        ...(endpoint ? [`mcp_servers.${SECRET_MCP_SERVER}.url=${JSON.stringify(endpoint.url)}`, `mcp_servers.${SECRET_MCP_SERVER}.bearer_token_env_var="ACCIO_TOOL_TOKEN"`] : []),
       ];
-      const launch = () => factory({ home, cwd, env: endpoint ? { ...env, ACCIO_TOOL_TOKEN: endpoint.token } : env, signal, experimental: !!requestSecret,
-        config: [...config, ...disabledSkillsConfig(discovered.known(home))] });
+      const launch = () => factory({ home, cwd, env, signal, config: [...config, ...disabledSkillsConfig(discovered.known(home))] });
       // ADR 0020: skills installed on this machine are no skill level. Codex reads them at
       // launch, so a launch that still finds one enabled is replaced by one with it disabled.
       const client = await (async () => {
@@ -96,7 +91,7 @@ export function codexHarness(factory: CodexFactory = startCodex): Harness {
         try { if (!await discovered.discover(first, home, cwd)) return first; } catch (error) { await first.close(); throw error; }
         await first.close();
         return launch();
-      })().catch(async error => { await endpoint?.close(); throw error; });
+      })();
       const events: CodexNotification[] = [];
       let wake = () => {};
       let failure: Error | undefined;
@@ -104,19 +99,6 @@ export function codexHarness(factory: CodexFactory = startCodex): Harness {
       let turnId: string | undefined;
       let stopTimer: ReturnType<typeof setTimeout> | undefined;
       let forcedStop = false;
-      const offRequest = requestSecret ? client.onRequest?.(async (method, params) => {
-        if (method !== 'item/tool/call' || params.tool !== 'request_secret' ||
-          (params.namespace != null && params.namespace !== 'functions') ||
-          signal.aborted || params.threadId !== threadId || (turnId && params.turnId !== turnId)) throw new Error('Unsupported tool request');
-        try {
-          const parsed = SecretToolInput.safeParse(params.arguments);
-          if (!parsed.success) throw new Error('Invalid secret request');
-          const result = await requestSecret(parsed.data);
-          return { success: true, contentItems: [{ type: 'inputText', text: JSON.stringify(result) }] };
-        } catch {
-          return { success: false, contentItems: [{ type: 'inputText', text: 'Could not supply the credential. Check Accio for the request status; retry request_secret if necessary.' }] };
-        }
-      }) : undefined;
       const off = client.onNotification((event) => { events.push(event); wake(); });
       const offExit = client.onExit((error) => { failure = error; wake(); });
       const stop = () => {
@@ -127,19 +109,16 @@ export function codexHarness(factory: CodexFactory = startCodex): Harness {
       signal.addEventListener('abort', stop, { once: true });
       try {
         if (signal.aborted) return;
-        // Config, unlike dynamic tools, applies on resume too, so resumed threads keep accio's tools.
+        // Config applies on resume too, so resumed threads keep accio's tools, request_secret among them.
         const config = {
           ...(tools ? { [`mcp_servers.${ACCIO_MCP_SERVER}`]: { url: tools.url, http_headers: { Authorization: tools.authorization }, tool_timeout_sec: SUBAGENT_TIMEOUT_SEC } } : {}),
-          ...(endpoint ? { [`mcp_servers.${SECRET_MCP_SERVER}`]: { url: endpoint.url, bearer_token_env_var: 'ACCIO_TOOL_TOKEN' } } : {}),
         };
         const params = { cwd, ...(model ? { model } : {}), ...(Object.keys(config).length ? { config } : {}), approvalPolicy: 'never', sandbox: 'danger-full-access',
           developerInstructions: [systemPromptText({ harnessId: 'codex', model, modelName }), resourceInstructions,
-            requestSecret ? `For missing tokens use request_secret (or ${SECRET_MCP_SERVER} MCP request_secret on resumed sessions). Reuse the exact service/operation/target slot. Accio handles saved project credentials automatically. Never ask for or print a secret in chat, and never copy or link secret files.` + savedPurposeInstructions(secretPurposes) : undefined,
+            tools && secretPurposes ? secretInstructions(secretPurposes) : undefined,
           ].filter(Boolean).join('\n\n') };
-        const dynamicTools = requestSecret && !sessionId ? { dynamicTools: [{ type: 'function', name: 'request_secret', description: SECRET_TOOL_DESCRIPTION,
-          inputSchema: z.toJSONSchema(SecretToolInput), deferLoading: false }] } : {};
         const method = sessionId ? 'thread/resume' : 'thread/start';
-        const result = parseCodex(method, CodexThreadResult, await client.request(method, { ...params, ...dynamicTools, ...(sessionId ? { threadId: sessionId } : {}) }));
+        const result = parseCodex(method, CodexThreadResult, await client.request(method, { ...params, ...(sessionId ? { threadId: sessionId } : {}) }));
         threadId = result.thread.id;
         yield { type: 'harness_event', event: { kind: 'session', id: threadId! } };
         if (signal.aborted) return;
@@ -172,9 +151,9 @@ export function codexHarness(factory: CodexFactory = startCodex): Harness {
       } finally {
         registerSteer?.(undefined);
         signal.removeEventListener('abort', stop);
-        clearTimeout(stopTimer); off(); offExit(); offRequest?.();
+        clearTimeout(stopTimer); off(); offExit();
         // Closing the native child is bounded, even if interrupt never acknowledged.
-        try { await client.close(); } finally { await endpoint?.close(); }
+        await client.close();
       }
     },
   });

@@ -84,7 +84,6 @@ describe('hub resource management', () => {
     const t = await startTestApp({ harness, mcpFetch: async (_url, init) => { requests.push(init!); return Response.json({ result: 'ok' }); } }); stop = t.stop;
     const c = await t.connect(); await c.signedIn('Personal');
     await expect(c.call('mcp.save', { id: 'accio', name: 'Reserved', transport: 'http', url: 'https://example.test/mcp', auth: 'none' })).rejects.toThrow('reserved');
-    await expect(c.call('mcp.save', { id: 'accio_secrets', name: 'Reserved', transport: 'http', url: 'https://example.test/mcp', auth: 'none' })).rejects.toThrow('reserved');
     await c.call('mcp.save', { id: 'mobbin', name: 'Mobbin', transport: 'http', url: 'https://mcp.example.test/mcp', auth: 'bearer' });
     await c.call('mcp.setToken', { id: 'mobbin', token: 'private-mobbin-token' });
     expect(JSON.stringify(await c.call('resources.get', {}))).not.toContain('private-mobbin-token');
