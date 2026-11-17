@@ -20,9 +20,9 @@ export class Profiles {
   private announcedLimits = '';
   private announcedSortingHat = '';
   readonly signIns: BrowserSignIns;
-  private referenceSource = (): string[] => [];
   private referenceQueue: Promise<unknown> = Promise.resolve();
-  constructor(private home: string, readonly client: HubClient, private broadcast: Broadcast) {
+  /** `references` names the profiles this machine's projects and threads use, so the hub keeps them. */
+  constructor(private home: string, readonly client: HubClient, private broadcast: Broadcast, private references: () => string[]) {
     this.signIns = new BrowserSignIns(client);
     client.onChanged(() => this.announce());
   }
@@ -52,9 +52,8 @@ export class Profiles {
     if (!profile.providers.find((p) => p.id === providerId)?.accounts.some((a) => a.signedIn)) throw new UserError(`Select a signed-in ${providerId === 'openai' ? 'ChatGPT' : 'Claude'} account for ${profile.name} in Profiles.`);
     await this.syncReferences(); return this.connect(id);
   }
-  setReferenceSource(source: () => string[]) { this.referenceSource = source; }
   syncReferences() {
-    const refs = [...new Set([...this.referenceSource(), ...this.users.keys()])];
+    const refs = [...new Set([...this.references(), ...this.users.keys()])];
     const next = this.referenceQueue.then(() => this.client.call('machine.references', { profiles: refs }));
     this.referenceQueue = next.catch(() => {}); return next;
   }

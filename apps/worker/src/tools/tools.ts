@@ -42,9 +42,8 @@ type RpcRequest = { jsonrpc?: string; id?: string | number | null; method?: unkn
 
 export class AccioTools {
   private grants = new Map<string, { threadId: string; measurement?: boolean }>();
-  private origin?: string;
-
-  constructor(private tools: AccioTool[]) {}
+  /** `origin` is where the worker listens; without one, turns get no access until `listen`. */
+  constructor(private tools: AccioTool[], private origin?: string) {}
 
   /** Adds a tool whose implementation needs parts built after the server, such as running turns. */
   add(...tools: AccioTool[]) {

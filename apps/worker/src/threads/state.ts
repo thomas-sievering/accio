@@ -5,6 +5,35 @@ import { UserError, type Broadcast } from '../rpc/router.js';
 import { toView, type Thread } from './thread.js';
 import { TranscriptStore } from './transcriptStore.js';
 
+/** Why a thread can't take a turn now, in the order they are checked. */
+const BUSY_REASONS = ['closing', 'lifecycle', 'delivery', 'stopping', 'running', 'queued', 'messages', 'preview'] as const;
+export type BusyReason = typeof BUSY_REASONS[number];
+
+const BUSY_MESSAGES: Record<BusyReason, string> = {
+  closing: 'This machine is shutting down',
+  lifecycle: 'Wait for the current thread action to finish.',
+  delivery: 'Finish or cancel delivery before sending more work.',
+  stopping: 'Wait for this turn to stop.',
+  running: 'This thread is already working. Stop it or wait for it to finish.',
+  queued: 'Send or remove queued messages first.',
+  messages: 'Wait for the messages sent to this thread to be handled.',
+  preview: 'Stop the app preview in this worktree first.',
+};
+
+/** What a user blocked for `reason` is told, wherever they are blocked. */
+export function busyMessage(reason: BusyReason) {
+  return BUSY_MESSAGES[reason];
+}
+
+export type BusyOptions = {
+  /** Reasons the caller holds itself or works alongside, such as the message operation it runs in. */
+  allow?: readonly BusyReason[];
+  /** The turn starts or continues the thread's own delivery, so its queued delivery is the work it runs. */
+  delivering?: boolean;
+  /** Releasing the worktree: whether the app preview Accio started still runs in it. */
+  preview?: boolean;
+};
+
 /** The stored thread list and the in-flight work every part of Threads coordinates on. */
 export class ThreadState {
   list: Thread[] = [];
@@ -26,8 +55,33 @@ export class ThreadState {
     this.transcripts = new TranscriptStore(home, broadcast);
   }
 
+  /**
+   * The one rule for whether a thread can take a turn now: the first reason it can't, or undefined.
+   * `thread` is the thread as the caller sees it, which may be a change not yet stored.
+   */
+  busy(thread: Thread, { allow = [], delivering = false, preview = false }: BusyOptions = {}): BusyReason | undefined {
+    const { id } = thread;
+    const holds: Record<BusyReason, () => boolean> = {
+      closing: () => this.closing,
+      lifecycle: () => this.lifecycle.has(id),
+      delivery: () => !delivering && (thread.delivery?.status === 'queued' || thread.delivery?.status === 'running'),
+      stopping: () => !!this.running.get(id)?.signal.aborted,
+      running: () => this.running.has(id) || thread.status === 'running',
+      queued: () => !!thread.queuedMessages?.length,
+      messages: () => this.messageOps.has(id),
+      preview: () => preview,
+    };
+    return BUSY_REASONS.find(reason => !allow.includes(reason) && holds[reason]());
+  }
+
+  /** Throws the message of the first reason the thread is busy. */
+  assertFree(thread: Thread, options?: BusyOptions) {
+    const reason = this.busy(thread, options);
+    if (reason) throw new UserError(busyMessage(reason));
+  }
+
   assertOpen() {
-    if (this.closing) throw new UserError('This machine is shutting down');
+    if (this.closing) throw new UserError(busyMessage('closing'));
   }
 
   require(id: string): Thread {

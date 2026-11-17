@@ -93,12 +93,10 @@ export class Turns {
 
   begin(threadId: string, text: string, options: TurnOptions = {}, stored?: Promise<void>) {
     const { state } = this;
-    state.assertOpen();
     const thread = state.require(threadId);
-    if (state.lifecycle.has(threadId)) throw new UserError('Wait for the current thread action to finish.');
-    if (thread.delivery?.status === 'queued' && !options.delivery && !options.resume && !options.retry) throw new UserError('Cancel the queued delivery before sending more work.');
     if (options.resume) assertResumable(thread);
-    if (state.running.has(threadId) || thread.status === 'running') throw new UserError('This thread is already working. Stop it or wait for it to finish.');
+    // Queued messages wait behind this turn, or are what it starts. Resume and Retry may continue a delivery turn.
+    state.assertFree(thread, { allow: ['queued', 'messages'], delivering: !!(options.delivery || options.resume || options.retry) });
     const controller = new AbortController();
     state.running.set(threadId, controller);
     if (options.queuedId) this.queuedStarts.set(threadId, options.queuedId);
@@ -130,7 +128,8 @@ export class Turns {
     const { state } = this;
     const thread = state.require(id);
     const message = thread.queuedMessages?.[0];
-    if (!message || message.editing || state.closing || state.lifecycle.has(id) || state.running.has(id) || thread.status !== 'idle') return;
+    // A queued delivery goes first; its turn dispatches the queue when it ends.
+    if (!message || message.editing || thread.status !== 'idle' || state.busy(thread, { allow: ['queued', 'messages'] })) return;
     try { await this.begin(id, message.text, { pick: message.pick, images: message.images, queuedId: message.id, ...(message.wake ? { wake: true } : {}) }); }
     catch (error) {
       await state.transcripts.add(id, { kind: 'notice', id: randomUUID(), turnId: 'queue', tone: 'error', text: `Queued message could not start: ${(error as Error).message}` });
@@ -167,7 +166,6 @@ export class Turns {
       let delivering = options.delivery ?? false;
       let pick = options.pick;
       let images = options.images ?? [];
-      if (resume) assertResumable(thread);
       if (options.retry || resume) {
         const items = (await transcripts.get(threadId)).items;
         const last = items.findLast(item => item.kind === 'user');
@@ -378,8 +376,7 @@ export class Turns {
   async continueGoal(threadId: string) {
     const { state } = this;
     const thread = state.get(threadId);
-    if (!thread || thread.goal?.status !== 'active' || state.closing || state.running.has(threadId) || state.lifecycle.has(threadId)
-      || thread.status === 'running' || thread.queuedMessages?.length || thread.delivery?.status === 'queued' || thread.wait) return;
+    if (!thread || thread.goal?.status !== 'active' || thread.wait || state.busy(thread, { allow: ['messages'] })) return;
     try { await this.begin(threadId, CONTINUE_PROMPT, { goalContinue: true }); }
     catch (error) {
       await state.update(threadId, t => t.goal?.status === 'active' ? { ...t, goal: { ...t.goal, status: 'paused', detail: (error as Error).message } } : t);

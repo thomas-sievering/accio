@@ -11,7 +11,7 @@ import { cleanExecutionEnv } from './harnessEnv.js';
 import type { Previews } from './previews.js';
 import { scriptedShip } from './scriptedShip.js';
 import { recordShippedNote } from './shippedNote.js';
-import type { ThreadState } from './state.js';
+import { busyMessage, type ThreadState } from './state.js';
 import { settle, toView, type Thread } from './thread.js';
 
 /** What deliveries need from the rest of Threads. */
@@ -85,7 +85,8 @@ export class Deliveries {
   async request(threadId: string, mode: DeliveryMode) {
     await this.host.withLifecycle(threadId, async () => {
       const thread = this.state.require(threadId);
-      if (thread.queuedMessages?.length) throw new UserError('Send or remove queued messages before requesting delivery.');
+      // A Ship may be requested while a turn runs; its delivery waits behind the turn.
+      this.state.assertFree(thread, { allow: ['lifecycle', 'delivery', 'stopping', 'running', 'messages'] });
       if (!thread.workspace || thread.workspace.releasedAt) throw new UserError('Start a new thread in a committed Git project to use an owned worktree.');
       if (thread.delivery && ['queued', 'running', 'waiting'].includes(thread.delivery.status)) throw new UserError('Delivery is already requested.');
       const baseBranch = await this.git.target(thread.workspace);
@@ -118,7 +119,8 @@ export class Deliveries {
       script.abort();
       return toView(this.state.require(threadId));
     }
-    if (this.state.lifecycle.has(threadId) || this.starting.has(threadId)) throw new UserError('Wait for the current thread action to finish.');
+    // A delivery turn that is starting counts as a thread action, though a turn running beside a queued delivery doesn't.
+    if (this.state.lifecycle.has(threadId) || this.starting.has(threadId)) throw new UserError(busyMessage('lifecycle'));
     const thread = this.state.require(threadId);
     if (!thread.delivery || !['queued', 'waiting', 'blocked', 'ready'].includes(thread.delivery.status)) throw new UserError('Only a queued or paused delivery can be cancelled.');
     this.clearCheck(threadId);
@@ -133,7 +135,7 @@ export class Deliveries {
   archive(threadId: string) {
     return this.host.withLifecycle(threadId, async () => {
       let thread = this.state.require(threadId);
-      if (this.state.running.has(threadId) || thread.status === 'running') throw new UserError('Wait for the thread to finish before archiving.');
+      this.state.assertFree(thread, { allow: ['lifecycle', 'delivery', 'queued', 'messages'] });
       if (!thread.workspace || thread.workspace.releasedAt || !thread.delivery || !['delivered', 'ready'].includes(thread.delivery.status)) throw new UserError('Ship the change successfully before archiving its workspace.');
       this.assertWorkspaceUnused(thread);
       const verified = await this.git.verify(thread.workspace, thread.delivery, undefined, await this.githubEnv(thread));
@@ -152,8 +154,8 @@ export class Deliveries {
     return this.host.withLifecycle(threadId, async () => {
       const thread = this.state.require(threadId);
       const workspace = thread.workspace;
-      if (!thread.settledAt || !workspace || workspace.releasedAt || thread.delivery || thread.status === 'running' || this.state.running.has(threadId)
-        || thread.queuedMessages?.length || this.state.messageOps.has(threadId) || this.previews.has(threadId)) return;
+      if (!thread.settledAt || !workspace || workspace.releasedAt || thread.delivery
+        || this.state.busy(thread, { allow: ['lifecycle'], preview: this.previews.has(threadId) })) return;
       this.assertWorkspaceUnused(thread);
       if (!await this.git.unchanged(workspace)) return;
       // Journal before touching files, as Archive does.
@@ -169,7 +171,8 @@ export class Deliveries {
 
   async dispatch(threadId: string) {
     const thread = this.state.require(threadId);
-    if (this.state.closing || this.state.lifecycle.has(threadId) || this.state.running.has(threadId) || thread.status === 'running' || thread.delivery?.status !== 'queued' || thread.delivery.followUpsStoppedAt) return;
+    // Messages queued behind the delivery start after its turn.
+    if (thread.delivery?.status !== 'queued' || thread.delivery.followUpsStoppedAt || this.state.busy(thread, { delivering: true, allow: ['queued', 'messages'] })) return;
     const testCommand = this.scriptable(thread);
     // Like a turn, the run holds its slot once this returns; the request does not wait for it.
     if (testCommand) { void this.ship(threadId, testCommand).catch(error => console.error('[delivery] scripted ship failed', error)); return; }
@@ -275,7 +278,7 @@ export class Deliveries {
   settleDelivered(thread: Thread) {
     const d = thread.delivery;
     if (d?.status !== 'delivered' || !d.autoSettle || d.keepOpen || d.followUpsStoppedAt || thread.settledAt || thread.status !== 'idle'
-      || (d.workVersion ?? 0) !== (thread.workVersion ?? 0) || this.state.running.has(thread.id) || this.state.lifecycle.has(thread.id) || !!thread.queuedMessages?.length || this.state.messageOps.has(thread.id)
+      || (d.workVersion ?? 0) !== (thread.workVersion ?? 0) || this.state.busy(thread)
       || (thread.snoozedUntil && Date.parse(thread.snoozedUntil) > Date.now())) return thread;
     return settle(thread, now());
   }
@@ -328,8 +331,7 @@ export class Deliveries {
       const d = current.delivery!;
       const pending = error instanceof DeliveryPending;
       const canContinue = continueAgent && pending && error.continueAgent && !d.followUpsStoppedAt && (!d.integratedAt || d.mode === 'ship')
-        && !current.queuedMessages?.length && !this.state.messageOps.has(threadId)
-        && current.status === 'idle' && (d.continuationAttempts ?? 0) < 3 && Date.now() - Date.parse(d.requestedAt) < 60 * 60_000;
+        && current.status === 'idle' && !this.state.busy(current) && (d.continuationAttempts ?? 0) < 3 && Date.now() - Date.parse(d.requestedAt) < 60 * 60_000;
       if (canContinue) await this.state.update(threadId, t => ({ ...t, delivery: { ...t.delivery!, ci: undefined, status: 'queued',
         continuationAttempts: (d.continuationAttempts ?? 0) + 1,
         // A published failure needs a new revision (and a new PR under PR policy).
@@ -349,7 +351,7 @@ export class Deliveries {
     if (existing) return existing;
     const thread = this.state.require(threadId);
     if (!thread.delivery || !thread.workspace || thread.workspace.releasedAt) return;
-    if (this.state.running.has(threadId) || this.state.lifecycle.has(threadId) || this.checks.size >= 2) { this.scheduleCheck(threadId); return; }
+    if (this.state.busy(thread, { allow: ['delivery', 'queued', 'messages'] }) || this.checks.size >= 2) { this.scheduleCheck(threadId); return; }
     const check = this.state.track(async () => {
       if (thread.delivery?.status === 'waiting' && thread.delivery.turnError) {
         // Nothing to observe: the failed turn's work is unfinished. Start another.

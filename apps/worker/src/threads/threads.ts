@@ -54,6 +54,19 @@ import { cleanExecutionEnv, harnessHomeEnv } from './harnessEnv.js';
 import { Waits, waitForTool } from './waits.js';
 import { Confirmations } from './confirmations.js';
 
+export type ThreadsOptions = {
+  /** GLOSSARY: Thread mention. Every thread this machine knows, other machines' included: the relay's merged list. */
+  knownThreads: () => readonly ThreadView[];
+  tools?: AccioTools;
+  deliveryHosting?: DeliveryHosting;
+  resources: ResourceManager;
+  /** GLOSSARY: Space. What each turn of a thread in a space is told about it. */
+  spaceContext: SpaceContext;
+  /** The hub's built-in tool overrides. */
+  toolOverrides: () => BuiltinToolOverrides;
+  onRepairFinished: (toolId: string) => void;
+};
+
 /** Threads on this machine, their transcripts, and the turns running in them. */
 export class Threads {
   get runningCount() { return this.state.running.size; }
@@ -62,12 +75,7 @@ export class Threads {
   /** The turn running in a thread on this machine, for an accio tool that records items in it. */
   runningTurn(threadId: string) { return this.turns.runningTurn(threadId); }
   profileReferences() { return this.state.list.map((thread) => thread.profileId); }
-  resources?: ResourceManager;
-  onRepairFinished?: (toolId: string) => void;
-  /** GLOSSARY: Space. What each turn of a thread in a space is told about it; none until it is set. */
-  spaceContext?: SpaceContext;
-  /** The hub's built-in tool overrides; accio's defaults apply until it is set. */
-  toolOverrides?: () => BuiltinToolOverrides;
+  private readonly resources: ResourceManager;
   readonly assets: ThreadAssets;
   private readonly uploads: Uploads;
   readonly secrets: SecretRequests;
@@ -97,11 +105,9 @@ export class Threads {
     private models: Models,
     private machines: Machines,
     vault: SecretsAccess,
-    /** GLOSSARY: Thread mention. Every thread this machine knows, other machines' included: the relay's merged list. */
-    knownThreads: () => readonly ThreadView[],
-    tools?: AccioTools,
-    deliveryHosting?: DeliveryHosting,
+    { knownThreads, tools, deliveryHosting, resources, spaceContext, toolOverrides, onRepairFinished }: ThreadsOptions,
   ) {
+    this.resources = resources;
     this.state = new ThreadState(home, projects, broadcast, (threadId) => this.secrets.hasPending(threadId));
     this.naming = new ThreadNaming(this.state, profiles, models, harnesses);
     this.issues = new Issues((profileId, cwd, args) => machines.github.run(profileId, cwd, args));
@@ -127,7 +133,7 @@ export class Threads {
     }, deliveryHosting);
     this.turns = new Turns(this.state, { profiles, projects, models, machines, harnesses, secrets: this.secrets, confirmations: this.confirmations, content: this.content, deliveries: this.deliveries, tools,
       images: { claim: (threadId, ids) => this.uploads.claim(threadId, ids, this.assets), file: (threadId, asset) => this.assets.harnessFile(threadId, asset) },
-      resources: () => this.resources, spaceContext: () => this.spaceContext, toolsOff: (harnessId) => builtinToolsOff(harnessId, this.toolOverrides?.()[harnessId]), onWorkFinished: id => this.naming.refine(id), onRepairFinished: (toolId) => this.onRepairFinished?.(toolId), knownThreads,
+      resources: () => resources, spaceContext: () => spaceContext, toolsOff: (harnessId) => builtinToolsOff(harnessId, toolOverrides()[harnessId]), onWorkFinished: id => this.naming.refine(id), onRepairFinished, knownThreads,
       offeredIssues: (threadId, refs) => this.offeredIssues(threadId, refs) });
     tools?.add(issueOfferTool((threadId, refs) => this.offeredIssues(threadId, refs, true), (threadId) => !!this.state.get(threadId)?.checkoutId));
     this.waits = new Waits(this.state, {
@@ -203,7 +209,8 @@ export class Threads {
       if (state.closing) return;
       this.restartCandidates.delete(id);
       const thread = state.list.find(t => t.id === id);
-      if (!thread || thread.status !== 'interrupted' || state.running.has(id)) continue;
+      // Asks what the resume below would, so a thread something else holds is left to it.
+      if (!thread || thread.status !== 'interrupted' || state.busy(thread, { delivering: true, allow: ['queued', 'messages'] })) continue;
       try {
         await this.turns.begin(id, RESUME_PROMPT, { resume: true });
       } catch (error) {
@@ -232,10 +239,11 @@ export class Threads {
     const { state, turns } = this;
     return this.withMessages(threadId, async () => {
       const thread = state.get(threadId);
-      if (!thread || state.closing) return;
-      const free = !state.running.has(threadId) && thread.status !== 'running' && !state.lifecycle.has(threadId)
-        && thread.delivery?.status !== 'queued' && thread.delivery?.status !== 'running' && !thread.queuedMessages?.length;
-      if (free) {
+      if (!thread) return;
+      // This runs as the thread's message operation.
+      const busy = state.busy(thread, { allow: ['messages'] });
+      if (busy === 'closing') return;
+      if (!busy) {
         try { await turns.begin(threadId, text, { wake: true }); return; }
         catch (error) { console.error('[waits] waking the thread failed; queued its message instead', error); }
       }
@@ -321,11 +329,9 @@ export class Threads {
         // Never wait behind a starting turn for steering: it may be blocked on
         // authentication, and the caller must keep its unsent draft immediately.
         // A scripted ship holds the slot with no turn to steer.
-        if (state.running.has(threadId) && !turns.canSteer(threadId) && state.get(threadId)?.delivery?.status === 'running') {
-          throw new UserError('Finish or cancel delivery before sending more work.');
-        }
-        if (state.running.has(threadId) && mode !== 'queue' && !turns.canSteer(threadId)) {
-          throw new UserError('The agent is starting or finishing. Try sending again in a moment.');
+        if (state.running.has(threadId) && !turns.canSteer(threadId)) {
+          this.assertMessageAllowed(threadId);
+          if (mode !== 'queue') throw new UserError('The agent is starting or finishing. Try sending again in a moment.');
         }
         const goal = parseGoalCommand(text);
         if (goal && !pick && !uploads.length) return this.withMessages(threadId, () => this.goalCommand(threadId, goal, text));
@@ -469,7 +475,7 @@ export class Threads {
         if (issue) thread.issue = issue;
         if (checkout && input.issue?.title) thread.title = titleFrom(input.issue.ref.startsWith('#') ? `${input.issue.ref} ${input.issue.title}` : input.issue.title);
         if (input.startedBy) thread.startedBy = input.startedBy;
-        if (options.repairToolId) { thread.repairToolId = options.repairToolId; thread.title = `Repair ${this.resources?.state().tools.find(tool => tool.id === options.repairToolId)?.name ?? options.repairToolId}`; }
+        if (options.repairToolId) { thread.repairToolId = options.repairToolId; thread.title = `Repair ${this.resources.state().tools.find(tool => tool.id === options.repairToolId)?.name ?? options.repairToolId}`; }
         if (checkout) thread.workspace = await this.deliveries.git.allocate(thread.id, checkout.path);
         if (!checkout) await mkdir(join(state.home, 'workspaces', thread.id), { recursive: true });
         // Quiet: clients first see the thread once its turn is running, never as an idle empty thread.
@@ -652,13 +658,9 @@ export class Threads {
     return pending;
   }
 
+  /** A message starts a turn, or steers or queues behind the running one. Callers run as the thread's message operation. */
   private assertMessageAllowed(id: string) {
-    const { state } = this;
-    state.assertOpen();
-    if (state.lifecycle.has(id)) throw new UserError('Wait for the current thread action to finish.');
-    const delivery = state.require(id).delivery?.status;
-    if (delivery === 'queued' || delivery === 'running') throw new UserError('Finish or cancel delivery before sending more work.');
-    if (state.running.get(id)?.signal.aborted) throw new UserError('Wait for this turn to stop.');
+    this.state.assertFree(this.state.require(id), { allow: ['running', 'queued', 'messages'] });
   }
 
   private async changeQueue(id: string, change: (queue: NonNullable<Thread['queuedMessages']>) => NonNullable<Thread['queuedMessages']>) {
@@ -674,9 +676,9 @@ export class Threads {
 
   private async withLifecycle<T>(id: string, action: () => Promise<T>): Promise<T> {
     const { state } = this;
-    state.assertOpen();
-    state.require(id);
-    if (state.lifecycle.has(id)) throw new UserError('Wait for the current thread action to finish.');
+    // An action may overlap a turn and its messages, such as a preview opening as work ends.
+    // Each action checks the rest of the rule itself.
+    state.assertFree(state.require(id), { allow: ['delivery', 'stopping', 'running', 'queued', 'messages'] });
     state.lifecycle.add(id);
     const pending = action();
     state.starts.add(pending);

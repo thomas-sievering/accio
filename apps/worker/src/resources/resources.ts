@@ -26,16 +26,18 @@ export class ResourceManager {
   private closing = false;
   private localSources = new Map<string, Promise<SkillEntry[]>>();
   /** The hub's spaces, for the Space level. */
-  spaces: () => Space[] = () => [];
+  private spaces: () => Space[];
+  /** GLOSSARY: Space, Home. This machine's checkout of a space's home; without it no space has skill files. */
+  private homeCheckout: HomeCheckout;
   constructor(private home: string, private machineId: string, private store: ResourceAccess, private gateway: McpAccess,
     private profiles: Profiles, private projects: Projects, private broadcast: Broadcast,
-    repair: (tool: ToolDefinition, detail: string) => Promise<string>, run?: CommandRunner) {
+    repair: (tool: ToolDefinition, detail: string) => Promise<string>, levels: { spaces: () => Space[]; homeCheckout: HomeCheckout }, run?: CommandRunner) {
+    this.spaces = levels.spaces;
+    this.homeCheckout = levels.homeCheckout;
     this.skills = new SkillFiles(home, run);
     this.tools = new ManagedTools(home, machineId, store, () => this.announce(), repair, run);
   }
   state(): ResourcesState { return this.store.state(); }
-  /** GLOSSARY: Space, Home. This machine's checkout of a space's home; without it no space has skill files. */
-  homeCheckout?: HomeCheckout;
   /** The profile, space and project a thread's levels are matched against. */
   levelContext(profileId?: string, projectId?: string): LevelContext {
     const project = this.projects.state().projects.find(p => p.id === projectId);
@@ -60,7 +62,7 @@ export class ResourceManager {
    * cloned in the background, or waited for with `waitForHome`.
    */
   private async homeSkills(key: string | undefined, space: Space | undefined, waitForHome: boolean): Promise<WorkspaceSkill[]> {
-    if (!space?.homeProjectKey || space.homeProjectKey === key || !this.homeCheckout) return [];
+    if (!space?.homeProjectKey || space.homeProjectKey === key) return [];
     const home = await this.homeCheckout(space.homeProjectKey, waitForHome).catch(() => undefined);
     // A home not here leaves the space with its library skills only; one here whose files can't be read is an error, like the project's own.
     const files = home ? await repositorySkills(home).catch((error: Error) => { throw new Error(`The skills in the space’s home can’t be read: ${error.message}`); }) : [];

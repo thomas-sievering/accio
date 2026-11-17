@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { JsonFile } from '@accio/persistence';
 import { RelaySocket, type RelayRequest } from '@accio/hub';
-import { OFFLINE_SNOOZE_MS, RELAY_MACHINE_METHODS, RELAY_THREAD_METHODS, type CheckoutView, type OfflineSnooze, type Events, type MachineView, type ParamsOf, type ProjectsState, type ResultOf, type RelaySnapshot, type ThreadView } from '@accio/protocol';
+import { OFFLINE_SNOOZE_MS, RELAY_MACHINE_METHODS, RELAY_THREAD_METHODS, type CheckoutView, type OfflineSnooze, type Events, type MachineView, type MethodName, type ParamsOf, type ProjectsState, type ResultOf, type RelaySnapshot, type ThreadView } from '@accio/protocol';
 import { UserError, type Router } from '../rpc/router.js';
 import { CLONE_TIMEOUT_MS, httpsUrlOf, remoteUrlOf } from '../projects/git.js';
 import type { RemoteMediaKey, ThreadAssets } from '../threads/assets.js';
@@ -23,11 +23,11 @@ export type RelayDeps = {
   /** The hub's machines, as `machines.list` returns them before the relay adds to them. */
   machines: () => MachineView[];
   /** This machine's router, which serves requests from the others. */
-  router: () => Router;
+  router: Router;
   /** The hub's name for a paired machine; undefined once it is unpaired. */
   machineName: (id: string) => string | undefined;
   /** Caches other machines' media here and serves it to this machine's clients. */
-  assets: () => Pick<ThreadAssets, 'cachedRemote' | 'storeRemote'> | undefined;
+  assets: Pick<ThreadAssets, 'cachedRemote' | 'storeRemote'>;
   /** GLOSSARY: Snooze. The hub's snoozes until a machine is back, by thread id. */
   offlineSnoozes: () => Record<string, OfflineSnooze>;
   /** Records one on the hub, or wakes the thread with null. */
@@ -250,8 +250,7 @@ export class Relay {
    * fetched once; a linked file is fetched again each time.
    */
   private async media(machineId: string, name: string, method: 'threads.assetUrl' | 'threads.fileUrl', params: unknown): Promise<unknown> {
-    const assets = this.deps.assets();
-    if (!assets) throw new UserError(`Open this on ${name} for now.`);
+    const { assets } = this.deps;
     if (method === 'threads.assetUrl') {
       const { threadId, assetId, download } = params as ParamsOf<'threads.assetUrl'>;
       const key = { machineId, threadId, assetId };
@@ -304,10 +303,7 @@ export class Relay {
       const { machineId: _, ...own } = params as Record<string, unknown>;
       params = own;
     }
-    const response = await this.deps.router().handle({ id: 0, method, params }, { local: true });
-    if (!response) throw new Error('Invalid request');
-    if (!response.ok) throw new Error(response.error);
-    return response.result;
+    return this.deps.router.call(method as MethodName, params as never, { local: true });
   }
 
   private receive(from: string, event: string, data: unknown) {

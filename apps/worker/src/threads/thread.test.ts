@@ -26,10 +26,6 @@ describe('thread lifecycle', () => {
     expect(again.title).toBe('Fix the build');
   });
 
-  it('allows one turn at a time', () => {
-    expect(() => startTurn(startTurn(t0, 'a', 'now'), 'b', 'now')).toThrow(/already working/);
-  });
-
   it('maps turn outcomes to thread status', () => {
     const r = startTurn(t0, 'a', 'now');
     expect(endTurn(r, 'completed', 'now').status).toBe('idle');

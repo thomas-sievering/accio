@@ -75,6 +75,31 @@ describe('named hub connections and work ownership', () => {
     expect((await root.call('profiles.list', {})).map((p) => p.name)).toEqual(['Local']);
     expect((await otherClient.call('profiles.list', {})).map((p) => p.name)).toEqual(['Remote']);
   });
+  it('starts with two saved hubs and serves each one its threads and accio tools', async () => {
+    const { app, local, remote, saved } = await fixture();
+    await local.signedIn('Local'); await remote.signedIn('Remote');
+    await app.stop({ keepHome: true });
+    const tools: { url: string; names: string[] }[] = [];
+    const harness = new FakeHarness(async function* (run) {
+      const listed = await fetch(run.tools!.url, { method: 'POST', headers: { 'content-type': 'application/json', authorization: run.tools!.authorization },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }) }).then((r) => r.json()) as { result: { tools: { name: string }[] } };
+      tools.push({ url: run.tools!.url, names: listed.result.tools.map((t) => t.name) });
+      yield* replyWith('done');
+    });
+    const restarted = await startTestApp({ harness }, app.home); cleanup.push(() => restarted.stop());
+    const root = await restarted.connect();
+    const other = await TestClient.open(`${restarted.url}?token=test-token&hub=${saved.id}`); cleanup.push(async () => other.close());
+    const [localProfile] = await root.call('profiles.list', {});
+    const [otherProfile] = await other.call('profiles.list', {});
+    await root.call('threads.start', { profileId: localProfile!.id, text: 'here' });
+    await other.call('threads.start', { profileId: otherProfile!.id, text: 'there' });
+    await expect.poll(() => tools.length, { timeout: 10_000 }).toBe(2);
+    const origin = `http://127.0.0.1:${restarted.app.port}`;
+    expect(tools.map((t) => t.url).sort()).toEqual([`${origin}/hubs/${saved.id}/mcp`, `${origin}/mcp`]);
+    for (const { names } of tools) expect(names).toContain('read_thread');
+    await expect.poll(async () => (await other.call('threads.list', {}))[0]?.status, { timeout: 10_000 }).toBe('idle');
+    expect((await fetch(`${origin}/hubs/00000000-0000-0000-0000-000000000000/mcp`, { method: 'POST' })).status).toBe(404);
+  });
   it('delivers a remote saved secret on the machine and removes the file when the hub revokes it', async () => {
     const held = gate(); cleanup.push(async () => held.release());
     let delivered: string | undefined;
