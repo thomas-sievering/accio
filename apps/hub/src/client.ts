@@ -1,5 +1,5 @@
 import WebSocket from 'ws';
-import { DEFAULT_THREAD_NAMING } from '@accio/protocol';
+import { DEFAULT_THREAD_NAMING, type AccountView } from '@accio/protocol';
 import type { MachineHello, SharedSettings } from './sharedSettings.js';
 import type { HubSnapshot } from './service.js';
 import { HUB_PROTOCOL } from './service.js';
@@ -34,7 +34,16 @@ export class HubClient {
     if (snapshot.hubId !== this.id || snapshot.protocol !== HUB_PROTOCOL) throw new Error('The hub identity or protocol has changed. Check this saved connection before pairing again.');
     if (this.snapshot?.epoch === snapshot.epoch && snapshot.revision < this.snapshot.revision || this.snapshot?.epoch !== snapshot.epoch && sequence < this.appliedSequence) return;
     this.appliedSequence = Math.max(this.appliedSequence, sequence);
-    this.snapshot = snapshot; this.status = 'connected'; this.error = undefined; this.changed();
+    // Older hubs embed accounts in each provider instead of sending their ids. Normalize
+    // at the connection boundary so worker policy and renderer views see the same shape.
+    this.snapshot = { ...snapshot, profiles: snapshot.profiles.map((profile) => ({
+      ...profile,
+      providers: profile.providers.map((provider) => {
+        const { accounts, ...view } = provider as typeof provider & { accounts?: AccountView[] };
+        return { ...view, accountIds: view.accountIds ?? accounts?.map((account) => account.id) ?? [] };
+      }),
+    })) };
+    this.status = 'connected'; this.error = undefined; this.changed();
   }
   async start() {
     if (this.asleep) return;
