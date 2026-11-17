@@ -27,8 +27,10 @@ export type TransportOptions = {
   host: string;
   port: number;
   token: string;
-  router: Router;
+  router?: Router;
   routerFor?: (hubId: string | null) => Router | undefined;
+  /** Holds sockets and other HTTP routes until it settles, so no client reaches a half-opened workspace. */
+  ready?: Promise<unknown>;
   /** Built web client to serve; omitted in dev, where Vite serves it. */
   webRoot?: string;
   /** Other HTTP routes, such as thread assets and accio's MCP tools; resolves true when it answered. */
@@ -48,7 +50,7 @@ export async function startTransport(opts: TransportOptions) {
         res.writeHead(tokenMatches(opts.token, url.searchParams.get('token')) ? 204 : 401, { 'cache-control': 'no-store' }).end();
         return;
       }
-      if (opts.serveHttp && await opts.serveHttp(req, res)) return;
+      if (opts.serveHttp) { await opts.ready; if (await opts.serveHttp(req, res)) return; }
       await serveStatic(opts.webRoot, req, res);
     })().catch(() => {
       if (!res.headersSent) res.writeHead(500, { 'content-type': 'text/plain' }).end('Content unavailable');
@@ -65,7 +67,7 @@ export async function startTransport(opts: TransportOptions) {
       socket.destroy();
       return;
     }
-    wss.handleUpgrade(req, socket, head, (ws) => {
+    void Promise.resolve(opts.ready).then(() => wss.handleUpgrade(req, socket, head, (ws) => {
       const hubId = url.searchParams.get('hub');
       contexts.set(ws, hubId);
       ws.on('message', async (data) => {
@@ -87,7 +89,7 @@ export async function startTransport(opts: TransportOptions) {
         }
         if (response && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(response));
       });
-    });
+    }), () => socket.destroy());
   });
 
   const broadcast = (event: Parameters<Broadcast>[0], data: any, hubId?: string) => {
