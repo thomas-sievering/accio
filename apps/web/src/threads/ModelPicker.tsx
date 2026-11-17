@@ -30,15 +30,6 @@ export function ModelPicker({ profileId, value, onChange, disabled = false }: {
   const error = actionError ?? loadError;
   const [tab, setTab] = useState('favorites');
 
-  useEffect(() => {
-    setTab('favorites');
-    panel.current?.hidePopover();
-  }, [profileId]);
-
-  useEffect(() => {
-    if (disabled || status !== 'open') { panel.current?.hidePopover(); effortMenu.current?.hidePopover(); }
-  }, [disabled, status]);
-
   const models = data?.models ?? [];
   const fallbackName = value.modelId === 'default' ? `${value.harnessId === 'codex' ? 'Codex' : 'Claude Code'} default` : value.modelId;
   const favorites = new Set(data?.favorites.map(modelKey));
@@ -101,6 +92,15 @@ export function ModelPicker({ profileId, value, onChange, disabled = false }: {
     },
   });
   useWheelSteps(effortTrigger, stepper.step, !!effort);
+
+  useEffect(() => {
+    setTab('favorites');
+    panel.current?.hidePopover();
+  }, [profileId, panel]);
+
+  useEffect(() => {
+    if (disabled || status !== 'open') { panel.current?.hidePopover(); effortMenu.current?.hidePopover(); }
+  }, [disabled, status, panel, effortMenu]);
   const shownEffort = effort?.steps[stepper.shown];
   const description = selected?.name ?? fallbackName;
 

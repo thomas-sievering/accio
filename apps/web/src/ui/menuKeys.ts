@@ -11,13 +11,15 @@ function itemsOf(popover: HTMLElement, selector: string): HTMLElement[] {
     .filter((el) => !el.matches(':disabled, [hidden]') && el.closest('[popover]') === popover);
 }
 
-/** Moves focus into a popover that just opened: its checked item if there is one, else its first. */
+/** A popover's checked item if there is one, else its first. */
+export function menuItemToFocus(popover: HTMLElement, selector = MENU_ITEMS): HTMLElement | undefined {
+  const items = itemsOf(popover, selector);
+  return items.find((el) => el.matches('[aria-checked="true"], [aria-pressed="true"]')) ?? items[0];
+}
+
+/** Moves focus to a popover's checked or first item once its content has rendered. */
 export function focusMenuItem(popover: HTMLElement | null, selector = MENU_ITEMS) {
-  if (!popover) return;
-  requestAnimationFrame(() => {
-    const items = itemsOf(popover, selector);
-    (items.find((el) => el.matches('[aria-checked="true"], [aria-pressed="true"]')) ?? items[0])?.focus();
-  });
+  if (popover) requestAnimationFrame(() => menuItemToFocus(popover, selector)?.focus());
 }
 
 /**

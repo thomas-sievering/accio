@@ -129,7 +129,7 @@ export function ThreadMenuProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (open) menu.current?.showPopover();
-  }, [open]);
+  }, [open, menu]);
 
   const show = (thread: ThreadView, x: number, y: number) => setOpen({ thread, x, y });
   // Always the latest view, so the menu follows status changes while it is open.

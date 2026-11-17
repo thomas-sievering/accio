@@ -1,5 +1,5 @@
 import { useRef, type KeyboardEvent, type ToggleEvent } from 'react';
-import { focusMenuItem, MENU_ITEMS, onMenuKeyDown } from './menuKeys';
+import { focusMenuItem, MENU_ITEMS, menuItemToFocus, onMenuKeyDown } from './menuKeys';
 
 /** Where a popover opens against its trigger (or a point, for a right-click menu). */
 export type Placement = {
@@ -83,8 +83,13 @@ export function usePopoverMenu<P extends HTMLElement = HTMLDivElement>({ placeme
       const open = event.newState === 'open';
       onToggle?.(open);
       if (!open) return;
-      if (focus) requestAnimationFrame(() => focus()?.focus());
-      else focusItem();
+      // Once its content has rendered, unless it has closed again or focus is already inside it
+      // (an item clicked first must keep what it did, such as a rename field it opened).
+      requestAnimationFrame(() => {
+        const el = popover.current;
+        if (!el?.matches(':popover-open') || el.contains(document.activeElement)) return;
+        (focus ? focus() : menuItemToFocus(el, items))?.focus();
+      });
     },
     onKeyDown: (event: KeyboardEvent<P>) => {
       onKeyDown?.(event);
