@@ -230,11 +230,17 @@ export class Turns {
         goal: goalTurnStarted(t.goal),
       }));
       await transcripts.add(thread.id, { kind: 'user', id: `${turnId}:u`, turnId, text, at: now(), ...(images.length ? { images } : {}), ...(resume ? { resume } : {}), ...(delivering ? { delivery: thread.delivery!.mode } : {}), ...(pick ? { pick } : {}), ...(options.goalContinue ? { goal: 'continue' as const } : {}), ...(options.wake ? { wake: true } : {}) });
-      const grant = deps.tools?.grant(thread.id);
+      // ADR 0013: the turn's secret request travels with its accio tools grant. Both end with
+      // the turn, in `run`, which always runs from here.
+      const requestSecret = deps.secrets.forTurn({ threadId: thread.id, turnId, profileId: thread.profileId,
+        profileName: deps.profiles.require(thread.profileId).name, projectId: thread.projectId || null,
+        projectName: project?.name ?? 'No project',
+        machineName: deps.machines.views().find(m => m.thisMachine)?.name ?? 'This machine', signal: controller.signal });
+      const grant = deps.tools?.grant(thread.id, { requestSecret });
       const turnResources = resources;
       this.liveInputs.set(thread.id, { turnId });
       const instructions = [resources?.instructions, space, goalInstructions(next.goal), waitInstructions(next.wait)].filter(Boolean).join('\n\n') || undefined;
-      const turn = this.run(next, turnId, { cwd, prompt, ...(files.length ? { images: files } : {}), env: resources?.env ?? env, signal: controller.signal, ...(grant ? { tools: grant.access } : {}), resourceInstructions: instructions, mcps: resources?.mcps }, delivering, resources?.skills).finally(() => { turnResources?.release(); grant?.revoke(); });
+      const turn = this.run(next, turnId, { cwd, prompt, ...(files.length ? { images: files } : {}), env: resources?.env ?? env, signal: controller.signal, ...(grant ? { tools: grant.access } : {}), resourceInstructions: instructions, mcps: resources?.mcps }, delivering, resources?.skills, grant?.revoke).finally(() => { turnResources?.release(); grant?.revoke(); });
       resources = undefined;
       this.turns.add(turn);
       void turn.then(() => this.turns.delete(turn), (err) => {
@@ -257,6 +263,7 @@ export class Turns {
     run: Pick<HarnessTurn, 'cwd' | 'prompt' | 'images' | 'env' | 'tools' | 'signal' | 'resourceInstructions' | 'mcps'>,
     delivering = false,
     skills: WorkspaceSkill[] = [],
+    revokeTools = () => {},
   ) {
     const { state, deps } = this;
     const { transcripts } = state;
@@ -273,16 +280,12 @@ export class Turns {
       }
       const harness = deps.harnesses[thread.model.harnessId];
       if (!harness) throw new UserError('This harness is not installed on this machine');
-      const requestSecret = deps.secrets.forTurn({ threadId: thread.id, turnId, profileId: thread.profileId,
-        profileName: deps.profiles.require(thread.profileId).name, projectId: thread.projectId || null,
-        projectName: deps.projects.state().projects.find(p => p.id === thread.projectId)?.name ?? 'No project',
-        machineName: deps.machines.views().find(m => m.thisMachine)?.name ?? 'This machine', signal: run.signal });
       const model = { model: thread.model.modelId, effort: deps.models.effort(thread.profileId, thread.model), modelName: deps.models.modelName(thread.profileId, thread.model), toolsOff: deps.toolsOff(thread.model.harnessId) };
       this.subagentTurns.set(thread.id, { turnId, profileId: thread.profileId, model: { ...thread.model, effort: model.effort }, turn: { harness, signal: run.signal, run: { cwd: run.cwd, env: run.env, resourceInstructions: run.resourceInstructions, mcps: run.mcps, ...model } } });
-      for await (const msg of harness.run({ ...run, sessionId: thread.sessionId, ...model, requestSecret,
+      for await (const msg of harness.run({ ...run, sessionId: thread.sessionId, ...model,
         onPromptSize: measurement => { promptMeasurement = measurement; },
         registerSteer: send => { const input = this.liveInputs.get(thread.id); if (input?.turnId === turnId) input.send = send; },
-        secretPurposes: deps.secrets.purposes(thread.profileId, thread.projectId || null) })) {
+        ...(run.tools ? { secretPurposes: deps.secrets.purposes(thread.profileId, thread.projectId || null) } : {}) })) {
         for (const change of transcript.accept(msg)) {
           if (change.type === 'end') outcome = change.outcome;
           if (change.type === 'tool') usedTools = true;
@@ -313,6 +316,8 @@ export class Turns {
       if (input) input.send = undefined;
       await state.messageOps.get(thread.id)?.catch(() => {});
       this.liveInputs.delete(thread.id);
+      // The harness is done: its token stops working before anything the turn left is cleaned up.
+      revokeTools();
       try {
         await deps.secrets.endTurn(turnId);
         await deps.confirmations?.endTurn(turnId);

@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { z } from 'zod';
+import type { SecretDelivery, SecretToolArgs } from '../secrets/secrets.js';
 
 /**
  * GLOSSARY: Accio tools. Tools accio gives every harness, served over MCP by the
@@ -15,17 +16,26 @@ export type AccioTool<Shape extends z.ZodRawShape = z.ZodRawShape> = {
   name: string;
   description: string;
   input: Shape;
-  /** Listed and callable only when this says so for the turn's thread, so a turn sees just the tools it can use. */
-  available?: (threadId: string) => boolean;
+  /** Listed and callable only when this says so for the turn, so a turn sees just the tools it can use. */
+  available?: (threadId: string, turn: TurnGrant) => boolean;
   call: (args: z.infer<z.ZodObject<Shape>>, context: ToolContext) => Promise<string> | string;
 };
+
+/**
+ * What a turn may do beyond naming its thread; its token carries it. ADR 0013:
+ * `requestSecret` is bound by the machine to the turn's thread, profile and
+ * project, and stops answering when the turn ends.
+ */
+export type TurnGrant = { requestSecret?: (input: SecretToolArgs) => Promise<SecretDelivery> };
 
 /**
  * What a call knows about its caller. `progress` tells the harness the call is
  * still working, so a long call is not mistaken for a hung one; it does nothing
  * when the harness did not ask for progress.
  */
-export type ToolContext = { threadId: string; signal: AbortSignal; progress: (message: string) => void };
+export type ToolContext = TurnGrant & { threadId: string; signal: AbortSignal; progress: (message: string) => void };
+
+type Grant = TurnGrant & { threadId: string; measurement?: boolean };
 
 /** Typed helper so each tool's arguments are checked against its own shape. */
 export function accioTool<Shape extends z.ZodRawShape>(tool: AccioTool<Shape>): AccioTool {
@@ -41,7 +51,7 @@ const MAX_BODY = 1024 * 1024;
 type RpcRequest = { jsonrpc?: string; id?: string | number | null; method?: unknown; params?: Record<string, unknown> };
 
 export class AccioTools {
-  private grants = new Map<string, { threadId: string; measurement?: boolean }>();
+  private grants = new Map<string, Grant>();
   /** `origin` is where the worker listens; without one, turns get no access until `listen`. */
   constructor(private tools: AccioTool[], private origin?: string) {}
 
@@ -55,9 +65,9 @@ export class AccioTools {
     this.origin = origin;
   }
 
-  /** Access for one turn of a thread; revoke it when the turn ends. */
-  grant(threadId: string): { access: ToolAccess; revoke: () => void } | undefined {
-    return this.createGrant({ threadId });
+  /** Access for one turn of a thread, with what else the turn may do; revoke it when the turn ends. */
+  grant(threadId: string, turn: TurnGrant = {}): { access: ToolAccess; revoke: () => void } | undefined {
+    return this.createGrant({ ...turn, threadId });
   }
 
   /** Enumerate standard tools for a baseline, with all tool execution disabled. */
@@ -65,7 +75,7 @@ export class AccioTools {
     return this.createGrant({ threadId: '', measurement: true });
   }
 
-  private createGrant(context: { threadId: string; measurement?: boolean }) {
+  private createGrant(context: Grant) {
     if (!this.origin) return undefined;
     const token = randomBytes(32).toString('base64url');
     this.grants.set(token, context);
@@ -107,7 +117,8 @@ export class AccioTools {
     const caller = new AbortController();
     res.once('close', () => caller.abort());
     const events = progressEvents(req, res, message.params);
-    const answer = await this.answer(message as RpcRequest & { method: string }, { threadId: grant.threadId, signal: caller.signal, progress: events.progress }, grant.measurement);
+    const { measurement, ...turn } = grant;
+    const answer = await this.answer(message as RpcRequest & { method: string }, { ...turn, signal: caller.signal, progress: events.progress }, measurement);
     return events.started ? events.finish(answer) : json(res, 200, answer);
   }
 
@@ -126,10 +137,10 @@ export class AccioTools {
         return rpcResult(id, {});
       case 'tools/list':
         // Claude Code would otherwise defer MCP tools behind its tool search; accio's are few and named in the system prompt.
-        return rpcResult(id, { tools: this.tools.filter((t) => !t.available || !measurement && t.available(threadId)).map(({ name, description, input }) => ({ name, description, inputSchema: inputSchema(input), _meta: { 'anthropic/alwaysLoad': true } })) });
+        return rpcResult(id, { tools: this.tools.filter((t) => !t.available || !measurement && t.available(threadId, context)).map(({ name, description, input }) => ({ name, description, inputSchema: inputSchema(input), _meta: { 'anthropic/alwaysLoad': true } })) });
       case 'tools/call': {
         if (measurement) return rpcError(id, -32601, 'Tool execution is disabled during prompt measurement');
-        const tool = this.tools.find((t) => t.name === params?.name && (!t.available || t.available(threadId)));
+        const tool = this.tools.find((t) => t.name === params?.name && (!t.available || t.available(threadId, context)));
         if (!tool) return rpcError(id, -32602, `Unknown tool: ${String(params?.name)}`);
         const args = z.object(tool.input).safeParse(params?.arguments ?? {});
         if (!args.success) return rpcResult(id, toolResult(z.prettifyError(args.error), true));

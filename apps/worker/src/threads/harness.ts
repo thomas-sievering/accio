@@ -79,9 +79,10 @@ export type HarnessTurn = {
   signal: AbortSignal;
   /** GLOSSARY: Built-in tools. The harness's own tools switched off for this turn. */
   toolsOff?: BuiltinTool[];
-  /** Bound by the machine to this turn, project and profile; never accepts identity arguments. */
-  requestSecret?: (input: import('../secrets/secrets.js').SecretToolArgs) => Promise<import('../secrets/secrets.js').SecretDelivery>;
-  /** Authorized saved-purpose metadata lets a fresh harness reuse the exact stable key. */
+  /**
+   * Set when this turn's accio tools offer request_secret: the saved purposes it may
+   * reuse, as metadata, so a fresh harness keeps the exact stable key.
+   */
   secretPurposes?: { slot: string; name: string }[];
 };
 
