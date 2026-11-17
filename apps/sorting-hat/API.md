@@ -129,8 +129,9 @@ be empty:
 Open `url`, approve, and copy the code Anthropic's page shows (`code#state`).
 Then `POST /api/sign-ins/{signInId}/complete` with `{ "code": "<pasted code>" }`
 answers `{ "status": "complete", "account": Account }`. A full redirect address
-is accepted as `code` too. An app that receives the code on its own machine may
-pass `{ "redirectUri": "http://localhost:<port>/callback" }` when starting.
+is accepted as `code` too, or as `url`. An app that receives the code on its own machine may
+pass `{ "redirectUri": "http://localhost:<port>/callback" }` when starting, and
+then complete with the callback's `{ "code", "state" }`.
 
 For a ChatGPT account, the body chooses the flow, `{ "flow": "browser" }`
 (the default) or `{ "flow": "device" }`:
@@ -151,10 +152,15 @@ Either way, poll `GET /api/sign-ins/{signInId}` until it answers
 and a failed sign-in answers 400 with the reason. For Claude it is `pending`
 until completed with the code.
 
+The same two routes serve both providers. A finished sign-in keeps answering
+`complete` with its account for 15 minutes, so a late poll still sees it;
+completing it again answers 409. An unknown, expired or cancelled sign-in
+answers 404.
+
 | Method and path | Body | Answer |
 | --- | --- | --- |
 | `POST /api/accounts/{id}/sign-in` | Claude: `{ redirectUri? }`; ChatGPT: `{ flow? }` | 201, see above |
-| `POST /api/sign-ins/{signInId}/complete` | Claude: `{ code }`; ChatGPT browser: `{ url }` or `{ code, state }` | `{ status, account? }` |
+| `POST /api/sign-ins/{signInId}/complete` | `{ code, state? }` or `{ url }`; ChatGPT needs the state | `{ status, account? }` |
 | `GET /api/sign-ins/{signInId}` | | `{ status: "pending" }` or `{ status: "complete", account }` |
 | `DELETE /api/sign-ins/{signInId}` | | 204; cancels it |
 

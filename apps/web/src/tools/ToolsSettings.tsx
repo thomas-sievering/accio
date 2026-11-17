@@ -93,7 +93,7 @@ const valid = {
 
 function ToolForm({ tool, all, packageDescription, taken, onSaved, onDone, after }: { tool?: ToolEntry; all: ToolEntry[]; /** What the installed package says it does, on this machine. */ packageDescription?: string; taken: string[]; onSaved: (t: ToolEntry) => void; onDone: () => void; /** Shown between the form and its footer. */ after?: ReactNode }) {
   const client = useClient();
-  const { profiles = [] } = useProfiles();
+  const { profiles = [], accounts } = useProfiles();
   const { value, dirty, set, reset } = useDraft<Draft>(tool ? { ...tool, description: tool.description ?? '' } : blank());
   // GLOSSARY: CLI. Another CLI with the same executable: where both are on, the narrower level wins.
   const sameExecutable = all.filter((t) => t.id !== tool?.id && t.executable === value.executable.trim());
@@ -115,8 +115,8 @@ function ToolForm({ tool, all, packageDescription, taken, onSaved, onDone, after
 
   const repairProfile = profiles.find((p) => p.id === value.repairProfileId);
   const repairWarning = value.repairProfileId
-    ? repairProfile && !hasSignedInAccount(repairProfile) ? `${repairProfile.name} isn’t signed in, so a failed check can’t start a repair thread.` : undefined
-    : !profiles.some(hasSignedInAccount) ? 'No profile is signed in yet, so a failed check can’t start a repair thread.' : undefined;
+    ? repairProfile && !hasSignedInAccount(repairProfile, accounts) ? `${repairProfile.name} isn’t signed in, so a failed check can’t start a repair thread.` : undefined
+    : !profiles.some((p) => hasSignedInAccount(p, accounts)) ? 'No profile is signed in yet, so a failed check can’t start a repair thread.' : undefined;
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -190,7 +190,7 @@ function ToolForm({ tool, all, packageDescription, taken, onSaved, onDone, after
           <div className="field" title="When a check fails, Accio starts a thread on that machine that fixes the install, then checks again">
             <span>Repair threads run as</span>
             <MenuSelect label="Repair threads run as" value={value.repairProfileId ?? ''} onChange={(next) => set('repairProfileId', next || undefined)}
-              options={[{ value: '', label: 'Any signed-in profile' }, ...profiles.map((p) => ({ value: p.id, label: p.name, ...(hasSignedInAccount(p) ? {} : { detail: 'Signed out' }) }))]} />
+              options={[{ value: '', label: 'Any signed-in profile' }, ...profiles.map((p) => ({ value: p.id, label: p.name, ...(hasSignedInAccount(p, accounts) ? {} : { detail: 'Signed out' }) }))]} />
           </div>
           {repairWarning && <small className="warn" role="status">{repairWarning}</small>}
         </div>

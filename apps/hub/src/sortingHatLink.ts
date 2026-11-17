@@ -103,9 +103,6 @@ export class SortingHatLink {
   // Read views, from the copy last read.
   house(id: string) { return this.cache.houses.find((h) => h.id === id); }
   accountViews() { return this.cache.accounts; }
-  selectedAccounts(houseId: string, providerId: ProviderId): AccountView[] {
-    return (this.house(houseId)?.accounts[providerId] ?? []).flatMap((id) => this.cache.accounts.filter((a) => a.id === id));
-  }
   accountIdInUse(houseId: string, providerId: ProviderId) { return this.house(houseId)?.inUse[providerId] ?? null; }
   codexModels(houseId: string) { return this.cache.models[houseId] ?? []; }
   limitViews() { return this.cache.limits; }

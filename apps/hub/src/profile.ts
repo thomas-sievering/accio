@@ -6,12 +6,12 @@ import { HubError } from './errors.js';
 /** Per provider, the accounts to select in order; a provider left out keeps its selection. */
 export type AccountSelection = Partial<Record<ProviderId, string[]>>;
 
-/** Each profile with its house on the Sorting Hat and that house's accounts. */
-export function profileViews(profiles: readonly SharedProfile[], link: Pick<SortingHatLink, 'house' | 'selectedAccounts' | 'accountIdInUse'>): ProfileView[] {
+/** Each profile with its house on the Sorting Hat and the ids of that house's accounts, whose details are in the account list. */
+export function profileViews(profiles: readonly SharedProfile[], link: Pick<SortingHatLink, 'house' | 'accountIdInUse'>): ProfileView[] {
   return profiles.map(({ houseId, ...p }) => ({
     ...p,
     house: houseId ? { id: houseId, name: link.house(houseId)?.name ?? houseId } : null,
-    providers: PROVIDERS.map((provider) => ({ ...provider, accounts: houseId ? link.selectedAccounts(houseId, provider.id) : [], inUseId: houseId ? link.accountIdInUse(houseId, provider.id) : null })),
+    providers: PROVIDERS.map((provider) => ({ ...provider, accountIds: (houseId && link.house(houseId)?.accounts[provider.id]) || [], inUseId: houseId ? link.accountIdInUse(houseId, provider.id) : null })),
   }));
 }
 

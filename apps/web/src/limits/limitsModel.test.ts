@@ -7,7 +7,7 @@ import {
 const account = (id: string, providerId: 'anthropic' | 'openai' = 'anthropic'): AccountView =>
   ({ id, name: id, providerId, signedIn: true, email: null, organization: null });
 const provider = (id: 'anthropic' | 'openai', accounts: AccountView[], available = true): ProfileProviderView =>
-  ({ id, name: id === 'anthropic' ? 'Anthropic' : 'OpenAI', accountName: id === 'anthropic' ? 'Claude account' : 'ChatGPT account', available, accounts, inUseId: accounts.find((a) => a.signedIn)?.id ?? null });
+  ({ id, name: id === 'anthropic' ? 'Anthropic' : 'OpenAI', accountName: id === 'anthropic' ? 'Claude account' : 'ChatGPT account', available, accountIds: accounts.map((a) => a.id), inUseId: accounts.find((a) => a.signedIn)?.id ?? null });
 const profile = (id: string, claude: AccountView | null, chatgpt: AccountView | null = null): ProfileView =>
   ({ id, name: id, house: { id, name: id }, providers: [provider('anthropic', claude ? [claude] : []), provider('openai', chatgpt ? [chatgpt] : [])] });
 const win = (over: Partial<LimitWindow>): LimitWindow =>
@@ -22,9 +22,10 @@ describe('limitsLayout', () => {
   const own = account('own');
   const gpt = account('gpt', 'openai');
   const profiles = [profile('personal', team, gpt), profile('work', team), profile('side', own, gpt)];
+  const accounts = [team, own, gpt, { ...account('out'), signedIn: false }];
 
   it('draws a shared account once in All profiles and references it from the others', () => {
-    const groups = limitsLayout(profiles, 'all');
+    const groups = limitsLayout(profiles, accounts, 'all');
     expect(groups.map((g) => g.profile.id)).toEqual(['personal', 'work', 'side']);
     const kinds = groups.map((g) => g.entries.map((e) => `${e.kind}:${e.account.id}`));
     expect(kinds).toEqual([
@@ -37,9 +38,9 @@ describe('limitsLayout', () => {
   });
 
   it('draws every account of a single profile and says who else shares it', () => {
-    const [work] = limitsLayout(profiles, 'work');
+    const [work] = limitsLayout(profiles, accounts, 'work');
     expect(work!.entries[0]).toMatchObject({ kind: 'account', sharedWith: [{ id: 'personal' }] });
-    const [side] = limitsLayout(profiles, 'side');
+    const [side] = limitsLayout(profiles, accounts, 'side');
     expect(side!.entries.map((e) => e.kind)).toEqual(['account', 'account']);
     expect(side!.entries[1]).toMatchObject({ sharedWith: [{ id: 'personal' }] });
     expect(side!.entries[0]).toMatchObject({ sharedWith: [] });
@@ -48,19 +49,19 @@ describe('limitsLayout', () => {
   it('marks which of several accounts at a provider the profile uses', () => {
     const out = { ...account('out'), signedIn: false };
     const p: ProfileView = { id: 'p', name: 'p', house: null, providers: [provider('anthropic', [out, team, own]), provider('openai', [gpt])] };
-    expect(limitsLayout([p], 'p')[0]!.entries.map((e) => `${e.account.id}:${e.role}`)).toEqual(['out:standby', 'team:inUse', 'own:standby', 'gpt:only']);
+    expect(limitsLayout([p], accounts, 'p')[0]!.entries.map((e) => `${e.account.id}:${e.role}`)).toEqual(['out:standby', 'team:inUse', 'own:standby', 'gpt:only']);
     // The Sorting Hat's choice wins over the order.
     const chosen: ProfileView = { ...p, providers: [{ ...provider('anthropic', [out, team, own]), inUseId: 'own' }] };
-    expect(limitsLayout([chosen], 'p')[0]!.entries.map((e) => e.role)).toEqual(['standby', 'standby', 'inUse']);
+    expect(limitsLayout([chosen], accounts, 'p')[0]!.entries.map((e) => e.role)).toEqual(['standby', 'standby', 'inUse']);
   });
 
   it('skips providers with no selected account regardless of availability', () => {
     const p: ProfileView = { id: 'p', name: 'p', house: null, providers: [provider('anthropic', []), provider('openai', [], false)] };
-    expect(limitsLayout([p], 'p')[0]!.entries).toEqual([]);
+    expect(limitsLayout([p], accounts, 'p')[0]!.entries).toEqual([]);
   });
 
   it('returns nothing for a deleted profile', () => {
-    expect(limitsLayout(profiles, 'gone')).toEqual([]);
+    expect(limitsLayout(profiles, accounts, 'gone')).toEqual([]);
   });
 });
 

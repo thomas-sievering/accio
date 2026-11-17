@@ -17,7 +17,7 @@ describe('account limits RPC and hub ownership', () => {
     } });
     const a = await t.connect(), b = await t.connect();
     const personal = await a.signedIn('Personal');
-    const account = personal.providers[0]!.accounts[0]!;
+    const account = { id: personal.providers[0]!.accountIds[0]! };
     await a.call('profiles.save', { createHouse: true, name: 'Work', accountIds: { anthropic: [account.id] } });
     const out = await a.call('accounts.save', { name: 'Signed out' });
     expect((await a.call('accounts.limits', {})).find((v) => v.accountId === out.id)?.status).toBe('signedOut');
@@ -42,7 +42,7 @@ describe('account limits RPC and hub ownership', () => {
   it('keeps a test account signed in when its limits refresh, without asking the real provider (#243)', async () => {
     t = await startTestApp();
     const c = await t.connect();
-    const account = (await c.signedIn('Personal')).providers[0]!.accounts[0]!;
+    const account = { id: (await c.signedIn('Personal')).providers[0]!.accountIds[0]! };
     const [view] = await c.call('accounts.refreshLimits', { accountIds: [account.id], force: true });
     // The real endpoint answers the dummy token with 401, and the Sorting Hat would then skip the account.
     expect(view).toMatchObject({ accountId: account.id, status: 'unsupported', problem: null });
@@ -85,7 +85,7 @@ describe('account limits RPC and hub ownership', () => {
     } });
     const c = await t.connect(), other = await t.connect();
     const p = await c.signedIn('Personal');
-    const id = p.providers[0]!.accounts[0]!.id;
+    const id = p.providers[0]!.accountIds[0]!;
     const reading = c.call('accounts.refreshLimits', { accountIds: [id] });
     await started;
     try {
@@ -105,7 +105,7 @@ describe('account limits RPC and hub ownership', () => {
     expect(result[0]).toMatchObject({ status: 'error', snapshot: null, problem: { code: 'rateLimited' } });
     expect(Date.parse(result[0]!.retryAt!) - Date.now()).toBeGreaterThan(115_000);
     expect(JSON.stringify(result)).not.toContain('secret');
-    await c.call('accounts.signOut', { id: p.providers[0]!.accounts[0]!.id });
+    await c.call('accounts.signOut', { id: p.providers[0]!.accountIds[0]! });
   });
 
   it('queries ChatGPT limits only in its Sorting Hat credential home and never starts a turn', async () => {

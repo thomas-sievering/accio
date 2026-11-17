@@ -69,9 +69,14 @@ export function claudeCallback(authorizeUrl: string, code: string, state = new U
   return callback;
 }
 
-/** The profile's Claude account, or null. */
-export function claudeAccount(profile: ProfileView): AccountView | null {
-  return profile.providers.find((p) => p.id === 'anthropic')?.accounts[0] ?? null;
+/** The id of the profile's Claude account, or null. */
+export function claudeAccountId(profile: ProfileView): string | null {
+  return profile.providers.find((p) => p.id === 'anthropic')?.accountIds[0] ?? null;
+}
+
+/** The profile's Claude account, as the account list describes it, or null. */
+export function claudeAccount(profile: ProfileView, accounts: readonly AccountView[]): AccountView | null {
+  return accounts.find((a) => a.id === claudeAccountId(profile)) ?? null;
 }
 
 /**
@@ -164,7 +169,7 @@ export class TestClient {
   /** Creates a profile (if new) with a house of its name and signs it in as the given Claude login. */
   async signedIn(name: string, opts: { claudeAccount?: string } = {}) {
     const profile = await this.profile(name);
-    const account = claudeAccount(profile) ?? await this.call('accounts.save', { name: `${name} Claude` });
+    const account = { id: claudeAccountId(profile) ?? (await this.call('accounts.save', { name: `${name} Claude` })).id };
     await this.claudeSignIn(account.id, opts.claudeAccount ?? `claude-${profile.id}`);
     return this.call('profiles.save', { id: profile.id, name, accountIds: { anthropic: [account.id] } });
   }
@@ -175,7 +180,7 @@ export class TestClient {
     const login = await this.call('accounts.beginSignIn', { id: account.id });
     await codex.latest.complete(profile.name);
     await this.call('accounts.signInStatus', { signInId: login.signInId });
-    return this.call('profiles.save', { id: profile.id, name: profile.name, accountIds: { anthropic: [claudeAccount(profile)!.id], openai: [account.id] } });
+    return this.call('profiles.save', { id: profile.id, name: profile.name, accountIds: { anthropic: [claudeAccountId(profile)!], openai: [account.id] } });
   }
 
   /** Signs a Claude account in as the browser does: Claude's page sends `code` to this machine's callback, then the sign-in reads complete. */

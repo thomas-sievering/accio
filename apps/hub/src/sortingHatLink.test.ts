@@ -53,9 +53,10 @@ describe('a hub with a Sorting Hat of its own', () => {
     expect(desktop.snapshot.sortingHat?.url).toBe(f.remote.url);
 
     const personal = await laptop.call('profiles.save', { name: 'Personal', houseId: 'personal' });
-    expect(personal).toMatchObject({ house: { id: 'personal', name: 'Personal' }, providers: [{ id: 'anthropic', accounts: [{ id: mine.id, name: 'Mine', signedIn: true }], inUseId: mine.id }, { id: 'openai', accounts: [] }] });
+    expect(personal).toMatchObject({ house: { id: 'personal', name: 'Personal' }, providers: [{ id: 'anthropic', accountIds: [mine.id], inUseId: mine.id }, { id: 'openai', accountIds: [] }] });
+    expect(laptop.snapshot.accounts).toEqual([expect.objectContaining({ id: mine.id, name: 'Mine', signedIn: true })]);
     const spare = await laptop.call('profiles.save', { name: 'Spare' });
-    expect(spare).toMatchObject({ house: null, providers: [{ accounts: [] }, { accounts: [] }] });
+    expect(spare).toMatchObject({ house: null, providers: [{ accountIds: [] }, { accountIds: [] }] });
     await expect(laptop.call('machine.modelKey', { profileId: spare.id })).rejects.toThrow('Spare isn’t linked to a house on the Sorting Hat. Choose one in Settings / Profiles.');
     await expect(laptop.call('profiles.save', { id: spare.id, name: 'Spare', houseId: 'nowhere' })).rejects.toThrow(/no such house/);
 
@@ -114,7 +115,7 @@ describe('a hub with a Sorting Hat of its own', () => {
 
     // Linking another house keeps both houses' accounts and moves the key.
     const moved = await again.call('profiles.save', { id: profile.id, name: 'Personal', houseId: 'work', accountIds: { anthropic: [mine.id] } });
-    expect(moved).toMatchObject({ house: { id: 'work' }, providers: [{ accounts: [{ id: theirs.id }] }, {}] });
+    expect(moved).toMatchObject({ house: { id: 'work' }, providers: [{ accountIds: [theirs.id] }, {}] });
     expect((await f.remote.api('GET', 'hat-keys')).map((k: any) => k.houseId)).toEqual([]);
     const work = await again.call('machine.modelKey', { profileId: profile.id });
     const sent = await claude(work.url, work.key); expect(sent.status).toBe(200); await sent.text();
@@ -163,7 +164,7 @@ describe('account settings on a hub with a Sorting Hat of its own', () => {
     await laptop.call('accounts.save', { id: second.id, name: 'Second renamed' });
     expect((await f.remote.api('GET', `accounts/${second.id}`)).name).toBe('Second renamed');
     const ordered = await laptop.call('profiles.save', { id: profile.id, name: 'Personal', accountIds: { anthropic: [second.id, first.id], openai: [gpt.id] } });
-    expect(ordered.providers.map((p) => p.accounts.map((a) => a.name))).toEqual([['Second renamed', 'First'], ['GPT']]);
+    expect(ordered.providers.map((p) => p.accountIds.map((id) => laptop.snapshot.accounts.find((a) => a.id === id)?.name))).toEqual([['Second renamed', 'First'], ['GPT']]);
     expect((await f.remote.api('GET', 'houses/personal')).accounts).toEqual({ anthropic: [second.id, first.id], openai: [gpt.id] });
 
     // A dashboard change shows on the next read.
@@ -185,5 +186,32 @@ describe('account settings on a hub with a Sorting Hat of its own', () => {
     await f.service.sortingHatLink.poll();
     expect((await laptop.call('sortingHat.get', {}))?.problem).toMatch(/Could not reach the Sorting Hat/);
     await expect(laptop.call('accounts.save', { name: 'Offline', providerId: 'anthropic' })).rejects.toThrow(/Could not reach the Sorting Hat/);
+  });
+
+  it('lets only the machine that started a sign-in poll, finish or cancel it, and answers late polls with the account', async () => {
+    const f = await fixture();
+    const laptop = await f.pair('laptop'); const desktop = await f.pair('desktop');
+    await laptop.call('sortingHat.configure', { url: f.remote.url, adminToken: f.remote.adminToken, hubName: 'Home server' });
+    const expired = /This sign-in has expired or was cancelled/;
+
+    const claude = await laptop.call('accounts.save', { name: 'Claude', providerId: 'anthropic' });
+    const begun = await laptop.call<{ signInId: string; url: string }>('accounts.beginSignIn', { id: claude.id, redirectUri: 'http://localhost:4567/callback' });
+    const state = new URL(begun.url).searchParams.get('state');
+    await expect(desktop.call('accounts.signInStatus', { signInId: begun.signInId })).rejects.toThrow(expired);
+    await expect(desktop.call('accounts.callback', { signInId: begun.signInId, code: `code#${state}`, state })).rejects.toThrow(expired);
+    await expect(desktop.call('accounts.cancelSignIn', { signInId: begun.signInId })).rejects.toThrow(expired);
+    await laptop.call('accounts.callback', { signInId: begun.signInId, code: `code#${state}`, state });
+    await expect(laptop.call('accounts.callback', { signInId: begun.signInId, code: `code#${state}`, state })).rejects.toThrow('This sign-in is already complete.');
+    for (let poll = 0; poll < 2; poll++) expect(await laptop.call('accounts.signInStatus', { signInId: begun.signInId })).toMatchObject({ status: 'complete', account: { id: claude.id, signedIn: true } });
+    expect(laptop.snapshot.accounts.find((a) => a.id === claude.id)?.signedIn).toBe(true);
+
+    const gpt = await laptop.call('accounts.save', { name: 'GPT', providerId: 'openai' });
+    const started = await laptop.call<{ signInId: string }>('accounts.beginSignIn', { id: gpt.id });
+    await laptop.call('accounts.cancelSignIn', { signInId: started.signInId });
+    await expect(laptop.call('accounts.signInStatus', { signInId: started.signInId })).rejects.toThrow(expired);
+    const again = await laptop.call<{ signInId: string }>('accounts.beginSignIn', { id: gpt.id });
+    await f.remote.codex.latest.complete('chatgpt-me');
+    for (let poll = 0; poll < 2; poll++) expect(await laptop.call('accounts.signInStatus', { signInId: again.signInId })).toMatchObject({ status: 'complete', account: { id: gpt.id, email: 'chatgpt-me@example.com' } });
+    expect(laptop.snapshot.accounts.find((a) => a.id === gpt.id)?.signedIn).toBe(true);
   });
 });

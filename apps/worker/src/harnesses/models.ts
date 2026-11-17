@@ -1,4 +1,4 @@
-import { DEFAULT_MODEL, accountInUse, noHouseMessage, fallbackEffort, findMentionedModel, imageRefusal, modelHandles, modelKey, readsImage, type HarnessModel, type ModelSelection, type ModelsState, type ModelView } from '@accio/protocol';
+import { DEFAULT_MODEL, noHouseMessage, fallbackEffort, findMentionedModel, imageRefusal, modelHandles, modelKey, readsImage, type HarnessModel, type ModelSelection, type ModelsState, type ModelView, type ProviderId } from '@accio/protocol';
 import { HARNESSES, type SettingsAccess } from '@accio/hub';
 import type { Profiles } from '../profiles/profiles.js';
 import { UserError, type Broadcast, type Router } from '../rpc/router.js';
@@ -53,7 +53,7 @@ export class Models {
   list(profileId: string): ModelsState {
     const profile = this.profiles.profileView(profileId);
     const installed = this.settings.machine(this.machineId)?.harnesses ?? [];
-    const signedIn = (providerId: string) => { const provider = profile.providers.find((p) => p.id === providerId && p.available); return provider && accountInUse(provider); };
+    const signedIn = (providerId: string) => profile.providers.some((p) => p.id === providerId && p.available) ? this.profiles.accountInUse(profileId, providerId as ProviderId) : null;
     const now = Date.now();
     const windows = (providerId: string) => { const account = signedIn(providerId); return account ? this.profiles.limitWindows(account.id) : []; };
     const models = HARNESSES.flatMap((h) => {
@@ -127,7 +127,7 @@ export class Models {
 
   /** Waits until this profile's model lists are as complete as this machine can make them. */
   async ready(profileId: string): Promise<void> {
-    const account = accountInUse(this.profiles.profileView(profileId).providers.find((p) => p.id === 'anthropic'));
+    const account = this.profiles.accountInUse(profileId, 'anthropic');
     if (account) await this.claude.ready(profileId, account.id);
   }
 

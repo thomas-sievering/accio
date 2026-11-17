@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CLAUDE_OAUTH } from './claudeOAuth.js';
-import type { Fetch } from './types.js';
+import type { Fetch, ProviderId } from './types.js';
 import { JsonFile } from './store.js';
 import { SortingHat } from './sortingHat.js';
 import { startForwarding } from './proxy.js';
@@ -108,7 +108,7 @@ describe('sorting hat', () => {
     const { signInId, url } = await beginForHouse(hub, 'personal');
     const state = new URL(url).searchParams.get('state');
     await hub.completeAccountSignIn(signInId, `good#${state}`);
-    expect(hub.selectedAccount('personal')).toMatchObject({ signedIn: true, email: 'me@example.com', organization: null });
+    expect(inUse(hub, 'personal')).toMatchObject({ signedIn: true, email: 'me@example.com', organization: null });
     await hub.close();
     const stored = JSON.parse(await readFile(join(home, 'hub', 'sorting-hat.json'), 'utf8'));
     expect(stored.accounts[0].account.accessToken).toBe('token-1');
@@ -188,7 +188,7 @@ describe('sorting hat', () => {
     expect(hub.accountView(account.id).name).toBe('Original');
     vi.spyOn(JsonFile.prototype, 'write').mockRejectedValueOnce(new Error('disk full'));
     await expect(selectAccount(hub, 'personal', account.id)).rejects.toThrow('disk full');
-    expect(hub.selectedAccount('personal')).toBeNull();
+    expect(inUse(hub, 'personal')).toBeNull();
     await Promise.all([hub.saveAccount('Second'), hub.saveAccount('Third')]);
     expect(hub.accountViews().map((a) => a.name)).toEqual(['Original', 'Second', 'Third']);
     const reloaded = new SortingHat(join(home, 'hub'));
@@ -256,8 +256,8 @@ describe('sorting hat', () => {
     release();
     expect(await token).toBeNull();
     expect(await removed).toBeNull();
-    expect(hub.selectedAccounts('work', 'anthropic').map((a) => a.signedIn)).toEqual([false]);
-    expect(hub.selectedAccount('work')).toBeNull();
+    expect(houseAccounts(hub, 'work', 'anthropic').map((a) => a.signedIn)).toEqual([false]);
+    expect(inUse(hub, 'work')).toBeNull();
 
     entered = new Promise<void>((r) => { refreshing = r; });
     wait = new Promise<void>((r) => { release = r; });
@@ -291,7 +291,7 @@ describe('sorting hat', () => {
     auth.usage['token-1'] = report(10, 100);
     auth.usage['token-2'] = report(10, 30);
     await hub.refreshLimits();
-    expect(hub.selectedAccount('personal')?.id).toBe(sooner.id);
+    expect(inUse(hub, 'personal')?.id).toBe(sooner.id);
     expect((await call(key)).status).toBe(200);
 
     // Sooner is refused for limits: the hub reads its limits again and the same request moves to Later.
@@ -301,11 +301,11 @@ describe('sorting hat', () => {
     const response = await call(key);
     expect(response.status).toBe(200);
     expect(api.seen.map((r) => r.headers.authorization)).toEqual(['Bearer token-2', 'Bearer token-2', 'Bearer token-1']);
-    expect(hub.selectedAccount('personal')?.id).toBe(later.id);
+    expect(inUse(hub, 'personal')?.id).toBe(later.id);
 
     // Once Sooner's 5-hour window resets, it is preferred again.
     vi.setSystemTime(Date.now() + 2 * 3_600_000);
-    expect(hub.selectedAccount('personal')?.id).toBe(sooner.id);
+    expect(inUse(hub, 'personal')?.id).toBe(sooner.id);
   });
 
   it('moves a house past an account whose sign-in ended, and asks to sign it in again', async () => {
@@ -322,13 +322,13 @@ describe('sorting hat', () => {
     expect(response.status).toBe(200);
     await response.text();
     expect(api.seen.map((r) => r.headers.authorization)).toEqual(['Bearer token-2']);
-    expect(hub.selectedAccount('personal')?.id).toBe(working.id);
+    expect(inUse(hub, 'personal')?.id).toBe(working.id);
     expect(hub.limitViews().find((l) => l.accountId === ended.id)?.problem).toEqual({ code: 'signInRequired', message: 'Claude ended this sign-in. Sign in again.' });
 
     // Signing in again clears it, and the house may use the account again.
     await hub.completeAccountSignIn(hub.beginAccountSignIn(ended.id).signInId, 'good');
     expect(hub.limitViews().find((l) => l.accountId === ended.id)?.problem).toBeNull();
-    expect(hub.selectedAccount('personal')?.id).toBe(ended.id);
+    expect(inUse(hub, 'personal')?.id).toBe(ended.id);
   });
 
   it('routes a profile to its first signed-in account per provider, in the order chosen', async () => {
@@ -339,21 +339,21 @@ describe('sorting hat', () => {
     const signIn = async (id: string) => hub.completeAccountSignIn(hub.beginAccountSignIn(id).signInId, 'good');
     await hub.createHouse('personal', 'personal');
     await hub.setHouseAccounts('personal', { anthropic: [first.id, second.id, first.id], openai: [gpt.id] });
-    expect(hub.selectedAccounts('personal', 'anthropic').map((a) => a.name)).toEqual(['First', 'Second']);
+    expect(houseAccounts(hub, 'personal', 'anthropic').map((a) => a.name)).toEqual(['First', 'Second']);
     expect(await hub.accessToken('personal')).toBeNull();
 
     await signIn(second.id);
     const secondToken = await hub.accessToken('personal');
-    expect(hub.selectedAccount('personal')?.id).toBe(second.id);
+    expect(inUse(hub, 'personal')?.id).toBe(second.id);
     await signIn(first.id);
     const firstToken = await hub.accessToken('personal');
     expect(firstToken).not.toBe(secondToken);
-    expect(hub.selectedAccount('personal')?.id).toBe(first.id);
+    expect(inUse(hub, 'personal')?.id).toBe(first.id);
 
     // Putting an account first switches to it; one provider's order leaves the other's alone.
     await hub.setHouseAccounts('personal', { anthropic: [second.id, first.id] });
     expect(await hub.accessToken('personal')).toBe(secondToken);
-    expect(hub.selectedAccounts('personal', 'openai').map((a) => a.id)).toEqual([gpt.id]);
+    expect(houseAccounts(hub, 'personal', 'openai').map((a) => a.id)).toEqual([gpt.id]);
     await hub.signOutAccount(second.id);
     expect(await hub.accessToken('personal')).toBe(firstToken);
 
@@ -421,4 +421,15 @@ async function beginForHouse(hub: SortingHat, houseId: string) {
   const account = await hub.saveAccount(`${houseId} Claude`);
   await selectAccount(hub, houseId, account.id);
   return hub.beginAccountSignIn(account.id);
+}
+
+/** The house's accounts at a provider, in order, as its house view lists them. */
+function houseAccounts(hub: SortingHat, houseId: string, providerId: ProviderId) {
+  return hub.houseView(houseId).accounts[providerId].map((id) => hub.accountView(id));
+}
+
+/** The house's account in use at a provider, as its house view names it. */
+function inUse(hub: SortingHat, houseId: string, providerId: ProviderId = 'anthropic') {
+  const id = hub.houseView(houseId).inUse[providerId];
+  return id ? hub.accountView(id) : null;
 }

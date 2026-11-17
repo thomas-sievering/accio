@@ -3,7 +3,7 @@ import { useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useClient, useHubs } from './connection';
 import { Monitor, ProviderLogo } from './icons';
 import { useAction } from './useAction';
-import { hasSignedInAccount, useProfiles } from '../profiles/profiles';
+import { accountsOf, hasSignedInAccount, useProfiles } from '../profiles/profiles';
 import { SignIn } from '../profiles/SignIn';
 import { AddProjectForm, AddProjectSheet } from '../projects/AddProjectSheet';
 import { useProjects } from '../projects/projects';
@@ -17,17 +17,17 @@ import { MenuSelect } from '../ui/MenuSelect';
  * to the project; the new-thread draft follows on its own.
  */
 export function FirstRun() {
-  const { profiles = [] } = useProfiles();
+  const { profiles = [], accounts } = useProfiles();
   const { state } = useProjects();
   const { hubs, selectedId, chosen, select } = useHubs();
   const hub = hubs.find((h) => h.id === selectedId);
-  const unsigned = profiles.find((p) => !hasSignedInAccount(p));
+  const unsigned = profiles.find((p) => !hasSignedInAccount(p, accounts));
   const steps = [
     // A fresh install already runs Local dev, so "decided" means the user picked it, joined another hub, or set this one up.
     // With several saved hubs, an unfinished one may just be the wrong hub, so ask.
     chosen || hubs.length === 1 && (!hub?.local || profiles.length > 0),
     profiles.length > 0,
-    profiles.some(hasSignedInAccount),
+    profiles.some((p) => hasSignedInAccount(p, accounts)),
     (state?.checkouts.length ?? 0) > 0,
   ];
   const current = steps.findIndex((done) => !done);
@@ -157,12 +157,12 @@ function SetUpAccount({ profile, onAddProject, addedProject, onBack }: { profile
   const client = useClient();
   const { accounts, sortingHat } = useProfiles();
   const [selected, setSelected] = useState('');
-  const started = profile.providers.find((p) => p.accounts.length > 0);
+  const started = profile.providers.find((p) => p.accountIds.length > 0);
   const [providerId, setProviderId] = useState<'anthropic' | 'openai'>(started?.id ?? 'anthropic');
   // Signing in comes after picking; Back returns to the pick to change provider.
   const [signingIn, setSigningIn] = useState(!!started);
   const { busy, error, run } = useAction();
-  const account = profile.providers.find((p) => p.id === providerId)?.accounts[0];
+  const account = accountsOf(profile, providerId, accounts)[0];
   const projectFirst = addedProject ? <span role="status">Added {addedProject}.</span> : onAddProject && <button type="button" className="link" onClick={onAddProject}>Set up a project first</button>;
   if (account && signingIn) return <>
     <SignIn account={account} />
