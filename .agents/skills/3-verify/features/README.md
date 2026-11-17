@@ -19,7 +19,7 @@ Record feature IDs and entry points in `actions.json`. Pair the action trace wit
 
 ## Features
 
-- [Hubs](hubs.md): first-device pairing, switching, per-window selection, isolated state, offline status and revocation.
+- [Hubs](hubs.md): first-device pairing, switching, per-window selection, isolated state, offline status and revoking a machine from Settings / Machines.
 - [Profiles](profiles.md): first-run creation, settings creation, editing, cancel, delete and provider-account selection.
 - [Accounts](accounts.md): named Claude and ChatGPT accounts, provider sign-in, sign-out and deletion guards.
 - [Sorting Hat](sorting-hat.md): linking a hub to a Sorting Hat of its own, accounts, houses and limits through it, the unlinked-profile and unreachable notices and the admin token’s boundary.
@@ -30,7 +30,7 @@ Record feature IDs and entry points in `actions.json`. Pair the action trace wit
 - [Built-in tools](harness-tools.md): per-harness tool switches under Settings → Harnesses, hub-wide, with reset.
 - [System prompt](system-prompt.md): read-only Settings page with each harness's delivery and the shared sections.
 - [Thread naming](thread-naming.md): automatic titles, model choice, instructions, preview, save and navigation with unsaved changes.
-- [Machines](machines.md): status, harness versions, machine names and profile folder defaults.
+- [Machines](machines.md): status, harness versions, machine names, profile folder defaults and revoking a machine.
 - [Threads](threads.md): project/profile picker, models, messages, stop/resume, search/filter, shelves and deletion.
 - [Changelog](changelog.md): delivered changes with their shipped notes, the project dashboard's fold, search and opening a change's thread.
 - [Secrets](secrets.md): private entry, automatic saved reuse, one-time delivery, project access, replacement and deletion; includes the isolated scripted-harness journey.

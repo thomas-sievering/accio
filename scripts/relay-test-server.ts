@@ -1,6 +1,6 @@
 /**
- * GLOSSARY: Relay. Two isolated machines on one hub, for checking relayed threads in the browser.
- * "MacBook" owns the threads (deterministic harness); "PC" serves the real web client.
+ * GLOSSARY: Relay. Isolated machines on one hub, for checking relayed threads in the browser.
+ * "MacBook" owns the threads (deterministic harness); "PC" serves the real web client; "Old laptop" is there to be revoked.
  * Prints the PC's URL. Ctrl+C stops everything and removes the homes.
  */
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -50,6 +50,8 @@ const macHarness = new FakeHarness(async function* (run) {
   yield* replyWith(`MacBook here. You said: ${run.prompt.slice(0, 80)}`);
 });
 const mac = await machine('MacBook', 0, macHarness);
+// A machine with nothing on it, to revoke from Settings → Machines without taking the MacBook's threads offline.
+const spare = await machine('Old laptop', 0, new FakeHarness());
 const pc = await machine('PC', Number(process.env.ACCIO_RELAY_TEST_PORT ?? 47491), new FakeHarness(), resolve('apps/web/dist'));
 await mac.client.call('sortingHat.configure', { url: hat.url, adminToken: hat.adminToken, hubName: 'Home' });
 const profile = await mac.client.signedIn('Personal');
@@ -67,8 +69,8 @@ await mac.client.call('threads.start', { checkoutId: macOnlyCheckout.id, text: '
 console.log(`Relay fixture ready: http://127.0.0.1:${pc.app.port}/#token=${token}`);
 process.send?.({ type: 'ready' });
 onShutdown('Relay', async () => {
-  mac.client.close(); pc.client.close();
-  await pc.app.close(); await mac.app.close(); await hub.close(); await hat.close();
+  mac.client.close(); pc.client.close(); spare.client.close();
+  await pc.app.close(); await mac.app.close(); await spare.app.close(); await hub.close(); await hat.close();
   await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });
 /** Stops the MacBook only, to see its threads go offline on the PC. */

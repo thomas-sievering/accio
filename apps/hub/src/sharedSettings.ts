@@ -23,11 +23,10 @@ export type MachineRecord = MachineHello & {
   profileGitHub?: Record<string, string>;
 };
 
-/** What a store seeds itself with when it does not exist yet. */
-export type SharedSeed = { profiles: SharedProfile[]; machines: MachineRecord[] };
-
 type FavoriteModel = { harnessId: string; modelId: string };
-type Data = SharedSeed & {
+type Data = {
+  profiles: SharedProfile[];
+  machines: MachineRecord[];
   threadNaming?: ThreadNamingSettings;
   modelFavorites?: Record<string, FavoriteModel[]>;
   /** GLOSSARY: Built-in tools. Harness id → switch id → on, only where it differs from accio's default. */
@@ -115,14 +114,7 @@ export class SharedSettings {
     return () => { this.listeners.delete(listener); };
   }
 
-  /** `seed` runs only on the first start, when there is no store yet. */
-  async load(seed?: () => Promise<SharedSeed>) {
-    if (await this.store.file.exists()) {
-      await this.store.load();
-    } else if (seed) {
-      await this.commit(await seed());
-    }
-  }
+  async load() { await this.store.load(); }
 
   profiles(): readonly SharedProfile[] {
     return this.data.profiles;

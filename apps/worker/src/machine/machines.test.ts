@@ -1,6 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises';
-import { mkdtemp } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { startTestApp } from '../testing/testApp.js';
@@ -143,19 +141,4 @@ describe('machines on the hub', () => {
     expect((await restarted.call('machines.list', {})).every((m) => Object.keys(m.profileFolders).length === 0)).toBe(true);
   });
 
-  it('moves the profiles this machine kept itself onto the hub, their folders under this machine', async () => {
-    const home = await mkdtemp(join(tmpdir(), 'accio-test-'));
-    await writeFile(
-      join(home, 'profiles.json'),
-      JSON.stringify([
-        { id: 'personal', name: 'Personal', folders: ['S:\\'] },
-        { id: 'hrc', name: 'HRC', roots: ['S:\\hrc'] },
-      ]),
-    );
-    t = await startTestApp({}, home);
-    const c = await t.connect();
-    expect((await c.call('profiles.list', {})).map((p) => p.name)).toEqual(['Personal', 'HRC']);
-    expect((await c.call('machines.list', {}))[0]?.profileFolders).toEqual({ personal: ['S:\\'], hrc: ['S:\\hrc'] });
-    await expect(readFile(join(home, 'profiles.json'))).rejects.toThrow(/ENOENT/);
-  });
 });

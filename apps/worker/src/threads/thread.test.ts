@@ -1,12 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_MODEL, joinPastes, type TranscriptItem } from '@accio/protocol';
+import { joinPastes, type TranscriptItem } from '@accio/protocol';
 import {
   RESUME_PROMPT,
   assertResumable,
   closeOpenTools,
-  dropUnstarted,
   endTurn,
-  fromStored,
   newThread,
   recoverAfterRestart,
   reopen,
@@ -90,11 +88,6 @@ describe('thread lifecycle', () => {
     expect(titleFrom(joinPastes(['Error: boom\n  at main'], 'Why does this crash?'))).toBe('Why does this crash?');
     expect(titleFrom(joinPastes(['\nError: boom\n  at main'], ''))).toBe('Error: boom');
   });
-
-  it('drops threads from before a first message was required, and keeps every other', () => {
-    const named = startTurn(t0, 'a', 'now');
-    expect(dropUnstarted([t0, endTurn(named, 'completed', 'now')]).map((t) => t.title)).toEqual(['a']);
-  });
 });
 
 describe('shelving', () => {
@@ -108,22 +101,6 @@ describe('shelving', () => {
 
   it('reopens a thread when you send it a message', () => {
     expect(startTurn(settle(t0, 'now'), 'a', 'now')).toMatchObject({ settledAt: null, snoozedUntil: null });
-  });
-
-  it('fills in shelf fields for threads stored before they existed', () => {
-    const { snoozedUntil: _s, settledAt: _d, ...old } = t0;
-    expect(fromStored(old)).toMatchObject({ snoozedUntil: null, settledAt: null });
-  });
-
-  it('observes old pending deliveries conservatively without bulk-settling historical completed work', () => {
-    const delivery = { mode: 'review' as const, policy: 'direct' as const, requestedAt: '2026-01-01T00:00:00Z', baseBranch: 'main' };
-    expect(fromStored({ ...t0, delivery: { ...delivery, status: 'ready' } }).delivery).toMatchObject({ id: `${t0.id}:${delivery.requestedAt}`, workVersion: 0, autoSettle: true });
-    expect(fromStored({ ...t0, delivery: { ...delivery, status: 'delivered' } }).delivery!.autoSettle).toBe(false);
-  });
-
-  it('moves threads off the Claude Code account default, which is no longer a choice', () => {
-    expect(fromStored({ ...t0, model: { harnessId: 'claudeCode', modelId: 'default' } }).model).toEqual(DEFAULT_MODEL);
-    expect(fromStored({ ...t0, model: { harnessId: 'claudeCode', modelId: 'haiku' } }).model).toEqual({ harnessId: 'claudeCode', modelId: 'haiku' });
   });
 });
 

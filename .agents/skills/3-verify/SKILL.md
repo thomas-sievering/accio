@@ -78,7 +78,7 @@ The runner prints an absolute `out/verify/<timestamp>-<id>` evidence directory. 
 - `ACCIO_HOST=127.0.0.1`, `ACCIO_PORT=0`, `ACCIO_HUB_PORT=0` for independent ephemeral ports.
 - `ACCIO_WEB_ROOT=<checkout>/apps/web/dist` for the actual built UI.
 
-Production startup creates the token and machine identity, runs state migrations, loads all domains, and starts the in-process hub. No database or seed credentials are needed. Readiness requires `ACCIO_READY`, a passing doctor, and the visible `Set up Accio` heading in Chromium. The smoke then creates its prerequisites through the UI. Git must be on PATH: the runner uses `git init --quiet` to make its disposable `verify-project` a repository without a remote, so folder inspection cannot discover Accio's parent repository. This is verification scaffolding, recorded in `fixture.json` and removed with scratch.
+Production startup creates the token and machine identity, loads all domains, and starts the in-process hub. No database or seed credentials are needed. Readiness requires `ACCIO_READY`, a passing doctor, and the visible `Set up Accio` heading in Chromium. The smoke then creates its prerequisites through the UI. Git must be on PATH: the runner uses `git init --quiet` to make its disposable `verify-project` a repository without a remote, so folder inspection cannot discover Accio's parent repository. This is verification scaffolding, recorded in `fixture.json` and removed with scratch.
 
 Each run owns a fresh browser context, home and ports, so runs can coexist. Use only the instance created by this runner. Browser mode shares the React UI with Electron but cannot prove Electron startup, the native Browse picker, OS folder opening, or window controls. Those require a separate desktop proof; do not simulate `window.accioDesktop` and call that native coverage.
 
@@ -152,7 +152,7 @@ For an interrupted invocation, send Ctrl+C to the runner and allow it to finish 
 
 - `scripts/verify.mjs`: executable Node launcher, read-only doctor, evidence and teardown. Run via `pnpm verify` or the explicit Node commands above.
 - `scripts/smoke.mjs`: default journey module; invoked by the runner, not as a standalone process. Extend coverage through a custom journey with the same injected arguments.
-- `scripts/resources.mjs`, `scripts/hubs.mjs`, `scripts/sorting-hat.mjs`: offline journeys for tools/MCP/skills, hubs and a hub's own Sorting Hat; run them through the runner as their feature files say.
+- `scripts/resources.mjs`, `scripts/hubs.mjs`, `scripts/sorting-hat.mjs`, `scripts/revoke-machine.mjs`: offline journeys for tools/MCP/skills, hubs, a hub's own Sorting Hat and revoking a second machine; run them through the runner as their feature files say.
 - `scripts/steps.mjs`: steps several journeys share (first-run profile, adding a local project, common controls); import it from a custom journey too.
 - `scripts/real-turn.mjs`, `scripts/link-hub.mjs`: the verify-device journeys behind `pnpm verify:real` and `pnpm verify:link-hub`.
 
