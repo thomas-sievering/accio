@@ -15,7 +15,7 @@ export function useMachineUpdate(machine: Pick<MachineView, 'id' | 'connected'>)
     if (!machine.connected) { setView(undefined); return; }
     let active = true;
     const off = client.onEvent('update.changed', (next) => { if (next.machineId === machine.id) setView(next); });
-    // Such as a machine whose Accio predates updates.
+    // Such as a machine connected to the hub but not yet on the relay.
     void client.call('update.status', { machineId: machine.id }).then((next) => { if (active) setView(next); }, (e: Error) => { if (active) setUnavailable(e.message); });
     return () => { active = false; off(); };
   }, [client, machine.id, machine.connected]);
