@@ -64,8 +64,6 @@ export class Threads {
   profileReferences() { return this.state.list.map((thread) => thread.profileId); }
   resources?: ResourceManager;
   onRepairFinished?: (toolId: string) => void;
-  /** GLOSSARY: Thread mention. Every thread this machine knows, other machines' included; set once the relay is up. */
-  knownThreads?: () => readonly ThreadView[];
   /** GLOSSARY: Space. What each turn of a thread in a space is told about it; none until it is set. */
   spaceContext?: SpaceContext;
   /** The hub's built-in tool overrides; accio's defaults apply until it is set. */
@@ -99,6 +97,8 @@ export class Threads {
     private models: Models,
     private machines: Machines,
     vault: SecretsAccess,
+    /** GLOSSARY: Thread mention. Every thread this machine knows, other machines' included: the relay's merged list. */
+    knownThreads: () => readonly ThreadView[],
     tools?: AccioTools,
     deliveryHosting?: DeliveryHosting,
   ) {
@@ -127,11 +127,11 @@ export class Threads {
     }, deliveryHosting);
     this.turns = new Turns(this.state, { profiles, projects, models, machines, harnesses, secrets: this.secrets, confirmations: this.confirmations, content: this.content, deliveries: this.deliveries, tools,
       images: { claim: (threadId, ids) => this.uploads.claim(threadId, ids, this.assets), file: (threadId, asset) => this.assets.harnessFile(threadId, asset) },
-      resources: () => this.resources, spaceContext: () => this.spaceContext, toolsOff: (harnessId) => builtinToolsOff(harnessId, this.toolOverrides?.()[harnessId]), onWorkFinished: id => this.naming.refine(id), onRepairFinished: (toolId) => this.onRepairFinished?.(toolId), knownThreads: () => this.knownThreads?.() ?? this.views(),
+      resources: () => this.resources, spaceContext: () => this.spaceContext, toolsOff: (harnessId) => builtinToolsOff(harnessId, this.toolOverrides?.()[harnessId]), onWorkFinished: id => this.naming.refine(id), onRepairFinished: (toolId) => this.onRepairFinished?.(toolId), knownThreads,
       offeredIssues: (threadId, refs) => this.offeredIssues(threadId, refs) });
     tools?.add(issueOfferTool((threadId, refs) => this.offeredIssues(threadId, refs, true), (threadId) => !!this.state.get(threadId)?.checkoutId));
     this.waits = new Waits(this.state, {
-      threads: () => this.knownThreads?.() ?? this.views(),
+      threads: knownThreads,
       wake: (threadId, text) => this.wake(threadId, text),
       pullRequest: async (thread, ref) => {
         const cwd = this.state.cwd(thread);
@@ -289,7 +289,6 @@ export class Threads {
       return state.cwd(thread);
     };
     router
-      .on('threads.list', () => state.views())
       .on('threads.start', input => this.start(input))
       .on('threads.issues', ({ checkoutId }) => {
         const checkout = this.projects.checkout(checkoutId);

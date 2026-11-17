@@ -174,7 +174,7 @@ export class HubConnections {
     }));
     const stopUpdates = updates?.onChange((view) => { relay.emit('update.changed', view); this.send('update.changed', view, record.id); });
     const secrets = remoteSecrets(client);
-    const threads = refs.threads = new Threads(record.home, profiles, projects, this.runners, broadcast, models, machines, secrets, tools, this.deliveryHosting); await threads.load(); threads.register(router);
+    const threads = refs.threads = new Threads(record.home, profiles, projects, this.runners, broadcast, models, machines, secrets, () => relay.merged(), tools, this.deliveryHosting); await threads.load(); threads.register(router);
     // GLOSSARY: Home. "New home…" in Settings → Spaces; a user action, not an accio tool.
     new NewHomes({
       spaces: () => spaces.list(),
@@ -189,7 +189,8 @@ export class HubConnections {
       gh: (profileId, cwd, args) => machines.github.run(profileId, cwd, args),
       start: (params) => threads.start(params),
     }).register(router);
-    // GLOSSARY: Relay. Other machines' threads join this list; calls about them go to their machine.
+    // GLOSSARY: Relay. The only answer for the thread and machine lists: other machines' threads join
+    // this machine's, and calls about them go to their machine.
     await relay.load();
     router.on('threads.list', () => relay.merged());
     // A gh sign-in made since startup shows up in machine settings without a restart.
@@ -218,7 +219,7 @@ export class HubConnections {
         return threads.confirmations.ask(threadId, turnId, request, signal);
       },
     }));
-    resources.register(router); threads.resources = resources; threads.toolOverrides = () => settings.harnessTools(); threads.onRepairFinished = id => resources.tools.afterRepair(id); threads.knownThreads = () => relay.merged(); threads.spaceContext = new SpaceContext({ spaces: () => spaces.list(), projects: () => projects.state(), checkouts: spaceCheckouts });
+    resources.register(router); threads.resources = resources; threads.toolOverrides = () => settings.harnessTools(); threads.onRepairFinished = id => resources.tools.afterRepair(id); threads.spaceContext = new SpaceContext({ spaces: () => spaces.list(), projects: () => projects.state(), checkouts: spaceCheckouts });
     // GLOSSARY: Home. Its skill files are the Space level; a missing home is cloned like the Space section's.
     resources.homeCheckout = async (key, wait) => { const found = wait ? await spaceCheckouts.checkout(key) : await spaceCheckouts.lookup(key); return 'checkout' in found ? found.checkout.path : undefined; };
     profiles.setReferenceSource(() => [...projects.state().projects.map((p) => p.profileId), ...threads.profileReferences()]);
