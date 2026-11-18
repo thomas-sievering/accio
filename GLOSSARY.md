@@ -187,8 +187,17 @@ Sending a message to the harness during its current turn, without interrupting i
 Moving a thread to another harness by choosing one of its models. The next turn on that harness starts a new session, or resumes the one it left, with the conversation it has not seen, taken from accio's transcript and trimmed to fit. The harness can read the whole thread with the read_thread accio tool (ADR 0017), which also reads a thread you mention.
 _Avoid_: Switch, transfer, migration
 
-**Running**:
-The state of a thread while a turn is in progress.
+**Working**:
+The state of a thread while a turn is in progress; it sits on the Working shelf.
+_Avoid_: Running, busy
+
+**Ready**:
+The state of a thread whose last turn finished normally, with no delivery, Wait or secret pending, on a machine that is online: it is waiting for your next message.
+_Avoid_: Idle, done, active
+
+**Offline thread**:
+A thread whose machine is offline. Its transcript can't load and it can't take a message or settle, so it is not Ready, whatever its last status was; that status is only the last one heard. It stays in the inbox, greyed with its machine tagged offline, until you snooze it until the machine is back.
+_Avoid_: Unavailable, stale
 
 **Interrupted**:
 The state of a turn that stopped before finishing, because you stopped it or its machine restarted. It continues only when you resume it.
@@ -243,7 +252,7 @@ Naming a machine in a message with `@` and its handle, such as `@laptop`, so the
 _Avoid_: Machine tag, target
 
 **Thread mention**:
-Naming another thread of the same profile in a message with `@` and its handle, such as `@fix-login-redirect-3f2a9c`, so the agent can read it. The handle is the first words of the thread's title and the start of its id; only the id part counts, so it still works after a rename. The harness gets a line about each mentioned thread after the message (its title, where it sits in the sidebar, its machine, branch and PR), not its conversation; it reads that with the read_thread accio tool, newest items first, on any machine through the relay. Before you type, the @ menu's Threads lists recent ones: open first, then Working, then recently settled; typing searches all of them by title.
+Naming another thread of the same profile in a message with `@` and its handle, such as `@fix-login-redirect-3f2a9c`, so the agent can read it. The handle is the first words of the thread's title and the start of its id; only the id part counts, so it still works after a rename. The harness gets a line about each mentioned thread after the message (its title, where it sits in the sidebar, its machine, branch and PR), not its conversation; it reads that with the read_thread accio tool, newest items first, on any machine through the relay. Before you type, the @ menu's Threads lists recent ones: the inbox first, then Working, then recently settled; typing searches all of them by title.
 _Avoid_: Thread link, thread reference
 
 **Snooze**:
@@ -296,9 +305,13 @@ _Avoid_: Project settings (for this page), overview
 A space's page, opened through Space in the menu on the project name in a thread's header (only for a project in a space) or through Open on the space's row in Settings / Spaces: the home pinned on top with New thread in home, then each other project with its profile, its checkout on this machine, its threads that need you or are working, its project dashboard and New thread.
 _Avoid_: Space dashboard, space settings (for this page)
 
+**Inbox**:
+The threads at the top of the sidebar, above the shelves: those back with you, most recently returned first. A thread in it can be Ready, Interrupted or Failed, or wait on you for a secret, a review, a manual merge or a delivery that needs attention. A thread leaves it when a turn starts (to Working), when you snooze it or when it settles. Another machine's thread stays in it while that machine is offline, greyed and tagged offline.
+_Avoid_: Open list, active threads, ready threads (Ready is one state within it)
+
 **Shelf**:
-A group of threads in the sidebar apart from the open list: Working, Snoozed and Settled. Working holds threads in progress without you: a running turn, a delivery GitHub is carrying, or a Wait. A thread comes back to the top of the open list when it finishes or needs you, such as for a secret, a review or a manual merge.
-_Avoid_: Folder, inbox, tab
+A group of threads in the sidebar below the inbox: Working, Snoozed and Settled. Working holds threads in progress without you: a running turn, a delivery GitHub is carrying, or a Wait. A thread comes back to the top of the inbox when it finishes or needs you.
+_Avoid_: Folder, tab
 
 ## Secrets and hub connections
 
