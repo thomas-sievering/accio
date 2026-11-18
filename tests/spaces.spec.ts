@@ -79,21 +79,16 @@ test('creates a new home from the Home project picker and opens its first thread
     await pick(page, 'Home project', 'New home…');
 
     const dialog = page.getByRole('dialog', { name: 'New home' });
-    const name = dialog.getByRole('textbox', { name: 'Name', exact: true });
-    await expect(name).toHaveValue('home');
+    // One name to enter: the home's folder and repo are named after the space.
+    await expect(dialog.getByRole('textbox')).toHaveCount(1);
     await dialog.getByRole('textbox', { name: 'Space name', exact: true }).fill('agents');
-    await expect(name).toHaveValue('agents-home');
     // A home is usually personal, even for a work space: the profile is always picked.
     await expect(dialog.getByRole('button', { name: 'Profile', exact: true })).toHaveText('Choose…');
     await expect(dialog.getByRole('button', { name: 'Create as', exact: true })).toHaveText('Local folder');
     await dialog.getByRole('button', { name: 'Create home', exact: true }).click();
     await expect(dialog).toContainText('Choose a profile.');
     await pick(page, 'Profile', 'Personal');
-    await expect(dialog).toContainText(`Created in ${join(root, 'agents-home')}.`);
-    await name.fill('agents home');
-    await dialog.getByRole('button', { name: 'Create home', exact: true }).click();
-    await expect(dialog).toContainText("Use letters, digits, '.', '-' or '_'");
-    await name.fill('agents-home');
+    await expect(dialog).toContainText(`Creates agents-home in ${join(root, 'agents-home')}.`);
     // Without a GitHub account chosen for the profile, gh's active account is never used.
     await pick(page, 'Create as', 'New GitHub repo');
     await expect(dialog).toContainText('This profile has no GitHub account. Choose one in Settings / Profiles.');
