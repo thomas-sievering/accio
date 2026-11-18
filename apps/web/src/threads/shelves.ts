@@ -9,6 +9,8 @@ export type ThreadShelves = {
   open: ThreadView[];
   /** A turn is running, or a delivery waits on GitHub with nothing for you to do. Most recently active first. */
   working: ThreadView[];
+  /** Another machine's threads while it is offline, by machine, most recently active first within each. */
+  offline: ThreadView[];
   /** Soonest to wake first. */
   snoozed: ThreadView[];
   /** Most recently settled first. */
@@ -21,12 +23,19 @@ export type ThreadShelves = {
  */
 export const WORKING_GRACE_MS = 2_000;
 
+/**
+ * How long a thread stays where it was after its machine goes offline or comes back, so a short
+ * drop or a brief return doesn't move rows back and forth. A dropped machine reconnects within
+ * a few seconds; a dark wake doesn't show the machine online at all.
+ */
+export const OFFLINE_GRACE_MS = 10_000;
+
 /** Placement as one client observed it over time, so the list can hold and order returns. */
 export type Placement = {
   place: (t: ThreadView) => ThreadPlace;
   /** When this client saw the thread come back to the open list, in ms. */
   returnedAt: (id: string) => number | undefined;
-  /** The next moment a held thread leaves Working, if any. */
+  /** The next moment a held thread moves to the place it belongs in, if any. */
   nextDeadline?: number;
 };
 
@@ -37,13 +46,23 @@ function quietlyDone(t: ThreadView): boolean {
   return phase !== 'attention' && phase !== 'closed' && phase !== 'unavailable';
 }
 
+const inPlay = (p: ThreadPlace) => p === 'open' || p === 'working';
+
+/** How long a thread stays in `from` on its way to `to`; 0 moves it at once. */
+function grace(from: ThreadPlace, to: ThreadPlace, t: ThreadView): number {
+  if (from === 'working' && to === 'open' && quietlyDone(t)) return WORKING_GRACE_MS;
+  if ((from === 'offline' && inPlay(to)) || (inPlay(from) && to === 'offline')) return OFFLINE_GRACE_MS;
+  return 0;
+}
+
 /**
  * Observes every thread on each change. A thread that stops working stays on Working for
- * WORKING_GRACE_MS unless it needs you; a thread that arrives in the open list from
- * Working, Snoozed or Settled counts as returned then. The first observation records no returns.
+ * WORKING_GRACE_MS unless it needs you; a thread whose machine goes offline or comes back stays
+ * where it was for OFFLINE_GRACE_MS. A thread that arrives in the open list from another place
+ * counts as returned then. The first observation records no returns.
  */
 export function createPlacementTracker() {
-  const states = new Map<string, { place: ThreadPlace; deadline: number | null }>();
+  const states = new Map<string, { place: ThreadPlace; hold: { toward: ThreadPlace; deadline: number } | null }>();
   const returns = new Map<string, number>();
   return function observe(threads: readonly ThreadView[], at: number): Placement {
     const now = new Date(at);
@@ -54,11 +73,13 @@ export function createPlacementTracker() {
       present.add(t.id);
       const actual = threadPlace(t, now);
       const previous = states.get(t.id);
-      const deadline = actual === 'open' && previous?.place === 'working' && quietlyDone(t) ? (previous.deadline ?? at + WORKING_GRACE_MS) : null;
+      const wait = previous && previous.place !== actual ? grace(previous.place, actual, t) : 0;
+      // A hold keeps its deadline while the thread still heads to the same place.
+      const deadline = wait ? (previous!.hold?.toward === actual ? previous!.hold.deadline : at + wait) : null;
       const held = deadline !== null && deadline > at;
-      const place = held ? 'working' : actual;
+      const place = held ? previous!.place : actual;
       if (place === 'open' && previous && previous.place !== 'open') returns.set(t.id, at);
-      states.set(t.id, { place, deadline: held ? deadline : null });
+      states.set(t.id, { place, hold: held ? { toward: actual, deadline } : null });
       places.set(t.id, place);
       if (held) nextDeadline = Math.min(nextDeadline ?? Infinity, deadline);
     }
@@ -69,14 +90,27 @@ export function createPlacementTracker() {
 }
 
 export function shelveThreads(threads: ThreadView[], now: Date, placement?: Placement): ThreadShelves {
-  const shelves: ThreadShelves = { open: [], working: [], snoozed: [], settled: [] };
+  const shelves: ThreadShelves = { open: [], working: [], offline: [], snoozed: [], settled: [] };
   for (const t of threads) shelves[placement?.place(t) ?? threadPlace(t, now)].push(t);
   const returned = (t: ThreadView) => Math.max(Date.parse(t.updatedAt), placement?.returnedAt(t.id) ?? 0);
   shelves.open.sort((a, b) => returned(b) - returned(a));
   shelves.working.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  shelves.offline.sort((a, b) => a.machine!.name.localeCompare(b.machine!.name) || a.machine!.id.localeCompare(b.machine!.id) || b.updatedAt.localeCompare(a.updatedAt));
   shelves.snoozed.sort((a, b) => a.snoozedUntil!.localeCompare(b.snoozedUntil!));
   shelves.settled.sort((a, b) => b.settledAt!.localeCompare(a.settledAt!));
   return shelves;
+}
+
+/** The machines on the Offline shelf, each with how many of its threads are there, in shelf order. */
+export function offlineMachines(offline: readonly ThreadView[]): { id: string; name: string; count: number }[] {
+  const machines = new Map<string, { id: string; name: string; count: number }>();
+  for (const { machine } of offline) {
+    if (!machine) continue;
+    const m = machines.get(machine.id) ?? { id: machine.id, name: machine.name, count: 0 };
+    m.count++;
+    machines.set(machine.id, m);
+  }
+  return [...machines.values()];
 }
 
 /** What the sidebar is narrowed to: one project, or every project of the selected profile. */

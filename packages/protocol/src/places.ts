@@ -74,18 +74,20 @@ export function deliveryInProgress(t: Pick<ThreadView, 'status' | 'workVersion' 
 
 /**
  * Where a thread sits for the user. Open is the inbox: threads that finished or need you.
- * Working holds threads in progress without you.
+ * Working holds threads in progress without you. Offline holds another machine's threads while
+ * that machine is offline, since you can't act on them until it is back.
  */
-export type ThreadPlace = 'open' | 'working' | 'snoozed' | 'settled';
+export type ThreadPlace = 'open' | 'working' | 'offline' | 'snoozed' | 'settled';
 
 /**
- * Settled wins over snoozed, snoozed over working; a snooze that has passed puts the thread
+ * Settled wins over snoozed, snoozed over offline, offline over working and the inbox; a snooze that has passed puts the thread
  * back in the open list. A running turn waiting for a secret needs you, so it is open; a
  * delivery in progress, or a Wait on an idle thread, keeps the thread on Working.
  */
 export function threadPlace(t: ThreadView, now: Date): ThreadPlace {
   if (t.settledAt) return 'settled';
   if (t.snoozedUntil !== null && new Date(t.snoozedUntil) > now) return 'snoozed';
+  if (t.machine && !t.machine.online) return 'offline';
   if (t.needsSecret) return 'open';
   if (t.status === 'running' || deliveryInProgress(t) || (t.wait && t.status === 'idle')) return 'working';
   return 'open';

@@ -75,10 +75,11 @@ export function ProjectDashboard({ project, onClose }: { project: ProjectView; o
 const GROUPS = [
   { place: 'open', label: 'Needs you' },
   { place: 'working', label: 'Working' },
+  { place: 'offline', label: 'Offline' },
   { place: 'snoozed', label: 'Snoozed' },
 ] as const;
 
-/** Unsettled threads by what they wait on: you first, then the agent, then the clock. */
+/** Unsettled threads by what they wait on: you first, then the agent, then a machine to come back, then the clock. */
 function Threads({ project }: { project: ProjectView }) {
   const { threads, now } = useThreads();
   const own = (threads ?? []).filter((t) => t.projectId === project.id);

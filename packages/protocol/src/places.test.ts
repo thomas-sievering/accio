@@ -8,6 +8,7 @@ const thread = (extra: Partial<ThreadView> = {}): ThreadView => ({
   id: 't1', checkoutId: 'c1', projectId: 'p1', profileId: 'a1', model: { harnessId: 'claudeCode', modelId: 'opus' }, title: 't1',
   status: 'idle', createdAt: '2026-11-03T10:00:00Z', updatedAt: '2026-11-03T10:00:00Z', snoozedUntil: null, settledAt: null, ...extra,
 });
+const away = { id: 'mac', name: 'MacGonagall', online: false };
 const pr = { host: 'github.com' as const, repository: 'o/r', number: 7, url: 'https://github.com/o/r/pull/7', state: 'open' as const, headRevision: 'abc', baseBranch: 'main' };
 const delivering = (delivery: Partial<ThreadDelivery>, extra: Partial<ThreadView> = {}) =>
   thread({ delivery: { mode: 'ship', policy: 'pull-request', status: 'waiting', baseBranch: 'main', requestedAt: '2026-11-03T10:00:00Z', pullRequest: pr, ...delivery }, ...extra });
@@ -17,6 +18,12 @@ describe('threadPlace', () => {
     ['settled wins over snoozed and running', thread({ settledAt: '2026-11-03T11:00:00Z', snoozedUntil: later, status: 'running' }), 'settled'],
     ['snoozed wins over running', thread({ snoozedUntil: later, status: 'running' }), 'snoozed'],
     ['a passed snooze is open', thread({ snoozedUntil: '2026-11-03T11:00:00Z' }), 'open'],
+    ['settled wins over offline', thread({ settledAt: '2026-11-03T11:00:00Z', machine: away }), 'settled'],
+    ['snoozed wins over offline', thread({ snoozedUntil: later, machine: away }), 'snoozed'],
+    ['offline wins over running', thread({ status: 'running', machine: away }), 'offline'],
+    ['offline wins over a secret', thread({ needsSecret: true, machine: away }), 'offline'],
+    ['an idle thread on an offline machine is offline', thread({ machine: away }), 'offline'],
+    ['a thread on an online machine is placed as usual', thread({ machine: { ...away, online: true } }), 'open'],
     ['a running turn is working', thread({ status: 'running' }), 'working'],
     ['a running turn waiting on a secret is open', thread({ status: 'running', needsSecret: true }), 'open'],
     ['a secret wins over a delivery in progress', delivering({ waitingOn: 'checks' }, { needsSecret: true }), 'open'],

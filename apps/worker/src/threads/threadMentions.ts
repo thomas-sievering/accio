@@ -18,6 +18,7 @@ function placeOf(t: ThreadView, now: Date): string {
     case 'settled': return `settled ${t.settledAt!.slice(0, 10)}`;
     case 'snoozed': return `snoozed until ${t.snoozedUntil!.slice(0, 10)}`;
     case 'working': return t.status === 'running' ? 'working' : 'working, delivery in progress';
+    case 'offline': return 'offline shelf, until its machine is back';
   }
   if (t.needsSecret) return 'open, waiting for a secret';
   if (t.status === 'failed') return 'open, last turn failed';

@@ -4,7 +4,7 @@ import { ArrowLeft, BookOpen, Chevron, Layers, MessageSquare, Monitor, ProviderL
 import { PrettyName } from './ModelPicker';
 import type { MentionKind, MentionOption, ThreadGroup } from './mentionQuery';
 
-const GROUP_LABELS: Record<ThreadGroup, string> = { open: 'Open', working: 'Working', snoozed: 'Snoozed', settled: 'Settled' };
+const GROUP_LABELS: Record<ThreadGroup, string> = { open: 'Open', working: 'Working', offline: 'Offline', snoozed: 'Snoozed', settled: 'Settled' };
 const KIND_LABELS: Record<MentionKind, string> = { models: 'Models', machines: 'Machines', threads: 'Threads' };
 const kindOf = (o: MentionOption): MentionKind | 'skills' => 'model' in o ? 'models' : 'machine' in o ? 'machines' : 'thread' in o ? 'threads' : 'skill' in o ? 'skills' : o.kind;
 

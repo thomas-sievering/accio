@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ThreadView } from '@accio/protocol';
-import { createPlacementTracker, filterThreads, nextMorning, shelveThreads, WORKING_GRACE_MS } from './shelves';
+import { createPlacementTracker, filterThreads, nextMorning, offlineMachines, OFFLINE_GRACE_MS, shelveThreads, WORKING_GRACE_MS } from './shelves';
 
 const now = new Date('2026-11-03T12:00:00');
 const thread = (id: string, extra: Partial<ThreadView> = {}): ThreadView => ({
@@ -19,6 +19,8 @@ const thread = (id: string, extra: Partial<ThreadView> = {}): ThreadView => ({
 });
 const ids = (ts: ThreadView[]) => ts.map((t) => t.id);
 const later = '2026-11-04T09:00:00';
+const mac = { id: 'mac', name: 'MacGonagall', online: true };
+const on = (m: typeof mac, online: boolean) => ({ machine: { ...m, online } });
 
 describe('shelveThreads', () => {
   it('puts settled before snoozed, snoozed before working, and running threads on Working', () => {
@@ -97,6 +99,28 @@ describe('Waits on Working', () => {
   });
 });
 
+describe('offline shelf', () => {
+  const pc = { id: 'pc', name: 'Pomfrey', online: true };
+
+  it('shelves offline threads by machine, newest first within each', () => {
+    const s = shelveThreads([
+      thread('mac-old', { ...on(mac, false), updatedAt: '2026-11-03T08:00:00Z' }),
+      thread('pc', on(pc, false)),
+      thread('mac-new', { ...on(mac, false), updatedAt: '2026-11-03T09:00:00Z' }),
+      thread('online', on(pc, true)),
+      thread('snoozed', { ...on(mac, false), snoozedUntil: later }),
+    ], now);
+    expect(ids(s.offline)).toEqual(['mac-new', 'mac-old', 'pc']);
+    expect(ids(s.open)).toEqual(['online']);
+    expect(ids(s.snoozed)).toEqual(['snoozed']);
+  });
+
+  it('counts the shelf per machine', () => {
+    const s = shelveThreads([thread('a', on(mac, false)), thread('b', on(pc, false)), thread('c', on(mac, false))], now);
+    expect(offlineMachines(s.offline)).toEqual([{ id: 'mac', name: 'MacGonagall', count: 2 }, { id: 'pc', name: 'Pomfrey', count: 1 }]);
+  });
+});
+
 describe('createPlacementTracker', () => {
   const at = now.getTime();
 
@@ -137,6 +161,62 @@ describe('createPlacementTracker', () => {
     expect(observe([thread('t')], at).returnedAt('t')).toBeUndefined();
     observe([thread('t', { snoozedUntil: later })], at + 1);
     expect(observe([thread('t')], at + 2).returnedAt('t')).toBe(at + 2);
+  });
+});
+
+describe('createPlacementTracker across a machine going offline', () => {
+  const at = now.getTime();
+
+  it('keeps a thread in the inbox through a short drop', () => {
+    const observe = createPlacementTracker();
+    observe([thread('t', on(mac, true))], at);
+    const dropped = observe([thread('t', on(mac, false))], at + 1_000);
+    expect(dropped.place(thread('t', on(mac, false)))).toBe('open');
+    expect(dropped.nextDeadline).toBe(at + 1_000 + OFFLINE_GRACE_MS);
+    const back = observe([thread('t', on(mac, true))], at + 3_000);
+    expect(back.place(thread('t', on(mac, true)))).toBe('open');
+    expect(back.returnedAt('t')).toBeUndefined();
+    expect(back.nextDeadline).toBeUndefined();
+  });
+
+  it('moves a thread to Offline once its machine stays away past the grace', () => {
+    const observe = createPlacementTracker();
+    observe([thread('t', on(mac, true))], at);
+    observe([thread('t', on(mac, false))], at + 1_000);
+    const gone = observe([thread('t', on(mac, false))], at + 1_000 + OFFLINE_GRACE_MS);
+    expect(gone.place(thread('t', on(mac, false)))).toBe('offline');
+    expect(gone.nextDeadline).toBeUndefined();
+  });
+
+  it('keeps a thread on Offline through a brief return, then brings it back to the top of the inbox', () => {
+    const observe = createPlacementTracker();
+    observe([thread('t', on(mac, false))], at);
+    const blip = observe([thread('t', on(mac, true))], at + 1_000);
+    expect(blip.place(thread('t', on(mac, true)))).toBe('offline');
+    expect(observe([thread('t', on(mac, false))], at + 2_000).place(thread('t', on(mac, false)))).toBe('offline');
+    observe([thread('t', on(mac, true))], at + 3_000);
+    const back = observe([thread('t', on(mac, true))], at + 3_000 + OFFLINE_GRACE_MS);
+    expect(back.place(thread('t', on(mac, true)))).toBe('open');
+    expect(back.returnedAt('t')).toBe(at + 3_000 + OFFLINE_GRACE_MS);
+  });
+
+  it('keeps a working thread on Working through a short drop', () => {
+    const observe = createPlacementTracker();
+    const running = thread('t', { status: 'running', ...on(mac, true) });
+    observe([running], at);
+    const dropped = thread('t', { status: 'running', ...on(mac, false) });
+    expect(observe([dropped], at + 1_000).place(dropped)).toBe('working');
+  });
+
+  it('moves a settled or snoozed thread nowhere', () => {
+    const observe = createPlacementTracker();
+    const settled = (online: boolean) => thread('s', { settledAt: '2026-11-03T11:00:00Z', ...on(mac, online) });
+    const snoozed = (online: boolean) => thread('z', { snoozedUntil: later, ...on(mac, online) });
+    observe([settled(true), snoozed(true)], at);
+    const p = observe([settled(false), snoozed(false)], at + 1_000);
+    expect(p.place(settled(false))).toBe('settled');
+    expect(p.place(snoozed(false))).toBe('snoozed');
+    expect(p.nextDeadline).toBeUndefined();
   });
 });
 

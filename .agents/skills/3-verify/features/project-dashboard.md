@@ -1,6 +1,6 @@
 # Project dashboard
 
-A project's page, opened through `Dashboard` in the menu on the project name in a thread's header. Sections show Needs you, Working and Snoozed threads, one line each, then Recently shipped: the newest commits on `origin`'s default branch, one line each, with a pull request's merge commit shown by the PR's title. Issues, Changelog and Settled are folded.
+A project's page, opened through `Dashboard` in the menu on the project name in a thread's header. Sections show Needs you, Working, Offline and Snoozed threads, one line each, then Recently shipped: the newest commits on `origin`'s default branch, one line each, with a pull request's merge commit shown by the PR's title. Issues, Changelog and Settled are folded.
 
 ## Sub-features
 

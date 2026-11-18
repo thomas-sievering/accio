@@ -1,6 +1,8 @@
 /**
  * GLOSSARY: Relay. Isolated machines on one hub, for checking relayed threads in the browser.
  * "MacBook" owns the threads (deterministic harness); "PC" serves the real web client; "Old laptop" is there to be revoked.
+ * A PC thread told "Put the MacBook to sleep" or "Wake the MacBook" takes the MacBook off the relay
+ * and back, as a system sleep does.
  * Prints the PC's URL. Ctrl+C stops everything and removes the homes.
  */
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -52,7 +54,13 @@ const macHarness = new FakeHarness(async function* (run) {
 const mac = await machine('MacBook', 0, macHarness);
 // A machine with nothing on it, to revoke from Settings → Machines without taking the MacBook's threads offline.
 const spare = await machine('Old laptop', 0, new FakeHarness());
-const pc = await machine('PC', Number(process.env.ACCIO_RELAY_TEST_PORT ?? 47491), new FakeHarness(), resolve('apps/web/dist'));
+// Driven from a PC thread, since a sleeping MacBook can't take a message.
+const pcHarness = new FakeHarness(async function* (run, n) {
+  const asleep = /put the macbook to sleep/i.test(run.prompt) ? true : /wake the macbook/i.test(run.prompt) ? false : undefined;
+  if (asleep !== undefined) mac.app.connections.setAsleep(asleep);
+  yield* replyWith(asleep === undefined ? `reply ${n}` : asleep ? 'The MacBook is asleep.' : 'The MacBook is awake.');
+});
+const pc = await machine('PC', Number(process.env.ACCIO_RELAY_TEST_PORT ?? 47491), pcHarness, resolve('apps/web/dist'));
 await mac.client.call('sortingHat.configure', { url: hat.url, adminToken: hat.adminToken, hubName: 'Home' });
 const profile = await mac.client.signedIn('Personal');
 await pc.client.call('checkouts.add', { path: pc.repo, profileId: profile.id });

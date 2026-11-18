@@ -80,4 +80,9 @@ describe('where a mentioned thread sits', () => {
     const delivery = { mode: 'ship', policy: 'pull-request', status: 'waiting', waitingOn: 'checks', baseBranch: 'main', requestedAt: base.createdAt } as const;
     expect(placed({ ...base, status: 'idle', delivery })).toBe('working, delivery in progress');
   });
+
+  it('places a thread whose machine is offline on the Offline shelf, as the sidebar does', () => {
+    expect(placed({ ...base, status: 'running', machine: { id: 'mac', name: 'MacGonagall', online: false } }))
+      .toBe('offline shelf, until its machine is back; on MacGonagall (offline)');
+  });
 });

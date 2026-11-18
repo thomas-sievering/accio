@@ -29,7 +29,7 @@ The process on a machine that runs harnesses, executes turns and provides access
 _Avoid_: Server (for the role), machine (for the process), agent, sub-agent
 
 **Relay**:
-The hub passing messages between workers on different machines, so you can read and drive a thread from any client. The thread stays on its worker's machine; nothing is copied. Each client lists every machine's threads together, with the owning machine's name on the others. While that machine is offline its threads stay listed from the last list it sent, greyed and read-only, except that you can snooze them until the machine is back. A new thread can start on any machine on the relay, in any project the hub keeps: a machine without a checkout of the project's repository, this one included, clones it first, into the profile's folder there or else its home folder. No project starts on any machine. Saved images and files can be viewed through the relay. Sending image attachments, editing thread skills and Open app for an owned preview require the thread's machine. See the [relay plan](docs/plans/thread-relay.md).
+The hub passing messages between workers on different machines, so you can read and drive a thread from any client. The thread stays on its worker's machine; nothing is copied. Each client lists every machine's threads together, with the owning machine's name on the others. While that machine is offline its threads stay listed from the last list it sent, greyed and read-only, on the Offline shelf. A new thread can start on any machine on the relay, in any project the hub keeps: a machine without a checkout of the project's repository, this one included, clones it first, into the profile's folder there or else its home folder. No project starts on any machine. Saved images and files can be viewed through the relay. Sending image attachments, editing thread skills and Open app for an owned preview require the thread's machine. See the [relay plan](docs/plans/thread-relay.md).
 _Avoid_: Sync (for threads), tunnel
 
 **Update**:
@@ -196,7 +196,7 @@ The state of a thread whose last turn finished normally, with no delivery, Wait 
 _Avoid_: Idle, done, active
 
 **Offline thread**:
-A thread whose machine is offline. Its transcript can't load and it can't take a message or settle, so it is not Ready, whatever its last status was; that status is only the last one heard. It stays in the inbox, greyed with its machine tagged offline, until you snooze it until the machine is back.
+A thread whose machine is offline. Its transcript can't load and it can't take a message or settle, so it is not Ready, whatever its last status was; that status is only the last one heard. It leaves the inbox and Working by itself for the Offline shelf, greyed with its machine tagged offline, and comes back with its real status when the machine does. A settled or snoozed thread stays where it is.
 _Avoid_: Unavailable, stale
 
 **Interrupted**:
@@ -302,7 +302,7 @@ The app a thread's harness starts from its owned worktree through the project's 
 _Avoid_: Dev server, sandbox
 
 **Project dashboard**:
-A project's page, opened through Dashboard in the menu on the project name in a thread's header: the project's threads grouped as Needs you, Working and Snoozed, one line each, then Recently shipped (the default branch's newest commits, one line each, a pull request's merge commit shown by the PR's title, each joined to its Changelog entry and expanding to its shipped note, things to try, thread and PR), then its Issues, Changelog and settled threads, all folded. The Issues fold reads the project's issue tracker each time it opens and lists the open issues in dependency order (no issue above one it waits on) with a git-log style graph in the gutter: a dot per issue, a line from each issue down to the issues it unblocks. Each row says Ready, Blocked (with what it waits on) or Claimed; a filter narrows it to one parent issue or feature folder. It says why it is empty: no checkout here, no tracker, the tracker unavailable, or nothing open. Clicking an issue highlights its row and opens it in a reader beside the list (a sheet in a narrow window): its state and triage label, its Blocked by and Blocks as links that move the reader, its body (read when it opens, through the profile's GitHub account or from the local file) and a link to GitHub when it has one. A ready issue's reader has Start a thread, which starts and claims a thread on it as picking it in a draft does, then opens it; a blocked or claimed issue can't be started there. When a thread in the project already works on the issue (an open one, or a settled one for a claimed issue), the reader has Open thread instead.
+A project's page, opened through Dashboard in the menu on the project name in a thread's header: the project's threads grouped as Needs you, Working, Offline and Snoozed, one line each, then Recently shipped (the default branch's newest commits, one line each, a pull request's merge commit shown by the PR's title, each joined to its Changelog entry and expanding to its shipped note, things to try, thread and PR), then its Issues, Changelog and settled threads, all folded. The Issues fold reads the project's issue tracker each time it opens and lists the open issues in dependency order (no issue above one it waits on) with a git-log style graph in the gutter: a dot per issue, a line from each issue down to the issues it unblocks. Each row says Ready, Blocked (with what it waits on) or Claimed; a filter narrows it to one parent issue or feature folder. It says why it is empty: no checkout here, no tracker, the tracker unavailable, or nothing open. Clicking an issue highlights its row and opens it in a reader beside the list (a sheet in a narrow window): its state and triage label, its Blocked by and Blocks as links that move the reader, its body (read when it opens, through the profile's GitHub account or from the local file) and a link to GitHub when it has one. A ready issue's reader has Start a thread, which starts and claims a thread on it as picking it in a draft does, then opens it; a blocked or claimed issue can't be started there. When a thread in the project already works on the issue (an open one, or a settled one for a claimed issue), the reader has Open thread instead.
 _Avoid_: Project settings (for this page), overview
 
 **Space view**:
@@ -310,12 +310,16 @@ A space's page, opened through Space in the menu on the project name in a thread
 _Avoid_: Space dashboard, space settings (for this page)
 
 **Inbox**:
-The threads at the top of the sidebar, above the shelves: those back with you, most recently returned first. A thread in it can be Ready, Interrupted or Failed, or wait on you for a secret, a review, a manual merge or a delivery that needs attention. A thread leaves it when a turn starts (to Working), when you snooze it or when it settles. Another machine's thread stays in it while that machine is offline, greyed and tagged offline.
+The threads at the top of the sidebar, above the shelves: those back with you, most recently returned first. A thread in it can be Ready, Interrupted or Failed, or wait on you for a secret, a review, a manual merge or a delivery that needs attention. A thread leaves it when a turn starts (to Working), when its machine goes offline (to Offline), when you snooze it or when it settles.
 _Avoid_: Open list, active threads, ready threads (Ready is one state within it)
 
 **Shelf**:
-A group of threads in the sidebar below the inbox: Working, Snoozed and Settled. Working holds threads in progress without you: a running turn, a delivery GitHub is carrying, or a Wait. A thread comes back to the top of the inbox when it finishes or needs you.
-_Avoid_: Folder, tab
+A group of threads in the sidebar below the inbox: Working, Offline, Snoozed and Settled, each folded or open as you left it. Working holds threads in progress without you: a running turn, a delivery GitHub is carrying, or a Wait. A thread comes back to the top of the inbox when it finishes or needs you. Settled wins over Snoozed, Snoozed over Offline, and Offline over Working and the inbox; the project dashboard, space view and thread mentions place threads the same way.
+_Avoid_: Folder, inbox, tab
+
+**Offline shelf**:
+The shelf between Working and Snoozed holding Offline threads, which can't be acted on until their machine is back. Its header counts them per machine, such as "Offline · MacGonagall 2". A thread moves there, or back, only once its machine has stayed offline, or online, for a few seconds, so a short drop or a brief return doesn't move rows back and forth.
+_Avoid_: Away, unavailable
 
 ## Secrets and hub connections
 

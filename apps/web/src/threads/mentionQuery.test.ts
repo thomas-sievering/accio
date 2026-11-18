@@ -60,6 +60,7 @@ describe('thread mentions', () => {
   const shelves = {
     open: Array.from({ length: 7 }, (_, i) => thread(i, `Open thread ${i}`)),
     working: [thread(7, 'Fix the login redirect')],
+    offline: [thread(6, 'Login on the laptop')],
     snoozed: [thread(8, 'Snoozed login cleanup')],
     settled: Array.from({ length: 5 }, (_, i) => thread(9, `Settled ${i}`)),
   };
@@ -71,8 +72,8 @@ describe('thread mentions', () => {
     expect(listed.map((o) => 'group' in o && o.group)).toEqual([...Array(5).fill('open'), 'working', 'settled', 'settled', 'settled']);
   });
 
-  it('searches every thread by title once you type, snoozed ones too', () => {
-    expect(mentionOptions(state, 'login', [], shelves).map((o) => 'thread' in o && o.thread.title)).toEqual(['Fix the login redirect', 'Snoozed login cleanup']);
+  it('searches every thread by title once you type, offline and snoozed ones too', () => {
+    expect(mentionOptions(state, 'login', [], shelves).map((o) => 'thread' in o && o.thread.title)).toEqual(['Fix the login redirect', 'Login on the laptop', 'Snoozed login cleanup']);
     expect(mentionOptions(state, 'op', [], shelves).map((o) => o.handle).slice(0, 2)).toEqual(['opus', 'open-thread-0-000000']);
     expect(mentionOptions(state, 'op', [], shelves, 'threads').every((o) => 'thread' in o)).toBe(true);
   });
