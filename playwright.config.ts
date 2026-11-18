@@ -4,7 +4,7 @@ import { createServer } from 'node:net';
 /** Browser suites. Each project drives its own fixture server (`scripts/<project>-test-server.ts`, started by tests/servers.ts). */
 const suites = {
   relay: { testMatch: ['relay.spec.ts', 'machine-revoke.spec.ts'], timeout: 30_000 },
-  chat: { testMatch: ['model-isolation.spec.ts', 'naming.spec.ts', 'goal.spec.ts', 'wait.spec.ts', 'inline-chat.spec.ts', 'delivery.spec.ts', 'delivery-merge.spec.ts', 'effort.spec.ts', 'new-thread.spec.ts', 'skills-panel.spec.ts', 'settings.spec.ts', 'prompt-size.spec.ts', 'project-dashboard.spec.ts', 'mentions.spec.ts', 'images.spec.ts', 'pasted-text.spec.ts', 'ship-when-done.spec.ts', 'recall-message.spec.ts', 'reactions.spec.ts', 'issue-picker.spec.ts', 'spaces.spec.ts', 'space-view.spec.ts', 'sidebar-motion.spec.ts', 'app-pages.spec.ts', 'menu-keys.spec.ts'], timeout: 30_000 },
+  chat: { testMatch: ['model-isolation.spec.ts', 'naming.spec.ts', 'goal.spec.ts', 'wait.spec.ts', 'inline-chat.spec.ts', 'delivery.spec.ts', 'delivery-merge.spec.ts', 'effort.spec.ts', 'new-thread.spec.ts', 'skills-panel.spec.ts', 'settings.spec.ts', 'prompt-size.spec.ts', 'project-dashboard.spec.ts', 'mentions.spec.ts', 'images.spec.ts', 'pasted-text.spec.ts', 'ship-when-done.spec.ts', 'recall-message.spec.ts', 'reactions.spec.ts', 'issue-picker.spec.ts', 'spaces.spec.ts', 'space-view.spec.ts', 'sidebar-motion.spec.ts', 'app-pages.spec.ts', 'menu-keys.spec.ts', 'move-on.spec.ts'], timeout: 30_000 },
   limits: { testMatch: ['limits.spec.ts'], timeout: 90_000 },
   secrets: { testMatch: ['secret-ui.spec.ts'], timeout: 45_000 },
   sortinghat: { testMatch: ['sortinghat.spec.ts'], timeout: 60_000 },
@@ -25,7 +25,10 @@ async function port(suite: string) {
 
 const projects = [];
 for (const [name, suite] of Object.entries(suites)) {
-  projects.push({ name, ...suite, outputDir: `./out/e2e/${name}`, use: { baseURL: `http://127.0.0.1:${await port(name)}` } });
+  const baseURL = `http://127.0.0.1:${await port(name)}`;
+  // GLOSSARY: Move on. Specs that send and then read the reply stay in the thread; move-on.spec.ts clears this to test the default.
+  const storageState = { cookies: [], origins: [{ origin: baseURL, localStorage: [{ name: 'accio.moveOn', value: '0' }] }] };
+  projects.push({ name, ...suite, outputDir: `./out/e2e/${name}`, use: { baseURL, storageState } });
 }
 
 export default defineConfig({

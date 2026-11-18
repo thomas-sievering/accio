@@ -21,6 +21,9 @@ app.whenReady().then(async () => {
     item.once('done', (_doneEvent, state) => app.chatDownloads.push({ name: item.getFilename(), path: destination, state }));
   });
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  // GLOSSARY: Move on. Off, as for the browser specs (playwright.config.ts storageState): set on the fixture's origin first.
+  await win.loadURL(new URL('/move-on-off', process.env.ACCIO_CHAT_TEST_URL).href);
+  await win.webContents.executeJavaScript("localStorage.setItem('accio.moveOn', '0')");
   await win.loadURL(`${process.env.ACCIO_CHAT_TEST_URL}/#token=isolated-chat-test-token`);
 });
 app.on('window-all-closed', () => app.quit());

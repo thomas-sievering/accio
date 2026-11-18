@@ -192,6 +192,12 @@ export function Composer({
     input.current?.focus();
   });
 
+  // Opening a thread, by Move on or otherwise, continues its kept draft: the cursor goes after it.
+  useLayoutEffect(() => {
+    const el = input.current;
+    if (el) el.setSelectionRange(el.value.length, el.value.length);
+  }, []);
+
   // Picking an option is the start of a message: put the cursor there.
   // Keyed on the label: a re-sent attachment for the same option must not take focus again.
   // eslint-disable-next-line react-hooks/exhaustive-deps

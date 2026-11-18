@@ -5,16 +5,23 @@ import { useLiveState, useLocalState } from '../app/useLive';
 import { useProjects } from '../projects/projects';
 import { useProfiles } from '../profiles/profiles';
 import { observeTranscript, type TranscriptState } from './observeTranscript';
-import { createPlacementTracker, filterThreads, nextMorning, shelveThreads, type Placement, type ThreadShelves } from './shelves';
+import { createPlacementTracker, filterThreads, nextAfterSend, nextMorning, shelveThreads, type Placement, type ThreadShelves } from './shelves';
 import { clearFirstMessages } from './sentImages';
 
 type ThreadsCtx = {
   threads: ThreadView[] | undefined;
   loadError?: string;
   retryLoad: () => void;
-  /** The open thread, or '' when none (or a draft) is open. */
+  /** The open thread, or '' when none (or a draft, or the empty page) is open. */
   selectedId: string;
   select: (id: string) => void;
+  /** GLOSSARY: Move on. The page Move on opens when the inbox is empty; a landing page later. */
+  emptyPage: boolean;
+  /** Whether a send that starts a turn moves on: a preference of this client, on by default. */
+  movesOn: boolean;
+  setMovesOn: (on: boolean) => void;
+  /** After a send from `sentId` that started a turn: opens the top of the inbox, or the empty page. */
+  moveOn: (sentId: string) => void;
   /**
    * A new thread not yet started: just the checkout it will run in, or a hub project this machine has no
    * checkout of (`repoKey`, with its profile). It exists on the server only once its first message is sent.
@@ -34,6 +41,10 @@ type ThreadsCtx = {
   /** Thread actions shared by the row's hover buttons and its right-click menu. */
   act: ThreadActions;
 };
+
+/** The saved selection of the empty page; thread ids never take this form. */
+const EMPTY_PAGE = ':empty';
+const MOVES_ON_KEY = 'accio.moveOn';
 
 type Draft = { checkoutId: string; profileId?: string; repoKey?: string };
 
@@ -66,16 +77,36 @@ export function ThreadsProvider({ children, onNavigate }: { children: ReactNode;
   const now = useMinuteClock();
   useMoveLegacyShelfMarks(threads);
   const placement = usePlacement(threads, now);
+  const [movesOn, updateMovesOn] = useState(() => localStorage.getItem(MOVES_ON_KEY) !== '0');
+  const shelves = useMemo(
+    () => shelveThreads(filterThreads(threads ?? [], { project: projectScope, profileId: filter, projects: projects?.projects ?? [] }, query), now, placement),
+    [threads, projectScope, filter, projects, query, now, placement],
+  );
+  // A send is accepted after a round trip; Move on reads the inbox and selection as they are by then.
+  const latest = useRef({ shelves, selectedId, draft });
+  latest.current = { shelves, selectedId, draft };
+  const emptyPage = !draft && selectedId === EMPTY_PAGE;
 
   const value = useMemo<ThreadsCtx>(
     () => ({
       threads,
       loadError,
       retryLoad,
-      selectedId: draft ? '' : selectedId,
+      selectedId: draft || emptyPage ? '' : selectedId,
       select: (id) => {
         setDraft(null);
         setSelected(id);
+        onNavigate();
+      },
+      emptyPage,
+      movesOn,
+      setMovesOn: (on) => { localStorage.setItem(MOVES_ON_KEY, on ? '1' : '0'); updateMovesOn(on); },
+      moveOn: (sentId) => {
+        const current = latest.current;
+        // Only from the thread still open: a send accepted after you went elsewhere leaves you there.
+        if (current.draft || current.selectedId !== sentId) return;
+        const next = nextAfterSend(current.shelves.open, sentId);
+        setSelected(next.kind === 'thread' ? next.id : EMPTY_PAGE);
         onNavigate();
       },
       draft,
@@ -84,7 +115,7 @@ export function ThreadsProvider({ children, onNavigate }: { children: ReactNode;
         onNavigate();
       },
       placement,
-      shelves: shelveThreads(filterThreads(threads ?? [], { project: projectScope, profileId: filter, projects: projects?.projects ?? [] }, query), now, placement),
+      shelves,
       projectScope,
       setProjectScope,
       query,
@@ -100,7 +131,7 @@ export function ThreadsProvider({ children, onNavigate }: { children: ReactNode;
     // setDraft, setSelected and setProjectScope are rebuilt each render, but they only close over
     // keys derived from client, which is listed; recreate only when data changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [client, threads, placement, loadError, retryLoad, selectedId, draft, onNavigate, now, projects, projectScope, query, filter],
+    [client, threads, placement, shelves, loadError, retryLoad, selectedId, emptyPage, movesOn, draft, onNavigate, now, projectScope, query],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

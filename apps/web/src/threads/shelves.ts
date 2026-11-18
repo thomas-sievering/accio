@@ -113,6 +113,18 @@ export function offlineMachines(offline: readonly ThreadView[]): { id: string; n
   return [...machines.values()];
 }
 
+/** What the main pane shows after Move on: a thread, or the empty page. */
+export type NextSelection = { kind: 'thread'; id: string } | { kind: 'empty' };
+
+/**
+ * GLOSSARY: Move on. After a send that starts a turn, the top of the inbox other than the thread
+ * just sent (it can still sit there until its turn shows as Working), else the empty page.
+ */
+export function nextAfterSend(inbox: readonly Pick<ThreadView, 'id'>[], sentId: string): NextSelection {
+  const next = inbox.find((t) => t.id !== sentId);
+  return next ? { kind: 'thread', id: next.id } : { kind: 'empty' };
+}
+
 /** What the sidebar is narrowed to: one project, or every project of the selected profile. */
 export type ThreadScope = {
   /** The one project the sidebar shows, or '' for all. */

@@ -49,6 +49,7 @@ function usePlace(checkoutId: string, profileId?: string, projectId?: string) {
 
 export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits, onOpenSecrets }: { thread: ThreadView; active?: boolean; onOpenProfile: (profileId: string) => void; onOpenLimits: (profileId: string) => void; onOpenSecrets?: (profileId: string) => void }) {
   const client = useClient();
+  const { movesOn, moveOn } = useThreads();
   const { unavailable, imagesUnavailable } = useThreadAvailability(thread);
   const place = usePlace(thread.checkoutId, thread.profileId, thread.machine ? thread.projectId : undefined);
   const { items, error, retry } = useTranscript(thread.id);
@@ -104,8 +105,11 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
         attachment={pick && pickLabel ? { label: pickLabel, onRemove: () => setPick(undefined) } : undefined}
         model={thread.model}
         onSend={async (text, mode, images) => {
+          // GLOSSARY: Move on. Only a send that starts a turn; steering or queueing keeps you here.
+          const startsTurn = !running;
           await client.call('threads.send', { threadId: thread.id, text, mode, ...(pick ? { pick } : {}), ...(images.length ? { images } : {}) });
           setPick(undefined);
+          if (startsTurn && movesOn) moveOn(thread.id);
         }}
         toolbar={<>
           <ModelPicker key={thread.id} profileId={thread.profileId} value={thread.model} disabled={running || !!unavailable} onChange={async (model) => {

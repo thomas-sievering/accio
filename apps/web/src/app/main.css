@@ -31,6 +31,11 @@
   background: var(--side);
   border-bottom: 1px solid var(--line);
 }
+/* Move on with an empty inbox: blank until it becomes a landing page. */
+.empty-page {
+  flex: 1;
+}
+
 .empty {
   margin: auto;
   color: var(--dim);

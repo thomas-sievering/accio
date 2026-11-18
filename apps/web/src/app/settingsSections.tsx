@@ -1,10 +1,11 @@
 import type { SectionData, SectionEntry, LimitsLink } from './Settings';
-import { BookOpen, Folder, Hub, IdCard, Key, Layers, Limits, Monitor, Plug, ScrollText, Spaces, Users, Wrench } from './icons';
+import { ArrowUp, BookOpen, Folder, Hub, IdCard, Key, Layers, Limits, Monitor, Plug, ScrollText, Spaces, Users, Wrench } from './icons';
 import { AddHub, HubSettings } from '../hub/HubSettings';
 import { MachinePage, MachinesList, useMachinesData } from '../machine/MachineSettings';
 import { HarnessDetail, HarnessesList, useHarnessesData } from '../harnesses/HarnessesSettings';
 import { SystemPromptSettings } from '../harnesses/SystemPromptSettings';
 import { NamingSettings } from '../threads/NamingSettings';
+import { SendingSettings } from '../threads/SendingSettings';
 import { AccountDetail, AccountsList, NewAccount, useAccountsData } from '../profiles/AccountsSettings';
 import { NewProfile, ProfileDetail, ProfilesList, useProfilesData } from '../profiles/ProfilesSettings';
 import { NewSecret, SecretDetail, SecretsList, useSecretsData } from '../secrets/SecretsSettings';
@@ -23,7 +24,7 @@ function section<T extends { id: string }, D extends SectionData<T>>(entry: Sect
  * Every Settings section, in sidebar order. Settings draws each one's sidebar link, breadcrumb and
  * list, new, loading, error and deleted pages from its entry here; a new section is its id in `Section`, one entry and its panels.
  */
-export type Section = 'profiles' | 'accounts' | 'secrets' | 'harnesses' | 'systemPrompt' | 'naming' | 'tools' | 'mcps' | 'skills' | 'projects' | 'spaces' | 'machines' | 'hub';
+export type Section = 'profiles' | 'accounts' | 'secrets' | 'harnesses' | 'systemPrompt' | 'naming' | 'sending' | 'tools' | 'mcps' | 'skills' | 'projects' | 'spaces' | 'machines' | 'hub';
 
 export const SETTINGS: Record<Section | 'limits', SectionEntry | LimitsLink> = {
   profiles: section({ label: 'Profiles', icon: <Users />, group: 'Profiles', noun: 'profile', plural: 'profiles', useData: useProfilesData, List: ProfilesList, New: NewProfile, Detail: ProfileDetail }),
@@ -39,6 +40,7 @@ export const SETTINGS: Record<Section | 'limits', SectionEntry | LimitsLink> = {
   harnesses: section({ label: 'Harnesses', icon: <Layers />, group: 'Threads', noun: 'harness', plural: 'harnesses', useData: useHarnessesData, name: () => 'Built-in tools', List: HarnessesList, Detail: HarnessDetail }),
   systemPrompt: section({ label: 'System prompt', icon: <ScrollText />, group: 'Threads', List: SystemPromptSettings }),
   naming: section({ label: 'Thread naming', icon: <ScrollText />, group: 'Threads', List: NamingSettings }),
+  sending: section({ label: 'Sending', icon: <ArrowUp />, group: 'Threads', List: SendingSettings }),
   tools: section({ label: 'CLIs', icon: <Wrench />, group: 'Tools and skills', noun: 'CLI', plural: 'CLIs', useData: useToolsData, List: ToolsList, New: NewTool, Detail: ToolDetail }),
   mcps: section({ label: 'MCP servers', icon: <Plug />, group: 'Tools and skills', noun: 'MCP server', plural: 'MCP servers', useData: useMcpData, List: McpList, New: NewMcp, Detail: McpDetail }),
   skills: section({ label: 'Skills', icon: <BookOpen />, group: 'Tools and skills', noun: 'skill source', plural: 'skill sources', useData: useSkillsData, List: SkillsList, New: NewSource, Detail: SourcePage }),

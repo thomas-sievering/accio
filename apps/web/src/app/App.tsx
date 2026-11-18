@@ -63,7 +63,7 @@ function Shell({ page, setPage }: { page: Page; setPage: Dispatch<SetStateAction
   const { profiles, accounts, filter, setFilter } = useProfiles();
   const { state } = useProjects();
   const { spaces } = useSpaces();
-  const { threads, selectedId, select, draft, projectScope, setProjectScope } = useThreads();
+  const { threads, selectedId, select, draft, emptyPage, projectScope, setProjectScope } = useThreads();
   const filterLabel = state?.projects.find((p) => p.id === projectScope)?.name
     ?? profiles?.find((p) => p.id === filter)?.name;
   const thread = threads?.find((t) => t.id === selectedId);
@@ -228,7 +228,7 @@ function Shell({ page, setPage }: { page: Page; setPage: Dispatch<SetStateAction
             ) : (
               <>
                 <header className="main-top drag" />
-                {settingUp ? <FirstRun /> : <Idle />}
+                {settingUp ? <FirstRun /> : emptyPage ? <EmptyPage /> : <Idle />}
               </>
             )}
           </div>
@@ -240,6 +240,11 @@ function Shell({ page, setPage }: { page: Page; setPage: Dispatch<SetStateAction
       </div>
     </>
   );
+}
+
+/** GLOSSARY: Move on. Where Move on lands when the inbox is empty; it becomes a landing page later. */
+function EmptyPage() {
+  return <section className="empty-page" aria-label="Empty page" />;
 }
 
 function Idle() {

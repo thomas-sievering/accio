@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ThreadView } from '@accio/protocol';
-import { createPlacementTracker, filterThreads, nextMorning, offlineMachines, OFFLINE_GRACE_MS, shelveThreads, WORKING_GRACE_MS } from './shelves';
+import { createPlacementTracker, filterThreads, nextAfterSend, nextMorning, offlineMachines, OFFLINE_GRACE_MS, shelveThreads, WORKING_GRACE_MS } from './shelves';
 
 const now = new Date('2026-11-03T12:00:00');
 const thread = (id: string, extra: Partial<ThreadView> = {}): ThreadView => ({
@@ -217,6 +217,40 @@ describe('createPlacementTracker across a machine going offline', () => {
     expect(p.place(settled(false))).toBe('settled');
     expect(p.place(snoozed(false))).toBe('snoozed');
     expect(p.nextDeadline).toBeUndefined();
+  });
+});
+
+describe('nextAfterSend', () => {
+  const inbox = (threads: ThreadView[]) => shelveThreads(threads, now).open;
+
+  it('opens the top of the inbox, skipping the thread just sent even while it still sits there', () => {
+    const threads = [
+      thread('sent', { updatedAt: '2026-11-03T11:30:00Z' }),
+      thread('older', { updatedAt: '2026-11-03T10:30:00Z' }),
+      thread('newer', { updatedAt: '2026-11-03T11:00:00Z' }),
+    ];
+    expect(nextAfterSend(inbox(threads), 'sent')).toEqual({ kind: 'thread', id: 'newer' });
+  });
+
+  it('counts every inbox thread: Failed, Interrupted and ones that need you', () => {
+    for (const extra of [{ status: 'failed' }, { status: 'interrupted' }, { status: 'running', needsSecret: true }] as Partial<ThreadView>[])
+      expect(nextAfterSend(inbox([thread('sent', { status: 'running' }), thread('next', extra)]), 'sent')).toEqual({ kind: 'thread', id: 'next' });
+  });
+
+  it('skips Working, Offline, Snoozed and Settled threads', () => {
+    const threads = [
+      thread('sent', { status: 'running' }),
+      thread('working', { status: 'running' }),
+      thread('snoozed', { snoozedUntil: later }),
+      thread('settled', { settledAt: '2026-11-03T11:00:00' }),
+      thread('offline', on(mac, false)),
+    ];
+    expect(nextAfterSend(inbox(threads), 'sent')).toEqual({ kind: 'empty' });
+  });
+
+  it('opens the empty page when only the sent thread is left, or nothing', () => {
+    expect(nextAfterSend(inbox([thread('sent')]), 'sent')).toEqual({ kind: 'empty' });
+    expect(nextAfterSend([], 'sent')).toEqual({ kind: 'empty' });
   });
 });
 
