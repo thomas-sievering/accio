@@ -6,6 +6,8 @@ A space groups projects that share context, such as "hrc" or "Copilot Studio age
 
 A thread stays attached to one project. It reads sibling projects from their checkouts on its machine. To change a sibling, including the home, it starts a thread in that sibling. The new thread runs under the sibling's profile and ships its change on its own. Accio passes the home's AGENTS.md and the sibling list to every thread in the space through its own instructions, the same way for every harness.
 
+A thread can change a space with the `edit_space` accio tool when you ask it to: add or remove projects, set or clear the home, or rename it. Which space a project is in decides what context and siblings every thread in the space gets, so every edit waits for you to allow it, as Everywhere does for `add_mcp` (ADR 0024). The hub checks the same rules as for Settings. Creating and deleting spaces stays in Settings. (Added 2026-11-18.)
+
 ## Considered options
 
 - **Spaces inside a profile.** This is simpler, but one subject can span profiles, and a profile is also not a fixed property of the work: limits are handled by fallback accounts in a house, not by moving work between profiles.

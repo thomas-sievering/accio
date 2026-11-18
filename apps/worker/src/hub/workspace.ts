@@ -16,6 +16,7 @@ import { startThreadTool } from '../threads/startThread.js';
 import { Projects } from '../projects/projects.js';
 import { Spaces, refused } from '../spaces/spaces.js';
 import { NewHomes } from '../spaces/newHome.js';
+import { editSpaceTool } from '../spaces/editSpace.js';
 import { SpaceContext } from '../spaces/spaceContext.js';
 import { SiblingThreads } from '../spaces/siblingThreads.js';
 import { MissingCheckouts } from '../spaces/missingCheckouts.js';
@@ -209,6 +210,12 @@ export async function openWorkspace(record: SavedHub, deps: WorkspaceDeps, slot:
     save: (mcp) => resources.saveMcp(mcp),
     beginSignIn: (id) => resources.beginMcpSignIn(id),
     setToken: (id, token) => resources.setMcpToken(id, token),
+  }), editSpaceTool({
+    caller: levelTool.caller,
+    spaces: () => spaces.list(),
+    projects: () => projects.state(),
+    save: (space) => refused(() => settings.saveSpace(space)),
+    confirm: levelTool.confirm,
   }));
   // GLOSSARY: Relay. The only answer for the thread and machine lists: other machines' threads join
   // this machine's, and calls about them go to their machine.

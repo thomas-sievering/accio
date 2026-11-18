@@ -5,7 +5,8 @@ import { UserError, type Broadcast, type Router } from '../rpc/router.js';
 /**
  * GLOSSARY: Space. Kept with the hub's shared settings, so every paired machine has the
  * same spaces; the hub enforces their rules on every save (ADR 0019). Only the user's
- * clients reach these methods: no accio tool changes which space a project is in.
+ * clients reach these methods; the edit_space accio tool saves through the hub too, and
+ * only after the user allows it.
  */
 export class Spaces {
   private announced: string;

@@ -138,7 +138,7 @@ A repository, recognised across machines by its git remote URL. It belongs to ex
 _Avoid_: Workspace, repo (in UI text)
 
 **Space**:
-A named group of projects that share context, such as "hrc" or "Copilot Studio agents". A project is in at most one space, or in none. A space is not tied to a profile, so its projects may belong to different profiles. A space can have a home, which holds what applies to the whole space. Its projects can read and change each other, and each project ships its own changes.
+A named group of projects that share context, such as "hrc" or "Copilot Studio agents". A project is in at most one space, or in none. A space is not tied to a profile, so its projects may belong to different profiles. A space can have a home, which holds what applies to the whole space. Its projects can read and change each other, and each project ships its own changes. A thread can change which projects are in a space, its home and its name with the edit_space accio tool, after you allow it.
 _Avoid_: Workspace, home, group
 
 **Home**:

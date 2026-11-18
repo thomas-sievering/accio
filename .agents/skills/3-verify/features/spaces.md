@@ -42,6 +42,10 @@ The UI doesn't show this text. Check it with the fake-harness suite `npx vitest 
 
 `spaces.createHome` checks the space's rules and that a thread can start in the profile (as `threads.start` would) before writing anything, then claims the folder, so a second request for the same name is refused. A failure while writing, committing, creating the GitHub repo or saving the space removes the folder (and the added project) again; a GitHub repo already created stays. `New GitHub repo` runs `gh repo create <login>/<name> --private --source <folder> --remote origin --push` as the profile's GitHub account chosen on this machine. Without one it is refused before anything is created; gh's active account is never used. The fake-harness suite `npx vitest run apps/worker/src/spaces/newHome.test.ts` covers the template, the home, the starter thread and its prompt, the refusals, and the GitHub path with a fake gh. Creating a real GitHub repo needs a signed-in gh and is not covered by any automated check: try it by hand with a disposable repo name and delete the repo afterwards.
 
+## edit_space
+
+The `edit_space` accio tool (`apps/worker/src/spaces/editSpace.ts`) adds and removes projects, sets or clears the home and renames a space, by name or key, defaulting to the caller's space. Every change shows a confirmation card first; declined or expired saves nothing. A project in another space is refused with that space's name. Check it with `npx vitest run apps/worker/src/spaces/editSpace.test.ts`; in a real app, ask a thread to add a disposable project to a disposable space, allow the card, and require the row in Settings / Spaces.
+
 ## Gotchas
 
 - `Create home` saves the space as the editor shows it, unsaved edits included; `Cancel` in the dialog leaves the editor as it was.
