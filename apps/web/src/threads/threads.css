@@ -958,6 +958,18 @@ div.model-picker-empty b { color: var(--ink); font-weight: 500; }
 .effort-word-out { opacity: 0; }
 .effort-word-current, .effort-word-out { transform-origin: left center; }
 .effort-word-out { position: absolute; inset: 0; }
+/* GLOSSARY: Borrowing. Whose accounts the listed models spend, above the rail; the chip names a borrowed profile. */
+.model-picker.with-profiles:popover-open { grid-template-rows: auto minmax(0, 1fr) auto; }
+.model-picker-profiles { grid-column: 1 / -1; display: flex; align-items: center; gap: 2px; min-width: 0; padding: 6px 8px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.model-picker-profiles > span { flex: none; margin-right: 6px; padding-left: 4px; color: var(--muted); font-size: 12px; }
+.model-picker-profiles button { flex: none; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 3px 9px; border-radius: 6px; color: var(--muted); font-size: 12.5px; }
+.model-picker-profiles button:hover { color: var(--ink); background: var(--raised-2); }
+.model-picker-profiles button[aria-pressed="true"] { color: var(--ink-strong); background: var(--raised-2); }
+.model-picker-used-up { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-bottom: 4px; padding: 7px 10px; border-radius: 7px; background: color-mix(in srgb, var(--amber) 10%, transparent); color: var(--amber); font-size: 12px; }
+.model-picker-used-up > span { flex: 1 1 160px; }
+.model-picker-used-up button { flex: none; padding: 2px 8px; border-radius: 6px; color: var(--ink-strong); background: var(--raised-2); font-size: 12px; }
+.model-picker-used-up button:hover { background: var(--hover); }
+.model-borrowed { flex: none; max-width: 96px; overflow: hidden; text-overflow: ellipsis; padding: 0 5px; border: 1px solid var(--line-2); border-radius: 5px; font-size: 11px; line-height: 16px; }
 .model-picker-row.limited .model-picker-name { opacity: 0.55; }
 .model-picker-limited { color: var(--amber) !important; }
 /* GLOSSARY: Machine. Where a new thread runs; a quiet chip under the composer. */

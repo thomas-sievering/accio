@@ -52,6 +52,9 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
   const { movesOn, moveOn } = useThreads();
   const { unavailable, imagesUnavailable } = useThreadAvailability(thread);
   const place = usePlace(thread.checkoutId, thread.profileId, thread.machine ? thread.projectId : undefined);
+  // GLOSSARY: Borrowing. The profile whose accounts its turns spend: another one it borrows from, else its own.
+  const { profiles = [] } = useProfiles();
+  const spending = thread.borrowFrom ? profiles.find((p) => p.id === thread.borrowFrom) : place.profile;
   const { items, error, retry } = useTranscript(thread.id);
   useReportPendingSecrets(thread.id, items);
   const starting = firstMessage(client, thread.id);
@@ -88,12 +91,12 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
       {visibleItems && error && <div className="notice-bar error" role="alert">
         <span>Could not refresh transcript: {error}</span><button className="ghost" onClick={retry}>Retry</button>
       </div>}
-      <ThreadNotice thread={thread} profile={place.profile} detail={detail} onOpenProfile={onOpenProfile} />
+      <ThreadNotice thread={thread} profile={spending} borrowed={!!thread.borrowFrom} detail={detail} onOpenProfile={onOpenProfile} />
       <Composer
         key={thread.id}
         imagesUnavailable={imagesUnavailable}
-        disabled={!!unavailable || savingModel || thread.delivery?.status === 'queued' || thread.delivery?.status === 'running' || !place.profile || !accountForModel(place.profile, thread.model, place.accounts)?.signedIn}
-        actions={<><DeliveryActions key={thread.id} thread={thread} active={active} project={place.project} canRun={!!place.profile && !!accountForModel(place.profile, thread.model, place.accounts)?.signedIn} /><GoalBar thread={thread} /><WaitBar thread={thread} /><QueueTray thread={thread} /></>}
+        disabled={!!unavailable || savingModel || thread.delivery?.status === 'queued' || thread.delivery?.status === 'running' || !spending || !accountForModel(spending, thread.model, place.accounts)?.signedIn}
+        actions={<><DeliveryActions key={thread.id} thread={thread} active={active} project={place.project} canRun={!!spending && !!accountForModel(spending, thread.model, place.accounts)?.signedIn} /><GoalBar thread={thread} /><WaitBar thread={thread} /><QueueTray thread={thread} /></>}
         target={thread.id}
         draftId={`thread:${thread.id}`}
         lastMessage={lastSentText(items)}
@@ -112,12 +115,12 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
           if (startsTurn && movesOn) moveOn(thread.id);
         }}
         toolbar={<>
-          <ModelPicker key={thread.id} profileId={thread.profileId} value={thread.model} disabled={running || !!unavailable} onChange={async (model) => {
+          <ModelPicker key={thread.id} profileId={thread.profileId} borrowFrom={thread.borrowFrom} value={thread.model} disabled={running || !!unavailable} onChange={async (model, borrowFrom) => {
             setSavingModel(true);
-            try { await client.call('threads.setModel', { threadId: thread.id, model }); }
+            try { await client.call('threads.setModel', { threadId: thread.id, model, ...(borrowFrom !== undefined ? { borrowFrom } : {}) }); }
             finally { setSavingModel(false); }
           }} />
-          <ContextMeter items={items ?? []} limits={place.profile && <LimitsIndicator active={active} account={accountForModel(place.profile, thread.model, place.accounts)} onOpen={() => onOpenLimits(place.profile!.id)} />} />
+          <ContextMeter items={items ?? []} limits={spending && <LimitsIndicator active={active} account={accountForModel(spending, thread.model, place.accounts)} onOpen={() => onOpenLimits(spending.id)} />} />
         </>}
       />
     </>
@@ -136,8 +139,13 @@ export function DraftPane({ checkoutId, profileId, repoKey: hubRepoKey, active =
   const hubProject = hubRepoKey ? projectsState?.elsewhere?.find((p) => p.repoKey === hubRepoKey) ?? projectsState?.projects.find((p) => p.repoKey === hubRepoKey) : undefined;
   const projectName = hubRepoKey ? hubProject?.name ?? hubRepoKey.split('/').pop() : undefined;
   const place = usePlace(checkoutId, hubProject?.profileId ?? profileId);
-  const [choice, setChoice] = useState<{ checkoutId: string; profileId?: string; model: ModelSelection }>();
-  const model = choice?.checkoutId === checkoutId && choice.profileId === place.profile?.id ? choice.model : defaultModel(place.profile, place.accounts);
+  const [choice, setChoice] = useState<{ checkoutId: string; profileId?: string; model: ModelSelection; borrowFrom?: string }>();
+  const chosen = choice?.checkoutId === checkoutId && choice.profileId === place.profile?.id ? choice : undefined;
+  // GLOSSARY: Borrowing. A new thread can start on another profile's accounts too.
+  const { profiles = [] } = useProfiles();
+  const borrowFrom = chosen?.borrowFrom && profiles.some((p) => p.id === chosen.borrowFrom) ? chosen.borrowFrom : undefined;
+  const spending = borrowFrom ? profiles.find((p) => p.id === borrowFrom) : place.profile;
+  const model = chosen?.model ?? defaultModel(place.profile, place.accounts);
   useShareDraftHarness(model.harnessId);
   const machines = useLive(() => client.call('machines.list', {}), 'machines.changed');
   const [chosenMachineId, setChosenMachineId] = useState<string>();
@@ -183,7 +191,7 @@ export function DraftPane({ checkoutId, profileId, repoKey: hubRepoKey, active =
       {/* While starting, the composer settles where the thread's own will be, so the swap is still. */}
       <div className={`hero${starting ? ' starting' : ''}`} inert={!!starting}>
         <h1>{checkoutId ? <>What should we build in {place.project ? <span className="hero-project">{place.project.name}</span> : 'this checkout'}?</> : projectName ? <>What should we build in <span className="hero-project">{projectName}</span>?</> : 'What should we build?'}</h1>
-        <ThreadNotice profile={place.profile} model={model} onOpenProfile={onOpenProfile} />
+        <ThreadNotice profile={spending} borrowed={!!borrowFrom} model={model} onOpenProfile={onOpenProfile} />
         {chosenMachineId && unavailable && <p className="note" role="status">The selected machine is offline. Choose an online machine.</p>}
         <Composer
           target="draft"
@@ -192,7 +200,7 @@ export function DraftPane({ checkoutId, profileId, repoKey: hubRepoKey, active =
           skills={checkoutId ? { checkoutId, ...(place.profile ? { profileId: place.profile.id } : {}), harnessId: model.harnessId } : place.profile ? { profileId: place.profile.id, harnessId: model.harnessId } : undefined}
           imagesUnavailable={machine && !machine.thisMachine ? remoteImagesReason : undefined}
           handsOffImages
-          disabled={!!starting || !place.profile || !accountForModel(place.profile, model, place.accounts)?.signedIn || unavailable}
+          disabled={!!starting || !spending || !accountForModel(spending, model, place.accounts)?.signedIn || unavailable}
           placeholder={`Ask ${model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}
           model={model}
           attachment={offersIssues && issue ? { label: `${issue.label} ${issue.title}`, icon: <span className="issue-chip-mark"><Issue /></span>, onRemove: () => setPicked(undefined) } : undefined}
@@ -202,8 +210,9 @@ export function DraftPane({ checkoutId, profileId, repoKey: hubRepoKey, active =
             const shown = viewTransition('thread-start', () => setStarting({ text, images: previews }));
             try {
               const images = uploads.length ? { images: uploads } : {};
-              const thread = await client.call('threads.start', checkoutId ? { checkoutId, text, model, machineId, ...images, ...(sent ? { issue: { ref: sent.ref, title: sent.title } } : {}) }
-                : hubRepoKey ? { repoKey: hubRepoKey, text, model, machineId, ...images } : { profileId: profileId!, text, model, machineId, ...images });
+              const lent = borrowFrom ? { borrowFrom } : {};
+              const thread = await client.call('threads.start', checkoutId ? { checkoutId, text, model, machineId, ...lent, ...images, ...(sent ? { issue: { ref: sent.ref, title: sent.title } } : {}) }
+                : hubRepoKey ? { repoKey: hubRepoKey, text, model, machineId, ...lent, ...images } : { profileId: profileId!, text, model, machineId, ...lent, ...images });
               keepFirstMessage(client, thread.id, text, previews);
               await shown;
               if (open.current) await viewTransition('thread-open', () => select(thread.id));
@@ -215,8 +224,8 @@ export function DraftPane({ checkoutId, profileId, repoKey: hubRepoKey, active =
             }
           }}
           toolbar={<>
-            <ModelPicker profileId={place.profile?.id} value={model} onChange={async (model) => setChoice({ checkoutId, profileId: place.profile?.id, model })} />
-            {place.profile && <LimitsIndicator active={active} account={accountForModel(place.profile, model, place.accounts)} onOpen={() => onOpenLimits(place.profile!.id)} />}
+            <ModelPicker profileId={place.profile?.id} borrowFrom={borrowFrom} value={model} onChange={async (model, next) => setChoice({ checkoutId, profileId: place.profile?.id, model, borrowFrom: next === undefined ? borrowFrom : next ?? undefined })} />
+            {spending && <LimitsIndicator active={active} account={accountForModel(spending, model, place.accounts)} onOpen={() => onOpenLimits(spending.id)} />}
           </>}
         />
         <div className="draft-machine draft-context">

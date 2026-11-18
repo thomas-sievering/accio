@@ -7,30 +7,46 @@ import { EffortWord, effortSteps } from './EffortControl';
 import { useSteps, useWheelSteps } from './steps';
 import { prettyModelName } from './modelName';
 import { useModels } from './useModels';
+import { useProfiles } from '../profiles/profiles';
 import { formatDayTime } from '../ui/dates';
 import { usePopoverMenu } from '../ui/usePopoverMenu';
 
 /**
  * GLOSSARY: Effort. One chip for what a thread runs: the model and a muted effort word.
  * Scrolling over it, or the up and down keys, change the effort; clicking lists the
- * profile's models, favourites first, then each provider/harness pair.
+ * profile's models, favourites first, then each provider/harness pair. GLOSSARY: Borrowing. With
+ * other profiles on the hub, it also lists theirs: choosing one of their models borrows that profile's accounts.
  */
-export function ModelPicker({ profileId, value, onChange, disabled = false }: {
+export function ModelPicker({ profileId, borrowFrom, value, onChange, disabled = false }: {
   profileId?: string;
+  /** The other profile whose accounts it uses; absent for its own. */
+  borrowFrom?: string;
   value: ModelSelection;
-  onChange: (model: ModelSelection) => Promise<void>;
+  /** `borrowFrom` is the profile of the chosen model: null for its own, left out when only the effort changed. */
+  onChange: (model: ModelSelection, borrowFrom?: string | null) => Promise<void>;
   disabled?: boolean;
 }) {
   const client = useClient();
   const status = useConnectionStatus();
   const id = useId();
   const effortId = useId();
-  const { data, error: loadError, setError, update } = useModels(profileId);
+  const { profiles = [] } = useProfiles();
+  // Its own profile first, then every other one whose accounts it could borrow.
+  const own = profiles.find((p) => p.id === profileId);
+  const lenders = own ? [own, ...profiles.filter((p) => p.id !== profileId && p.house !== null)] : [];
+  const lender = borrowFrom ? profiles.find((p) => p.id === borrowFrom) : undefined;
+  const using = borrowFrom ?? profileId;
+  const [chosenProfile, setShownProfile] = useState<string>();
+  const shownProfile = chosenProfile && lenders.some((p) => p.id === chosenProfile) ? chosenProfile : using;
+  const inUse = useModels(using);
+  const other = useModels(shownProfile !== using ? shownProfile : undefined);
+  const { data, error: loadError, setError, update } = shownProfile !== using ? other : inUse;
   const { busy, error: actionError, run, clear } = useAction();
   const error = actionError ?? loadError;
   const [tab, setTab] = useState('favorites');
 
   const models = data?.models ?? [];
+  const usingModels = inUse.data?.models ?? [];
   const fallbackName = value.modelId === 'default' ? `${value.harnessId === 'codex' ? 'Codex' : 'Claude Code'} default` : value.modelId;
   const favorites = new Set(data?.favorites.map(modelKey));
   const groups = [...new Map(models.map((m) => [JSON.stringify([m.providerId, m.harnessId]), {
@@ -39,11 +55,13 @@ export function ModelPicker({ profileId, value, onChange, disabled = false }: {
   const activeTab = tab === 'favorites' || groups.some((g) => g.id === tab) ? tab : 'favorites';
   // Codex's 'default' is no longer listed; it stands for the account's default model.
   const current = value.harnessId === 'codex' && value.modelId === 'default'
-    ? { harnessId: 'codex', modelId: models.find((m) => m.harnessId === 'codex' && m.isDefault)?.id ?? 'default' } : value;
-  const selected = models.find((m) => m.harnessId === current.harnessId && m.id === current.modelId);
+    ? { harnessId: 'codex', modelId: usingModels.find((m) => m.harnessId === 'codex' && m.isDefault)?.id ?? 'default' } : value;
+  const selected = usingModels.find((m) => m.harnessId === current.harnessId && m.id === current.modelId);
+  // The thread's model is ticked only among the models of the profile whose accounts it uses.
+  const isCurrent = (m: { harnessId: string; id: string }) => shownProfile === using && m.harnessId === current.harnessId && m.id === current.modelId;
   const shortName = short(selected?.name ?? fallbackName);
   // An older model stays listed only while it is the thread's own, so it can still be seen and left.
-  const visible = models.filter((m) => !m.older || (m.harnessId === current.harnessId && m.id === current.modelId)).filter((m) => activeTab === 'favorites'
+  const visible = models.filter((m) => !m.older || isCurrent(m)).filter((m) => activeTab === 'favorites'
     ? favorites.has(modelKey({ harnessId: m.harnessId, modelId: m.id }))
     : JSON.stringify([m.providerId, m.harnessId]) === activeTab);
   // Open on the active model's provider, where the choice is likeliest; favourites only when nothing is selected.
@@ -51,11 +69,16 @@ export function ModelPicker({ profileId, value, onChange, disabled = false }: {
     : favorites.size > 0 ? 'favorites' : groups[0]?.id ?? 'favorites';
   // One height for every tab: the longest list or the rail, whichever is taller.
   const longest = Math.max(favorites.size * 33, ...groups.map((g) => models.filter((m) => JSON.stringify([m.providerId, m.harnessId]) === g.id).length * 33));
-  const height = Math.min(Math.max(longest + 14, (groups.length + 1) * 40 + 12, 172), 420);
+  const switches = lenders.length > 1;
+  const height = Math.min(Math.max(longest + 14, (groups.length + 1) * 40 + 12, 172) + (switches ? 37 : 0), 460);
+  // A used-up allowance of the provider shown (any provider on Favourites), with the other profiles to borrow from instead.
+  const shownProvider = groups.find((g) => g.id === activeTab)?.providerId;
+  const usedUp = (data?.usedUp ?? []).filter((limit) => activeTab === 'favorites' || limit.providerId === shownProvider);
+  const showProfile = (id: string) => { setShownProfile(id); focusItem(); };
   const { props: panelProps, trigger, popover: panel, focusItem } = usePopoverMenu({
     placement: { width: 340, side: 'above', height, gap: 8, fill: (room) => Math.min(height, room) },
     items: '[data-model-choice]',
-    onToggle: (open) => { if (open) setTab(openingTab()); },
+    onToggle: (open) => { if (open) { setShownProfile(undefined); setTab(openingTab()); } },
     // Left and right step through the tabs.
     onKeyDown: (event) => {
       if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
@@ -70,12 +93,12 @@ export function ModelPicker({ profileId, value, onChange, disabled = false }: {
     // Another model keeps the effort when it accepts it, so moving from Opus to Sonnet stays at high.
     const next = models.find((m) => m.harnessId === model.harnessId && m.id === model.modelId);
     const effort = value.effort && next?.efforts.some((e) => e.id === value.effort) ? value.effort : undefined;
-    await run(async () => { await onChange(effort ? { ...model, effort } : model); panel.current?.hidePopover(); });
+    await run(async () => { await onChange(effort ? { ...model, effort } : model, shownProfile === profileId ? null : shownProfile); panel.current?.hidePopover(); });
   };
   const favorite = async (model: ModelSelection, next: boolean) => {
-    if (!profileId || busy) return;
+    if (!shownProfile || busy) return;
     setError(undefined);
-    await run(async () => update(await client.call('models.favorite', { profileId, model, favorite: next })));
+    await run(async () => update(await client.call('models.favorite', { profileId: shownProfile, model, favorite: next })));
   };
   const switchTab = (step: number) => {
     const tabs = ['favorites', ...groups.map((g) => g.id)];
@@ -102,13 +125,14 @@ export function ModelPicker({ profileId, value, onChange, disabled = false }: {
     if (disabled || status !== 'open') { panel.current?.hidePopover(); effortMenu.current?.hidePopover(); }
   }, [disabled, status, panel, effortMenu]);
   const shownEffort = effort?.steps[stepper.shown];
-  const description = selected?.name ?? fallbackName;
+  const description = `${selected?.name ?? fallbackName}${lender ? `, on ${lender.name}’s accounts` : ''}`;
 
   return <span className="model-choice">
     <button type="button" ref={trigger} className="model-trigger" popoverTarget={id}
       disabled={disabled || busy || !profileId || status !== 'open'} aria-label={`Select model: ${description}`}>
       <ProviderLogo providerId={selected?.providerId ?? (value.harnessId === 'codex' ? 'openai' : 'anthropic')} />
       <span>{shortName}</span>
+      {lender && <span className="model-borrowed" title={`Borrowing ${lender.name}’s accounts`}>{lender.name}</span>}
     </button>
     {effort && <>
       <button type="button" ref={effortTrigger} className="effort-trigger" popoverTarget={effortId}
@@ -126,7 +150,11 @@ export function ModelPicker({ profileId, value, onChange, disabled = false }: {
         </button>)}
       </div>
     </>}
-    <div id={id} {...panelProps} popover="auto" className="model-picker" role="dialog" aria-label="Choose a model">
+    <div id={id} {...panelProps} popover="auto" className={`model-picker${switches ? ' with-profiles' : ''}`} role="dialog" aria-label="Choose a model">
+      {switches && <div className="model-picker-profiles" role="group" aria-label="Whose accounts">
+        <span>Accounts</span>
+        {lenders.map((p) => <button type="button" key={p.id} aria-pressed={p.id === shownProfile} onClick={() => showProfile(p.id)}>{p.name}</button>)}
+      </div>}
       <nav className="model-picker-tabs" aria-label="Model groups">
         <button type="button" className="favorite" aria-pressed={activeTab === 'favorites'} aria-label="Favourites" title="Favourites" onClick={() => setTab('favorites')}>
           <Star filled />
@@ -136,6 +164,12 @@ export function ModelPicker({ profileId, value, onChange, disabled = false }: {
         </button>)}
       </nav>
       <div className="model-picker-models" aria-busy={busy}>
+        {usedUp.map((limit) => <div className="model-picker-used-up" role="status" key={`${limit.providerId}:${limit.label}`}>
+          <span>{usedUpText(limit)}</span>
+          {lenders.filter((p) => p.id !== shownProfile).map((p) => <button type="button" key={p.id} onClick={() => showProfile(p.id)}>
+            {p.id === profileId ? `Use ${p.name}` : `Borrow from ${p.name}`}
+          </button>)}
+        </div>)}
         {!data && !error && <p className="model-picker-empty">Loading models…</p>}
         {data && models.length === 0 && <p className="model-picker-empty">No models are available. Sign this profile in with a supported provider.</p>}
         {models.length > 0 && visible.length === 0 && <div className="model-picker-empty">
@@ -146,7 +180,7 @@ export function ModelPicker({ profileId, value, onChange, disabled = false }: {
         {visible.map((m) => {
           const choice = { harnessId: m.harnessId, modelId: m.id };
           const key = modelKey(choice);
-          const isSelected = modelKey(current) === key;
+          const isSelected = isCurrent(m);
           const isFavorite = favorites.has(key);
           return <div className={`model-picker-row${isSelected ? ' selected' : ''}${m.limited ? ' limited' : ''}`} key={key} title={m.limited ? usedUpText(m.limited) : undefined}>
             <button type="button" data-model-choice aria-pressed={isSelected} onClick={() => void choose(choice)}>

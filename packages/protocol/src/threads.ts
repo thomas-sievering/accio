@@ -27,6 +27,11 @@ export type ThreadView = {
   /** Empty for a thread started with No project. */
   projectId: string;
   profileId: string;
+  /**
+   * GLOSSARY: Borrowing. Another profile whose accounts this thread's turns spend, chosen in the model picker;
+   * absent while it uses its own profile's. Skills, MCPs and GitHub stay the thread's profile's.
+   */
+  borrowFrom?: string;
   model: ModelSelection;
   title: string;
   status: ThreadStatus;
@@ -57,6 +62,9 @@ export type ThreadView = {
   /** GLOSSARY: Started thread. The thread that started this one through start_thread, and its machine. */
   startedBy?: { threadId: string; machineId: string };
 };
+
+/** GLOSSARY: Borrowing. The profile whose accounts and models a thread's turns use. */
+export const accountsProfile = (thread: { profileId: string; borrowFrom?: string }) => thread.borrowFrom ?? thread.profileId;
 
 /** GLOSSARY: Wait. What a started thread must reach: no turn left to run, a pull request open, or delivered. */
 export type WaitThreadState = 'stopped' | 'pr_open' | 'delivered';
@@ -284,7 +292,8 @@ const Images = z.array(z.string().uuid()).max(IMAGES_PER_MESSAGE).optional();
 const StartIssue = z.object({ ref: z.string().min(1).max(4096), title: z.string().trim().max(500) });
 /** GLOSSARY: Started thread. Set by start_thread, so the starting thread can wait for it. */
 const StartedBy = z.object({ threadId: z.string().min(1).max(200), machineId: z.string().min(1).max(200) });
-const StartCommon = { text: z.string().trim(), images: Images, model: ModelSelection.optional(), machineId: z.string().optional(), issue: StartIssue.optional(), startedBy: StartedBy.optional() };
+const BorrowFrom = z.string().min(1).max(200);
+const StartCommon = { text: z.string().trim(), images: Images, model: ModelSelection.optional(), borrowFrom: BorrowFrom.optional(), machineId: z.string().optional(), issue: StartIssue.optional(), startedBy: StartedBy.optional() };
 const said = (start: { text: string; images?: string[] }) => start.text.length > 0 || !!start.images?.length;
 const Start = z.union([
   z.object({ checkoutId: z.string().min(1), ...StartCommon }).refine(said, { message: 'Write a message' }),
@@ -294,7 +303,8 @@ const Start = z.union([
 ]);
 /** Base64 bytes of one pasted image, which the client has already shrunk to the attachment limit. */
 const Upload = z.object({ name: z.string().max(180), mimeType: z.enum(IMAGE_TYPES), data: z.string().min(1).max(Math.ceil(IMAGE_ATTACHMENT_BYTES / 3) * 4 + 4) });
-const SetModel = z.object({ threadId: z.string(), model: ModelSelection });
+/** GLOSSARY: Borrowing. `borrowFrom` names the profile whose model it is: null for the thread's own, left out to keep the current one. */
+const SetModel = z.object({ threadId: z.string(), model: ModelSelection, borrowFrom: BorrowFrom.nullable().optional() });
 /** GLOSSARY: Goal. The status bar's controls; setting one goes through `/goal` in a message. */
 const GoalAction = z.object({ threadId: z.string(), action: z.enum(['pause', 'resume', 'clear']) });
 const Snooze = z.object({ threadId: z.string(), until: z.iso.datetime({ offset: true }) });

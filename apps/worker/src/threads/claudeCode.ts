@@ -102,6 +102,9 @@ export const claudeCode: Harness = measuredHarness('claudeCode', {
         permissionMode: 'bypassPermissions',
         allowDangerouslySkipPermissions: true,
         settingSources: ['user', 'project', 'local'],
+        // GLOSSARY: Borrowing. The turn's own Sorting Hat key outranks the one its profile's config folder sets,
+        // so a thread borrowing another profile's accounts spends them.
+        ...(env.ANTHROPIC_BASE_URL && env.ANTHROPIC_AUTH_TOKEN ? { settings: { env: { ANTHROPIC_BASE_URL: env.ANTHROPIC_BASE_URL, ANTHROPIC_AUTH_TOKEN: env.ANTHROPIC_AUTH_TOKEN } } } : {}),
         // Removed from the model's context, not only refused (docs/plans/harness-tools.md).
         ...(toolsOff.length ? { disallowedTools: toolsOff.flatMap((t) => t.tools) } : {}),
         mcpServers: mcps || tools ? { ...mcps,

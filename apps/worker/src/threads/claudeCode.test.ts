@@ -193,6 +193,15 @@ it("points Claude at this turn's accio tools", async () => {
   expect(queryMock.mock.calls[2]![0].options.systemPrompt.append).toContain('Enabled skill: browser');
 });
 
+it("puts the turn's Sorting Hat key above the one its profile's config folder sets", async () => {
+  const q = query(); queryMock.mockReturnValue(q);
+  const env = { ANTHROPIC_BASE_URL: 'https://hat.example', ANTHROPIC_AUTH_TOKEN: 'lent-key', CLAUDE_CONFIG_DIR: 'own' };
+  const iterator = claudeCode.run({ cwd: '.', prompt: 'hi', sessionId: null, env, signal: new AbortController().signal })[Symbol.asyncIterator]();
+  const output = iterator.next();
+  expect(queryMock.mock.calls[0]![0].options.settings).toEqual({ env: { ANTHROPIC_BASE_URL: 'https://hat.example', ANTHROPIC_AUTH_TOKEN: 'lent-key' } });
+  q.close(); await output;
+});
+
 it('removes switched-off built-in tools from the model by name', async () => {
   const q = query(); queryMock.mockReturnValue(q);
   const iterator = claudeCode.run({ cwd: '.', prompt: 'hi', sessionId: null, env: {}, signal: new AbortController().signal,

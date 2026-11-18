@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { implementMessage, issueNamedIn, threadHandle, type CheckoutView, type DeliveryStepName, type OfferedIssue, type ParamsOf, type ShippedNote, type ThreadView, type TranscriptItem } from '@accio/protocol';
+import { accountsProfile, implementMessage, issueNamedIn, threadHandle, type CheckoutView, type DeliveryStepName, type OfferedIssue, type ParamsOf, type ShippedNote, type ThreadView, type TranscriptItem } from '@accio/protocol';
 import type { SecretsAccess } from '@accio/hub';
 import { now } from '../time.js';
 import type { Profiles } from '../profiles/profiles.js';
@@ -46,7 +46,7 @@ import { agentTool } from './subagents.js';
 import { Turns } from './turns.js';
 import { registerThreadSkills } from './threadSkills.js';
 import { ThreadNaming } from './naming.js';
-import { changeHarness, readThreadPage } from './handoff.js';
+import { changeAccounts, changeHarness, readThreadPage } from './handoff.js';
 import { Issues } from '../issues/issues.js';
 import { findIssue, implementable, issueOfferTool, offeredIssues } from './issueOffer.js';
 import type { SpaceContext } from '../spaces/spaceContext.js';
@@ -76,7 +76,15 @@ export class Threads {
   views() { return this.state.views(); }
   /** The turn running in a thread on this machine, for an accio tool that records items in it. */
   runningTurn(threadId: string) { return this.turns.runningTurn(threadId); }
-  profileReferences() { return this.state.list.map((thread) => thread.profileId); }
+  profileReferences() { return this.state.list.flatMap((thread) => thread.borrowFrom ? [thread.profileId, thread.borrowFrom] : [thread.profileId]); }
+
+  /** GLOSSARY: Borrowing. The other profile a thread of `profileId` borrows accounts from; undefined for its own. */
+  private lender(profileId: string, borrowFrom: string | null | undefined) {
+    if (!borrowFrom || borrowFrom === profileId) return undefined;
+    const profile = this.profiles.require(borrowFrom);
+    if (profile.house === null) throw new UserError(`${profile.name} isn’t linked to a house on the Sorting Hat, so its accounts can’t be borrowed.`);
+    return borrowFrom;
+  }
   private readonly resources: ResourceManager;
   readonly assets: ThreadAssets;
   private readonly uploads: Uploads;
@@ -157,7 +165,7 @@ export class Threads {
     projects.onRemoveThreads((id) => this.deleteThreads(this.state.list.filter((t) => t.checkoutId === id)));
     projects.onCheckInUse((checkoutId) => this.countUsing((t) => t.checkoutId === checkoutId));
     projects.onCheckProjectInUse((projectId) => this.countUsing((t) => t.projectId === projectId));
-    profiles.onCheckInUse((profileId) => this.countUsing((t) => t.profileId === profileId));
+    profiles.onCheckInUse((profileId) => this.countUsing((t) => t.profileId === profileId || t.borrowFrom === profileId));
   }
 
   private countUsing(pred: (t: Thread) => boolean): string | undefined {
@@ -343,7 +351,7 @@ export class Threads {
           const images = await this.uploads.claim(threadId, uploads, this.assets);
           if (!state.running.has(threadId)) await turns.begin(threadId, text, { pick, images });
           else if (mode === 'queue') {
-            this.models.assertReadsImages(thread.profileId, thread.model, images);
+            this.models.assertReadsImages(accountsProfile(thread), thread.model, images);
             await this.changeQueue(threadId, queue => [...queue, { id: randomUUID(), text, ...(pick ? { pick } : {}), ...(images.length ? { images } : {}) }]);
           } else await turns.steer(threadId, text, pick, undefined, images);
           await this.uploads.release(uploads);
@@ -391,14 +399,23 @@ export class Threads {
       }))
       .on('threads.archive', ({ threadId }) => deliveries.archive(threadId))
       .on('changelog.list', () => this.changelog.list())
-      .on('threads.setModel', async ({ threadId, model }) => {
-        await this.models.ready(state.require(threadId).profileId);
+      .on('threads.setModel', async ({ threadId, model, borrowFrom }) => {
+        const before = state.require(threadId);
+        // GLOSSARY: Borrowing. Left out, the thread keeps whose accounts it uses; the model must be that profile's.
+        const lender = borrowFrom === undefined ? before.borrowFrom : this.lender(before.profileId, borrowFrom);
+        const accounts = lender ?? before.profileId;
+        await this.models.ready(accounts);
         const thread = state.require(threadId);
         if (state.running.has(threadId) || thread.status === 'running') throw new UserError('Wait for this turn to finish before changing its model.');
-        const selected = this.models.requireExact(thread.profileId, model);
+        const selected = this.models.requireExact(accounts, model);
+        const lent = lender !== thread.borrowFrom;
+        if (lent) await this.profiles.hubAccess(accounts, providerOf(selected.harnessId));
         // ADR 0017: another harness continues the thread with the history it missed.
-        const lastItemId = selected.harnessId === thread.model.harnessId ? null : (await state.transcripts.get(threadId)).items.at(-1)?.id ?? null;
-        return toView(await state.update(threadId, (t) => ({ ...changeHarness(t, selected.harnessId, lastItemId), model: selected })));
+        const lastItemId = selected.harnessId === thread.model.harnessId && !lent ? null : (await state.transcripts.get(threadId)).items.at(-1)?.id ?? null;
+        return toView(await state.update(threadId, ({ borrowFrom: _previous, ...t }) => ({
+          ...(lent ? changeAccounts(t, selected.harnessId, lastItemId) : changeHarness(t, selected.harnessId, lastItemId)),
+          model: selected, ...(lender ? { borrowFrom: lender } : {}),
+        })));
       })
       .on('threads.stop', async ({ threadId }) => {
         const controller = state.running.get(state.require(threadId).id);
@@ -466,9 +483,11 @@ export class Threads {
       try {
         if (checkout) release = this.projects.useCheckout(checkout.id);
         // Refuse before anything is stored, so a thread that cannot run never appears.
-        await this.models.ready(profileId);
-        const choice = model ?? this.models.default(profileId);
-        await this.profiles.hubAccess(profileId, providerOf(choice.harnessId));
+        const lender = this.lender(profileId, input.borrowFrom);
+        const accounts = lender ?? profileId;
+        await this.models.ready(accounts);
+        const choice = model ?? this.models.default(accounts);
+        await this.profiles.hubAccess(accounts, providerOf(choice.harnessId));
         state.assertOpen();
         if (repoKey) {
           checkout = await this.checkoutOf(repoKey);
@@ -478,7 +497,7 @@ export class Threads {
           release = this.projects.useCheckout(checkout.id);
           state.assertOpen();
         }
-        const selected = model ? this.models.requireExact(profileId, choice) : this.models.require(profileId, choice);
+        const selected = model ? this.models.requireExact(accounts, choice) : this.models.require(accounts, choice);
         // GLOSSARY: a thread keeps the profile it started with for its whole life.
         const thread = newThread({ checkoutId: checkout?.id ?? '', projectId: project?.id ?? '', profileId, hubId: this.profiles.client.id, model: selected }, now());
         const goal = parseGoalCommand(text);
@@ -489,6 +508,7 @@ export class Threads {
         if (issue) thread.issue = issue;
         if (checkout && input.issue?.title) thread.title = titleFrom(input.issue.ref.startsWith('#') ? `${input.issue.ref} ${input.issue.title}` : input.issue.title);
         if (input.startedBy) thread.startedBy = input.startedBy;
+        if (lender) thread.borrowFrom = lender;
         if (options.repairToolId) { thread.repairToolId = options.repairToolId; thread.title = `Repair ${this.resources.state().tools.find(tool => tool.id === options.repairToolId)?.name ?? options.repairToolId}`; }
         if (checkout) thread.workspace = await this.deliveries.git.allocate(thread.id, checkout.path);
         if (!checkout) await mkdir(join(state.home, 'workspaces', thread.id), { recursive: true });

@@ -119,6 +119,10 @@ One login at a provider, such as a personal Anthropic account, held by the Sorti
 The account a house's next request uses at a provider, which the Sorting Hat chooses among its signed-in accounts there. It skips accounts whose sign-in the provider has ended, and accounts with 5% or less left in any window until that window resets, and otherwise prefers the account whose weekly allowance resets soonest; the house's order breaks ties. It can change during a thread.
 _Avoid_: Login, sign-in (as a noun for the account), subscription, provider instance
 
+**Borrowing**:
+A thread spending another profile's accounts, such as an hrc thread running on personal's after hrc's limit is used up. You choose it in the model picker by picking one of the other profile's models, which can be any of them, at any provider; it holds for that thread until you pick one of its own profile's models again. The thread keeps its own profile's skills, MCPs, GitHub account and config folder; only its turns' hat key and models come from the other profile. Claude carries on in the same session; Codex starts a new one, handed the whole conversation, because its reasoning may not carry across ChatGPT accounts.
+_Avoid_: Switching profile, fallback account
+
 **Sign-in**:
 Signing an account in on the provider's page, from Accio or the Sorting Hat's dashboard. Claude and ChatGPT finish automatically after browser approval. Provider credentials stay on the Sorting Hat. Signing out clears its credentials while preserving its name and houses. A provider can end a sign-in on its own, such as by refusing its refresh token; the account then needs signing in again.
 _Avoid_: Login (as a verb or action), auth, connect

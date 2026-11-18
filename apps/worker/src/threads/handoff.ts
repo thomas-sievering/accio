@@ -95,6 +95,21 @@ export function changeHarness<T extends HarnessState>(thread: T, harnessId: stri
   return { ...thread, sessionId: returning?.sessionId ?? null, leftHarnesses: { ...others, [from]: leaving }, handoff: { from: thread.handoff?.from ?? from, after } };
 }
 
+/**
+ * GLOSSARY: Borrowing. Moves a thread to `harnessId` under another profile's accounts. Claude Code
+ * resends the whole conversation, so its session carries on under any account. Reasoning one
+ * ChatGPT account encrypted may not be accepted under another, so Codex drops its session and
+ * starts afresh, handed the whole conversation.
+ */
+export function changeAccounts<T extends HarnessState>(thread: T, harnessId: string, lastItemId: string | null): T {
+  const moved = changeHarness(thread, harnessId, lastItemId);
+  const { codex: _dropped, ...left } = moved.leftHarnesses ?? {};
+  const kept = { ...moved, ...(moved.leftHarnesses ? { leftHarnesses: left } : {}) };
+  if (harnessId !== 'codex') return kept;
+  const from = moved.handoff?.from ?? thread.model.harnessId;
+  return { ...kept, sessionId: null, handoff: { from, after: null } };
+}
+
 /** The prompt a turn sends when it carries a handoff. */
 export function withHandoff(context: string, prompt: string) {
   return context ? `${context}\n\nUser message:\n${prompt}` : prompt;

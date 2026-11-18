@@ -12,13 +12,17 @@ import { useThreadAvailability } from './useThreadAvailability';
 export function ThreadNotice({
   thread,
   profile,
+  borrowed = false,
   detail,
   model,
   onOpenProfile,
 }: {
   /** Absent for a draft, which can only be blocked by its profile. */
   thread?: ThreadView;
+  /** The profile whose accounts its turns spend. */
   profile: ProfileView | undefined;
+  /** GLOSSARY: Borrowing. `profile` is another one, whose accounts it borrows. */
+  borrowed?: boolean;
   detail?: string;
   model?: ModelSelection;
   onOpenProfile: (profileId: string) => void;
@@ -35,7 +39,7 @@ export function ThreadNotice({
   if (unavailable) {
     text = unavailable;
   } else if (!profile) {
-    text = 'The profile this thread started with no longer exists.';
+    text = borrowed ? 'The profile this thread borrows accounts from no longer exists. Choose one of its own profile’s models.' : 'The profile this thread started with no longer exists.';
     tone = 'error';
   } else if (sortingHat === null) {
     text = noSortingHatMessage;

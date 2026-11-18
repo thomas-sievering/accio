@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mediaKind, mediaMimeType, normalizeMarkdownSource, type ChoicePick, type ModelSelection, type OfferedIssue, type ThreadAsset, type ThreadView, type WorkspaceSkill } from '@accio/protocol';
+import { accountsProfile, mediaKind, mediaMimeType, normalizeMarkdownSource, type ChoicePick, type ModelSelection, type OfferedIssue, type ThreadAsset, type ThreadView, type WorkspaceSkill } from '@accio/protocol';
 import { mentionedModel, type Models } from '../harnesses/models.js';
 import type { Machines } from '../machine/machine.js';
 import type { Profiles } from '../profiles/profiles.js';
@@ -72,7 +72,7 @@ export class Turns {
   private preparing = new Set<Promise<void>>();
   private turns = new Set<Promise<void>>();
   /** The running turn of each thread, which its sub-agents inherit. */
-  private subagentTurns = new Map<string, { turnId: string; turn: SubagentTurn; profileId: string; model: ModelSelection }>();
+  private subagentTurns = new Map<string, { turnId: string; turn: SubagentTurn; profileId: string; accounts: string; model: ModelSelection }>();
   /** Parent tool rows already showing a running sub-agent. */
   private subagentRows = new Set<string>();
 
@@ -117,7 +117,7 @@ export class Turns {
     const harnessText = prompt ?? (pick ? pickPrompt((await this.state.transcripts.get(id)).items, pick, text) : text);
     if (harnessText === undefined) throw new UserError('That option is no longer available');
     const thread = this.state.require(id);
-    this.deps.models.assertReadsImages(thread.profileId, thread.model, images);
+    this.deps.models.assertReadsImages(accountsProfile(thread), thread.model, images);
     const files = await this.imageFiles(id, images);
     await send(withImageFiles(this.withMentionedThreads(thread, harnessText), files), files);
     await this.state.transcripts.add(id, { kind: 'user', id: randomUUID(), turnId: input.turnId, text, at: now(), steered: true, ...(images.length ? { images } : {}), ...(pick ? { pick } : {}) });
@@ -178,13 +178,14 @@ export class Turns {
       const picked = pick ? pickPrompt((await transcripts.get(threadId)).items, pick, text) : text;
       if (picked === undefined) throw new UserError('That option is no longer available');
       if (!deps.profiles.get(thread.profileId)) throw new UserError('The profile this thread started with no longer exists');
-      const access = await deps.profiles.hubAccess(thread.profileId, providerOf(thread.model.harnessId));
+      if (thread.borrowFrom && !deps.profiles.get(thread.borrowFrom)) throw new UserError('The profile this thread borrows accounts from no longer exists. Choose one of its own profile’s models.');
+      const access = await deps.profiles.hubAccess(accountsProfile(thread), providerOf(thread.model.harnessId));
       if (controller.signal.aborted || state.closing) throw new UserError('Turn interrupted before starting');
-      await deps.models.ready(thread.profileId);
+      await deps.models.ready(accountsProfile(thread));
       thread = state.require(threadId);
-      thread = { ...thread, model: deps.models.require(thread.profileId, thread.model) };
+      thread = { ...thread, model: deps.models.require(accountsProfile(thread), thread.model) };
       if (options.uploads?.length) images = await deps.images.claim(threadId, options.uploads);
-      deps.models.assertReadsImages(thread.profileId, thread.model, images);
+      deps.models.assertReadsImages(accountsProfile(thread), thread.model, images);
       const files = await this.imageFiles(threadId, images);
       if (thread.workspace?.releasedAt) {
         // An archived delivery restores its published revision with a fresh session.
@@ -285,8 +286,8 @@ export class Turns {
       }
       const harness = deps.harnesses[thread.model.harnessId];
       if (!harness) throw new UserError('This harness is not installed on this machine');
-      const model = { model: thread.model.modelId, effort: deps.models.effort(thread.profileId, thread.model), modelName: deps.models.modelName(thread.profileId, thread.model), toolsOff: deps.toolsOff(thread.model.harnessId) };
-      this.subagentTurns.set(thread.id, { turnId, profileId: thread.profileId, model: { ...thread.model, effort: model.effort }, turn: { harness, signal: run.signal, run: { cwd: run.cwd, env: run.env, resourceInstructions: run.resourceInstructions, mcps: run.mcps, ...model } } });
+      const model = { model: thread.model.modelId, effort: deps.models.effort(accountsProfile(thread), thread.model), modelName: deps.models.modelName(accountsProfile(thread), thread.model), toolsOff: deps.toolsOff(thread.model.harnessId) };
+      this.subagentTurns.set(thread.id, { turnId, profileId: thread.profileId, accounts: accountsProfile(thread), model: { ...thread.model, effort: model.effort }, turn: { harness, signal: run.signal, run: { cwd: run.cwd, env: run.env, resourceInstructions: run.resourceInstructions, mcps: run.mcps, ...model } } });
       for await (const msg of harness.run({ ...run, sessionId: thread.sessionId, ...model,
         onPromptSize: measurement => { promptMeasurement = measurement; },
         registerSteer: send => { const input = this.liveInputs.get(thread.id); if (input?.turnId === turnId) input.send = send; },
@@ -372,7 +373,7 @@ export class Turns {
         });
         deps.deliveries.scheduleCheck(thread.id);
         // Every turn spends the account's allowance, so a model it used up is marked as soon as possible.
-        deps.profiles.refreshLimits(thread.profileId, providerOf(thread.model.harnessId));
+        deps.profiles.refreshLimits(accountsProfile(thread), providerOf(thread.model.harnessId));
         if (thread.repairToolId && outcome === 'completed') deps.onRepairFinished(thread.repairToolId);
         if (outcome === 'completed') {
           if (!delivering) deps.onWorkFinished?.(thread.id);
@@ -422,16 +423,16 @@ export class Turns {
    * the thread's effort when it accepts it, and on another harness that harness's own
    * account and settings, with the same tools on PATH.
    */
-  private async subagentOn(live: { turn: SubagentTurn; profileId: string; model: ModelSelection }, handle: string): Promise<SubagentTurn> {
+  private async subagentOn(live: { turn: SubagentTurn; profileId: string; accounts: string; model: ModelSelection }, handle: string): Promise<SubagentTurn> {
     const { deps, state } = this;
-    const models = deps.models.list(live.profileId).models;
+    const models = deps.models.list(live.accounts).models;
     const { model, selection } = mentionedModel(models, handle, live.model.effort);
     if (model.harnessId === live.model.harnessId && model.id === live.model.modelId) return live.turn;
     const harness = deps.harnesses[model.harnessId];
     if (!harness) throw new Error(`${model.harnessName} is not installed on this machine.`);
     let env = live.turn.run.env;
     if (model.harnessId !== live.model.harnessId) {
-      const access = await deps.profiles.hubAccess(live.profileId, providerOf(model.harnessId));
+      const access = await deps.profiles.hubAccess(live.accounts, providerOf(model.harnessId));
       const path = Object.entries(env).find(([key]) => key.toLowerCase() === 'path')?.[1];
       env = Object.fromEntries(Object.entries(turnEnv(state.home, live.profileId, model.harnessId, access)).filter(([key]) => key.toLowerCase() !== 'path'));
       if (path) env.PATH = path;

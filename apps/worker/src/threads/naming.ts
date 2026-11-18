@@ -2,7 +2,7 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import type { ModelSelection, ModelView, ShippedNote, ThreadNamingSettings, TranscriptItem } from '@accio/protocol';
-import { pasteGist, reactionLabel, splitPastes } from '@accio/protocol';
+import { accountsProfile, pasteGist, reactionLabel, splitPastes } from '@accio/protocol';
 import type { Models } from '../harnesses/models.js';
 import type { Profiles } from '../profiles/profiles.js';
 import { UserError } from '../rpc/router.js';
@@ -156,14 +156,14 @@ export class ThreadNaming {
   /** One JSON answer from the naming model; never a coding-model turn. */
   private async ask(id: string, prompt: string, settings: ThreadNamingSettings, signal: AbortSignal): Promise<unknown> {
     const thread = this.state.require(id);
-    await this.models.ready(thread.profileId);
+    await this.models.ready(accountsProfile(thread));
     const selection = settings.model
-      ? this.models.requireExact(thread.profileId, settings.model)
-      : namingModel(this.models.list(thread.profileId).models, thread.model.harnessId);
+      ? this.models.requireExact(accountsProfile(thread), settings.model)
+      : namingModel(this.models.list(accountsProfile(thread)).models, thread.model.harnessId);
     if (!selection) throw new UserError('No lightweight naming model is available. Choose a naming model in Settings.');
     const generate = this.harnesses[selection.harnessId]?.generateText;
     if (!generate) throw new UserError('This harness does not support thread naming.');
-    const access = await this.profiles.hubAccess(thread.profileId, providerOf(selection.harnessId));
+    const access = await this.profiles.hubAccess(accountsProfile(thread), providerOf(selection.harnessId));
     const cwd = join(this.state.home, 'naming');
     await mkdir(cwd, { recursive: true });
     signal.throwIfAborted();
