@@ -19,9 +19,9 @@ test('the space view opens from the project menu and Settings, lists its project
     await startProjectThread(page, baseURL!, /delivery-project/, 'Queued hrc follow-up');
     await expect(page.getByText('Finished: Queued hrc follow-up', { exact: true })).toBeVisible();
 
-    // The project-name menu offers the space next to Dashboard.
+    // The project name's right-click menu offers the space.
     const crumb = page.locator('.thread-project-link', { hasText: 'delivery-project' });
-    await crumb.click();
+    await crumb.click({ button: 'right' });
     await page.getByRole('menuitem', { name: 'Space', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'hrc' })).toBeVisible();
 
@@ -68,10 +68,12 @@ test('the space view opens from the project menu and Settings, lists its project
     await expect(page.locator('.thread-project-link', { hasText: 'review-project' })).toBeVisible();
     await expect.poll(homeThreads).toBe(before + 1);
 
-    // Outside any space, the project-name menu has no Space entry.
+    // Outside any space, the project name's right-click menu has no Space entry.
     await client.call('spaces.delete', { id: space.id });
-    await page.locator('.thread-project-link', { hasText: 'review-project' }).click();
-    await expect(page.getByRole('menuitem', { name: 'Dashboard', exact: true })).toBeVisible();
+    await page.locator('.thread-project-link', { hasText: 'review-project' }).click({ button: 'right' });
+    await expect(page.getByRole('menuitem', { name: 'Project settings', exact: true })).toBeVisible();
+    // A browser can't open the folder: Explorer is listed, greyed out.
+    await expect(page.getByRole('menuitem', { name: 'Open in Explorer', exact: true })).toBeDisabled();
     await expect(page.getByRole('menuitem', { name: 'Space', exact: true })).toHaveCount(0);
   } finally {
     for (const space of await client.call('spaces.list', {}).catch(() => [])) await client.call('spaces.delete', { id: space.id }).catch(() => {});

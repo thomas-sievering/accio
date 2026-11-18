@@ -27,7 +27,6 @@ test('one page at a time over a thread that stays mounted, and the page comes ba
 
     // Settings opened from the dashboard go back to it, and so does a reload.
     await page.locator('.thread-project-link', { hasText: 'pages-project' }).click();
-    await page.getByRole('menuitem', { name: 'Dashboard', exact: true }).click();
     await expect(dashboard).toBeVisible();
     await page.getByRole('button', { name: 'pages-project settings', exact: true }).click();
     await expect(button('Back')).toBeVisible();

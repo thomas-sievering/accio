@@ -29,7 +29,6 @@ test('pane headers show their profile only while multiple profiles exist', async
   await page.getByRole('option', { name: /delivery-project/ }).click();
   await expect(page.locator('.main-top:visible .profile-label')).toHaveText('Personal');
   await page.locator('.thread-project-link:visible').click();
-  await page.getByRole('menuitem', { name: 'Dashboard', exact: true }).click();
   await expect(page.locator('.main-top:visible .profile-label')).toHaveText('Personal');
   await page.screenshot({ path: info.outputPath('project-profile.png') });
 

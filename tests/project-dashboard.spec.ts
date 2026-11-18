@@ -29,7 +29,6 @@ test('the project dashboard lists the project’s threads by state and what rece
 
     // The breadcrumb's project name opens the dashboard with the project's threads.
     await page.locator('.thread-project-link', { hasText: 'dashboard-project' }).click();
-    await page.getByRole('menuitem', { name: 'Dashboard', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'dashboard-project' })).toBeVisible();
     await expect(page.locator('.dashboard-rows .row-title', { hasText: 'Delivery follow-up' })).toBeVisible();
     // The Needs you heading already says Ready; the row does not repeat it.
@@ -48,7 +47,6 @@ test('the project dashboard lists the project’s threads by state and what rece
 
     // The project's full Changelog is a fold on its dashboard.
     await page.locator('.thread-project-link', { hasText: 'dashboard-project' }).click();
-    await page.getByRole('menuitem', { name: 'Dashboard', exact: true }).click();
     await page.locator('.dashboard-fold > summary', { hasText: 'Changelog' }).click();
     await expect(page.getByText('Nothing shipped yet.')).toBeVisible();
   } finally {
@@ -75,7 +73,6 @@ test('all settled project threads remain reachable beyond the first page', async
     await page.locator('.sidebar').getByRole('button', { name: 'New thread', exact: true }).click();
     await page.getByRole('option', { name: new RegExp(folder.split(/[\\/]/).at(-1)!) }).click();
     await page.locator('.thread-project-link').click();
-    await page.getByRole('menuitem', { name: 'Dashboard', exact: true }).click();
     const fold = page.locator('.dashboard-fold').filter({ has: page.locator('summary', { hasText: 'Settled' }) });
     await expect(fold).not.toHaveAttribute('open', '');
     await fold.locator('summary').click();
@@ -101,7 +98,6 @@ async function openDashboard(page: Page, text: string, project: string) {
   await expect(page.locator('.row-main[aria-current="page"]', { hasText: text }).filter({ hasNotText: 'Draft' })).toBeVisible({ timeout: 20_000 });
   await expect(async () => {
     await page.locator('.thread-project-link', { hasText: project }).click();
-    await page.getByRole('menuitem', { name: 'Dashboard', exact: true }).click({ timeout: 2_000 });
     await expect(page.getByRole('heading', { name: project })).toBeVisible({ timeout: 2_000 });
   }).toPass({ timeout: 20_000 });
 }
@@ -244,7 +240,6 @@ test('the reader starts a thread on a ready issue, claimed like the picker, and 
     // A ready issue starts a thread named from it and claimed in its worktree, as the picker does.
     // A started thread is already open, so its header opens the dashboard straight away.
     await page.locator('.thread-project-link', { hasText: 'start-issue-project' }).click();
-    await page.getByRole('menuitem', { name: 'Dashboard', exact: true }).click();
     await fold.locator('summary').click();
     await rows.filter({ hasText: 'Show a welcome card' }).getByRole('button').click();
     await expect(reader.locator('.issue-pill')).toHaveText('Ready');
@@ -260,7 +255,6 @@ test('the reader starts a thread on a ready issue, claimed like the picker, and 
 
     // The checkout's file still says ready; the reader now opens the thread instead of starting another.
     await page.locator('.thread-project-link', { hasText: 'start-issue-project' }).click();
-    await page.getByRole('menuitem', { name: 'Dashboard', exact: true }).click();
     await fold.locator('summary').click();
     await rows.filter({ hasText: 'Show a welcome card' }).getByRole('button').click();
     await expect(reader.getByRole('button', { name: 'Open thread', exact: true })).toBeVisible();

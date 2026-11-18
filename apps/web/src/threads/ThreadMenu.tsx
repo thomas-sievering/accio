@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { threadPlace, type ThreadView } from '@accio/protocol';
 import { useClient } from '../app/connection';
+import { Check, Close } from '../app/icons';
 import { useAction } from '../app/useAction';
 import { Button } from '../ui/Button';
 import { usePopoverMenu } from '../ui/usePopoverMenu';
@@ -153,7 +154,7 @@ export function RowRename({ thread }: { thread: ThreadView }) {
 /**
  * The one title editor, in the sidebar row and the thread header. Enter (or Save) saves the
  * trimmed title; Escape, Cancel or leaving the field keeps the old one. The header, with room
- * for them, shows Save and Cancel.
+ * for them, shows Save and Cancel as small icon buttons.
  */
 export function TitleEdit({ thread, className, buttons = false, onDone }: { thread: ThreadView; className: string; buttons?: boolean; onDone: () => void }) {
   const client = useClient();
@@ -177,8 +178,8 @@ export function TitleEdit({ thread, className, buttons = false, onDone }: { thre
         onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Escape') onDone(); }} />
       <small className="title-count" aria-live="polite">{title.length}/120</small>
       {buttons && <>
-        <button type="submit" className="ghost" disabled={!!unavailable || busy || !title.trim()}>Save</button>
-        <button type="button" className="ghost" disabled={busy} onClick={onDone}>Cancel</button>
+        <button type="submit" className="title-edit-button" aria-label="Save" title="Save (Enter)" disabled={!!unavailable || busy || !title.trim()}><Check /></button>
+        <button type="button" className="title-edit-button" aria-label="Cancel" title="Cancel (Esc)" disabled={busy} onClick={onDone}><Close /></button>
       </>}
       {error && <span className="error" role="alert">{error}</span>}
     </form>
