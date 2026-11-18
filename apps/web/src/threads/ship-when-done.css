@@ -1,0 +1,16 @@
+/* GLOSSARY: Ship when done. The armed chip in the composer, tinted like the queued delivery it becomes. */
+.composer-ship { padding: 0; border: 1px solid color-mix(in srgb, #c4b5fd 55%, var(--line-2)); background: linear-gradient(110deg, #b8dfff10, #c4b5fd1a 60%); }
+.composer-chip.composer-ship button { display: inline-flex; align-items: center; gap: 6px; width: auto; height: auto; padding: 3px 6px 3px 8px; color: var(--ink-strong); }
+.composer-chip.composer-ship button svg:first-child { width: 13px; height: 13px; color: #c4b5fd; }
+.composer-chip.composer-ship button svg:last-child { color: var(--dim); }
+.composer-chip.composer-ship button:hover svg:last-child { color: var(--ink-strong); }
+/* Ship can't run now: the chip stays, removable, and its title says why. */
+.composer-ship.unavailable { border-color: var(--line-2); background: var(--raised-2); }
+.composer-ship.unavailable button { color: var(--muted); }
+.composer-ship.unavailable button svg:first-child { color: var(--dim); }
+.composer-ship { transition: opacity 160ms ease, scale 220ms var(--ease-settle); }
+@starting-style { .composer-ship { opacity: 0; scale: .94; } }
+/* Fades stay, scale goes. */
+@media (prefers-reduced-motion: reduce) { @starting-style { .composer-ship { scale: none; } } }
+/* Ship stays pressed while it arms the chip. */
+.delivery-split > button[aria-pressed="true"] { background: var(--hover); color: var(--ink-strong); }

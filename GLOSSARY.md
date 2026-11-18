@@ -154,7 +154,7 @@ A durable conversation with a harness, optionally attached to a project's checko
 _Avoid_: Chat, session, agent, conversation
 
 **Draft**:
-What a composer holds before it sends: text, Pasted text and image attachments. It stays when you move to another thread; text and Pasted text also survive a restart. A new thread whose draft has something in it is listed at the top of the inbox as Draft until it is sent or emptied; it is not yet a thread. In a thread, Up in an empty composer brings back the text of your last message there as a draft.
+What a composer holds before it sends: text, Pasted text, Reactions, image attachments and an armed Ship when done. It stays when you move to another thread; all but images also survive a restart. A new thread whose draft has something in it is listed at the top of the inbox as Draft until it is sent or emptied; it is not yet a thread. In a thread, Up in an empty composer brings back the text of your last message there as a draft.
 _Avoid_: Unsent thread, pending thread
 
 **Turn**:
@@ -265,6 +265,10 @@ _Avoid_: Archive, close, resolve
 
 **Ship**:
 Requesting delivery from the owning thread: finish the work, integrate the target branch, verify and publish under the project's direct or pull-request policy. A request made during work waits for that turn to finish. It authorizes publication under its recorded policy.
+
+**Ship when done**:
+Ship armed while writing a message, shown as a chip in the composer and sent with it: the message goes first, then the delivery is requested and waits for the turn it started or steered. The Ship button or Alt+S arms and removes it while the composer holds a message, and Alt+Enter sends and ships in one step. It follows the Ship / Prepare for review choice ("Review when done"). Where Ship is unavailable the chip is too, with Ship's reason, and sending with it refuses rather than sending without the ship. A failed send requests nothing and keeps the chip; a queued message never ships, since Ship waits until the queue is empty.
+_Avoid_: Auto ship, ship toggle
 
 **Delivery step**:
 The part of a delivery the agent, or a scripted ship, says it is on (commit, integrate, verify or publish), with a short note. The agent reports it through the delivery_step accio tool. The Delivery panel shows it with the turn's elapsed time. It is for following along only; accio's own delivery checks never depend on it.

@@ -5,20 +5,22 @@ import { REACTION_KINDS, type Reaction } from '@accio/protocol';
 export type PendingImage = { key: string; name: string; mimeType: string; url: string; uploadId?: string };
 
 /** What a composer holds before it sends. */
-export type DraftContent = { text: string; pastes: string[]; reactions: Reaction[]; images: PendingImage[] };
+/** `ship` is an armed Ship when done (GLOSSARY: Ship when done). */
+export type DraftContent = { text: string; pastes: string[]; reactions: Reaction[]; images: PendingImage[]; ship: boolean };
 
 type Update<T> = T | ((current: T) => T);
 
 /**
  * GLOSSARY: Draft. Unsent composer content, kept per composer key outside any component, so it
- * survives moving to another thread and back. Text, Pasted text and Reactions are also saved in localStorage,
+ * survives moving to another thread and back. Text, Pasted text, Reactions and Ship when done are also saved in localStorage,
  * so a restart keeps them; images stay in memory for this session only.
  */
 const contents = new Map<string, DraftContent>();
 const listeners = new Set<() => void>();
-const EMPTY: DraftContent = { text: '', pastes: [], reactions: [], images: [] };
+const EMPTY: DraftContent = { text: '', pastes: [], reactions: [], images: [], ship: false };
 /** The parts saved beside the text, each under its own key suffix. */
-const SAVED_PARTS = ['pastes', 'reactions'] as const;
+const SAVED_PARTS = ['pastes', 'reactions', 'ship'] as const;
+const unset = (value: DraftContent[(typeof SAVED_PARTS)[number]]) => Array.isArray(value) ? !value.length : !value;
 let scanned = false;
 let version = 0;
 
@@ -34,7 +36,8 @@ function readSaved(key: string): DraftContent {
     const saved: unknown = JSON.parse(localStorage.getItem(`${key}:reactions`) ?? '[]');
     if (Array.isArray(saved)) reactions = saved.filter(isReaction);
   } catch { /* An unreadable copy is no draft. */ }
-  return text || pastes.length || reactions.length ? { text, pastes, reactions, images: [] } : EMPTY;
+  const ship = localStorage.getItem(`${key}:ship`) === 'true';
+  return text || pastes.length || reactions.length || ship ? { text, pastes, reactions, images: [], ship } : EMPTY;
 }
 
 function isReaction(value: unknown): value is Reaction {
@@ -67,7 +70,7 @@ function change(key: string, next: DraftContent) {
   }
   for (const part of SAVED_PARTS) {
     if (next[part] === before[part]) continue;
-    try { if (next[part].length) localStorage.setItem(`${key}:${part}`, JSON.stringify(next[part])); else localStorage.removeItem(`${key}:${part}`); }
+    try { if (!unset(next[part])) localStorage.setItem(`${key}:${part}`, JSON.stringify(next[part])); else localStorage.removeItem(`${key}:${part}`); }
     catch { /* Too large to keep across a restart; it still sends. */ }
   }
   contents.set(key, next);
@@ -97,6 +100,7 @@ export function useDraft(key: string) {
     setPastes: (update: Update<string[]>) => editDraft(key, 'pastes', update),
     setReactions: (update: Update<Reaction[]>) => editDraft(key, 'reactions', update),
     setImages: (update: Update<PendingImage[]>) => editDraft(key, 'images', update),
+    setShip: (update: Update<boolean>) => editDraft(key, 'ship', update),
   }), [key, content]);
 }
 

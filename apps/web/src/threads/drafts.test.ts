@@ -49,6 +49,21 @@ describe('new-thread drafts', () => {
     expect(saved.has(`${key}:reactions`)).toBe(false);
   });
 
+  it('saves an armed Ship when done beside the text, which alone is no draft to list', async () => {
+    const key = drafts.composerKey('h1', drafts.newThreadDraftId('c3'));
+    drafts.editDraft(key, 'ship', true);
+    expect(saved.get(`${key}:ship`)).toBe('true');
+    expect(listed()).toHaveLength(2);
+    drafts.editDraft(key, 'text', 'ship this');
+    // After a restart the chip is still armed.
+    vi.resetModules();
+    const restarted = await import('./drafts');
+    expect(restarted.draftsOf('h1').find((d) => d.key === key)).toMatchObject({ text: 'ship this', ship: true });
+    drafts.discardDraft(key);
+    expect(saved.has(`${key}:ship`)).toBe(false);
+    expect(saved.has(key)).toBe(false);
+  });
+
   it('keeps the same list while nothing changes', () => {
     expect(drafts.draftsOf('h1')).toBe(drafts.draftsOf('h1'));
   });

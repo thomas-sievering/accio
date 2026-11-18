@@ -10,6 +10,7 @@ import { useThreads } from './threads';
 import { formatDayTime } from '../ui/dates';
 import { usePopoverMenu } from '../ui/usePopoverMenu';
 import { useThreadAvailability } from './useThreadAvailability';
+import { shipWhenDoneLabel, useShipWhenDone } from './ShipWhenDone';
 
 /** Delivery intent stays on the server, including when this view is closed or disconnected. */
 export function DeliveryActions({ thread, project, canRun }: { thread: ThreadView; project?: ProjectView; canRun: boolean }) {
@@ -56,8 +57,9 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
   // Ship answers on the click: the pill shows the state the server is about to report
   // while it checks the target, and gives way once that state arrives.
   const [pending, setPending] = useState<Pending>();
-  const deliver = () => {
-    setPending({ from: thread.delivery?.id, running: thread.status === 'running', mode });
+  /** `running`: a turn is under way, also when it started too recently for this view to know. */
+  const deliver = (running = thread.status === 'running') => {
+    setPending({ from: thread.delivery?.id, running, mode });
     void run(async () => { await client.call('threads.deliver', { threadId: thread.id, mode }); });
   };
   const arrived = !!pending && thread.delivery?.id !== pending.from;
@@ -97,8 +99,6 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
   // Snoozed on the hub until the thread's offline machine is back; waking it needs no machine.
   const untilOnline = !!thread.snoozedUntilOnline;
   const snoozedUntil = !settled && thread.snoozedUntil && new Date(thread.snoozedUntil) > now ? new Date(thread.snoozedUntil) : undefined;
-  // A settled or snoozed thread always has its state row, even when it never had a workspace.
-  if (!thread.workspace && !settled && !snoozedUntil) return null;
   const status = !thread.workspace ? undefined : pending && (!arrived || passing) ? requestedStatus(pending.running, pending.mode, target) : deliveryStatus(thread);
   const call = (method: 'threads.cancelDelivery' | 'threads.checkDelivery' | 'threads.archive' | 'threads.reopen') =>
     void run(async () => { await client.call(method, { threadId: thread.id }); });
@@ -117,6 +117,28 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
     : status?.phase === 'queued' || status?.phase === 'shipping' ? undefined
     : [reviewWait ? undefined : status?.detail, status && ['waiting', 'integrated', 'unavailable'].includes(status.phase) ? age : undefined].filter(Boolean).join(' · ') || undefined;
   const statusName = status && statusText(status.label, status.pullRequest);
+  const shipTitle = thread.queuedMessages?.length ? 'Send or remove queued messages first' : !canRun ? 'Sign in to this profile to ship' : summary?.reason;
+
+  // GLOSSARY: Ship when done. While a message is being written, Ship arms it in the composer instead,
+  // which is unavailable wherever Ship is, for the same reason.
+  const composer = useShipWhenDone();
+  const arming = !!composer && (composer.composing || composer.armed);
+  const shipReason = !thread.workspace || released ? undefined
+    : inFlight ? 'Delivery is already requested'
+    : !offerShip ? onBase ? `Already on ${target}` : statusName ?? 'Nothing to ship'
+    : unavailable ?? (thread.queuedMessages?.length || !canRun ? shipTitle : !summary ? 'Checking the workspace' : !summary.available ? summary.reason ?? 'Shipping is unavailable' : undefined);
+  const offered = !!thread.workspace && !released;
+  const latestDeliver = useRef(deliver);
+  latestDeliver.current = deliver;
+  const offer = composer?.offer;
+  useEffect(() => {
+    // The send has just started or steered a turn, which the delivery then waits behind.
+    offer?.(offered ? { mode, reason: shipReason, deliver: () => latestDeliver.current(true) } : undefined);
+  }, [offer, offered, mode, shipReason]);
+  useEffect(() => () => offer?.(undefined), [offer]);
+
+  // A settled or snoozed thread always has its state row, even when it never had a workspace.
+  if (!thread.workspace && !settled && !snoozedUntil) return null;
   const hasChip = !!thread.workspace && (archived || (!!status && status.phase !== 'superseded'));
   const checkingCI = delivery?.status === 'waiting' && (status?.phase === 'integrated'
     ? delivery.waitingOn !== 'agent'
@@ -149,7 +171,9 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
           {status.canCancel && status.phase !== 'shipping' && <button disabled={!!unavailable || busy} aria-label="Cancel queued delivery" title="Cancel queued delivery" onClick={() => call('threads.cancelDelivery')}><Close /></button>}
         </span>
         : offerShip && <span ref={pill} className="delivery-split">
-          <button disabled={!!unavailable || busy || !canRun || !summary?.available || !!thread.queuedMessages?.length} title={thread.queuedMessages?.length ? 'Send or remove queued messages first' : !canRun ? 'Sign in to this profile to ship' : summary?.reason ?? (mode === 'review' ? 'Prepare a PR without merging' : `Finish, verify and ship to ${target}`)} onClick={deliver}><Ship />{mode === 'review' ? 'Prepare for review' : 'Ship'}</button>
+          <button disabled={!!unavailable || busy || !canRun || !summary?.available || !!thread.queuedMessages?.length} aria-pressed={composer ? composer.armed : undefined}
+            title={shipTitle ?? (arming ? `${shipWhenDoneLabel(mode)}: sends with your message (Alt+S)` : mode === 'review' ? 'Prepare a PR without merging' : `Finish, verify and ship to ${target}`)}
+            onClick={() => { if (arming) composer.toggle(); else deliver(); }}><Ship />{mode === 'review' ? 'Prepare for review' : 'Ship'}</button>
           <button ref={trigger} popoverTarget={id} disabled={!!unavailable || busy || !summary?.available || !!thread.queuedMessages?.length} aria-label="Shipping options" aria-haspopup="menu"><ChevronDown /></button>
         </span>}
         {status?.canCheck && <button className="delivery-pill" disabled={!!unavailable || busy} onClick={() => call('threads.checkDelivery')}><Refresh />Check now</button>}

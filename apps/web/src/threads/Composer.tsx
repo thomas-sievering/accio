@@ -14,7 +14,8 @@ import { useModels } from './useModels';
 import { base64, pastedImages, prepareImage } from './pastedImage';
 import { PasteChip } from './PastedText';
 import { ReactionChip } from './Reactions';
-import { composerKey, useDraft } from './drafts';
+import { composerKey, editDraft, useDraft } from './drafts';
+import { ShipChip, ShipWhenDoneSlot, shipWhenDoneLabel, type ShipOffer } from './ShipWhenDone';
 
 /**
  * Enter steers the running turn; Ctrl+Enter queues. Shift+Enter adds a line.
@@ -24,6 +25,7 @@ import { composerKey, useDraft } from './drafts';
  * Pasted images go above the message when the model reads them (GLOSSARY: Image attachment).
  * A long text paste becomes a chip that sends before the message; Ctrl+Shift+V keeps it in the box (GLOSSARY: Pasted text).
  * A reaction picked over transcript text is a chip too, sent after the pastes (GLOSSARY: Reaction).
+ * Where the thread offers Ship, Alt+S arms Ship when done as a chip, and Alt+Enter sends and ships in one step (GLOSSARY: Ship when done).
  */
 export function Composer({
   onSend,
@@ -75,7 +77,8 @@ export function Composer({
   const client = useClient();
   const { threads, shelves, selectedId, select, now, placement } = useThreads();
   // GLOSSARY: Draft. Unsent text, Pasted text and images outlive this composer; sending or clearing them removes them.
-  const { text, setText, pastes, setPastes, reactions, setReactions, images, setImages } = useDraft(composerKey(client.hubId, draftId));
+  const key = composerKey(client.hubId, draftId);
+  const { text, setText, pastes, setPastes, reactions, setReactions, images, setImages, ship: armed, setShip } = useDraft(key);
   /** Set by Ctrl+Shift+V just before its paste event, which then keeps long text in the box. */
   const pasteInline = useRef(0);
   const [pasteHint, setPasteHint] = useState(false);
@@ -143,7 +146,11 @@ export function Composer({
   // A model chosen after pasting may not read what is already here.
   const refused = images.map((image) => refusalFor(image.mimeType)).find(Boolean);
   const uploading = images.some((image) => !image.uploadId);
-  const sendable = (!!text.trim() || !!attachment || images.length > 0 || pastes.length > 0 || reactions.length > 0) && !uploading && !refused;
+  const composing = !!text.trim() || !!attachment || images.length > 0 || pastes.length > 0 || reactions.length > 0;
+  const sendable = composing && !uploading && !refused;
+  // GLOSSARY: Ship when done. Offered by the thread's Ship (DeliveryActions), which follows its mode and reason.
+  const [shipOffer, setShipOffer] = useState<ShipOffer>();
+  const shipSlot = useMemo(() => ({ composing, armed, offer: setShipOffer, toggle: () => editDraft(key, 'ship', (on) => !on) }), [composing, armed, key]);
   const repairThread = error?.includes('A repair thread was started')
     ? threads?.filter((t) => t.repairToolId).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
     : undefined;
@@ -264,16 +271,27 @@ export function Composer({
     return image.key !== key;
   }));
 
-  const submit = async (mode: 'steer' | 'queue' = 'steer') => {
+  /** With `ship`, a sent message then requests delivery; a queued one never does, since Ship waits for the queue. */
+  const submit = async (mode: 'steer' | 'queue' = 'steer', ship = armed) => {
     const value = text.trim();
     if (!sendable || disabled || sending.current) return;
+    const shipping = ship && mode !== 'queue' ? shipOffer : undefined;
+    // A ship that can't happen is never promised: the message stays until the chip goes or Ship is back.
+    const refusal = shipping?.reason;
+    if (shipping && refusal) {
+      setShip(true);
+      void run(() => Promise.reject(new Error(`Can't ${shipWhenDoneLabel(shipping.mode).toLowerCase()}: ${refusal.replace(/\.$/, '')}. Remove the chip to send without it.`)));
+      return;
+    }
     const sent = images;
     const sentPastes = pastes;
     const sentReactions = reactions;
     sending.current = true;
     try {
       await run(async () => {
-        await onSend(joinPastes(sentPastes, value, sentReactions), mode, sent.map((image) => image.uploadId!), sent.map((image) => image.url));
+        // Only once the message is in: a failed send ships nothing, and keeps (or, from Alt+Enter, arms) the chip.
+        try { await onSend(joinPastes(sentPastes, value, sentReactions), mode, sent.map((image) => image.uploadId!), sent.map((image) => image.url)); }
+        catch (cause) { if (shipping) setShip(true); throw cause; }
         // Sent from a composer that has since closed (a started draft): forget its saved text too.
         if (!input.current || input.current.value === text) setText('');
         setImages((current) => current.filter((image) => !sent.includes(image)));
@@ -282,6 +300,7 @@ export function Composer({
         setPasteHint(false);
         if (!handsOffImages) for (const image of sent) URL.revokeObjectURL(image.url);
         setImageError(undefined);
+        if (shipping) { setShip(false); shipping.deliver(); }
       });
     } finally {
       sending.current = false;
@@ -289,6 +308,7 @@ export function Composer({
   };
 
   return (
+    <ShipWhenDoneSlot.Provider value={shipSlot}>
     <div className="composer-wrap">
       {actions}
       {(error || refused || imageError) && <p className="error composer-error" role="status">{refused ?? error ?? imageError}
@@ -299,7 +319,7 @@ export function Composer({
         Long paste kept as Pasted text, sent before your message. <kbd>{pasteShortcut}</kbd> pastes into the message instead.
       </p>}
       <form className="composer" onSubmit={(e: FormEvent) => { e.preventDefault(); void submit(queuing ? 'queue' : 'steer'); }}>
-        {(attachment || images.length > 0 || pastes.length > 0 || reactions.length > 0) && <div className="composer-chips">
+        {(attachment || images.length > 0 || pastes.length > 0 || reactions.length > 0 || (armed && shipOffer)) && <div className="composer-chips">
           {attachment && <span className="composer-chip">
             {attachment.icon}{attachment.label}
             <button type="button" aria-label={`Remove ${attachment.label}`} onClick={attachment.onRemove}><Close /></button>
@@ -314,6 +334,7 @@ export function Composer({
           {reactions.map((reaction, index) => <ReactionChip key={`${index}:${reaction.quote}`} reaction={reaction}
             onChange={(kind) => setReactions((current) => current.map((r, i) => i === index ? { ...r, kind } : r))}
             onRemove={() => { setReactions((current) => current.filter((_, i) => i !== index)); input.current?.focus(); }} />)}
+          {armed && shipOffer && <ShipChip offer={shipOffer} onRemove={() => { setShip(false); input.current?.focus(); }} />}
         </div>}
         {options.length > 0 && mention && <MentionMenu options={options} active={active} browsing={kind} sigil={command ? '/' : '@'} onPick={pickMention} onHover={setHighlight}
           onBack={() => { setBrowsing(undefined); setHighlight(0); }}
@@ -369,6 +390,17 @@ export function Composer({
                 select(next.id);
               }
             }
+            // By key code: Alt+S types ß on a Mac keyboard.
+            if (shipOffer && e.altKey && e.code === 'KeyS' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+              e.preventDefault();
+              if (!e.repeat && (composing || armed)) shipSlot.toggle();
+              return;
+            }
+            if (shipOffer && e.key === 'Enter' && e.altKey && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.nativeEvent.isComposing && e.keyCode !== 229) {
+              e.preventDefault();
+              if (!e.repeat) void submit('steer', true);
+              return;
+            }
             if (e.key === 'Enter' && !e.shiftKey && !e.altKey && !e.nativeEvent.isComposing && e.keyCode !== 229) {
               e.preventDefault();
               if (!e.repeat) void submit(onStop && (e.ctrlKey || e.metaKey) ? 'queue' : 'steer');
@@ -390,12 +422,14 @@ export function Composer({
               <StopSquare />
             </button>
           )}
-          <button type="submit" className={`send${queuing ? ' queue' : ''}`} aria-label={queuing ? 'Queue message' : 'Send'} disabled={disabled || busy || !sendable}
+          <button type="submit" className={`send${queuing ? ' queue' : ''}`} aria-label={queuing ? 'Queue message' : 'Send'}
+            title={!queuing && armed && shipOffer ? `Send, then ${shipWhenDoneLabel(shipOffer.mode).toLowerCase()}` : undefined} disabled={disabled || busy || !sendable}
             onClick={e => { e.preventDefault(); void submit(onStop && (e.ctrlKey || e.metaKey) ? 'queue' : 'steer'); }}>
             {queuing ? <Queue /> : <ArrowUp />}
           </button>
         </div>
       </form>
     </div>
+    </ShipWhenDoneSlot.Provider>
   );
 }
