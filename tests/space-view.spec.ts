@@ -67,6 +67,8 @@ test('the space view opens from the project menu and Settings, lists its project
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.locator('.thread-project-link', { hasText: 'review-project' })).toBeVisible();
     await expect.poll(homeThreads).toBe(before + 1);
+    // The draft's header is replaced by the started thread's, which would close a menu opened on it.
+    await expect(page.getByRole('button', { name: 'Rename thread: Home follow-up', exact: true })).toBeVisible();
 
     // Outside any space, the project name's right-click menu has no Space entry.
     await client.call('spaces.delete', { id: space.id });
