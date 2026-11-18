@@ -71,7 +71,7 @@ test('Ship when done arms by button or Alt+S, follows the mode and ships once th
   await expect(page.getByText('Ship to main when ready.', { exact: true })).toHaveCount(1);
 });
 
-test('Alt+Enter sends and ships in one step; a failed send or an unavailable Ship ships nothing and keeps the chip', async ({ page, baseURL }, testInfo) => {
+test('Alt+Enter sends and ships in one step; a failed send or an unavailable Ship ships nothing', async ({ page, baseURL }, testInfo) => {
   // The app's calls, with the next send refused when asked.
   const calls: string[] = [];
   let refuseSend = false;
@@ -96,15 +96,17 @@ test('Alt+Enter sends and ships in one step; a failed send or an unavailable Shi
   await input.fill('Build delivery fixture');
 
   // A refused send requests no delivery and leaves the chip armed for the retry.
+  await input.press('Alt+S');
   refuseSend = true;
-  await input.press('Alt+Enter');
+  await input.press('Enter');
   await expect(page.locator('.composer-error')).toHaveText('Sending failed in this test.');
   await expect(chip).toHaveText('Ship when done');
   await expect(input).toHaveValue('Build delivery fixture');
   expect(calls).not.toContain('threads.deliver');
-  await page.keyboard.press('Alt+S');
+  await input.press('Alt+S');
   await expect(chip).toHaveCount(0);
 
+  // Alt+Enter sends and ships without the chip.
   await input.press('Alt+Enter');
   await expect(page.getByText('Feature implemented. Running checks…', { exact: true })).toBeVisible();
   await expect(input).toHaveValue('');
@@ -112,14 +114,16 @@ test('Alt+Enter sends and ships in one step; a failed send or an unavailable Shi
   await expect(actions.getByText('Ships when done', { exact: true })).toBeVisible();
   await expect.poll(() => delivery(page, baseURL!)).toEqual({ status: 'running', mode: 'ship', delivery: 'queued' });
 
-  // Queued messages hold Ship back, so the chip can't promise one either.
+  // Queued messages hold Ship back, so the chip can't promise one either. Queueing never ships and keeps it armed.
   await actions.getByRole('button', { name: 'Cancel queued delivery' }).click();
   await expect(actions.getByText('Ships when done', { exact: true })).toHaveCount(0);
   await input.fill('Delivery follow-up');
+  await input.press('Alt+S');
+  await expect(chip).toHaveText('Ship when done');
   await input.press('Control+Enter');
   await expect(page.locator('.queued-message')).toHaveCount(1);
   await input.fill('Wait for the queue');
-  await input.press('Alt+Enter');
+  await input.press('Enter');
   const removeChip = page.getByRole('button', { name: 'Remove Ship when done', exact: true });
   await expect(chip).toHaveClass(/unavailable/);
   await expect(removeChip).toHaveAttribute('title', 'Send or remove queued messages first');
@@ -127,8 +131,13 @@ test('Alt+Enter sends and ships in one step; a failed send or an unavailable Shi
   await expect(input).toHaveValue('Wait for the queue');
   await expect(page.getByRole('button', { name: 'Ship', exact: true })).toBeDisabled();
   await page.locator('.composer').screenshot({ path: testInfo.outputPath('ship-when-done-unavailable.png') });
-  // The chip still comes off, and the message then sends without a ship.
+  // The chip still comes off; then Alt+S won't arm what Ship can't do, and Alt+Enter refuses too.
   await removeChip.click();
+  await expect(chip).toHaveCount(0);
+  await input.press('Alt+S');
+  await expect(chip).toHaveCount(0);
+  await input.press('Alt+Enter');
+  await expect(page.locator('.composer-error')).toContainText("Can't ship when done: Send or remove queued messages first.");
   await expect(chip).toHaveCount(0);
   await input.press('Control+Enter');
   await expect(page.locator('.queued-message')).toHaveCount(2);

@@ -76,7 +76,7 @@ export function Composer({
 }) {
   const client = useClient();
   const { threads, shelves, selectedId, select, now, placement } = useThreads();
-  // GLOSSARY: Draft. Unsent text, Pasted text and images outlive this composer; sending or clearing them removes them.
+  // GLOSSARY: Draft. Unsent text, Pasted text, Reactions, images and an armed Ship when done outlive this composer; sending or clearing them removes them.
   const key = composerKey(client.hubId, draftId);
   const { text, setText, pastes, setPastes, reactions, setReactions, images, setImages, ship: armed, setShip } = useDraft(key);
   /** Set by Ctrl+Shift+V just before its paste event, which then keeps long text in the box. */
@@ -279,7 +279,6 @@ export function Composer({
     // A ship that can't happen is never promised: the message stays until the chip goes or Ship is back.
     const refusal = shipping?.reason;
     if (shipping && refusal) {
-      setShip(true);
       void run(() => Promise.reject(new Error(`Can't ${shipWhenDoneLabel(shipping.mode).toLowerCase()}: ${refusal.replace(/\.$/, '')}. Remove the chip to send without it.`)));
       return;
     }
@@ -289,9 +288,8 @@ export function Composer({
     sending.current = true;
     try {
       await run(async () => {
-        // Only once the message is in: a failed send ships nothing, and keeps (or, from Alt+Enter, arms) the chip.
-        try { await onSend(joinPastes(sentPastes, value, sentReactions), mode, sent.map((image) => image.uploadId!), sent.map((image) => image.url)); }
-        catch (cause) { if (shipping) setShip(true); throw cause; }
+        // A failed send throws here: it ships nothing and leaves the chip as it was.
+        await onSend(joinPastes(sentPastes, value, sentReactions), mode, sent.map((image) => image.uploadId!), sent.map((image) => image.url));
         // Sent from a composer that has since closed (a started draft): forget its saved text too.
         if (!input.current || input.current.value === text) setText('');
         setImages((current) => current.filter((image) => !sent.includes(image)));
@@ -393,7 +391,8 @@ export function Composer({
             // By key code: Alt+S types ß on a Mac keyboard.
             if (shipOffer && e.altKey && e.code === 'KeyS' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
               e.preventDefault();
-              if (!e.repeat && (composing || armed)) shipSlot.toggle();
+              // Like Ship, it arms only what can ship; an armed chip always comes off.
+              if (!e.repeat && (armed || (composing && !shipOffer.reason))) shipSlot.toggle();
               return;
             }
             if (shipOffer && e.key === 'Enter' && e.altKey && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.nativeEvent.isComposing && e.keyCode !== 229) {

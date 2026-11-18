@@ -4,8 +4,7 @@ import { REACTION_KINDS, type Reaction } from '@accio/protocol';
 /** GLOSSARY: Image attachment. A pasted image in the composer; it can be sent once uploaded. */
 export type PendingImage = { key: string; name: string; mimeType: string; url: string; uploadId?: string };
 
-/** What a composer holds before it sends. */
-/** `ship` is an armed Ship when done (GLOSSARY: Ship when done). */
+/** What a composer holds before it sends; `ship` is an armed Ship when done (GLOSSARY: Ship when done). */
 export type DraftContent = { text: string; pastes: string[]; reactions: Reaction[]; images: PendingImage[]; ship: boolean };
 
 type Update<T> = T | ((current: T) => T);
@@ -20,7 +19,7 @@ const listeners = new Set<() => void>();
 const EMPTY: DraftContent = { text: '', pastes: [], reactions: [], images: [], ship: false };
 /** The parts saved beside the text, each under its own key suffix. */
 const SAVED_PARTS = ['pastes', 'reactions', 'ship'] as const;
-const unset = (value: DraftContent[(typeof SAVED_PARTS)[number]]) => Array.isArray(value) ? !value.length : !value;
+const isEmptyPart = (value: DraftContent[(typeof SAVED_PARTS)[number]]) => Array.isArray(value) ? !value.length : !value;
 let scanned = false;
 let version = 0;
 
@@ -70,7 +69,7 @@ function change(key: string, next: DraftContent) {
   }
   for (const part of SAVED_PARTS) {
     if (next[part] === before[part]) continue;
-    try { if (!unset(next[part])) localStorage.setItem(`${key}:${part}`, JSON.stringify(next[part])); else localStorage.removeItem(`${key}:${part}`); }
+    try { if (!isEmptyPart(next[part])) localStorage.setItem(`${key}:${part}`, JSON.stringify(next[part])); else localStorage.removeItem(`${key}:${part}`); }
     catch { /* Too large to keep across a restart; it still sends. */ }
   }
   contents.set(key, next);
