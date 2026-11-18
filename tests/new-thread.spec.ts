@@ -122,7 +122,18 @@ async function threadNamed(baseURL: string | undefined, title: string) {
   finally { client.close(); }
 }
 
-test('a fresh draft sends on an immediate Enter', async ({ page, baseURL }) => {
+test('Ctrl+N and Ctrl+T both open the New thread picker', async ({ page, baseURL }) => {
+  await page.goto(`${baseURL}/#token=${token}`);
+  const picker = page.locator('.side-tools .new-thread-picker');
+  for (const shortcut of ['Control+n', 'Control+t']) {
+    await expect(picker).toBeHidden();
+    await page.keyboard.press(shortcut);
+    await expect(picker).toBeVisible();
+    await page.keyboard.press('Escape');
+  }
+});
+
+test('a fresh draft sends on an immediate Enter',async ({ page, baseURL }) => {
   await freshDraft(page, baseURL);
   const input = page.locator('.composer textarea');
   await input.fill('Queued early enter');
