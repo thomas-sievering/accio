@@ -46,7 +46,7 @@ it('keeps CLI levels across a save, a reload and a definition change, and drops 
 });
 
 
-it('loads legacy tools Everywhere, dropping scopes stored on old definitions, and MCPs without scopes', async () => {
+it('loads legacy tools and MCP servers Everywhere, dropping scopes stored on old definitions', async () => {
   const home = await mkdtemp(join(tmpdir(), 'accio-resources-'));
   const tool = { id: 'browser', name: 'Browser', package: '@playwright/cli', version: '0.1.23', executable: 'playwright-cli', checkArgs: ['--version'] };
   const mcp = { id: 'remote', name: 'Remote', transport: 'http', url: 'https://example.test/mcp', args: [], auth: 'none' };
@@ -56,7 +56,7 @@ it('loads legacy tools Everywhere, dropping scopes stored on old definitions, an
     await writeFile(join(home, 'hub', 'resources.json'), JSON.stringify({ tools: [{ ...tool, scope: { ...optionalScope(), projectKeys: ['local:old'] } }], mcps: [{ ...mcp, scope: optionalScope() }], sources: [], skills: [], toolStatuses: [] }));
     await store.load();
     expect(store.state().tools).toEqual([{ ...tool, scope: everywhere() }]);
-    expect(store.state().mcps).toEqual([{ ...mcp, signedIn: false }]);
+    expect(store.state().mcps).toEqual([{ ...mcp, scope: everywhere(), signedIn: false }]);
   } finally { await store.close(); await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); }
 });
 

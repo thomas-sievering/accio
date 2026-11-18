@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { HubClient, remoteSettings, remoteResources, remoteMcp, remoteSecrets, type SecretsAccess, type HubSnapshot, type HarnessInstall } from '@accio/hub';
-import { projectKey, type Events, type MachineInfo } from '@accio/protocol';
+import { projectKey, type Events, type LevelContext, type MachineInfo } from '@accio/protocol';
 import { Router, UserError, type Broadcast } from '../rpc/router.js';
 import { Profiles } from '../profiles/profiles.js';
 import { Machines } from '../machine/machine.js';
@@ -26,6 +26,8 @@ import { AccioTools } from '../tools/tools.js';
 import { offerChoice } from '../threads/choice.js';
 import { ResourceManager } from '../resources/resources.js';
 import { addCliTool } from '../resources/addCli.js';
+import { addMcpTool } from '../resources/addMcp.js';
+import type { ConfirmationRequest } from '../threads/confirmations.js';
 import type { CommandRunner } from '../resources/process.js';
 import type { DeliveryHosting } from '../threads/delivery.js';
 import { GitHubAccounts, type GhRunner } from '../github/accounts.js';
@@ -185,19 +187,28 @@ export async function openWorkspace(record: SavedHub, deps: WorkspaceDeps, slot:
     const n = relay.merged([]).filter((t) => t.projectId === projectId).length;
     return n ? `${n} thread${n > 1 ? 's' : ''} on other machines` : undefined;
   });
-  tools.add(addCliTool({
-    caller: (id) => threads.views().find((t) => t.id === id),
-    levelContext: (profileId, projectId) => resources.levelContext(profileId, projectId),
-    names: (at) => ({ profile: profiles.all().find((p) => p.id === at.profileId)?.name, space: spaces.list().find((s) => s.id === at.spaceId)?.name,
+  const levelTool = {
+    caller: (id: string) => threads.views().find((t) => t.id === id),
+    levelContext: (profileId: string, projectId: string) => resources.levelContext(profileId, projectId),
+    names: (at: LevelContext) => ({ profile: profiles.all().find((p) => p.id === at.profileId)?.name, space: spaces.list().find((s) => s.id === at.spaceId)?.name,
       project: projects.state().projects.find((p) => at.projectKey && projectKey(p) === at.projectKey)?.name }),
+    confirm: async (threadId: string, request: ConfirmationRequest, signal: AbortSignal) => {
+      const turnId = threads.runningTurn(threadId);
+      if (!turnId) return 'cancelled' as const;
+      return threads.confirmations.ask(threadId, turnId, request, signal);
+    },
+  };
+  tools.add(addCliTool({
+    ...levelTool,
     tools: () => resources.state().tools,
     save: async (tool) => (await resources.saveTool(tool)).check,
     bin: (tool) => resources.tools.bin(tool),
-    confirm: async (threadId, request, signal) => {
-      const turnId = threads.runningTurn(threadId);
-      if (!turnId) return 'cancelled';
-      return threads.confirmations.ask(threadId, turnId, request, signal);
-    },
+  }), addMcpTool({
+    ...levelTool,
+    mcps: () => resources.state().mcps,
+    save: (mcp) => resources.saveMcp(mcp),
+    beginSignIn: (id) => resources.beginMcpSignIn(id),
+    setToken: (id, token) => resources.setMcpToken(id, token),
   }));
   // GLOSSARY: Relay. The only answer for the thread and machine lists: other machines' threads join
   // this machine's, and calls about them go to their machine.

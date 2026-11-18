@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { projectKey, type LevelContext, type McpDefinition, type ResourceScope, type ResourcesState, type Space, type ToolDefinition, type WorkspaceSkill, type SkillEntry } from '@accio/protocol';
+import { narrowestLevel, projectKey, type LevelContext, type McpDefinition, type McpSave, type ResourceScope, type ResourcesState, type Space, type ToolDefinition, type WorkspaceSkill, type SkillEntry } from '@accio/protocol';
 import type { McpAccess, ResourceAccess } from '@accio/hub';
 import type { Router, Broadcast } from '../rpc/router.js';
 import type { Profiles } from '../profiles/profiles.js';
@@ -126,6 +126,22 @@ export class ResourceManager {
     const saved = this.tool(tool.id);
     return { saved, check: this.tools.check(saved) };
   }
+  /** Saves an MCP server, signing it out when its address or sign-in changes (ADR 0024). */
+  async saveMcp(mcp: McpSave) {
+    this.validateMcp(mcp);
+    const old = this.state().mcps.find(m => m.id === mcp.id);
+    if (mcp.scope) this.checkScope(mcp.scope, old?.scope);
+    if (old && (old.url !== mcp.url || old.auth !== mcp.auth || old.oauthClientId !== mcp.oauthClientId)) await this.gateway.signOut(mcp.id);
+    await this.store.saveMcp(mcp); this.announce();
+    return this.state().mcps.find(m => m.id === mcp.id)!;
+  }
+  /** GLOSSARY: MCP server. Starts the hub's OAuth sign-in for a remote server; the hub finishes it at its callback. */
+  beginMcpSignIn(id: string) { return this.gateway.beginSignIn(id); }
+  /** Saves a bearer token for a remote server on the hub. */
+  async setMcpToken(id: string, token: string) {
+    if (!this.state().mcps.some(m => m.id === id && m.auth === 'bearer')) throw new Error('Select a server with bearer authentication');
+    await this.store.setCredential(id, { accessToken: token }); this.announce();
+  }
   register(router: Router) {
     router.on('resources.get', () => this.state())
       .on('tools.save', async tool => { const { saved, check } = await this.saveTool(tool); void check.catch(console.error); return saved; })
@@ -146,9 +162,9 @@ export class ResourceManager {
       .on('skills.deleteSource', ({ id }) => this.sourceOperation(id, async () => { await this.store.deleteSource(id); this.announce(); return null; }))
       .on('skills.setScope', async ({ id, scope }) => { this.checkScope(scope, this.state().skills.find(s => s.id === id)?.scope); await this.store.setSkillScope(id, scope); this.announce(); return this.state().skills.find(s => s.id === id)!; })
       .on('skills.copy', async ({ id, checkoutId }) => { const skill = this.state().skills.find(s => s.id === id); if (!skill) throw new Error('No such skill'); const release = this.projects.useCheckout(checkoutId); try { return await this.skills.copy(await this.localSkill(skill), this.projects.checkout(checkoutId).path); } finally { release(); } })
-      .on('mcp.save', async mcp => { this.validateMcp(mcp); const old = this.state().mcps.find(m => m.id === mcp.id); if (old && (old.url !== mcp.url || old.auth !== mcp.auth || old.oauthClientId !== mcp.oauthClientId)) await this.gateway.signOut(mcp.id); await this.store.saveMcp(mcp); this.announce(); return this.state().mcps.find(m => m.id === mcp.id)!; })
+      .on('mcp.save', mcp => this.saveMcp(mcp))
       .on('mcp.delete', async ({ id }) => { await this.gateway.signOut(id); await this.store.deleteMcp(id); this.announce(); return null; })
-      .on('mcp.setToken', async ({ id, token }) => { if (!this.state().mcps.some(m => m.id === id && m.auth === 'bearer')) throw new Error('Select a server with bearer authentication'); await this.store.setCredential(id, { accessToken: token }); this.announce(); return null; })
+      .on('mcp.setToken', async ({ id, token }) => { await this.setMcpToken(id, token); return null; })
       .on('mcp.signOut', async ({ id }) => { await this.gateway.signOut(id); this.announce(); return null; })
       .on('mcp.beginSignIn', ({ id }) => this.gateway.beginSignIn(id))
       .on('mcp.completeSignIn', async ({ id, callbackUrl }) => { await this.gateway.completeSignIn(callbackUrl, id); this.announce(); return null; });
@@ -210,7 +226,8 @@ export class ResourceManager {
     const instructions = [skillText, cliInstructions(clis)].filter(Boolean).join('\n\n');
     const releases: (() => void)[] = [];
     const mcps: Record<string, HarnessMcp> = {};
-    for (const mcp of state.mcps) {
+    // ADR 0024: a turn gets only the MCP servers turned on at one of its levels.
+    for (const mcp of state.mcps.filter(m => narrowestLevel(m.scope, at))) {
       if (mcp.id === ACCIO_MCP_SERVER) throw new Error('Rename this managed MCP server: that name is reserved for built-in tools');
       if (mcp.transport === 'http') { const grant = await this.gateway.grant(mcp.id, profileId, key); releases.push(grant.release); mcps[mcp.id] = { type: 'http', url: grant.url, headers: { Authorization: `Bearer ${grant.token}` } }; }
       else mcps[mcp.id] = { type: 'stdio', command: mcp.command!, args: mcp.args };

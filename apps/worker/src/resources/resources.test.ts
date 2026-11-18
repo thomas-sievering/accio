@@ -101,6 +101,20 @@ describe('hub resource management', () => {
     held.release(); await c.waitFor('threads.changed', threads => threads.some(x => x.id === thread.id && x.status === 'idle'));
     await expect.poll(async () => (await fetch(mcp.url, { headers: mcp.headers })).status).toBe(403);
   });
+  it('gives a turn only the MCP servers turned on at one of its levels', async () => {
+    const harness = new FakeHarness(); const t = await startTestApp({ harness }); stop = t.stop;
+    const c = await t.connect(); await c.signedIn('Personal');
+    const nowhere = { global: false, profileIds: [], spaceIds: [], projectKeys: [] };
+    const local = (id: string) => ({ id, name: id, transport: 'stdio' as const, command: 'node', args: [], auth: 'none' as const });
+    await c.call('mcp.save', local('everyone'));
+    await c.call('mcp.save', { ...local('mine'), scope: { ...nowhere, profileIds: ['personal'] } });
+    await c.call('mcp.save', { ...local('off'), scope: nowhere });
+    await expect(c.call('mcp.save', { ...local('ghost'), scope: { ...nowhere, projectKeys: ['github.com/nobody/nothing'] } })).rejects.toThrow('No such project');
+    expect((await c.call('resources.get', {})).mcps.find(m => m.id === 'everyone')?.scope.global).toBe(true);
+    await c.call('threads.start', { profileId: 'personal', text: 'Which servers?' });
+    await expect.poll(() => harness.runs.length).toBe(1);
+    expect(Object.keys(harness.runs[0]!.mcps ?? {}).filter(id => id !== 'accio').sort()).toEqual(['everyone', 'mine']);
+  });
   it('imports real Git skills, applies project scope and copies without overwriting project content', async () => {
     const harness = new FakeHarness(); const t = await startTestApp({ harness }); stop = t.stop;
     const c = await t.connect(); await c.signedIn('Personal');

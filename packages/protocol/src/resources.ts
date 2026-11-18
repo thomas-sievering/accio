@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { method } from './rpc.js';
 
-/** GLOSSARY: Skill level. Where a library skill or CLI is turned on: everywhere, for profiles, for spaces (by space id) and for projects (by project key). */
+/** GLOSSARY: Skill level. Where a library skill, CLI or MCP server is turned on: everywhere, for profiles, for spaces (by space id) and for projects (by project key). */
 export const ResourceScope = z.object({ global: z.boolean().default(false), profileIds: z.array(z.string()).default([]), spaceIds: z.array(z.string()).default([]), projectKeys: z.array(z.string()).default([]) });
 export type ResourceScope = z.infer<typeof ResourceScope>;
 const Id = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/);
@@ -29,7 +29,10 @@ export type SkillSource = z.infer<typeof SkillSource>;
 export type SkillEntry = { id: string; sourceId: string; name: string; description: string; path: string; revision: string; scope: ResourceScope };
 export const McpDefinition = z.object({ id: Id, name: z.string().trim().min(1).max(120), transport: z.enum(['http', 'stdio']), url: z.url().optional(), command: z.string().trim().min(1).optional(), args: z.array(z.string()).default([]), auth: z.enum(['none', 'bearer', 'oauth']).default('none'), oauthClientId: z.string().optional() });
 export type McpDefinition = z.infer<typeof McpDefinition>;
-export type McpView = McpDefinition & { signedIn: boolean; status?: string };
+/** Saving an MCP server may set its levels too; without them a new server is on Everywhere and an existing one keeps its levels (ADR 0024). */
+export const McpSave = McpDefinition.extend({ scope: ResourceScope.optional() });
+export type McpSave = z.infer<typeof McpSave>;
+export type McpView = McpDefinition & { scope: ResourceScope; signedIn: boolean; status?: string };
 export type ToolStatus = { toolId: string; machineId: string; status: 'pending' | 'installing' | 'ready' | 'error'; version?: string; detail?: string; /** The installed package's own description, used when the CLI has none. */ description?: string; checkedAt?: string; repairThreadId?: string; repairError?: string };
 export type ResourcesState = { tools: ToolEntry[]; sources: SkillSource[]; skills: SkillEntry[]; mcps: McpView[]; toolStatuses: ToolStatus[]; skillVersions: { sourceId: string; revision: string; active: boolean }[] };
 const ResourceId = z.object({ id: z.string().min(1) });
@@ -52,7 +55,7 @@ export const resourceMethods = {
   'skills.deleteSource': method<typeof ResourceId, null>(ResourceId),
   'skills.setScope': method<typeof ScopeInput, SkillEntry>(ScopeInput),
   'skills.copy': method<typeof CopySkill, { path: string }>(CopySkill),
-  'mcp.save': method<typeof McpDefinition, McpView>(McpDefinition),
+  'mcp.save': method<typeof McpSave, McpView>(McpSave),
   'mcp.delete': method<typeof ResourceId, null>(ResourceId),
   'mcp.setToken': method<typeof Secret, null>(Secret),
   'mcp.signOut': method<typeof ResourceId, null>(ResourceId),

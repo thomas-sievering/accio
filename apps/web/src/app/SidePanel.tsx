@@ -125,7 +125,7 @@ export function SidePanel({ overlay = false }: { overlay?: boolean }) {
           ? <p className="side-panel-empty">Open a thread or start one to see its {tab === 'mcp' ? 'MCP servers' : 'skills'}.</p>
           : tab === 'skills'
             ? skillsUnavailable ? <p className="side-panel-empty">{skillsUnavailable}</p> : <SkillsPanel key={key} context={context} composer={draft ? 'draft' : thread!.id} />
-            : <McpPanel />}
+            : <McpPanel context={draft ? { profileId: draft.profileId, checkoutId: draft.checkoutId } : { profileId: thread!.profileId, projectId: thread!.projectId }} />}
       </div>
     </aside>
   </>;

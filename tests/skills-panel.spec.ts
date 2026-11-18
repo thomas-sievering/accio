@@ -34,7 +34,7 @@ test('narrow panel wraps focus in both directions without a blank or background 
   // Settings opened from the narrow panel must release its focus boundary.
   await toggle.click();
   await page.getByRole('tab', { name: 'MCP', exact: true }).click();
-  await page.getByRole('tabpanel', { name: 'MCP' }).getByRole('button', { name: 'docs-search Remote', exact: true }).click();
+  await page.getByRole('tabpanel', { name: 'MCP' }).getByRole('button', { name: 'docs-search Everywhere · Remote', exact: true }).click();
   await expect(page.locator('.settings-page').getByRole('textbox').first()).toBeFocused();
   const accounts = page.locator('.sidebar nav').getByRole('button', { name: 'Accounts', exact: true });
   await accounts.focus();
@@ -255,14 +255,16 @@ test('Skills tab shows a Space level between Project and Profile, and Settings t
   }
 });
 
-test('MCP tab lists every MCP server, flags sign-in and opens settings', async ({ page, baseURL }, testInfo) => {
+test('MCP tab lists the servers on for the thread with their level, flags sign-in and opens settings', async ({ page, baseURL }, testInfo) => {
   await openSkills(page, baseURL!, /Skills fixture/);
   await page.getByRole('tab', { name: 'MCP', exact: true }).click();
   const mcp = page.getByRole('tabpanel', { name: 'MCP' });
   const row = (name: string) => mcp.locator('.mcp-item').filter({ has: page.getByRole('button', { name: new RegExp(`^${name}\\b`) }) });
 
   await expect(mcp.getByRole('heading', { name: 'Servers 2' })).toBeVisible();
-  await expect(row('docs-search')).toContainText('Remote');
+  await expect(row('docs-search')).toContainText('Everywhere · Remote');
+  await expect(row('other-team')).toHaveCount(0);
+  await expect(mcp).toContainText('1 more server is on elsewhere');
   await expect(row('docs-search')).toContainText('https://mcp.example.test/docs');
   await expect(row('docs-search')).toContainText('Signed out');
   await expect(row('local-db')).toContainText('db-mcp --readonly');
@@ -279,7 +281,7 @@ test('MCP tab lists every MCP server, flags sign-in and opens settings', async (
   await expect(page.getByRole('tab', { name: 'MCP', exact: true })).toHaveAttribute('aria-selected', 'true');
 
   // A row opens that server in settings.
-  await page.getByRole('tabpanel', { name: 'MCP' }).getByRole('button', { name: 'docs-search Remote', exact: true }).click();
+  await page.getByRole('tabpanel', { name: 'MCP' }).getByRole('button', { name: 'docs-search Everywhere · Remote', exact: true }).click();
   await expect(page.locator('.layout.with-panel')).toBeHidden();
   await expect(page.getByText('docs-search').first()).toBeVisible();
 });

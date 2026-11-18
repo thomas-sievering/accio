@@ -1,15 +1,15 @@
 import { join } from 'node:path';
 import { JsonFile, JsonStore } from '@accio/persistence';
 import { McpDefinition, ResourceScope as ResourceScopeInput, ToolDefinition, narrowestLevel } from '@accio/protocol';
-import type { ResourceScope, ResourcesState, SkillEntry, SkillSource, ToolSave, ToolStatus } from '@accio/protocol';
+import type { McpSave, ResourceScope, ResourcesState, SkillEntry, SkillSource, ToolSave, ToolStatus } from '@accio/protocol';
 
 export const optionalScope = (): ResourceScope => ({ global: false, profileIds: [], spaceIds: [], projectKeys: [] });
-/** Every CLI saved before CLIs had levels was on for every thread. */
+/** Every CLI or MCP server saved before it had levels was on for every thread. */
 export const everywhere = (): ResourceScope => ({ ...optionalScope(), global: true });
 export function enabled(scope: ResourceScope, profileId?: string, projectKey?: string, spaceId?: string): boolean {
   return !!narrowestLevel(scope, { profileId, projectKey, spaceId });
 }
-type Data = { tools: ToolDefinition[]; sources: SkillSource[]; skills: SkillEntry[]; mcps: McpDefinition[]; toolStatuses: ToolStatus[]; toolSelections?: Record<string, ResourceScope>; skillSelections?: Record<string, ResourceScope>; skillSnapshots?: { sourceId: string; revision: string; skills: SkillEntry[] }[] };
+type Data = { tools: ToolDefinition[]; sources: SkillSource[]; skills: SkillEntry[]; mcps: McpDefinition[]; toolStatuses: ToolStatus[]; toolSelections?: Record<string, ResourceScope>; mcpSelections?: Record<string, ResourceScope>; skillSelections?: Record<string, ResourceScope>; skillSnapshots?: { sourceId: string; revision: string; skills: SkillEntry[] }[] };
 export type McpCredential = { accessToken: string; refreshToken?: string; expiresAt?: number; tokenEndpoint?: string; clientId?: string; clientSecret?: string };
 
 /** Definitions and selections are shared; credentials are kept in a separate hub-only file. */
@@ -25,7 +25,7 @@ export class Resources {
   private get data() { return this.store.data; }
   async load() {
     const data = await this.store.load();
-    // Parsing strips scopes stored on legacy tool and MCP definitions; CLI levels live in toolSelections.
+    // Parsing strips scopes stored on legacy tool and MCP definitions; levels live in toolSelections and mcpSelections.
     data.tools = data.tools.map(tool => ToolDefinition.parse(tool));
     data.mcps = data.mcps.map(mcp => McpDefinition.parse(mcp));
     // Selections saved before spaces had skills have no `spaceIds`.
@@ -33,7 +33,7 @@ export class Resources {
     if (data.skillSelections) data.skillSelections = Object.fromEntries(Object.entries(data.skillSelections).map(([id, scope]) => [id, ResourceScopeInput.parse(scope)]));
     this.secrets = await this.secretsFile.read();
   }
-  state(): ResourcesState { const { skillSnapshots = [], skillSelections: _selections, toolSelections = {}, ...data } = this.data; return structuredClone({ ...data, tools: data.tools.map(tool => ({ ...tool, scope: toolSelections[tool.id] ?? everywhere() })), skillVersions: skillSnapshots.map(s => ({ sourceId: s.sourceId, revision: s.revision, active: this.data.skills.some(skill => skill.sourceId === s.sourceId && skill.revision === s.revision) })), mcps: this.data.mcps.map(m => ({ ...m, signedIn: !!this.secrets[m.id] })) }); }
+  state(): ResourcesState { const { skillSnapshots = [], skillSelections: _selections, toolSelections = {}, mcpSelections = {}, ...data } = this.data; return structuredClone({ ...data, tools: data.tools.map(tool => ({ ...tool, scope: toolSelections[tool.id] ?? everywhere() })), skillVersions: skillSnapshots.map(s => ({ sourceId: s.sourceId, revision: s.revision, active: this.data.skills.some(skill => skill.sourceId === s.sourceId && skill.revision === s.revision) })), mcps: this.data.mcps.map(m => ({ ...m, scope: mcpSelections[m.id] ?? everywhere(), signedIn: !!this.secrets[m.id] })) }); }
   credential(id: string) { return this.secrets[id] ? { ...this.secrets[id] } : undefined; }
   private save(fn: (data: Data) => Data) { return this.store.change(() => this.store.commit(fn(this.data))); }
   async setCredential(id: string, value?: McpCredential) { await this.store.change(async () => { const next = { ...this.secrets }; if (value) next[id] = value; else delete next[id]; await this.secretsFile.write(next); this.secrets = next; }); }
@@ -62,8 +62,11 @@ export class Resources {
       return { ...d, skillSelections: { ...d.skillSelections, [id]: scope }, skills: d.skills.map(skill => skill.id === id ? { ...skill, scope } : skill) };
     });
   }
-  saveMcp(mcp: McpDefinition) { return this.save(d => ({ ...d, mcps: [...d.mcps.filter(m => m.id !== mcp.id), mcp] })); }
-  async deleteMcp(id: string) { await this.setCredential(id); await this.save(d => ({ ...d, mcps: d.mcps.filter(m => m.id !== id) })); }
+  saveMcp(input: McpSave) { return this.save(d => {
+    const { scope, ...rest } = input; const mcp = McpDefinition.parse(rest);
+    return { ...d, mcps: [...d.mcps.filter(m => m.id !== mcp.id), mcp], mcpSelections: scope ? { ...d.mcpSelections, [mcp.id]: scope } : d.mcpSelections };
+  }); }
+  async deleteMcp(id: string) { await this.setCredential(id); await this.save(d => ({ ...d, mcps: d.mcps.filter(m => m.id !== id), mcpSelections: Object.fromEntries(Object.entries(d.mcpSelections ?? {}).filter(([key]) => key !== id)) })); }
   setToolStatus(status: ToolStatus) { return this.save(d => ({ ...d, toolStatuses: [...d.toolStatuses.filter(s => s.toolId !== status.toolId || s.machineId !== status.machineId), status] })); }
   async close() { await this.store.idle(); await this.secretsFile.idle(); }
 }

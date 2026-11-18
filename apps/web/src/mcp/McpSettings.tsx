@@ -1,18 +1,24 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import type { McpDefinition, McpView } from '@accio/protocol';
+import type { McpSave, McpView, ResourceScope } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { Plug } from '../app/icons';
 import { NEW, SettingLink, SettingsFooter, SettingsSection, StatusPill, type SettingsNav } from '../app/Settings';
 import { useAction } from '../app/useAction';
-import { slugId, useDraft, useResources } from '../resources/resources';
+import { scopeSummary, slugId, useDraft, useResources } from '../resources/resources';
+import { ScopeEditor } from '../resources/ScopeEditor';
+import { useProfiles } from '../profiles/profiles';
+import { useProjects } from '../projects/projects';
+import { useSpaces } from '../spaces/spaces';
 import { Field, focusFirstInvalid } from '../resources/Field';
 import { mcpDefinition } from './mcp';
 import { MenuSelect } from '../ui/MenuSelect';
 
-const blank = (): McpDefinition => ({ id: '', name: '', transport: 'http', url: '', command: '', args: [], auth: 'none', oauthClientId: undefined });
+type Draft = McpSave & { scope: ResourceScope };
+const everywhere = (): ResourceScope => ({ global: true, profileIds: [], spaceIds: [], projectKeys: [] });
+const blank = (): Draft => ({ id: '', name: '', transport: 'http', url: '', command: '', args: [], auth: 'none', oauthClientId: undefined, scope: everywhere() });
 const authLabel = { none: 'No sign-in', bearer: 'Bearer token', oauth: 'OAuth sign-in' } as const;
 
-/** MCP servers threads can use. Remote servers go through the hub, which keeps their credentials. */
+/** MCP servers threads get at their levels (ADR 0024). Remote servers go through the hub, which keeps their credentials. */
 export function useMcpData() {
   const { state, loadError, retry } = useResources();
   return { items: state?.mcps, error: loadError, retry };
@@ -20,12 +26,15 @@ export function useMcpData() {
 type Props = { nav: SettingsNav; data: ReturnType<typeof useMcpData> };
 
 export function McpList({ nav, data }: Props) {
+  const { profiles = [] } = useProfiles();
+  const { state: projects } = useProjects();
+  const { spaces = [] } = useSpaces();
   return (
     <>
-      <p className="note">Remote (HTTP) servers are reached through the hub, which holds their tokens; machines never see them. Local (stdio) servers run as a command on the machine running the thread.</p>
+      <p className="note">Threads get a server’s tools at its levels, so a server only costs context where it’s on. Remote (HTTP) servers are reached through the hub, which holds their tokens; machines never see them. Local (stdio) servers run as a command on the machine running the thread. A thread can add one with the add_mcp tool.</p>
       <SettingsSection add={{ label: 'Add MCP server', onClick: () => nav.open(NEW) }}>
         {[...data.items!].sort((a, b) => a.name.localeCompare(b.name)).map((m) => (
-          <SettingLink key={m.id} icon={<Plug />} title={m.name} description={m.transport === 'http' ? m.url : [m.command, ...m.args].join(' ')} onClick={() => nav.open(m.id)}>
+          <SettingLink key={m.id} icon={<Plug />} title={m.name} description={`${m.transport === 'http' ? m.url : [m.command, ...m.args].join(' ')} · ${scopeSummary(m.scope, profiles, projects?.projects, spaces)}`} onClick={() => nav.open(m.id)}>
             <McpPill mcp={m} />
           </SettingLink>
         ))}
@@ -60,7 +69,7 @@ function urlProblem(url?: string) {
 
 function McpForm({ mcp, taken, onSaved, onDone }: { mcp?: McpView; taken: string[]; onSaved: (m: McpView) => void; onDone: () => void }) {
   const client = useClient();
-  const { value, dirty, set, reset } = useDraft<McpDefinition>(mcp ? mcpDefinition(mcp) : blank());
+  const { value, dirty, set, reset } = useDraft<Draft>(mcp ? { ...mcpDefinition(mcp), scope: mcp.scope } : blank());
   const [argsText, setArgsText] = useState<string>();
   const [touched, setTouched] = useState(false);
   const { busy, error, run, attempt, clear } = useAction();
@@ -80,9 +89,9 @@ function McpForm({ mcp, taken, onSaved, onDone }: { mcp?: McpView; taken: string
     e.preventDefault();
     setTouched(true);
     if (invalid) return focusFirstInvalid(e.currentTarget);
-    const def: McpDefinition = http
-      ? { id: mcp?.id ?? slugId(value.name, taken), name: value.name.trim(), transport: 'http', url: value.url!.trim(), args: [], auth: value.auth, oauthClientId: value.auth === 'oauth' ? value.oauthClientId?.trim() || undefined : undefined }
-      : { id: mcp?.id ?? slugId(value.name, taken), name: value.name.trim(), transport: 'stdio', command: value.command!.trim(), args, auth: 'none' };
+    const def: McpSave = http
+      ? { id: mcp?.id ?? slugId(value.name, taken), name: value.name.trim(), transport: 'http', url: value.url!.trim(), args: [], auth: value.auth, oauthClientId: value.auth === 'oauth' ? value.oauthClientId?.trim() || undefined : undefined, scope: value.scope }
+      : { id: mcp?.id ?? slugId(value.name, taken), name: value.name.trim(), transport: 'stdio', command: value.command!.trim(), args, auth: 'none', scope: value.scope };
     const saved = await run(() => client.call('mcp.save', def));
     if (saved) { reset(); setArgsText(undefined); setTouched(false); onSaved(saved); }
   };
@@ -141,7 +150,11 @@ function McpForm({ mcp, taken, onSaved, onDone }: { mcp?: McpView; taken: string
             )}
           </div>
         </SettingsSection>
-        <p className="note">This MCP server is available to every profile and project.</p>
+        <SettingsSection title="Levels">
+          <div className="setting-form">
+            <ScopeEditor name={value.name || 'this server'} scope={value.scope} onChange={(scope) => set('scope', scope)} disabled={busy} withSpaces />
+          </div>
+        </SettingsSection>
       </form>
       {mcp && mcp.transport === 'http' && mcp.auth !== 'none' && <McpCredentials key={`${mcp.id}:${mcp.auth}:${mcp.url}`} mcp={mcp} />}
       {error && <p className="error" role="alert">{error}</p>}

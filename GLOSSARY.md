@@ -90,6 +90,10 @@ _Avoid_: Default tools, native tools, harness tools
 A command-line program that Accio installs at a pinned version on every machine and tells threads about, such as agent-desktop. It is turned on at the same levels as skills: Everywhere, Profile, Space or Project, and where two CLIs share a command the narrower level wins. A program you installed on a machine yourself is not a CLI until you add it to Accio, in Settings → CLIs or by asking a thread, which uses the add_cli accio tool. A CLI that is broken on a machine never holds a turn up; the turn is told it is unavailable there.
 _Avoid_: Tool (on its own), managed tool, binary
 
+**MCP server**:
+A server whose tools Accio hands to threads, such as Mobbin. A remote one is reached through the hub, which keeps its sign-in, a bearer token or OAuth, for every thread that gets it; a local one runs as a command on the machine running the thread. It is turned on at the same levels as CLIs, so a thread gets only the servers on at one of its levels, from its next turn. You add one in Settings → MCP servers, or a thread does with the add_mcp accio tool, which returns a sign-in link for OAuth and reads a bearer token only from a secret file. See ADR 0024.
+_Avoid_: Connector, integration, MCP (on its own, for a server)
+
 **System prompt**:
 What accio adds to a harness's own instructions for every turn: titled sections that describe accio's chat, such as how to show images inline. Each harness receives it in its own way. Claude Code gets it after its built-in system prompt and Codex as developer instructions. It is read-only and shown under Settings → System prompt.
 _Avoid_: Instructions, preamble, custom prompt

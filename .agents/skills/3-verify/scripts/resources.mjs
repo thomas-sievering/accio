@@ -92,6 +92,7 @@ export default async function journey({ page, runDir, home, fixture, action, cap
     const state = await resources();
     const m = state.mcps.find((x) => x.name === 'Linear (work)');
     assert(!('scope' in m));
+    assert.equal(state.mcpSelections[m.id].global, true);
     assert(!JSON.stringify(state).includes('verify-secret-token'));
     const creds = JSON.parse(await readFile(join(home, 'hub/mcp-credentials.json'), 'utf8'));
     assert(Object.keys(creds).includes(m.id));
@@ -127,6 +128,16 @@ export default async function journey({ page, runDir, home, fixture, action, cap
     assert.equal(m.auth, 'none');
     await button('Cancel').click();
     await page.getByRole('button', { name: /^Local echo.*Local$/ }).waitFor();
+  });
+  await action('mcp/levels: a server turned off everywhere keeps its definition', async () => {
+    await page.getByRole('button', { name: /^Local echo/ }).click();
+    await page.getByRole('checkbox', { name: /^Enable everywhere/ }).uncheck();
+    await button('Save').click();
+    await page.getByRole('button', { name: 'Save', exact: true, disabled: true }).waitFor();
+    const saved = await resources();
+    assert.equal(saved.mcpSelections[saved.mcps.find((x) => x.name === 'Local echo').id].global, false);
+    await button('Cancel').click();
+    await page.getByRole('button', { name: /^Local echo.*Optional/ }).waitFor();
   });
   await capture('mcp-list');
 

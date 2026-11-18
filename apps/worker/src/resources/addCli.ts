@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { z } from 'zod';
-import { RESOURCE_LEVELS, ToolDefinition, type LevelContext, type ResourceLevel, type ResourceScope, type ToolEntry, type ToolStatus } from '@accio/protocol';
-import { optionalScope } from '@accio/hub';
+import { RESOURCE_LEVELS, ToolDefinition, type LevelContext, type ResourceScope, type ToolEntry, type ToolStatus } from '@accio/protocol';
+import { levelScope, levelWhere, mergedScope } from './levelScope.js';
 import { accioTool } from '../tools/tools.js';
 import type { ConfirmationRequest } from '../threads/confirmations.js';
 
@@ -18,20 +18,6 @@ export type AddCliDeps = {
   confirm: (threadId: string, request: ConfirmationRequest, signal: AbortSignal) => Promise<Outcome>;
 };
 
-const levelScope = (level: ResourceLevel, at: LevelContext): ResourceScope => {
-  const scope = optionalScope();
-  if (level === 'everywhere') return { ...scope, global: true };
-  if (level === 'profile') return { ...scope, profileIds: [at.profileId!] };
-  if (level === 'space') {
-    if (!at.spaceId) throw new Error("This thread's project is in no space. Choose project, profile or everywhere.");
-    return { ...scope, spaceIds: [at.spaceId] };
-  }
-  if (!at.projectKey) throw new Error('This thread has no project. Choose profile or everywhere.');
-  return { ...scope, projectKeys: [at.projectKey] };
-};
-const union = (a: string[], b: string[]) => [...new Set([...a, ...b])];
-const merged = (a: ResourceScope, b: ResourceScope): ResourceScope =>
-  ({ global: a.global || b.global, profileIds: union(a.profileIds, b.profileIds), spaceIds: union(a.spaceIds, b.spaceIds), projectKeys: union(a.projectKeys, b.projectKeys) });
 const slug = (text: string) => text.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^[-_]+|-+$/g, '').slice(0, 60) || 'cli';
 
 /**
@@ -68,7 +54,7 @@ export function addCliTool(deps: AddCliDeps) {
       if (!parsed.success) throw new Error(z.prettifyError(parsed.error));
       const tool = parsed.data;
       const names = deps.names(at);
-      const where = args.level === 'everywhere' ? 'every thread' : args.level === 'profile' ? `threads of the ${names.profile ?? 'thread\'s'} profile` : args.level === 'space' ? `threads in the ${names.space ?? 'thread\'s'} space` : `threads in ${names.project ?? 'this project'}`;
+      const where = levelWhere(args.level, names);
       if (args.level === 'everywhere' && !existing?.scope.global) {
         const outcome = await deps.confirm(threadId, {
           title: `Add ${tool.name} for every thread?`,
@@ -78,7 +64,7 @@ export function addCliTool(deps: AddCliDeps) {
         if (outcome !== 'allowed') return outcome === 'declined' ? 'The user declined adding this CLI everywhere. Nothing was saved; a narrower level such as project, space or profile needs no confirmation.' : 'The confirmation ended without an answer. Nothing was saved.';
       }
       progress(`Installing ${tool.package}@${tool.version}`);
-      const status = await deps.save({ ...tool, scope: existing ? merged(existing.scope, scope) : scope });
+      const status = await deps.save({ ...tool, scope: existing ? mergedScope(existing.scope, scope) : scope });
       const saved = `Saved ${tool.name} (${tool.package}@${tool.version}) for ${where}. Other machines install it on their own.`;
       if (status.status === 'ready') {
         return `${saved}\nReady on this machine. It is on the PATH from the next turn; in this turn run it as ${JSON.stringify(join(deps.bin(tool), tool.executable))}.\nCheck output:\n${(status.detail ?? '').slice(-1500)}`;

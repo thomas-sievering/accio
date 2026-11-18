@@ -457,6 +457,8 @@ await client.waitFor('threads.changed', (threads) => threads.some((entry) => ent
 const cliThread = await client.call('threads.start', { profileId: 'personal', text: 'CLI fixture' });
 await client.waitFor('threads.changed', (threads) => threads.some((entry) => entry.id === cliThread.id && entry.status === 'idle'));
 // MCP tab: a remote server that still needs signing in, and a local one.
+// ADR 0024: on nowhere, so the MCP tab leaves it out and counts it as elsewhere.
+await client.call('mcp.save', { id: 'other-team', name: 'other-team', transport: 'stdio', command: 'other-mcp', args: [], auth: 'none', scope: { global: false, profileIds: [], spaceIds: [], projectKeys: [] } });
 await client.call('mcp.save', { id: 'docs-search', name: 'docs-search', transport: 'http', url: 'https://mcp.example.test/docs', args: [], auth: 'oauth' });
 await client.call('mcp.save', { id: 'local-db', name: 'local-db', transport: 'stdio', command: 'db-mcp', args: ['--readonly'], auth: 'none' });
 console.log(`Chat fixture ready: http://127.0.0.1:${app.port}`);
