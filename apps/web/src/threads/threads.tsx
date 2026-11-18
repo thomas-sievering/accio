@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { ThreadView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { useLiveState, useLocalState } from '../app/useLive';
@@ -44,6 +44,7 @@ type ThreadsCtx = {
 
 /** The saved selection of the empty page; thread ids never take this form. */
 const EMPTY_PAGE = ':empty';
+// One switch per client, not per hub. The Playwright config and tests/electron-shell.cjs set it off by this name.
 const MOVES_ON_KEY = 'accio.moveOn';
 
 type Draft = { checkoutId: string; profileId?: string; repoKey?: string };
@@ -84,7 +85,7 @@ export function ThreadsProvider({ children, onNavigate }: { children: ReactNode;
   );
   // A send is accepted after a round trip; Move on reads the inbox and selection as they are by then.
   const latest = useRef({ shelves, selectedId, draft });
-  latest.current = { shelves, selectedId, draft };
+  useLayoutEffect(() => { latest.current = { shelves, selectedId, draft }; });
   const emptyPage = !draft && selectedId === EMPTY_PAGE;
 
   const value = useMemo<ThreadsCtx>(
