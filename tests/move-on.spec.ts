@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { CHAT_TOKEN, chatClient } from './chat.js';
+import { CHAT_TOKEN, chatClient, startProjectThread } from './chat.js';
 
 // GLOSSARY: Move on. The other chat specs turn it off (playwright.config.ts); these run with the default.
 test.use({ storageState: { cookies: [], origins: [] } });
@@ -128,5 +128,31 @@ test('steering and queueing stay in the thread, and with Move on off a send that
     await page.locator('.sidebar').getByRole('button', { name: 'Settings', exact: true }).click();
     await page.getByRole('button', { name: 'Sending', exact: true }).click();
     await expect(page.getByRole('switch', { name: 'Move on after sending' })).not.toBeChecked();
+  } finally { await stopThreads(baseURL!, Object.values(ids)); }
+});
+
+test('moving on keeps Ship when done: Alt+Enter sends, ships and opens the next thread', async ({ page, baseURL }) => {
+  test.setTimeout(60_000);
+  // A project thread with a workspace, opened with Move on off (once per tab), then another inbox thread to move on to.
+  await page.addInitScript(() => { if (!sessionStorage.getItem('moveOnSet')) { localStorage.setItem('accio.moveOn', '0'); sessionStorage.setItem('moveOnSet', '1'); } });
+  await startProjectThread(page, baseURL!, /delivery-project/, 'Delivery follow-up');
+  await expect(page.getByText('Fresh workspace ready.', { exact: true })).toBeVisible();
+  const shipped = await page.evaluate(() => Object.entries(localStorage).find(([key]) => key.endsWith(':accio.thread'))?.[1]);
+  const tag = `Ship on ${Date.now()}`;
+  const ids = await startThreads(baseURL!, [tag]);
+  try {
+    // Move on back on, as by default.
+    await page.evaluate(() => localStorage.removeItem('accio.moveOn'));
+    await page.reload();
+    const input = page.locator('.composer textarea');
+    await expect(page.getByRole('button', { name: 'Ship', exact: true })).toBeEnabled();
+    await input.fill('Build delivery fixture');
+    await input.press('Alt+Enter');
+    await expect(openRow(page)).toContainText(tag);
+    await expect(page.locator('.composer textarea')).toBeFocused();
+    const client = await chatClient(baseURL!);
+    try {
+      await expect.poll(async () => (await client.call('threads.list', {})).find((t) => t.id === shipped)?.delivery?.mode, { timeout: 15_000 }).toBe('ship');
+    } finally { client.close(); }
   } finally { await stopThreads(baseURL!, Object.values(ids)); }
 });
