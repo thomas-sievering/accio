@@ -176,3 +176,26 @@ test('Ship with nothing written ships and moves on to the next thread', async ({
     } finally { client.close(); }
   } finally { await stopThreads(baseURL!, Object.values(ids)); }
 });
+
+test('Alt+S with nothing written, focus anywhere in the thread, ships and moves on', async ({ page, baseURL }) => {
+  test.setTimeout(60_000);
+  await page.addInitScript(() => { if (!sessionStorage.getItem('moveOnSet')) { localStorage.setItem('accio.moveOn', '0'); sessionStorage.setItem('moveOnSet', '1'); } });
+  await startProjectThread(page, baseURL!, /delivery-project/, 'Delivery follow-up');
+  await expect(page.getByText('Fresh workspace ready.', { exact: true })).toBeVisible();
+  const shipped = await page.evaluate(() => Object.entries(localStorage).find(([key]) => key.endsWith(':accio.thread'))?.[1]);
+  const tag = `Alt S ${Date.now()}`;
+  const ids = await startThreads(baseURL!, [tag]);
+  try {
+    await page.evaluate(() => localStorage.removeItem('accio.moveOn'));
+    await page.reload();
+    await expect(page.getByRole('button', { name: 'Ship', exact: true })).toBeEnabled();
+    // Focus on the transcript, not the composer.
+    await page.getByText('Fresh workspace ready.', { exact: true }).click();
+    await page.keyboard.press('Alt+S');
+    await expect(openRow(page)).toContainText(tag);
+    const client = await chatClient(baseURL!);
+    try {
+      await expect.poll(async () => (await client.call('threads.list', {})).find((t) => t.id === shipped)?.delivery?.mode, { timeout: 15_000 }).toBe('ship');
+    } finally { client.close(); }
+  } finally { await stopThreads(baseURL!, Object.values(ids)); }
+});

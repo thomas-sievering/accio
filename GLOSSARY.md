@@ -275,7 +275,7 @@ _Avoid_: Archive, close, resolve
 Requesting delivery from the owning thread: finish the work, integrate the target branch, verify and publish under the project's direct or pull-request policy. A request made during work waits for that turn to finish. It authorizes publication under its recorded policy.
 
 **Ship when done**:
-Ship armed while writing a message, shown as a chip in the composer and sent with it: the message goes first, then the delivery is requested and waits for the turn it started or steered. The Ship button or Alt+S arms and removes it while the composer holds a message, and Alt+Enter sends and ships in one step. It follows the Ship / Prepare for review choice ("Review when done"). Where Ship is unavailable the chip is too, with Ship's reason, and sending with it refuses rather than sending without the ship. A failed send requests nothing and keeps the chip; a queued message never ships, since Ship waits until the queue is empty.
+Ship armed while writing a message, shown as a chip in the composer and sent with it: the message goes first, then the delivery is requested and waits for the turn it started or steered. The Ship button or Alt+S arms and removes it while the composer holds a message (with the composer empty, Alt+S anywhere in the thread presses Ship, outside other text fields), and Alt+Enter sends and ships in one step. It follows the Ship / Prepare for review choice ("Review when done"). Where Ship is unavailable the chip is too, with Ship's reason, and sending with it refuses rather than sending without the ship. A failed send requests nothing and keeps the chip; a queued message never ships, since Ship waits until the queue is empty.
 _Avoid_: Auto ship, ship toggle
 
 **Delivery step**:

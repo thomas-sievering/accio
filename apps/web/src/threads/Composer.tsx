@@ -394,13 +394,7 @@ export function Composer({
                 select(next.id);
               }
             }
-            // By key code: Alt+S types ß on a Mac keyboard.
-            if (shipOffer && e.altKey && e.code === 'KeyS' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
-              e.preventDefault();
-              // Like Ship, it arms only what can ship; an armed chip always comes off.
-              if (!e.repeat && (armed || (composing && !shipOffer.reason))) shipSlot.toggle();
-              return;
-            }
+            // Alt+S is the thread's Ship key (DeliveryActions): here it arms or removes Ship when done.
             if (shipOffer && e.key === 'Enter' && e.altKey && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.nativeEvent.isComposing && e.keyCode !== 229) {
               e.preventDefault();
               if (!e.repeat) void submit('steer', true);

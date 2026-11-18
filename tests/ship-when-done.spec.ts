@@ -21,11 +21,13 @@ test('Ship when done arms by button or Alt+S, follows the mode and ships once th
   const chip = page.locator('.composer-ship');
   const removeChip = page.getByRole('button', { name: 'Remove Ship when done', exact: true });
 
-  // With nothing written, Ship ships now and Alt+S does nothing.
-  await input.focus();
+  // Another text field keeps Alt+S: from the sidebar search it neither ships nor arms.
+  await expect(ship).toBeEnabled();
+  await page.locator('.side-search input').focus();
   await page.keyboard.press('Alt+S');
   await expect(chip).toHaveCount(0);
   await expect(ship).toHaveAttribute('aria-pressed', 'false');
+  expect((await delivery(page, baseURL!)).mode).toBeUndefined();
 
   // While writing, Ship arms the chip instead; clicking the chip removes it.
   await input.fill('Build delivery fixture');

@@ -16,7 +16,7 @@ import { shipWhenDoneLabel, useShipWhenDone } from './ShipWhenDone';
 /** Delivery intent stays on the server, including when this view is closed or disconnected. */
 type CallMethod = 'threads.cancelDelivery' | 'threads.checkDelivery' | 'threads.archive' | 'threads.reopen';
 
-export function DeliveryActions({ thread, project, canRun }: { thread: ThreadView; project?: ProjectView; canRun: boolean }) {
+export function DeliveryActions({ thread, project, canRun, active = true }: { thread: ThreadView; project?: ProjectView; canRun: boolean; active?: boolean }) {
   const client = useClient();
   const { unavailable, reason } = useThreadAvailability(thread);
   const connection = useConnectionStatus();
@@ -149,6 +149,27 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
     offer?.(offered ? { mode, reason: shipReason, deliver: () => void latestDeliver.current(true) } : undefined);
   }, [offer, offered, mode, shipReason]);
   useEffect(() => () => offer?.(undefined), [offer]);
+  // Alt+S anywhere in the open thread presses Ship: it ships, or while writing arms Ship when done.
+  // By key code: Alt+S types ß on a Mac keyboard. Another text field keeps the key for itself.
+  const shipEnabled = offered && !inFlight && offerShip && !shipBlocked && !busy;
+  const pressShip = useRef(() => {});
+  pressShip.current = () => {
+    // Like Ship, it arms only what can ship; an armed chip always comes off.
+    if (arming) { if (composer.armed || !shipReason) composer.toggle(); }
+    else if (shipEnabled) void ship();
+  };
+  useEffect(() => {
+    if (!active || !offered) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || !e.altKey || e.code !== 'KeyS' || e.shiftKey || e.ctrlKey || e.metaKey) return;
+      const field = e.target instanceof HTMLElement && e.target.closest('input, textarea, select, [contenteditable]');
+      if (field && !field.closest('.composer')) return;
+      e.preventDefault();
+      if (!e.repeat) pressShip.current();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [active, offered]);
 
   // A settled or snoozed thread always has its state row, even when it never had a workspace.
   if (!thread.workspace && !settled && !snoozedUntil) return null;
@@ -185,7 +206,7 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
         </span>
         : offerShip && <span ref={pill} className="delivery-split">
           <button disabled={!!shipBlocked || busy} aria-pressed={composer ? composer.armed : undefined}
-            title={shipBlocked ?? (arming ? `${shipWhenDoneLabel(mode)}: sends with your message (Alt+S)` : mode === 'review' ? 'Prepare a PR without merging' : `Finish, verify and ship to ${target}`)}
+            title={shipBlocked ?? (arming ? `${shipWhenDoneLabel(mode)}: sends with your message (Alt+S)` : mode === 'review' ? 'Prepare a PR without merging (Alt+S)' : `Finish, verify and ship to ${target} (Alt+S)`)}
             onClick={() => { if (arming) composer.toggle(); else void ship(); }}><Ship />{mode === 'review' ? 'Prepare for review' : 'Ship'}</button>
           <button ref={trigger} popoverTarget={id} disabled={!!unavailable || busy || !summary?.available || !!thread.queuedMessages?.length} aria-label="Shipping options" aria-haspopup="menu"><ChevronDown /></button>
         </span>}
