@@ -140,6 +140,43 @@ test('settling slides the rows below into place; searching and shelves returning
   await expect(row(page, `${prefix} A`)).toHaveCount(0);
 });
 
+test('a thread arriving in the inbox comes into focus, then keeps no filter', async ({ page, baseURL }) => {
+  const prefix = `Arrive ${Date.now()}`;
+  await startThreads(baseURL!, [`${prefix} B`, `${prefix} A`]);
+  await page.goto(`${baseURL}/#token=${CHAT_TOKEN}`);
+  await page.getByRole('searchbox', { name: 'Search threads', exact: true }).fill(prefix);
+  await expect(page.locator('.sidebar nav > .rows .row-title')).toHaveText([`${prefix} A`, `${prefix} B`]);
+  await row(page, `${prefix} A`).hover();
+  await row(page, `${prefix} A`).getByRole('button', { name: 'Settle', exact: true }).click();
+  await expect(page.locator('.sidebar nav > .rows .row-title')).toHaveText([`${prefix} B`]);
+  await settle(page);
+
+  // Watch for the row to land in the inbox, then sample it every frame until it is still.
+  await page.evaluate((title) => {
+    (window as unknown as { arriving: Promise<string[]> }).arriving = new Promise((done) => {
+      const seen: string[] = [];
+      const look = () => {
+        const el = [...document.querySelectorAll('.sidebar nav > .rows .row-slot')].find((s) => s.querySelector('.row-title')?.textContent === title);
+        if (el) {
+          const style = getComputedStyle(el);
+          seen.push(`${style.opacity} ${style.filter}`);
+          if (seen.length > 300 || (style.opacity === '1' && style.filter === 'none')) return done(seen);
+        }
+        requestAnimationFrame(look);
+      };
+      requestAnimationFrame(look);
+    });
+  }, `${prefix} A`);
+  const client = await chatClient(baseURL!);
+  try {
+    const id = (await client.call('threads.list', {})).find((t) => t.title === `${prefix} A`)!.id;
+    await client.call('threads.reopen', { threadId: id });
+  } finally { client.close(); }
+  const arriving = await page.evaluate(() => (window as unknown as { arriving: Promise<string[]> }).arriving);
+  expect(arriving.some((s) => /^0\.\d+ blur\([0-9.]+px\)$/.test(s)), JSON.stringify(arriving)).toBe(true);
+  expect(arriving.at(-1)).toBe('1 none');
+});
+
 test('reduced motion: settled rows leave without sliding the rest', async ({ page, baseURL }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   const prefix = `Still ${Date.now()}`;

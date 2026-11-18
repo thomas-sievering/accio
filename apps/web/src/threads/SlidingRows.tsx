@@ -6,17 +6,20 @@ import { AnimatePresence, MotionConfig, motion, useReducedMotion, type Transitio
  * delete, a turn starting or finishing), and removed rows fade out. A row that moves between
  * two visible lists travels there, above the rows it passes; one that leaves for a closed shelf
  * fades. A render that narrows or widens the lists (search, project scope, profile filter, the
- * first load) is instant, so filtering never animates. Reduced motion keeps the fades and drops
- * the travel.
+ * first load) is instant, so filtering never animates. A row new to the sidebar (back from a
+ * closed shelf, unsnoozed, just created) comes into focus where it lands, from 97% and a 4px
+ * blur. Reduced motion keeps the fades and drops the travel, the scale and the blur.
  */
 type Slide = {
   /** The list (inbox or shelf) of every row on screen after this render, and before it. */
   visible: Map<string, string>;
   previous: Map<string, string>;
   reduce: boolean;
+  /** This render narrows or widens the lists, so nothing on it animates. */
+  instant: boolean;
 };
 
-const SlideCtx = createContext<Slide>({ visible: new Map(), previous: new Map(), reduce: false });
+const SlideCtx = createContext<Slide>({ visible: new Map(), previous: new Map(), reduce: false, instant: true });
 const ListCtx = createContext('');
 
 // The house curve (--ease-settle in ui/motion.css): rows travel as one group. The fade is short, so a
@@ -24,6 +27,8 @@ const ListCtx = createContext('');
 const SETTLE = [0.22, 1, 0.36, 1] as const;
 const TRAVEL: Transition = { layout: { duration: 0.32, ease: SETTLE }, opacity: { duration: 0.12, ease: 'easeOut' } };
 const INSTANT: Transition = { duration: 0 };
+// A row new to the sidebar comes into focus: slower than the leaving fade, so it reads as arriving.
+const ARRIVE: Transition = { duration: 0.36, ease: SETTLE };
 
 export function SlidingRows({ visible, filters, ready, children }: {
   /** Every row the sidebar shows after this render, by key, with the list it is in. */
@@ -41,7 +46,7 @@ export function SlidingRows({ visible, filters, ready, children }: {
   const instant = !before || !before.ready || before.filters !== filters;
   useEffect(() => { last.current = { visible: now, filters, ready }; });
   return (
-    <SlideCtx.Provider value={{ visible: now, previous: before?.visible ?? now, reduce }}>
+    <SlideCtx.Provider value={{ visible: now, previous: before?.visible ?? now, reduce, instant }}>
       <MotionConfig transition={instant ? INSTANT : TRAVEL}>{children}</MotionConfig>
     </SlideCtx.Provider>
   );
@@ -60,7 +65,7 @@ export function RowList({ name, children }: { name: string; children: ReactNode 
 }
 
 export function SlidingRow({ id, children }: { id: string; children: ReactNode }) {
-  const { previous, reduce } = useContext(SlideCtx);
+  const { previous, reduce, instant } = useContext(SlideCtx);
   const list = useContext(ListCtx);
   const from = previous.get(id);
   // A row that was already showing travels in from there instead of fading in; one crossing
@@ -75,8 +80,9 @@ export function SlidingRow({ id, children }: { id: string; children: ReactNode }
       layout={reduce ? false : 'position'}
       layoutId={reduce ? undefined : `row-${id}`}
       variants={{
-        hidden: { opacity: 0 },
-        shown: { opacity: 1 },
+        hidden: reduce ? { opacity: 0 } : { opacity: 0, scale: 0.97, filter: 'blur(4px)' },
+        // The blur ends as none, so a settled row keeps no filter (and no layer of its own).
+        shown: { opacity: 1, scale: 1, filter: 'blur(0px)', transitionEnd: { filter: 'none' }, transition: instant ? INSTANT : reduce ? undefined : ARRIVE },
         // Still visible elsewhere: the row there carries it, so this copy goes at once.
         gone: (visible: Map<string, string>) => (visible.has(id) ? { opacity: 0, transition: INSTANT } : { opacity: 0 }),
       }}
