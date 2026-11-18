@@ -5,6 +5,7 @@ import { ConfirmAction, SettingRow, SettingsSection, StatusPill } from '../app/S
 import { useAction } from '../app/useAction';
 import { Field, focusFirstInvalid } from '../resources/Field';
 import { useProfiles } from '../profiles/profiles';
+import { Button } from '../ui/Button';
 
 /**
  * GLOSSARY: Sorting Hat. The current hub's link to one: its address and an admin
@@ -79,7 +80,7 @@ function SortingHatForm({ saved, hubName, onDone }: { saved?: { url: string; thr
       </Field>
       <div className="sorting-hat-actions">
         {saved && <button type="button" className="ghost" disabled={busy} onClick={onDone}>Cancel</button>}
-        <button type="submit" className="ghost primary" disabled={busy}>{busy ? 'Checking…' : saved ? 'Save' : 'Connect Sorting Hat'}</button>
+        <Button type="submit" className="ghost primary" busy={busy} busyLabel="Checking…">{saved ? 'Save' : 'Connect Sorting Hat'}</Button>
       </div>
       {error && <p className="error" role="alert">{error}</p>}
     </form>

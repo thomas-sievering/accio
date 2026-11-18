@@ -6,6 +6,7 @@ import { useAction } from '../app/useAction';
 import { useProfiles } from '../profiles/profiles';
 import { useThreads } from './threads';
 import { MenuSelect } from '../ui/MenuSelect';
+import { Button } from '../ui/Button';
 
 export function NamingSettings() {
   const client = useClient();
@@ -76,7 +77,7 @@ export function NamingSettings() {
         </div>
         {example && <p role="status">Example title: <b>{example}</b></p>}
       </details>
-      <button type="submit" className="ghost primary" disabled={busy}>{busy ? 'Working…' : 'Save naming settings'}</button>
+      <Button type="submit" className="ghost primary" busy={busy} busyLabel="Saving…">Save naming settings</Button>
       {saved && <p role="status" className="note">Naming settings saved</p>}
       {error && <p className="error" role="alert">{error}</p>}
     </form>}

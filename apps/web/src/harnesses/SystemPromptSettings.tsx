@@ -4,6 +4,7 @@ import { useClient, useConnectionStatus } from '../app/connection';
 import { useAction } from '../app/useAction';
 import { SettingRow, SettingsSection } from '../app/Settings';
 import { PromptSizeBreakdown } from './PromptSizeBreakdown';
+import { Button } from '../ui/Button';
 
 /** GLOSSARY: System prompt. Read-only: each section once, labelled with the harnesses that get it. */
 export function SystemPromptSettings() {
@@ -58,10 +59,10 @@ function Baseline({ harnessId, name }: { harnessId: string; name: string }) {
   const { busy, error, run } = useAction();
   return <div className="prompt-baseline">
     <SettingRow title={name} description="Baseline with current built-in tool settings">
-      <button disabled={busy} onClick={async () => {
+      <Button busy={busy} busyLabel="Measuring…" onClick={async () => {
         setMeasurement(undefined);
         setMeasurement(await run(() => client.call('systemPrompt.measure', { harnessId })));
-      }}>{busy ? 'Measuring…' : measurement ? 'Measure again' : 'Measure baseline'}</button>
+      }}>{measurement ? 'Measure again' : 'Measure baseline'}</Button>
     </SettingRow>
     {error && <p className="error" role="alert">{error}</p>}
     {measurement && <PromptSizeBreakdown measurement={measurement} />}

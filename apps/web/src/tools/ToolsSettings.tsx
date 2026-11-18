@@ -197,7 +197,7 @@ function ToolForm({ tool, all, packageDescription, taken, onSaved, onDone, after
       </SettingsSection>
       {after}
       {error && <p className="error" role="alert">{error}</p>}
-      <SettingsFooter remove={tool && { name: tool.name, run: remove, consequence: 'Threads on every machine lose this CLI.' }} busy={busy} onCancel={onDone} saveLabel={tool ? 'Save' : 'Add CLI'} saveDisabled={busy || (!!tool && !changed)} dirty={changed && !busy} />
+      <SettingsFooter remove={tool && { name: tool.name, run: remove, consequence: 'Threads on every machine lose this CLI.' }} busy={busy} onCancel={onDone} saveLabel={tool ? 'Save' : 'Add CLI'} busyLabel={tool ? 'Saving…' : 'Adding…'} saveDisabled={busy || (!!tool && !changed)} dirty={changed && !busy} />
     </form>
   );
 }

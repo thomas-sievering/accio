@@ -19,7 +19,7 @@
     "test:sortinghat": "pnpm build && playwright test --project sortinghat",
     "verify": "pnpm build && node .agents/skills/3-verify/scripts/verify.mjs",
     "verify:ui": "node scripts/verify-ui.mjs",
-    "test:verification": "node --test scripts/verify-ui.test.mjs",
+    "test:verification": "node --test scripts/verify-ui.test.mjs scripts/eslint/busy-button.test.mjs",
     "verify:doctor": "node .agents/skills/3-verify/scripts/verify.mjs doctor",
     "verify:link-hub": "pnpm build && node .agents/skills/3-verify/scripts/verify.mjs .agents/skills/3-verify/scripts/link-hub.mjs",
     "verify:real": "pnpm build && node .agents/skills/3-verify/scripts/verify.mjs .agents/skills/3-verify/scripts/real-turn.mjs",

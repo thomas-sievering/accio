@@ -32,6 +32,23 @@ springs that must stay interruptible, layout animations (rows sliding into place
 animation honours `prefers-reduced-motion`. For motion work see the `animate`,
 `review-animations` and `smooth-ui` skills; for any new UI dependency use `pick-ui-library`.
 
+## Waiting on an action
+
+A click that waits on the server shows the wait on the control that started it: use
+`Button` from `apps/web/src/ui/Button.tsx` with `busy` and an "-ing…" `busyLabel`
+("Saving…", "Creating…"). It keeps its colour, shows a spinner (after 150 ms, so quick
+actions don't flash) and takes no clicks. Never swap the label by hand and disable the
+button: that fades it, which reads as unavailable; lint rule `accio/busy-button` flags it.
+`SettingsFooter` and `ConfirmAction` already do this, given `busy` (and `busyLabel` for
+anything but "Saving…"). Where one `busy` covers several buttons, track which one was
+pressed so only it shows the wait; the others are just disabled.
+
+- **Long waits.** When it can take more than a couple of seconds (git, GitHub, a clone, a
+  model), also say in plain words what is happening, in a `role="status"` line beside it.
+- **Lock only what the action depends on.** In a sheet, disable the form's fieldset while
+  it saves. Block closing (`Sheet`'s `busy`) only when closing would hide work that keeps
+  running; otherwise let the user move on.
+
 ## Concurrent work
 
 Before editing, identify the existing owner and consumers of the behavior. Keep

@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState, type FormEvent,
 import { threadPlace, type ThreadView } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { useAction } from '../app/useAction';
+import { Button } from '../ui/Button';
 import { usePopoverMenu } from '../ui/usePopoverMenu';
 import { awaitsMachine } from './shelves';
 import { snoozeThread } from './SnoozeNotice';
@@ -39,8 +40,13 @@ export function ThreadMenuItems({ thread, close, onRename, before }: {
   const { selectedId, select, now, act } = useThreads();
   const [mode, setMode] = useState<Mode>('menu');
   const { busy, error, run } = useAction();
-  const done = async (fn: () => Promise<unknown>) => {
-    if ((await run(async () => (await fn(), true))) === true) close();
+  // Which item is under way: it shows the wait, the others are only disabled.
+  const [pending, setPending] = useState<string>();
+  const done = async (key: string, fn: () => Promise<unknown>) => {
+    setPending(key);
+    const ok = (await run(async () => (await fn(), true))) === true;
+    setPending(undefined);
+    if (ok) close();
   };
   const running = thread.status === 'running';
   const place = threadPlace(thread, now);
@@ -50,10 +56,10 @@ export function ThreadMenuItems({ thread, close, onRename, before }: {
   const item = (label: string, action: keyof ThreadActions, { whileOffline = false, blocked }: { whileOffline?: boolean; blocked?: string } = {}) => {
     const reason = blocked ?? (whileOffline ? undefined : unavailable);
     return (
-      <button className="menu-item" role="menuitem" disabled={busy || !!reason} title={reason}
-        onClick={() => done(() => action === 'snooze' ? snoozeThread(act, thread) : act[action](thread.id))}>
+      <Button className="menu-item" role="menuitem" disabled={busy || !!reason} title={reason} busy={pending === action}
+        onClick={() => done(action, () => action === 'snooze' ? snoozeThread(act, thread) : act[action](thread.id))}>
         <span className="menu-text">{label}</span>
-      </button>
+      </Button>
     );
   };
   return (
@@ -62,9 +68,9 @@ export function ThreadMenuItems({ thread, close, onRename, before }: {
       <button className="menu-item" role="menuitem" disabled={!!unavailable} title={unavailable} onClick={() => { close(); onRename(); }}>
         <span className="menu-text">Rename…</span>
       </button>
-      <button className="menu-item" role="menuitem" disabled={busy || !!unavailable} title={unavailable} onClick={() => done(() => client.call('threads.regenerateTitle', { threadId: thread.id }))}>
-        <span className="menu-text">{busy ? 'Generating?' : 'Regenerate title'}</span>
-      </button>
+      <Button className="menu-item" role="menuitem" disabled={busy || !!unavailable} title={unavailable} busy={pending === 'title'} busyLabel={<span className="menu-text">Generating…</span>} onClick={() => done('title', () => client.call('threads.regenerateTitle', { threadId: thread.id }))}>
+        <span className="menu-text">Regenerate title</span>
+      </Button>
       {running && item('Stop', 'stop')}
       {place === 'snoozed' ? item('Wake now', 'reopen', { whileOffline: !!thread.snoozedUntilOnline })
         : awaiting ? item('Snooze until back online', 'snooze', { whileOffline: true })
@@ -77,16 +83,16 @@ export function ThreadMenuItems({ thread, close, onRename, before }: {
           <button className="menu-item" role="menuitem" autoFocus disabled={busy || !!unavailable} title={unavailable} onClick={() => setMode('menu')}>
             <span className="menu-text">Cancel</span>
           </button>
-          <button className="menu-item danger" role="menuitem" disabled={busy || !!unavailable} title={unavailable}
+          <Button className="menu-item danger" role="menuitem" disabled={busy || !!unavailable} title={unavailable} busy={pending === 'delete'}
             onClick={() =>
-              done(async () => {
+              done('delete', async () => {
                 await client.call('threads.delete', { threadId: thread.id });
                 releaseFirstMessage(client, thread.id);
                 if (selectedId === thread.id) select('');
               })
             }>
             <span className="menu-text">Delete thread</span>
-          </button>
+          </Button>
         </div>
       ) : (
         <button className="menu-item danger" role="menuitem" disabled={running || !!unavailable}

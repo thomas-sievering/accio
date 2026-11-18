@@ -4,6 +4,7 @@ import { SETTINGS, type Section } from './settingsSections';
 import { ArrowLeft, Chevron, Plus } from './icons';
 import { SidebarResizer } from './Resizer';
 import { HubSelector } from '../hub/HubSelector';
+import { Button } from '../ui/Button';
 
 /** The item id of a section's page for adding one; never an item's own id. */
 export const NEW = 'new';
@@ -282,7 +283,7 @@ export function ConfirmAction({ question, consequence, action, busy, error, onCo
     <div className="confirm-action" role="group" aria-label={question}>
       {consequence && <small className="hint">{consequence}</small>}
       <button type="button" className="ghost" disabled={busy} autoFocus onClick={onCancel}>Cancel</button>
-      <button type="button" className="ghost danger" disabled={busy} onClick={onConfirm}>{action}</button>
+      <Button className="ghost danger" busy={busy} onClick={onConfirm}>{action}</Button>
       {error && <p className="error" role="alert">{error}</p>}
     </div>
   );
@@ -348,11 +349,13 @@ export function SettingLink({ icon, title, description, warn, chevron = true, on
  * with `blocked` as its reason, when the thing is in use. Delete asks first (ConfirmAction).
  * With `dirty`, leaving the page another way asks "Discard changes?" here first.
  */
-export function SettingsFooter({ remove, busy, onCancel, saveLabel, saveDisabled, saveForm, onSave, dirty = false }: {
+export function SettingsFooter({ remove, busy, onCancel, saveLabel, busyLabel = 'Saving…', saveDisabled, saveForm, onSave, dirty = false }: {
   remove?: { name: string; run: () => void; blocked?: string; consequence?: string };
   busy?: boolean;
   onCancel: () => void;
   saveLabel?: string;
+  /** What Save says while `busy`, as "Adding…". */
+  busyLabel?: string;
   saveDisabled?: boolean;
   /** The id of the form to submit when the footer sits outside it. */
   saveForm?: string;
@@ -395,7 +398,7 @@ export function SettingsFooter({ remove, busy, onCancel, saveLabel, saveDisabled
         <Fragment key="edit-actions">
           <button type="button" className="ghost" disabled={busy} onClick={onCancel}>{saveLabel ? 'Cancel' : 'Done'}</button>
           {saveLabel && (
-            <button ref={save} type={onSave ? 'button' : 'submit'} form={onSave ? undefined : saveForm} className="ghost primary" disabled={saveDisabled} onClick={onSave}>{saveLabel}</button>
+            <Button ref={save} type={onSave ? 'button' : 'submit'} form={onSave ? undefined : saveForm} className="ghost primary" disabled={saveDisabled} busy={busy} busyLabel={busyLabel} onClick={onSave}>{saveLabel}</Button>
           )}
         </Fragment>
       )}

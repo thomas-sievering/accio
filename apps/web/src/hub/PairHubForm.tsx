@@ -3,6 +3,7 @@ import { useHubs } from '../app/connection';
 import { useAction } from '../app/useAction';
 import { SettingsFooter, SettingsSection } from '../app/Settings';
 import { Field, focusFirstInvalid } from '../resources/Field';
+import { Button } from '../ui/Button';
 
 /** Pairs this machine with a hub by address and one-time code, then switches to it. Without `askName` the hub is named after its host. */
 export function PairHubForm({ className = 'setting-form', askName = true, submitClassName = 'ghost primary', onCancel }: { className?: string; askName?: boolean; submitClassName?: string; /** Set in Settings, where the form is a page with the shared footer. */ onCancel?: () => void }) {
@@ -27,11 +28,11 @@ export function PairHubForm({ className = 'setting-form', askName = true, submit
   const failure = error && <p className="error" role="alert">{error}</p>;
   if (onCancel) return <form className="settings-profile-form" onSubmit={pair} noValidate>
     <SettingsSection><div className="setting-form">{fields}{failure}</div></SettingsSection>
-    <SettingsFooter busy={busy} onCancel={onCancel} saveLabel="Connect hub" saveDisabled={busy} dirty={!!(name || url || code) && !busy} />
+    <SettingsFooter busy={busy} onCancel={onCancel} saveLabel="Connect hub" busyLabel="Connecting…" dirty={!!(name || url || code) && !busy} />
   </form>;
   return <form className={className} onSubmit={pair} noValidate>
     {fields}
-    <button type="submit" className={submitClassName} disabled={busy}>Connect hub</button>
+    <Button type="submit" className={submitClassName} busy={busy} busyLabel="Connecting…">Connect hub</Button>
     {failure}
   </form>;
 }

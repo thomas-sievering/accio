@@ -7,6 +7,7 @@ import { useAction } from '../app/useAction';
 import { useLive } from '../app/useLive';
 import { Field, focusFirstInvalid } from '../resources/Field';
 import { useProfiles } from '../profiles/profiles';
+import { Button } from '../ui/Button';
 import { MenuSelect } from '../ui/MenuSelect';
 
 type Location = 'folder' | 'github';
@@ -62,9 +63,9 @@ export function NewHomeSheet({ space, onSpaceName, onClose }: { space: SaveSpace
   };
 
   return (
-    <Sheet title="New home" onClose={onClose}>
+    <Sheet title="New home" onClose={onClose} busy={busy}>
       <form onSubmit={submit} ref={form} noValidate>
-        <div className="sheet-body">
+        <fieldset className="sheet-body" disabled={busy}>
           <p className="note">Creates a project from Accio's home template, with AGENTS.md, a glossary, decisions and a wiki page per project, and makes it the home of {spaceName.trim() || 'this space'}. A first thread then reads the space's projects and fills it in.</p>
           {askSpaceName && (
             <Field label="Space name" error={tried && spaceProblem}>
@@ -86,11 +87,13 @@ export function NewHomeSheet({ space, onSpaceName, onClose }: { space: SaveSpace
             <small className="hint">{location === 'folder' ? `Creates ${name} in ${where}.` : `Creates the private repo ${login ? `${login}/` : ''}${name}, cloned to ${where}.`}</small>
           </div>
           {error && <p className="error" role="alert">{error}</p>}
-        </div>
+        </fieldset>
         <footer className="sheet-foot">
-          <span className="spacer" />
-          <button type="button" className="ghost" onClick={onClose}>Cancel</button>
-          <button type="submit" className="ghost primary" disabled={busy}>{busy ? 'Creating…' : 'Create home'}</button>
+          <span className="spacer sheet-progress" role="status">
+            {busy && (location === 'github' ? 'Creating the repo on GitHub and cloning it. This can take a minute.' : 'Creating the folder and its first commit.')}
+          </span>
+          <button type="button" className="ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <Button type="submit" className="ghost primary" busy={busy} busyLabel="Creating…">Create home</Button>
         </footer>
       </form>
     </Sheet>

@@ -5,6 +5,7 @@ import { More } from '../app/icons';
 import { useAction } from '../app/useAction';
 import { usePopoverMenu } from '../ui/usePopoverMenu';
 import { ThreadMenuItems } from './ThreadMenu';
+import { Button } from '../ui/Button';
 
 export function ThreadActionsMenu({ thread, items, onRename }: { thread: ThreadView; items?: TranscriptItem[]; onRename: () => void }) {
   const client = useClient();
@@ -44,9 +45,9 @@ export function ThreadActionsMenu({ thread, items, onRename }: { thread: ThreadV
     </button>
     <div id={id} {...props} className="menu thread-actions-menu" popover="auto" role="menu" aria-label="Thread actions">
       <ThreadMenuItems key={opened} thread={thread} close={() => menu.current?.hidePopover()} onRename={onRename} before={<>
-        <button className="menu-item" role="menuitem" disabled={!items || busy} onClick={copy}>
-          <span className="menu-text">{busy ? 'Copying…' : 'Copy as Markdown'}</span>
-        </button>
+        <Button className="menu-item" role="menuitem" disabled={!items} busy={busy} busyLabel={<span className="menu-text">Copying…</span>} onClick={copy}>
+          <span className="menu-text">Copy as Markdown</span>
+        </Button>
         {copied && <p className="thread-copy-status" role="status">Copied to clipboard</p>}
         {error && <p className="error menu-error" role="alert">Could not copy thread: {error}</p>}
         <hr />

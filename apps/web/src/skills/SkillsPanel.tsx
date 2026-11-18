@@ -7,6 +7,7 @@ import { useAction } from '../app/useAction';
 import { useProjects } from '../projects/projects';
 import { shortRevision } from '../resources/resources';
 import { byName, harnessName, isAddable, isAddableToSpace, isHarnessSkill, isInherited, isOverridden, isProjectSkill, isSpaceSkill, LEVEL_NAMES, originLabel, skillReference, useWorkspaceSkills } from './workspaceSkills';
+import { Button } from '../ui/Button';
 
 type SectionKey = 'project' | 'space' | 'profile' | 'global' | 'harness' | 'overridden';
 /** Which sections are open, kept while the app runs so switching threads doesn't fold them again. */
@@ -170,10 +171,10 @@ function SkillItem({ skill, context, composer, onChanged, onAnnounce, harness }:
         <div className="skill-actions">
           <button type="button" className="ghost" onClick={() => emitAppEvent('composer.insert', { target: composer, text: skillReference(skill) })}>Reference in message</button>
           {own && (
-            <button type="button" className="ghost" disabled={disable.busy} onClick={async () => {
+            <Button className="ghost" busy={disable.busy} busyLabel="Disabling…" onClick={async () => {
               const done = await disable.attempt(() => client.call('threads.setSkillEnabled', { ...context, skillId: skill.id, enabled: false, level: own }));
               if (done) { onAnnounce(`${skill.name} disabled for this ${ownName}. Applies from the next turn.`); onChanged(); }
-            }}>{disable.busy ? 'Disabling…' : `Disable for this ${ownName}`}</button>
+            }}>{`Disable for this ${ownName}`}</Button>
           )}
         </div>
         {disable.error && <p className="error" role="alert">{disable.error}</p>}
@@ -228,7 +229,7 @@ function Instructions({ skill, context, onAnnounce }: { skill: WorkspaceSkill; c
             ? <button type="button" className="ghost" onClick={() => { setDraft(loaded!.content); setSaved(false); }}>Edit instructions</button>
             : <>
               <button type="button" className="ghost" disabled={save.busy} onClick={() => { setDraft(undefined); save.clear(); }}>Cancel</button>
-              <button type="button" className="ghost primary" disabled={save.busy || !changed} onClick={async () => {
+              <Button className="ghost primary" disabled={!changed} busy={save.busy} busyLabel="Saving…" onClick={async () => {
                 const content = draft;
                 const done = await save.attempt(() => client.call('threads.saveSkillContent', { ...context, skillId: skill.id, content }));
                 if (!done) return;
@@ -236,7 +237,7 @@ function Instructions({ skill, context, onAnnounce }: { skill: WorkspaceSkill; c
                 setDraft(undefined);
                 setSaved(true);
                 onAnnounce(`Saved ${skill.name}.`);
-              }}>{save.busy ? 'Saving…' : 'Save'}</button>
+              }}>Save</Button>
             </>}
         </div>
       )}

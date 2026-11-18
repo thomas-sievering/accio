@@ -306,7 +306,7 @@ function SecretForm({ profile: initial, profiles, projects: allProjects, store, 
       <SettingsFooter
         remove={secret && !replace ? { name: secret.name, run: () => void removeSecret(), consequence: DELETE_CONSEQUENCE } : undefined}
         busy={busy} onCancel={() => onDone()} onSave={() => void submit()} saveDisabled={!ready}
-        saveLabel={busy ? 'Saving…' : creating ? 'Save secret' : replace ? 'Replace value' : 'Save'} dirty={dirty && !busy} />
+        saveLabel={creating ? 'Save secret' : replace ? 'Replace value' : 'Save'} dirty={dirty && !busy} />
     </div>
   );
 }

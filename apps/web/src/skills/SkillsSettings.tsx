@@ -12,6 +12,7 @@ import { ScopeEditor } from '../resources/ScopeEditor';
 import { Field, focusFirstInvalid } from '../resources/Field';
 import { MidPath } from '../projects/MidPath';
 import { MenuSelect } from '../ui/MenuSelect';
+import { Button } from '../ui/Button';
 
 const activeRevision = (state: ResourcesState, sourceId: string) => state.skills.find((s) => s.sourceId === sourceId)?.revision;
 
@@ -92,7 +93,7 @@ function AddSource({ taken, onAdded, onCancel }: { taken: string[]; onAdded: (s:
         </div>
       </SettingsSection>
       {error && <p className="error" role="alert">{error}</p>}
-      <SettingsFooter busy={busy} onCancel={onCancel} saveLabel={busy ? 'Adding…' : 'Add source'} saveDisabled={busy} dirty={!!(name || url || ref) && !busy} />
+      <SettingsFooter busy={busy} onCancel={onCancel} saveLabel="Add source" busyLabel="Adding…" saveDisabled={busy} dirty={!!(name || url || ref) && !busy} />
     </form>
   );
 }
@@ -140,9 +141,9 @@ function SourceDetail({ source, state, onDeleted }: { source: SkillSource; state
         <div className="setting-form">
           <div className="update-row">
             <span className="grow note">Fetch {source.ref} again to see what changed. Nothing changes until you apply it.</span>
-            <button type="button" className="ghost" disabled={check.busy || apply.busy} onClick={async () => { const r = await check.run(() => client.call('skills.previewUpdate', { id: source.id })); if (r) setPreview(r); }}>
-              {check.busy ? 'Fetching…' : 'Check for updates'}
-            </button>
+            <Button className="ghost" disabled={apply.busy} busy={check.busy} busyLabel="Fetching…" onClick={async () => { const r = await check.run(() => client.call('skills.previewUpdate', { id: source.id })); if (r) setPreview(r); }}>
+              Check for updates
+            </Button>
           </div>
           {preview && !changes && <p className="note" role="status">Up to date at <code>{previewRev && shortRevision(previewRev)}</code>.</p>}
           {changes && previewRev && (
@@ -162,7 +163,7 @@ function SourceDetail({ source, state, onDeleted }: { source: SkillSource; state
               <div className="update-row">
                 <span className="spacer" />
                 <button type="button" className="ghost" disabled={apply.busy} onClick={() => setPreview(undefined)}>Not now</button>
-                <button type="button" className="ghost primary" disabled={apply.busy} onClick={() => applyRevision(previewRev)}>{apply.busy ? 'Applying…' : `Apply ${shortRevision(previewRev)}`}</button>
+                <Button className="ghost primary" busy={apply.busy} busyLabel="Applying…" onClick={() => applyRevision(previewRev)}>{`Apply ${shortRevision(previewRev)}`}</Button>
               </div>
             </div>
           )}
@@ -237,10 +238,10 @@ function SkillRow({ skill }: { skill: SkillEntry }) {
           <div className="update-row">
             <span className="spacer" />
             <button type="button" className="ghost" onClick={() => { setDraft(undefined); setOpen(undefined); }}>Cancel</button>
-            <button type="button" className="ghost primary" disabled={save.busy || !changed}
+            <Button className="ghost primary" disabled={!changed} busy={save.busy} busyLabel="Saving…"
               onClick={async () => { if (await save.run(() => client.call('skills.setScope', { id: skill.id, scope }))) { setDraft(undefined); setOpen(undefined); } }}>
-              {save.busy ? 'Saving…' : 'Save'}
-            </button>
+              Save
+            </Button>
           </div>
         </div>
       )}
@@ -259,10 +260,10 @@ function SkillRow({ skill }: { skill: SkillEntry }) {
               {copy.error && <p className="error" role="alert">{copy.error}</p>}
               <div className="update-row">
                 <span className="spacer" />
-                <button type="button" className="ghost primary" disabled={copy.busy || !checkoutId}
+                <Button className="ghost primary" disabled={!checkoutId} busy={copy.busy} busyLabel="Copying…"
                   onClick={async () => { setCopied(undefined); const r = await copy.run(() => client.call('skills.copy', { id: skill.id, checkoutId })); if (r) setCopied(r.path); }}>
-                  {copy.busy ? 'Copying…' : 'Copy'}
-                </button>
+                  Copy
+                </Button>
               </div>
             </>
           )}

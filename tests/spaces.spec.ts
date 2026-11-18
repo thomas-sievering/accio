@@ -69,6 +69,17 @@ test('creates a new home from the Home project picker and opens its first thread
     for (const space of await client.call('spaces.list', {})) await client.call('spaces.delete', { id: space.id });
     // The home goes in the profile's folder on this machine: a disposable one here.
     await client.call('machines.setProfileFolders', { machineId, profileId: personal.id, folders: [root] });
+    // Hold the create request until the test has seen the wait state, which a local folder is otherwise too quick for.
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    await page.routeWebSocket(/./, (ws) => {
+      const server = ws.connectToServer();
+      ws.onMessage(async (message) => {
+        if (typeof message === 'string' && message.includes('"spaces.createHome"')) await held;
+        server.send(message);
+      });
+      server.onMessage((message) => ws.send(message));
+    });
     await page.goto(`${baseURL}/#token=${CHAT_TOKEN}`);
     const button = (name: string) => page.getByRole('button', { name, exact: true });
     await button('Settings').click();
@@ -96,6 +107,18 @@ test('creates a new home from the Home project picker and opens its first thread
     await expect(page.getByRole('menu', { name: 'Create as' })).toBeHidden();
     await dialog.screenshot({ path: info.outputPath('new-home.png') });
     await dialog.getByRole('button', { name: 'Create home', exact: true }).click();
+
+    // While it works, the dialog says so: a spinner, a line on what is happening, every control locked and no way out.
+    const creating = dialog.getByRole('button', { name: 'Creating…', exact: true });
+    await expect(creating).toHaveAttribute('aria-busy', 'true');
+    await expect(creating.locator('.button-spinner')).toBeVisible();
+    await expect(dialog.getByRole('status')).toHaveText('Creating the folder and its first commit.');
+    for (const name of ['Profile', 'Create as', 'Cancel', 'Close']) await expect(dialog.getByRole('button', { name, exact: true })).toBeDisabled();
+    await expect(dialog.getByRole('textbox', { name: 'Space name', exact: true })).toBeDisabled();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeVisible();
+    await dialog.screenshot({ path: info.outputPath('new-home-creating.png') });
+    release();
 
     // The home's first thread opens, in the new project.
     await expect(page.locator('.thread-project-link', { hasText: 'agents-home' })).toBeVisible({ timeout: 20_000 });

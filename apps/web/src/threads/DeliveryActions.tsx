@@ -9,10 +9,13 @@ import { checkedAgo, deliveryStatus, requestedStatus, statusText } from './statu
 import { useThreads } from './threads';
 import { formatDayTime } from '../ui/dates';
 import { usePopoverMenu } from '../ui/usePopoverMenu';
+import { Button } from '../ui/Button';
 import { useThreadAvailability } from './useThreadAvailability';
 import { shipWhenDoneLabel, useShipWhenDone } from './ShipWhenDone';
 
 /** Delivery intent stays on the server, including when this view is closed or disconnected. */
+type CallMethod = 'threads.cancelDelivery' | 'threads.checkDelivery' | 'threads.archive' | 'threads.reopen';
+
 export function DeliveryActions({ thread, project, canRun }: { thread: ThreadView; project?: ProjectView; canRun: boolean }) {
   const client = useClient();
   const { unavailable, reason } = useThreadAvailability(thread);
@@ -22,6 +25,7 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
   const [mode, setMode] = useState<DeliveryMode>('ship');
   const [attempt, setAttempt] = useState(0);
   const { busy, error, run } = useAction();
+  const [calling, setCalling] = useState<CallMethod>();
   const id = useId();
   // Above the Ship split, reaching back from its chevron over the Ship button.
   const { props: menuProps, trigger, popover: menu } = usePopoverMenu({
@@ -100,8 +104,11 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
   const untilOnline = !!thread.snoozedUntilOnline;
   const snoozedUntil = !settled && thread.snoozedUntil && new Date(thread.snoozedUntil) > now ? new Date(thread.snoozedUntil) : undefined;
   const status = !thread.workspace ? undefined : pending && (!arrived || passing) ? requestedStatus(pending.running, pending.mode, target) : deliveryStatus(thread);
-  const call = (method: 'threads.cancelDelivery' | 'threads.checkDelivery' | 'threads.archive' | 'threads.reopen') =>
-    void run(async () => { await client.call(method, { threadId: thread.id }); });
+  // The pill you pressed shows the wait; the rest are only disabled.
+  const call = (method: CallMethod) => {
+    setCalling(method);
+    void run(async () => { await client.call(method, { threadId: thread.id }); }).finally(() => setCalling(undefined));
+  };
   // A fresh request is offered with no delivery, after new work, or when a person must act.
   // Offered from the start: Ship when done can be queued before the first edit.
   // Work the agent already pushed to the target outside Ship leaves nothing to ship.
@@ -180,18 +187,18 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
             onClick={() => { if (arming) composer.toggle(); else deliver(); }}><Ship />{mode === 'review' ? 'Prepare for review' : 'Ship'}</button>
           <button ref={trigger} popoverTarget={id} disabled={!!unavailable || busy || !summary?.available || !!thread.queuedMessages?.length} aria-label="Shipping options" aria-haspopup="menu"><ChevronDown /></button>
         </span>}
-        {status?.canCheck && <button className="delivery-pill" disabled={!!unavailable || busy} onClick={() => call('threads.checkDelivery')}><Refresh />Check now</button>}
+        {status?.canCheck && <Button className="delivery-pill" disabled={!!unavailable || busy} busy={calling === 'threads.checkDelivery'} busyLabel="Checking…" onClick={() => call('threads.checkDelivery')}><Refresh />Check now</Button>}
         {status?.canStopFollowUps && <button className="delivery-pill" disabled={!!unavailable || busy} title="The PR stays tracked; the agent no longer starts to fix failing checks" onClick={() => call('threads.cancelDelivery')}><StopSquare />Stop automatic fixes</button>}
         {status?.canCancel && status.phase !== 'queued' && <button className="delivery-pill" disabled={!!unavailable || busy} onClick={() => call('threads.cancelDelivery')}><Close />Cancel delivery</button>}
       </>}
       {settled && !hasChip && <span className="delivery-settled">Settled</span>}
       {snoozedUntil && <span className="delivery-settled">Snoozed until {untilOnline ? `${thread.machine!.name} is back` : formatDayTime(snoozedUntil, now)}</span>}
-      {settled && <button className="delivery-pill" disabled={!!unavailable || busy} onClick={() => call('threads.reopen')}><Undo />Reopen</button>}
-      {snoozedUntil && <button className="delivery-pill" disabled={(!!unavailable && !untilOnline) || busy}
-        onClick={() => call('threads.reopen')}><Undo />Wake now</button>}
-      {!released && (receipt || settled) && thread.workspace && <button className="delivery-pill" disabled={!!unavailable || busy || thread.status === 'running'} title="Frees the workspace, keeps this thread" onClick={() => call('threads.archive')}>
-        <Archive />{busy ? 'Archiving…' : 'Archive'}
-      </button>}
+      {settled && <Button className="delivery-pill" disabled={!!unavailable || busy} busy={calling === 'threads.reopen'} busyLabel="Reopening…" onClick={() => call('threads.reopen')}><Undo />Reopen</Button>}
+      {snoozedUntil && <Button className="delivery-pill" disabled={(!!unavailable && !untilOnline) || busy} busy={calling === 'threads.reopen'} busyLabel="Waking…"
+        onClick={() => call('threads.reopen')}><Undo />Wake now</Button>}
+      {!released && (receipt || settled) && thread.workspace && <Button className="delivery-pill" disabled={!!unavailable || busy || thread.status === 'running'} busy={calling === 'threads.archive'} busyLabel="Archiving…" title="Frees the workspace, keeps this thread" onClick={() => call('threads.archive')}>
+        <Archive />Archive
+      </Button>}
       {!released && !reason('threads.openPreview') && summary?.previewAvailable && <button className="delivery-pill" disabled={!!unavailable || busy} onClick={openApp}><Play />Open app</button>}
     </div>
     {hint && <p className={`delivery-hint tone-${status?.tone ?? 'ready'}`} role={status?.phase === 'attention' || status?.phase === 'closed' ? 'alert' : undefined}

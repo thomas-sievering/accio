@@ -131,7 +131,7 @@ function SpaceForm({ space, onDone }: { space?: Space; onDone: () => void }) {
         </div>
       </SettingsSection>
       <SettingsFooter remove={space && { name: space.name, run: remove, consequence: 'Its projects, checkouts and threads stay as they are; only the grouping goes.' }}
-        busy={busy} onCancel={onDone} saveLabel={space ? 'Save' : 'Add space'} saveDisabled={busy || (!!space && !dirty)} dirty={dirty && !busy} />
+        busy={busy} onCancel={onDone} saveLabel={space ? 'Save' : 'Add space'} busyLabel={space ? 'Saving…' : 'Adding…'} saveDisabled={busy || (!!space && !dirty)} dirty={dirty && !busy} />
     </form>
     {creatingHome && <NewHomeSheet space={{ ...(space ? { id: space.id } : {}), name, projectKeys: keys }} onSpaceName={setName} onClose={() => setCreatingHome(false)} />}
   </>);

@@ -69,6 +69,20 @@
   opacity: 0.4;
   pointer-events: none;
 }
+/* A sheet's body as a fieldset, so one `disabled` locks every field while it works. */
+fieldset.sheet-body {
+  margin: 0;
+  border: 0;
+  min-width: 0;
+}
+fieldset.sheet-body:disabled .field {
+  opacity: 0.55;
+  transition: opacity 150ms ease-out;
+}
+.sheet-progress {
+  color: var(--muted);
+  font-size: 12.5px;
+}
 .ghost.danger:disabled {
   color: var(--dim);
   opacity: 1;
