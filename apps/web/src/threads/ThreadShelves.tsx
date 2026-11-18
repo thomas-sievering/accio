@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from 'react';
 import { Chevron } from '../app/icons';
 import { useLocalState } from '../app/useLive';
-import { offlineMachines, shelveThreads, type ThreadShelves as Shelves } from './shelves';
+import { shelveThreads, type ThreadShelves as Shelves } from './shelves';
 import { RowList, ShelfList, SlidingRow, SlidingShelf } from './SlidingRows';
 import { ThreadRow } from './ThreadRow';
 import { useThreads } from './threads';
@@ -42,14 +42,14 @@ export function visibleShelfRows(shelves: Shelves, view: ShelfView): [id: string
 
 /**
  * Working, Offline, Snoozed and Settled shelves below the thread list, as in T3 Code. Empty shelves
- * are not shown. Offline counts its threads per machine instead of in all.
+ * are not shown.
  */
 export function ThreadShelves({ view }: { view: ShelfView }) {
   const { shelves } = useThreads();
   const created = useCreatedShelves();
   const hidden = shelves.settled.length - view.settledShown;
-  const shelf = (name: ShelfName, label: string, children: ReactNode, counts: { name?: string; count: number }[] = [{ count: shelves[name].length }]) => shelves[name].length > 0 && (
-    <Shelf key={name} name={name} label={label} counts={counts} view={view} arriving={created.has(name)}>{children}</Shelf>
+  const shelf = (name: ShelfName, label: string, children: ReactNode) => shelves[name].length > 0 && (
+    <Shelf key={name} name={name} label={label} count={shelves[name].length} view={view} arriving={created.has(name)}>{children}</Shelf>
   );
 
   return (
@@ -59,7 +59,7 @@ export function ThreadShelves({ view }: { view: ShelfView }) {
       )))}
       {shelf('offline', 'Offline', shelves.offline.map((t) => (
         <SlidingRow key={t.id} id={t.id}><ThreadRow thread={t} place="offline" /></SlidingRow>
-      )), offlineMachines(shelves.offline))}
+      )))}
       {shelf('snoozed', 'Snoozed', shelves.snoozed.map((t) => (
         <SlidingRow key={t.id} id={t.id}><ThreadRow thread={t} place="snoozed" /></SlidingRow>
       )))}
@@ -98,7 +98,7 @@ function useCreatedShelves(): Set<ShelfName> {
 }
 
 // ShelfList's presence measures a leaving shelf through `ref`, so it reaches the section.
-function Shelf(props: { name: ShelfName; label: string; counts: { name?: string; count: number }[]; view: ShelfView; arriving: boolean; children: ReactNode; ref?: Ref<HTMLElement> }) {
+function Shelf(props: { name: ShelfName; label: string; count: number; view: ShelfView; arriving: boolean; children: ReactNode; ref?: Ref<HTMLElement> }) {
   const expanded = props.view.expanded[props.name];
   // Decided once, when the shelf mounts: later renders must not restart or cut its opening.
   const [arriving] = useState(props.arriving);
@@ -110,9 +110,7 @@ function Shelf(props: { name: ShelfName; label: string; counts: { name?: string;
         if (!expanded) requestAnimationFrame(() => section?.querySelector('.row')?.scrollIntoView({ block: 'nearest' }));
       }}>
         <span>{props.label}</span>
-        {props.counts.map(({ name, count }, i) => name === undefined
-          ? <span key={i} className="shelf-count">{count}</span>
-          : <span key={i} className="shelf-machine">· {name} <span className="shelf-count">{count}</span></span>)}
+        <span className="shelf-count">{props.count}</span>
         <span className="shelf-chevron">
           <Chevron />
         </span>

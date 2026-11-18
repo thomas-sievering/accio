@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ThreadView } from '@accio/protocol';
-import { createPlacementTracker, filterThreads, nextAfterSend, nextMorning, offlineMachines, OFFLINE_GRACE_MS, shelveThreads, WORKING_GRACE_MS } from './shelves';
+import { createPlacementTracker, filterThreads, nextAfterSend, nextMorning, OFFLINE_GRACE_MS, shelveThreads, WORKING_GRACE_MS } from './shelves';
 
 const now = new Date('2026-11-03T12:00:00');
 const thread = (id: string, extra: Partial<ThreadView> = {}): ThreadView => ({
@@ -113,11 +113,6 @@ describe('offline shelf', () => {
     expect(ids(s.offline)).toEqual(['mac-new', 'mac-old', 'pc']);
     expect(ids(s.open)).toEqual(['online']);
     expect(ids(s.snoozed)).toEqual(['snoozed']);
-  });
-
-  it('counts the shelf per machine', () => {
-    const s = shelveThreads([thread('a', on(mac, false)), thread('b', on(pc, false)), thread('c', on(mac, false))], now);
-    expect(offlineMachines(s.offline)).toEqual([{ id: 'mac', name: 'MacGonagall', count: 2 }, { id: 'pc', name: 'Pomfrey', count: 1 }]);
   });
 });
 

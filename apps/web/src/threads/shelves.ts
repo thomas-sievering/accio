@@ -101,18 +101,6 @@ export function shelveThreads(threads: ThreadView[], now: Date, placement?: Plac
   return shelves;
 }
 
-/** The machines on the Offline shelf, each with how many of its threads are there, in shelf order. */
-export function offlineMachines(offline: readonly ThreadView[]): { id: string; name: string; count: number }[] {
-  const machines = new Map<string, { id: string; name: string; count: number }>();
-  for (const { machine } of offline) {
-    if (!machine) continue;
-    const m = machines.get(machine.id) ?? { id: machine.id, name: machine.name, count: 0 };
-    m.count++;
-    machines.set(machine.id, m);
-  }
-  return [...machines.values()];
-}
-
 /** What the main pane shows after Move on: a thread, or the empty page. */
 export type NextSelection = { kind: 'thread'; id: string } | { kind: 'empty' };
 

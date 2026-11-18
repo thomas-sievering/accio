@@ -368,16 +368,6 @@
   font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
-/* Offline counts per machine; a long name gives way before the chevron does. */
-.shelf-machine {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.shelf-head > :not(.shelf-machine) {
-  flex-shrink: 0;
-}
 .shelf-more {
   height: 28px;
   padding: 0 8px;

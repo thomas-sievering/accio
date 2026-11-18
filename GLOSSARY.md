@@ -326,7 +326,7 @@ A group of threads in the sidebar below the inbox: Working, Offline, Snoozed and
 _Avoid_: Folder, tab
 
 **Offline shelf**:
-The shelf between Working and Snoozed holding Offline threads, which can't be acted on until their machine is back. Its header counts them per machine, such as "Offline · MacGonagall 2". A thread moves there, or back, only once its machine has stayed offline, or online, for a few seconds, so a short drop or a brief return doesn't move rows back and forth.
+The shelf between Working and Snoozed holding Offline threads, which can't be acted on until their machine is back. A thread moves there, or back, only once its machine has stayed offline, or online, for a few seconds, so a short drop or a brief return doesn't move rows back and forth.
 _Avoid_: Away, unavailable
 
 ## Secrets and hub connections
