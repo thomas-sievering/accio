@@ -134,10 +134,15 @@ describe('thread relay between machines', () => {
     await mac.app.stop();
     const offline = await pc.client.waitFor('threads.changed', (threads) => remote(threads, thread.id)?.machine?.online === false, 10_000);
     expect(remote(offline, thread.id)?.title).toBeTruthy();
-    await expect(pc.client.call('threads.send', { threadId: thread.id, text: 'hi' })).rejects.toThrow(/offline/);
+    for (const [method, params] of [
+      ['threads.send', { threadId: thread.id, text: 'hi' }],
+      ['threads.settle', { threadId: thread.id }],
+      ['threads.snooze', { threadId: thread.id, until: new Date(Date.now() + 60_000).toISOString() }],
+      ['threads.reopen', { threadId: thread.id }],
+    ] as const) await expect(pc.client.call(method, params as never), method).rejects.toThrow(/offline/);
   }, 30_000);
 
-  it('shows a sleeping machine offline, and wakes its snoozed threads only once it really wakes', async () => {
+  it('shows a sleeping machine offline until it really wakes', async () => {
     const { mac, pc } = await machines();
     const profile = await mac.client.signedIn('Personal');
     const thread = await mac.client.call('threads.start', { profileId: profile.id, text: 'hello' });
@@ -146,48 +151,15 @@ describe('thread relay between machines', () => {
     // The desktop app reports a suspend: the worker may still run on a dark wake, but stays away.
     mac.app.app.connections.setAsleep(true);
     await pc.client.waitFor('threads.changed', (threads) => remote(threads, thread.id)?.machine?.online === false, 10_000);
-    await pc.client.call('threads.snooze', { threadId: thread.id, until: new Date(Date.now() + 60_000).toISOString() });
     // Reporting in from the dark wake, as it does when its harnesses change, says nothing to the hub.
     await mac.app.app.connections.workspaces.values().next().value!.machines.connect([]);
-    expect(remote(await pc.client.call('threads.list', {}), thread.id)).toMatchObject({ snoozedUntilOnline: true, machine: { online: false } });
+    expect(remote(await pc.client.call('threads.list', {}), thread.id)).toMatchObject({ machine: { online: false } });
 
-    // A real wake: it is back, and its thread wakes.
+    // A real wake: it is back.
     mac.app.app.connections.setAsleep(false);
-    const back = await pc.client.waitFor('threads.changed', (threads) => remote(threads, thread.id)?.machine?.online === true, 20_000);
-    expect(remote(back, thread.id)?.snoozedUntilOnline).toBeUndefined();
+    await pc.client.waitFor('threads.changed', (threads) => remote(threads, thread.id)?.machine?.online === true, 20_000);
   }, 60_000);
 
-  it('snoozes an offline machine’s thread on the hub, for every machine, until it is back', async () => {
-    const { mac, pc, join } = await machines();
-    const laptop = await join({ harness: new FakeHarness() });
-    const profile = await mac.client.signedIn('Personal');
-    const thread = await mac.client.call('threads.start', { profileId: profile.id, text: 'hello' });
-    await laptop.client.waitFor('threads.changed', (threads) => remote(threads, thread.id)?.status === 'idle', 10_000);
-    await mac.app.stop({ keepHome: true });
-    await pc.client.waitFor('threads.changed', (threads) => remote(threads, thread.id)?.machine?.online === false, 10_000);
-
-    // It can't be read, so it can't be settled; whatever time is asked, it waits for the machine.
-    await expect(pc.client.call('threads.settle', { threadId: thread.id })).rejects.toThrow(/offline/);
-    const snoozed = await pc.client.call('threads.snooze', { threadId: thread.id, until: new Date(Date.now() + 60_000).toISOString() });
-    expect(snoozed).toMatchObject({ snoozedUntilOnline: true, machine: { online: false } });
-    expect(Date.parse(snoozed.snoozedUntil!)).toBeGreaterThan(Date.now() + 6 * 24 * 3_600_000);
-    await laptop.client.waitFor('threads.changed', (threads) => remote(threads, thread.id)?.snoozedUntilOnline === true, 10_000);
-
-    // Any machine can wake it, and every machine sees that.
-    const woken = await laptop.client.call('threads.reopen', { threadId: thread.id });
-    expect(woken.snoozedUntilOnline).toBeUndefined();
-    await pc.client.waitFor('threads.changed', (threads) => !remote(threads, thread.id)?.snoozedUntilOnline, 10_000);
-    await pc.client.call('threads.snooze', { threadId: thread.id, until: new Date().toISOString() });
-    await laptop.client.waitFor('threads.changed', (threads) => remote(threads, thread.id)?.snoozedUntilOnline === true, 10_000);
-
-    // Back online, it wakes everywhere, and the hub forgets the snooze.
-    const back = await startTestApp({ harness: new FakeHarness() }, mac.app.home); cleanup.push(() => back.stop());
-    for (const viewer of [pc, laptop]) {
-      const listed = await viewer.client.waitFor('threads.changed', (threads) => remote(threads, thread.id)?.machine?.online === true, 20_000);
-      expect(remote(listed, thread.id)).toMatchObject({ snoozedUntil: null });
-      expect(remote(listed, thread.id)?.snoozedUntilOnline).toBeUndefined();
-    }
-  }, 60_000);
 
   it('starts a thread on another machine, in its checkout of the same repository', async () => {
     const { mac, pc } = await machines();

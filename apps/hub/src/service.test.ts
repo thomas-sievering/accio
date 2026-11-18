@@ -91,24 +91,20 @@ describe('standalone hub trust and network boundary', () => {
     await second.client.call('hub.revokeMachine', { machineId: 'first' });
     await second.client.call('profiles.delete', { id: profile.id }); expect(second.client.snapshot.profiles).toEqual([]);
   });
-  it('keeps a sleeping machine away, so its snoozed threads wake only when it really wakes', async () => {
+  it('keeps a sleeping machine away until it really wakes', async () => {
     const { pair } = await fixture(); const mac = await pair('mac'); const pc = await pair('pc');
     const connected = async () => { await pc.client.refresh(true); return pc.client.snapshot.machines.find((m) => m.id === 'mac')?.connected; };
     mac.client.setAsleep(true);
     await expect.poll(connected).toBe(false);
-    const until = new Date(Date.now() + 3_600_000).toISOString();
-    await pc.client.call('threads.snoozeUntilOnline', { threadId: 't1', snooze: { machineId: 'mac', until } });
 
     // A dark wake: the worker runs for a moment, its retry reconnects and its machine reports in.
     await mac.client.start();
     await mac.client.call('machine.hello', { id: 'mac', name: 'mac', platform: 'test', version: 'test', harnesses: [] });
     expect(await connected()).toBe(false);
-    expect(pc.client.snapshot.offlineSnoozes).toEqual({ t1: { machineId: 'mac', until } });
 
-    // Really awake: back online, and its thread wakes everywhere.
+    // Really awake: back online.
     mac.client.setAsleep(false);
     await expect.poll(connected).toBe(true);
-    expect(pc.client.snapshot.offlineSnoozes).toEqual({});
   });
   it('answers malformed input to any hub method as a client error naming the problem, leaving the hub as it was', async () => {
     const { home, service, pair } = await fixture();
@@ -139,7 +135,6 @@ describe('standalone hub trust and network boundary', () => {
       ['accounts.callback', { signInId: 'sign-in', code: 5 }, 'code'],
       ['profiles.save', { name: '' }, 'Name is required'],
       ['secrets.resolve', { profileId: profile.id }, 'projectId'],
-      ['threads.snoozeUntilOnline', { threadId: 'thread', snooze: { machineId: 'first', until: 'tomorrow' } }, 'snooze.until'],
     ];
     for (const [method, params, problem] of malformed) {
       const answer = await rpc(method, params);

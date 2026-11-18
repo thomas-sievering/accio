@@ -227,8 +227,6 @@ export async function openWorkspace(record: SavedHub, deps: WorkspaceDeps, slot:
     router,
     assets: threads.assets,
     machineName: (id) => settings.machine(id)?.name,
-    offlineSnoozes: () => settings.offlineSnoozes(),
-    setOfflineSnooze: (threadId, snooze) => settings.setOfflineSnooze(threadId, snooze),
     send: (event, data) => { if (event === 'threads.changed') threads.threadsChanged(); send(event, data); },
     profileOf: (repoKey) => projects.profileOf(repoKey),
   });

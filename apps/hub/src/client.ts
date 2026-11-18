@@ -98,7 +98,7 @@ export class HubClient {
     ws.on('close', () => { if (this.ws === ws && !this.stopped) { this.offline(new Error('Hub connection lost. Reconnecting…')); this.schedule(); } });
   }
   /**
-   * GLOSSARY: Snooze. While the system sleeps this machine stays away from the hub: a dark wake
+   * GLOSSARY: Offline thread. While the system sleeps this machine stays away from the hub: a dark wake
    * that runs the worker for a moment must not look like the machine coming back.
    */
   setAsleep(asleep: boolean) {
@@ -114,7 +114,7 @@ export class HubClient {
   async close() { this.stopped = true; clearTimeout(this.retry); this.ws?.terminate(); }
 }
 
-export type SettingsAccess = Pick<SharedSettings, 'threadNaming' | 'setThreadNaming' | 'spaces' | 'saveSpace' | 'deleteSpace' | 'registerProjects' | 'setProjectProfile' | 'forgetProject' | 'profiles' | 'machines' | 'machine' | 'modelFavorites' | 'setModelFavorite' | 'harnessTools' | 'setHarnessTools' | 'offlineSnoozes' | 'setOfflineSnooze' | 'onMachinesChanged' | 'machineConnected' | 'machineDisconnected' | 'renameMachine' | 'setProfileFolders'> & {
+export type SettingsAccess = Pick<SharedSettings, 'threadNaming' | 'setThreadNaming' | 'spaces' | 'saveSpace' | 'deleteSpace' | 'registerProjects' | 'setProjectProfile' | 'forgetProject' | 'profiles' | 'machines' | 'machine' | 'modelFavorites' | 'setModelFavorite' | 'harnessTools' | 'setHarnessTools' | 'onMachinesChanged' | 'machineConnected' | 'machineDisconnected' | 'renameMachine' | 'setProfileFolders'> & {
   refresh?: () => Promise<void>;
   /** GLOSSARY: Project. Undefined from a hub that keeps no projects yet, whose machines keep each project's profile themselves. */
   projects: () => HubProject[] | undefined;
@@ -142,9 +142,6 @@ export function remoteSettings(client: HubClient): SettingsAccess {
     harnessTools: () => client.snapshot?.harnessTools ?? {},
     setHarnessTools: async (harnessId, tools) => { await client.call('harnesses.setTools', { harnessId, tools }); },
     setModelFavorite: async (profileId, model, favorite) => { await client.call('models.favorite', { profileId, model, favorite }); },
-    // Older hubs don't send snoozes; a machine's connection status there drops expired ones.
-    offlineSnoozes: (now = new Date()) => Object.fromEntries(Object.entries(client.snapshot?.offlineSnoozes ?? {}).filter(([, s]) => new Date(s.until) > now)),
-    setOfflineSnooze: async (threadId, snooze) => { await client.call('threads.snoozeUntilOnline', { threadId, snooze }); await client.refresh(true); },
     machineConnected: async (hello) => { await client.call('machine.hello', hello); },
     machineDisconnected: async () => {},
     renameMachine: async (machineId, name) => { await client.call('machines.rename', { machineId, name }); },

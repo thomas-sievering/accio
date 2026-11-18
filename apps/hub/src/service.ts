@@ -32,8 +32,6 @@ export type HubSnapshot = {
   spaces?: ReturnType<SharedSettings['spaces']>;
   /** GLOSSARY: Project. Absent from hubs before they kept projects. */
   projects?: ReturnType<SharedSettings['projects']>;
-  /** GLOSSARY: Snooze. Absent from hubs before snoozes until a machine is back. */
-  offlineSnoozes?: ReturnType<SharedSettings['offlineSnoozes']>;
   models: Record<string, CodexModel[]>;
   resources: ResourcesState;
   limits: AccountLimitsView[];
@@ -56,10 +54,6 @@ export type HubServiceOptions = {
 const SecretId = z.string().min(1).max(160);
 const SecretScope = z.object({ profileId: SecretId, projectId: SecretId.nullable(), slot: SecretSlot });
 const settingCalls = {
-  'threads.snoozeUntilOnline': z.object({
-    threadId: z.string().min(1).max(128),
-    snooze: z.object({ machineId: z.string().min(1).max(128), until: z.iso.datetime({ offset: true }) }).nullable(),
-  }),
   'harnesses.setTools': z.object({ harnessId: z.string().min(1).max(64), tools: z.record(z.string().regex(/^[a-z][a-z0-9-]{0,63}$/), z.boolean()) }),
 };
 const secretCalls = {
@@ -174,7 +168,7 @@ export async function startHubService(opts: HubServiceOptions) {
     const remote = link.view();
     return { hubId: trust.id, protocol: HUB_PROTOCOL, revision, epoch, ...(opts.version ? { version: opts.version } : {}), profiles: profileViews(profiles, link), accounts: link.accountViews(), machines: settings.machines(),
       favorites: Object.fromEntries(profiles.map((p) => [p.id, settings.modelFavorites(p.id)])), harnessTools: settings.harnessTools(),
-      threadNaming: settings.threadNaming(), spaces: settings.spaces(), projects: settings.projects(), offlineSnoozes: settings.offlineSnoozes(),
+      threadNaming: settings.threadNaming(), spaces: settings.spaces(), projects: settings.projects(),
       models: Object.fromEntries(profiles.map((p) => [p.id, p.houseId ? link.codexModels(p.houseId) : []])), resources: resources.state(), limits: link.limitViews(), secrets: profiles.flatMap(p => secrets.list(p.id)),
       ...(remote ? { sortingHat: remote } : {}) };
   }
@@ -288,9 +282,6 @@ export async function startHubService(opts: HubServiceOptions) {
       case 'machines.setProfileFolders': await settings.setProfileFolders(p.machineId, p.profileId, p.folders); return null;
       case 'models.favorite': await settings.setModelFavorite(p.profileId, p.model, p.favorite); return null;
       case 'harnesses.setTools': await settings.setHarnessTools(p.harnessId, p.tools); return null;
-      case 'threads.snoozeUntilOnline':
-        try { await settings.setOfflineSnooze(p.threadId, p.snooze); } catch (error) { throw new HubError((error as Error).message); }
-        return null;
       case 'threadNaming.save': await settings.setThreadNaming(p); return settings.threadNaming();
       case 'spaces.list': return settings.spaces();
       case 'spaces.save': return settings.saveSpace(p);

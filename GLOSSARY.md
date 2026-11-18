@@ -29,7 +29,7 @@ The process on a machine that runs harnesses, executes turns and provides access
 _Avoid_: Server (for the role), machine (for the process), agent, sub-agent
 
 **Relay**:
-The hub passing messages between workers on different machines, so you can read and drive a thread from any client. The thread stays on its worker's machine; nothing is copied. Each client lists every machine's threads together, with the owning machine's name on the others. While that machine is offline its threads stay listed from the last list it sent, greyed and read-only, on the Offline shelf, except that you can snooze them until the machine is back. A new thread can start on any machine on the relay, in any project the hub keeps: a machine without a checkout of the project's repository, this one included, clones it first, into the profile's folder there or else its home folder. No project starts on any machine. Saved images and files can be viewed through the relay. Sending image attachments, editing thread skills and Open app for an owned preview require the thread's machine. See the [relay plan](docs/plans/thread-relay.md).
+The hub passing messages between workers on different machines, so you can read and drive a thread from any client. The thread stays on its worker's machine; nothing is copied. Each client lists every machine's threads together, with the owning machine's name on the others. While that machine is offline its threads stay listed from the last list it sent, greyed and read-only, on the Offline shelf. A new thread can start on any machine on the relay, in any project the hub keeps: a machine without a checkout of the project's repository, this one included, clones it first, into the profile's folder there or else its home folder. No project starts on any machine. Saved images and files can be viewed through the relay. Sending image attachments, editing thread skills and Open app for an owned preview require the thread's machine. See the [relay plan](docs/plans/thread-relay.md).
 _Avoid_: Sync (for threads), tunnel
 
 **Update**:
@@ -204,7 +204,7 @@ The state of a thread whose last turn finished normally, with no delivery, Wait 
 _Avoid_: Idle, done, active
 
 **Offline thread**:
-A thread whose machine is offline. Its transcript can't load and it can't take a message or settle, so it is not Ready, whatever its last status was; that status is only the last one heard. It leaves the inbox and Working by itself for the Offline shelf, greyed with its machine tagged offline, and comes back with its real status when the machine does. A settled or snoozed thread stays where it is.
+A thread whose machine is offline. Its transcript can't load and it can't take a message or settle, so it is not Ready, whatever its last status was; that status is only the last one heard. It leaves the inbox and Working by itself for the Offline shelf, greyed with its machine tagged offline, and comes back with its real status when the machine does. A settled or snoozed thread stays where it is. While its system sleeps a machine stays away from the hub, so a dark wake, which runs it for a moment, does not count as back.
 _Avoid_: Unavailable, stale
 
 **Interrupted**:
@@ -264,7 +264,7 @@ Naming another thread of the same profile in a message with `@` and its handle, 
 _Avoid_: Thread link, thread reference
 
 **Snooze**:
-Hiding a thread until a chosen time, when it comes back. Another machine's thread can't be read or settled while that machine is offline, so it is snoozed until the machine is back instead, or for a week if it stays away. Its machine can't record that snooze, so the hub keeps it, and every machine shows it; the hub drops it when the machine reconnects, so the thread wakes everywhere at once. While its system sleeps a machine stays away from the hub, so a dark wake, which runs it for a moment, does not count as back.
+Hiding a thread until a chosen time, when it comes back. Another machine's thread can't be snoozed or woken while that machine is offline; it waits on the Offline shelf instead.
 _Avoid_: Mute, defer
 
 **Settle**:

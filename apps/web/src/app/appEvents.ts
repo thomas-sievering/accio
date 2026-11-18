@@ -24,7 +24,7 @@ export type AppEvents = {
   /** GLOSSARY: Space. Open a space's view, such as from the project name's menu or Settings / Spaces. */
   'space.open': { id: string };
   /** A thread was snoozed until a time (ISO); the sidebar says so briefly. */
-  'thread.snoozed': { threadId: string; until: string; untilOnline?: string };
+  'thread.snoozed': { threadId: string; until: string };
   /** Open a thread, such as one started from an issue offer. */
   'thread.open': { id: string };
   /** Open the side panel at a tab, such as Delivery after pressing Ship. */

@@ -102,8 +102,6 @@ export function DeliveryActions({ thread, project, canRun, active = true }: { th
   }, [phase]);
 
   const settled = !!thread.settledAt;
-  // Snoozed on the hub until the thread's offline machine is back; waking it needs no machine.
-  const untilOnline = !!thread.snoozedUntilOnline;
   const snoozedUntil = !settled && thread.snoozedUntil && new Date(thread.snoozedUntil) > now ? new Date(thread.snoozedUntil) : undefined;
   const status = !thread.workspace ? undefined : pending && (!arrived || passing) ? requestedStatus(pending.running, pending.mode, target) : deliveryStatus(thread);
   // The pill you pressed shows the wait; the rest are only disabled.
@@ -215,9 +213,9 @@ export function DeliveryActions({ thread, project, canRun, active = true }: { th
         {status?.canCancel && status.phase !== 'queued' && <button className="delivery-pill" disabled={!!unavailable || busy} onClick={() => call('threads.cancelDelivery')}><Close />Cancel delivery</button>}
       </>}
       {settled && !hasChip && <span className="delivery-settled">Settled</span>}
-      {snoozedUntil && <span className="delivery-settled">Snoozed until {untilOnline ? `${thread.machine!.name} is back` : formatDayTime(snoozedUntil, now)}</span>}
+      {snoozedUntil && <span className="delivery-settled">Snoozed until {formatDayTime(snoozedUntil, now)}</span>}
       {settled && <Button className="delivery-pill" disabled={!!unavailable || busy} busy={calling === 'threads.reopen'} busyLabel="Reopening…" onClick={() => call('threads.reopen')}><Undo />Reopen</Button>}
-      {snoozedUntil && <Button className="delivery-pill" disabled={(!!unavailable && !untilOnline) || busy} busy={calling === 'threads.reopen'} busyLabel="Waking…"
+      {snoozedUntil && <Button className="delivery-pill" disabled={!!unavailable || busy} busy={calling === 'threads.reopen'} busyLabel="Waking…"
         onClick={() => call('threads.reopen')}><Undo />Wake now</Button>}
       {!released && (receipt || settled) && thread.workspace && <Button className="delivery-pill" disabled={!!unavailable || busy || thread.status === 'running'} busy={calling === 'threads.archive'} busyLabel="Archiving…" title="Frees the workspace, keeps this thread" onClick={() => call('threads.archive')}>
         <Archive />Archive

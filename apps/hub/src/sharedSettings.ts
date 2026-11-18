@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { JsonStore } from '@accio/persistence';
-import { DEFAULT_THREAD_NAMING, type ThreadNamingSettings, type HarnessInstall, type HubProject, type MachineInfo, type OfflineSnooze, type SaveSpace, type Space } from '@accio/protocol';
+import { DEFAULT_THREAD_NAMING, type ThreadNamingSettings, type HarnessInstall, type HubProject, type MachineInfo, type SaveSpace, type Space } from '@accio/protocol';
 import { HubError } from './errors.js';
 
 export type { HarnessInstall };
@@ -34,8 +34,6 @@ type Data = {
   modelFavorites?: Record<string, FavoriteModel[]>;
   /** GLOSSARY: Built-in tools. Harness id → switch id → on, only where it differs from accio's default. */
   harnessTools?: Record<string, Record<string, boolean>>;
-  /** GLOSSARY: Snooze. Thread id → snooze until its offline machine is back. */
-  offlineSnoozes?: Record<string, OfflineSnooze>;
   /** GLOSSARY: Space. Not tied to profiles, so deleting a profile leaves them as they are (ADR 0019). */
   spaces?: Space[];
   /** GLOSSARY: Project. Each repository with a remote and its profile, whether or not a machine has a checkout of it. */
@@ -56,9 +54,6 @@ function withProfileGitHub(data: Data): Data {
   });
   return { ...data, profiles, machines: data.machines.map(({ profileGitHub: _moved, ...m }) => m) };
 }
-
-/** Far more than anyone snoozes; keeps one store from growing without bound. */
-const MAX_OFFLINE_SNOOZES = 10_000;
 
 /** GLOSSARY: Provider. Both Anthropic and OpenAI support named account sign-in. */
 export const PROVIDERS = [
@@ -225,27 +220,6 @@ export class SharedSettings {
     });
   }
 
-  /** Snoozes still waiting: their machine is offline and the fallback has not passed. */
-  offlineSnoozes(now = new Date()): Record<string, OfflineSnooze> {
-    return Object.fromEntries(Object.entries(this.data.offlineSnoozes ?? {})
-      .filter(([, s]) => !this.connected.has(s.machineId) && new Date(s.until) > now)
-      .map(([id, s]) => [id, { ...s }]));
-  }
-
-  /** Snoozes another machine's thread until that machine is back, or wakes it with null. */
-  async setOfflineSnooze(threadId: string, snooze: OfflineSnooze | null) {
-    return this.change(async () => {
-      const { [threadId]: _previous, ...others } = this.offlineSnoozes();
-      if (snooze) {
-        const machine = this.machine(snooze.machineId);
-        if (!machine) throw new Error(`No machine ${snooze.machineId}`);
-        if (this.connected.has(snooze.machineId)) throw new Error(`${machine.name} is online. Snooze the thread there.`);
-        if (Object.keys(others).length >= MAX_OFFLINE_SNOOZES) throw new Error('Too many snoozed threads.');
-      }
-      await this.commit({ ...this.data, offlineSnoozes: snooze ? { ...others, [threadId]: { ...snooze } } : others });
-    });
-  }
-
   machines(): (MachineRecord & { connected: boolean })[] {
     return this.data.machines.map((m) => ({ ...m, connected: this.connected.has(m.id) }));
   }
@@ -259,11 +233,8 @@ export class SharedSettings {
     return this.change(async () => {
       const existing = this.machine(hello.id);
       const record: MachineRecord = { profileFolders: {}, ...existing, ...hello, name: existing?.customName ?? hello.name, lastSeen: new Date().toISOString() };
-      // Its threads snoozed until it was back wake now, on every machine.
-      const offlineSnoozes = Object.fromEntries(Object.entries(this.data.offlineSnoozes ?? {}).filter(([, s]) => s.machineId !== hello.id));
       await this.commit({
         ...this.data,
-        offlineSnoozes,
         machines: existing ? this.data.machines.map((m) => (m.id === hello.id ? record : m)) : [...this.data.machines, record],
       }, () => this.connected.add(hello.id));
     });

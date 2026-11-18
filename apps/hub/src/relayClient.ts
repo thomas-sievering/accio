@@ -42,7 +42,7 @@ export class RelaySocket {
 
   start() { this.connect(); }
 
-  /** GLOSSARY: Snooze. Off the relay while the system sleeps, so a dark wake does not show this machine online. */
+  /** GLOSSARY: Offline thread. Off the relay while the system sleeps, so a dark wake does not show this machine online. */
   setAsleep(asleep: boolean) {
     if (this.stopped || asleep === this.asleep) return;
     this.asleep = asleep;

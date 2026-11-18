@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { JsonFile } from '@accio/persistence';
 import { RelaySocket, type RelayRequest } from '@accio/hub';
-import { OFFLINE_SNOOZE_MS, RELAY_MACHINE_METHODS, RELAY_THREAD_METHODS, type CheckoutView, type OfflineSnooze, type Events, type MachineView, type MethodName, type ParamsOf, type ProjectsState, type ResultOf, type RelaySnapshot, type ThreadView } from '@accio/protocol';
+import { RELAY_MACHINE_METHODS, RELAY_THREAD_METHODS, type CheckoutView, type Events, type MachineView, type MethodName, type ParamsOf, type ProjectsState, type ResultOf, type RelaySnapshot, type ThreadView } from '@accio/protocol';
 import { UserError, type Router } from '../rpc/router.js';
 import { CLONE_TIMEOUT_MS, httpsUrlOf, remoteUrlOf } from '../projects/git.js';
 import type { RemoteMediaKey, ThreadAssets } from '../threads/assets.js';
@@ -28,10 +28,6 @@ export type RelayDeps = {
   machineName: (id: string) => string | undefined;
   /** Caches other machines' media here and serves it to this machine's clients. */
   assets: Pick<ThreadAssets, 'cachedRemote' | 'storeRemote'>;
-  /** GLOSSARY: Snooze. The hub's snoozes until a machine is back, by thread id. */
-  offlineSnoozes: () => Record<string, OfflineSnooze>;
-  /** Records one on the hub, or wakes the thread with null. */
-  setOfflineSnooze: (threadId: string, snooze: OfflineSnooze | null) => Promise<void>;
   /** To this hub's clients on this machine. */
   send: <E extends keyof Events>(event: E, data: Events[E]) => void;
   /** GLOSSARY: Shared settings. The hub's profile for a repository, else this machine's project's. */
@@ -82,7 +78,7 @@ export class Relay {
     this.socket.start();
   }
 
-  /** GLOSSARY: Snooze. Off the relay while the system sleeps. */
+  /** GLOSSARY: Offline thread. Off the relay while the system sleeps. */
   setAsleep(asleep: boolean) { this.asleep = asleep; this.socket?.setAsleep(asleep); }
   private asleep = false;
 
@@ -173,7 +169,6 @@ export class Relay {
     if (method === 'threads.assetUrl' || method === 'threads.fileUrl') return this.media(machineId, name, method, params);
     if (!RELAY_METHODS.has(method)) return Promise.reject(new UserError(`Open this on ${name} for now.`));
     if (method === 'threads.send' && (params as ParamsOf<'threads.send'>).images?.length) return Promise.reject(new UserError(`Images can't be sent to threads on ${name} yet.`));
-    if (!this.online.has(machineId) && (method === 'threads.snooze' || method === 'threads.reopen')) return this.snoozeUntilOnline(machineId, name, threadId, method === 'threads.snooze');
     if (!this.online.has(machineId) || !this.socket) return Promise.reject(new UserError(`${name} is offline.`));
     if (method === 'threads.observe') this.observed.set(threadId, machineId);
     return this.socket.call(machineId, method, params).then(
@@ -181,21 +176,6 @@ export class Relay {
       (error: Error) => { throw new UserError(error.message); });
   }
 
-  /**
-   * GLOSSARY: Snooze. An offline machine's thread can't be read, so it can't be settled or snoozed
-   * there; the hub keeps it snoozed until the machine is back instead, whatever time was asked for.
-   * Waking it takes the snooze off the hub.
-   */
-  private async snoozeUntilOnline(machineId: string, name: string, threadId: string, snooze: boolean): Promise<ThreadView> {
-    const set = this.deps.setOfflineSnooze;
-    const thread = this.remote.get(machineId)?.threads.find((t) => t.id === threadId);
-    if (!thread) throw new UserError('No such thread');
-    if (snooze) await set(threadId, { machineId, until: new Date(Date.now() + OFFLINE_SNOOZE_MS).toISOString() }).catch((error: Error) => { throw new UserError(error.message); });
-    else if (this.deps.offlineSnoozes()[threadId]) await set(threadId, null).catch((error: Error) => { throw new UserError(error.message); });
-    else throw new UserError(`${name} is offline.`);
-    this.announce();
-    return this.decorate(machineId, thread);
-  }
 
   /**
    * Starts a thread on the machine it names, in that machine's checkout of the same repository.
@@ -405,11 +385,8 @@ export class Relay {
     const project = this.remote.get(machineId)?.projects.find((p) => p.id === thread.projectId);
     const here = project?.repoKey ? this.deps.projects().projects.find((p) => p.repoKey === project.repoKey) : undefined;
     const online = this.online.has(machineId);
-    // Snoozed until its machine is back: it wakes the moment the machine rejoins the relay.
-    const snooze = online ? undefined : this.deps.offlineSnoozes()[thread.id];
     return {
       ...view,
-      ...(snooze?.machineId === machineId ? { snoozedUntil: snooze.until, snoozedUntilOnline: true } : {}),
       projectId: here?.id ?? thread.projectId,
       ...(project && !here ? { projectName: project.name } : {}),
       machine: { id: machineId, name: this.deps.machineName(machineId) ?? 'Other machine', online },
