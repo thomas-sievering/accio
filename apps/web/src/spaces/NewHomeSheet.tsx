@@ -10,10 +10,9 @@ import { useProfiles } from '../profiles/profiles';
 import { MenuSelect } from '../ui/MenuSelect';
 
 type Location = 'folder' | 'github';
-const NAME = /^(?!\.+$)[A-Za-z0-9._-]+$/;
 
-/** A folder and repository name from the space's name, such as "hrc-home". */
-function suggestedName(space: string) {
+/** The home's folder and repository name, from the space's name: "hrc" makes "hrc-home". */
+function homeName(space: string) {
   const base = space.trim().replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^[-.]+|-+$/g, '').toLowerCase();
   return base ? `${base}-home` : 'home';
 }
@@ -22,7 +21,8 @@ function suggestedName(space: string) {
  * GLOSSARY: Home. "New home…" from the Home project picker: a new project from Accio's home template,
  * as a local folder or a new GitHub repo in the chosen profile, made this space's home in one step. It
  * saves the space as the editor shows it, then opens the home's first thread. A space without a name yet
- * gets one here, as the editor's own Name field is behind the sheet. A home is usually personal
+ * gets one here, as the editor's own Name field is behind the sheet. The home's folder and repo are
+ * named after the space, with no field of their own: one name to think of. A home is usually personal
  * even for a work space, so the profile has no default: you always pick it, and with it the GitHub account.
  */
 export function NewHomeSheet({ space, onSpaceName, onClose }: { space: SaveSpace; onSpaceName: (name: string) => void; onClose: () => void }) {
@@ -32,8 +32,7 @@ export function NewHomeSheet({ space, onSpaceName, onClose }: { space: SaveSpace
   const here = machines?.find((m) => m.thisMachine);
   const [askSpaceName] = useState(() => !space.name.trim());
   const [spaceName, setSpaceName] = useState(space.name);
-  const [name, setName] = useState(() => suggestedName(space.name));
-  const [nameEdited, setNameEdited] = useState(false);
+  const name = homeName(spaceName);
   const [profileId, setProfileId] = useState('');
   const [location, setLocation] = useState<Location>('folder');
   const [tried, setTried] = useState(false);
@@ -46,20 +45,18 @@ export function NewHomeSheet({ space, onSpaceName, onClose }: { space: SaveSpace
   const login = loginOf(profileId);
   const where = path ?? (profileId ? 'your home folder on this machine, since this profile has no folder here' : "the profile's folder on this machine");
   const githubProblem = location === 'github' && profileId && !login ? 'This profile has no GitHub account. Choose one in Settings / Profiles.' : undefined;
-  const nameProblem = !name.trim() ? 'Enter a name for the home.' : !NAME.test(name.trim()) ? "Use letters, digits, '.', '-' or '_', as in a folder or repository name." : undefined;
   const spaceProblem = !spaceName.trim() ? 'Enter a name for the space.' : undefined;
-  // The editor behind keeps the name too, and the home's name follows it until you change that.
+  // The editor behind keeps the name too.
   const changeSpaceName = (value: string) => {
     setSpaceName(value);
     onSpaceName(value);
-    if (!nameEdited) setName(suggestedName(value));
   };
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setTried(true);
-    if (spaceProblem || nameProblem || !profileId || githubProblem) return focusFirstInvalid(form.current);
-    const created = await run(() => client.call('spaces.createHome', { space: { ...space, name: spaceName }, name: name.trim(), profileId, location }));
+    if (spaceProblem || !profileId || githubProblem) return focusFirstInvalid(form.current);
+    const created = await run(() => client.call('spaces.createHome', { space: { ...space, name: spaceName }, name, profileId, location }));
     if (!created) return;
     emitAppEvent('thread.open', { id: created.thread.id });
   };
@@ -74,10 +71,6 @@ export function NewHomeSheet({ space, onSpaceName, onClose }: { space: SaveSpace
               {(p) => <input {...p} value={spaceName} onChange={(e) => changeSpaceName(e.target.value)} placeholder="hrc, Copilot Studio agents…" data-autofocus required />}
             </Field>
           )}
-          <Field label="Name" error={tried && nameProblem}
-            hint={location === 'folder' ? `Created in ${where}.` : `A private repo${login ? ` under ${login}` : ''}, cloned to ${where}.`}>
-            {(p) => <input {...p} value={name} onChange={(e) => { setName(e.target.value); setNameEdited(true); }} data-autofocus spellCheck={false} required />}
-          </Field>
           <div className="field">
             <span>Profile</span>
             <MenuSelect label="Profile" value={profileId} placeholder="Choose…" onChange={setProfileId} invalid={tried && !profileId}
@@ -90,6 +83,7 @@ export function NewHomeSheet({ space, onSpaceName, onClose }: { space: SaveSpace
             <MenuSelect<Location> label="Create as" value={location} onChange={setLocation} invalid={tried && !!githubProblem}
               options={[{ value: 'folder', label: 'Local folder', detail: 'A git repository on this machine only' }, { value: 'github', label: 'New GitHub repo', detail: "Private, under the profile's GitHub account" }]} />
             {githubProblem && <small className="error" role="alert">{githubProblem}</small>}
+            <small className="hint">{location === 'folder' ? `Creates ${name} in ${where}.` : `Creates the private repo ${login ? `${login}/` : ''}${name}, cloned to ${where}.`}</small>
           </div>
           {error && <p className="error" role="alert">{error}</p>}
         </div>

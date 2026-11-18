@@ -98,7 +98,7 @@ describe('creating a new home for a space', () => {
     await writeFile(join(folder, 'hrc-home', 'notes.txt'), 'mine');
 
     await expect(c.call('spaces.createHome', { space: { name: 'hrc', projectKeys: [] }, name: 'hrc-home', profileId: 'personal', location: 'folder' }))
-      .rejects.toThrow(`${join(folder, 'hrc-home')} already exists. Choose another name.`);
+      .rejects.toThrow(`${join(folder, 'hrc-home')} already exists. Rename the space, or move that folder.`);
     expect(await readdir(join(folder, 'hrc-home'))).toEqual(['notes.txt']);
     expect((await c.call('projects.get', {})).projects).toEqual([]);
     expect(await c.call('spaces.list', {})).toEqual([]);
@@ -120,7 +120,7 @@ describe('creating a new home for a space', () => {
     const outcomes = [first.status, second.status].sort();
     expect(outcomes).toEqual(['fulfilled', 'rejected']);
     const refused = [first, second].find((r) => r.status === 'rejected') as PromiseRejectedResult;
-    expect(refused.reason.message).toBe(`${join(folder, 'hrc-home')} already exists. Choose another name.`);
+    expect(refused.reason.message).toBe(`${join(folder, 'hrc-home')} already exists. Rename the space, or move that folder.`);
     expect(await readFile(join(folder, 'hrc-home', 'AGENTS.md'), 'utf8')).toContain('# hrc');
     expect((await git(join(folder, 'hrc-home'), 'status', '--porcelain')).trim()).toBe('');
     const created = (first.status === 'fulfilled' ? first : second) as PromiseFulfilledResult<{ thread: { id: string } }>;

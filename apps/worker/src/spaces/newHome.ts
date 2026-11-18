@@ -55,7 +55,7 @@ export class NewHomes {
     await mkdir(base, { recursive: true });
     // Claims the folder: a second request for the same name fails here, and never removes this one's.
     await mkdir(path).catch((error: NodeJS.ErrnoException) => {
-      throw error.code === 'EEXIST' ? new UserError(`${path} already exists. Choose another name.`) : error;
+      throw error.code === 'EEXIST' ? new UserError(`${path} already exists. Rename the space, or move that folder.`) : error;
     });
     // Until the space is saved, nothing else points at the folder: a failure removes it, so the name stays free.
     const discard = () => rm(path, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }).catch(() => {});
