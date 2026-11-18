@@ -138,7 +138,8 @@ function Shell({ page, setPage }: { page: Page; setPage: Dispatch<SetStateAction
     const onKey = (e: KeyboardEvent) => {
       if (inSettings || settingUp || e.shiftKey || e.altKey) return;
       const key = e.key.toLowerCase();
-      if ((e.ctrlKey || e.metaKey) && key === 'n') {
+      // Ctrl+N or Ctrl+T opens the New thread picker.
+      if ((e.ctrlKey || e.metaKey) && (key === 'n' || key === 't')) {
         e.preventDefault();
         document.querySelector<HTMLButtonElement>('.side-tools [aria-label="New thread"]')?.click();
         return;

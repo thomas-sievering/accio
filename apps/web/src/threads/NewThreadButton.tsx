@@ -63,7 +63,7 @@ export function NewThreadButton({ className = 'side-icon', label }: { className?
   const selected = Math.max(0, filtered.findIndex((c) => c.id === activeId));
   return (
     <>
-      <button className={className} title="New thread" aria-label="New thread" popoverTarget={id}>
+      <button className={className} title="New thread (Ctrl+N or Ctrl+T)" aria-label="New thread" popoverTarget={id}>
         <MessageSquarePlus />{label}
       </button>
       <div className="new-thread-picker" id={id} popover="auto" {...props}>
