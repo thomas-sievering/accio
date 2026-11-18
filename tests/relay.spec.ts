@@ -47,7 +47,7 @@ test('an offline machine\'s threads move to the Offline shelf and come back with
     await expect(inbox).toBeVisible();
     await expect(shelf).toHaveCount(0);
     await expect(inbox).toHaveCount(0, { timeout: 15_000 });
-    await expect(shelf.locator('.shelf-machine')).toHaveText(/^· MacBook \d+$/);
+    await expect(shelf.locator('.shelf-count')).toHaveText(/^\d+$/);
     await shelf.locator('.shelf-head').click();
     await expect(shelf.locator('.row').filter({ hasText: 'Hello from the MacBook' })).toBeVisible();
     await page.screenshot({ path: info.outputPath('offline-shelf.png') });
