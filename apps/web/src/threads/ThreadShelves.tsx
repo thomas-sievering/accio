@@ -7,8 +7,8 @@ import { ThreadRow } from './ThreadRow';
 import { useThreads } from './threads';
 
 const SETTLED_PAGE = 5;
-type ShelfName = 'working' | 'offline' | 'snoozed' | 'settled';
-const SHELVES = ['working', 'offline', 'snoozed', 'settled'] as const satisfies readonly ShelfName[];
+const SHELVES = ['working', 'offline', 'snoozed', 'settled'] as const;
+type ShelfName = (typeof SHELVES)[number];
 
 /** Which shelves are expanded and how much of Settled is shown. The list owns it, so it knows which rows are on screen. */
 export type ShelfView = {
@@ -27,7 +27,7 @@ export function useShelfView(): ShelfView {
   };
   const [settledShown, setSettledShown] = useState(SETTLED_PAGE);
   return {
-    expanded: { working: shelves.working[0] === '1', offline: shelves.offline[0] === '1', snoozed: shelves.snoozed[0] === '1', settled: shelves.settled[0] === '1' },
+    expanded: Object.fromEntries(SHELVES.map((name) => [name, shelves[name][0] === '1'])) as Record<ShelfName, boolean>,
     toggle: (name) => { const [v, set] = shelves[name]; set(v === '1' ? '0' : '1'); },
     settledShown,
     showMoreSettled: () => setSettledShown((n) => n + SETTLED_PAGE),

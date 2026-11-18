@@ -29,7 +29,7 @@ The process on a machine that runs harnesses, executes turns and provides access
 _Avoid_: Server (for the role), machine (for the process), agent, sub-agent
 
 **Relay**:
-The hub passing messages between workers on different machines, so you can read and drive a thread from any client. The thread stays on its worker's machine; nothing is copied. Each client lists every machine's threads together, with the owning machine's name on the others. While that machine is offline its threads stay listed from the last list it sent, greyed and read-only, on the Offline shelf. A new thread can start on any machine on the relay, in any project the hub keeps: a machine without a checkout of the project's repository, this one included, clones it first, into the profile's folder there or else its home folder. No project starts on any machine. Saved images and files can be viewed through the relay. Sending image attachments, editing thread skills and Open app for an owned preview require the thread's machine. See the [relay plan](docs/plans/thread-relay.md).
+The hub passing messages between workers on different machines, so you can read and drive a thread from any client. The thread stays on its worker's machine; nothing is copied. Each client lists every machine's threads together, with the owning machine's name on the others. While that machine is offline its threads stay listed from the last list it sent, greyed and read-only, on the Offline shelf, except that you can snooze them until the machine is back. A new thread can start on any machine on the relay, in any project the hub keeps: a machine without a checkout of the project's repository, this one included, clones it first, into the profile's folder there or else its home folder. No project starts on any machine. Saved images and files can be viewed through the relay. Sending image attachments, editing thread skills and Open app for an owned preview require the thread's machine. See the [relay plan](docs/plans/thread-relay.md).
 _Avoid_: Sync (for threads), tunnel
 
 **Update**:
@@ -314,8 +314,8 @@ The threads at the top of the sidebar, above the shelves: those back with you, m
 _Avoid_: Open list, active threads, ready threads (Ready is one state within it)
 
 **Shelf**:
-A group of threads in the sidebar below the inbox: Working, Offline, Snoozed and Settled, each folded or open as you left it. Working holds threads in progress without you: a running turn, a delivery GitHub is carrying, or a Wait. A thread comes back to the top of the inbox when it finishes or needs you. Settled wins over Snoozed, Snoozed over Offline, and Offline over Working and the inbox; the project dashboard, space view and thread mentions place threads the same way.
-_Avoid_: Folder, inbox, tab
+A group of threads in the sidebar below the inbox: Working, Offline, Snoozed and Settled, each folded or open as you left it. Working holds threads in progress without you: a running turn, a delivery GitHub is carrying, or a Wait. A thread comes back to the top of the inbox when it finishes or needs you. Settled wins over Snoozed, Snoozed over Offline, and Offline over Working and the inbox; the project dashboard and thread mentions place threads the same way, and the space view lists only the inbox and Working.
+_Avoid_: Folder, tab
 
 **Offline shelf**:
 The shelf between Working and Snoozed holding Offline threads, which can't be acted on until their machine is back. Its header counts them per machine, such as "Offline · MacGonagall 2". A thread moves there, or back, only once its machine has stayed offline, or online, for a few seconds, so a short drop or a brief return doesn't move rows back and forth.

@@ -58,7 +58,7 @@ function grace(from: ThreadPlace, to: ThreadPlace, t: ThreadView): number {
 /**
  * Observes every thread on each change. A thread that stops working stays on Working for
  * WORKING_GRACE_MS unless it needs you; a thread whose machine goes offline or comes back stays
- * where it was for OFFLINE_GRACE_MS. A thread that arrives in the open list from another place
+ * where it was for OFFLINE_GRACE_MS. A thread that arrives in the inbox from another place
  * counts as returned then. The first observation records no returns.
  */
 export function createPlacementTracker() {
