@@ -188,7 +188,7 @@ _Avoid_: Citation, quote (for the whole thing), feedback
 Sending a message to the harness during its current turn, without interrupting it or starting a separate turn.
 
 **Move on**:
-After a message that starts a turn is accepted, opening the thread at the top of the inbox other than the one just sent (whatever its status, Ready, Failed, Interrupted or one that needs you), with the cursor at the end of its draft. When the inbox is empty it opens the empty page instead, a page of its own that a reload keeps and that becomes a landing page later. Steering, queueing and a new thread's first message never move on. Tab in an empty composer still goes to the next inbox thread below the open one. On by default; Settings / Sending turns it off for this client.
+After a message that starts a turn is accepted, opening the thread at the top of the inbox other than the one just sent (whatever its status, Ready, Failed, Interrupted or one that needs you), with the cursor at the end of its draft. Clicking Ship moves on the same way once the delivery is accepted; Ship armed while writing moves on with the send. When the inbox is empty it opens the empty page instead, a page of its own that a reload keeps and that becomes a landing page later. Steering, queueing and a new thread's first message never move on. Tab in an empty composer still goes to the next inbox thread below the open one. On by default; Settings / Sending turns it off for this client.
 _Avoid_: Auto-advance, next thread (for this)
 
 **Handoff**:

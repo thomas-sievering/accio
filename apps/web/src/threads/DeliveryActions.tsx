@@ -24,7 +24,7 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
   const [loadError, setLoadError] = useState<string>();
   const [mode, setMode] = useState<DeliveryMode>('ship');
   const [attempt, setAttempt] = useState(0);
-  const { busy, error, run } = useAction();
+  const { busy, error, run, attempt: tryCall } = useAction();
   const [calling, setCalling] = useState<CallMethod>();
   const id = useId();
   // Above the Ship split, reaching back from its chevron over the Ship button.
@@ -33,7 +33,7 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
   });
   const pill = useRef<HTMLSpanElement>(null);
   useResizeGlide(pill);
-  const { now } = useThreads();
+  const { now, movesOn, moveOn } = useThreads();
   const delivery = thread.delivery;
   const released = !!thread.workspace?.releasedAt;
   // Settle also releases an unchanged worktree; only a released delivery reads as Archived.
@@ -64,8 +64,10 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
   /** `running`: a turn is under way, also when it started too recently for this view to know. */
   const deliver = (running = thread.status === 'running') => {
     setPending({ from: thread.delivery?.id, running, mode });
-    void run(async () => { await client.call('threads.deliver', { threadId: thread.id, mode }); });
+    return tryCall(() => client.call('threads.deliver', { threadId: thread.id, mode }));
   };
+  // GLOSSARY: Move on. Ship, like a send that starts a turn, opens the next inbox thread once the server takes it.
+  const ship = async () => { if (await deliver() && movesOn) moveOn(thread.id); };
   const arrived = !!pending && thread.delivery?.id !== pending.from;
   // An idle thread reports queued for a moment before shipping starts; the pill does not step back to it.
   const passing = arrived && !pending.running && thread.status !== 'running' && thread.delivery?.status === 'queued';
@@ -144,7 +146,7 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
   const offer = composer?.offer;
   useEffect(() => {
     // The send has just started or steered a turn, which the delivery then waits behind.
-    offer?.(offered ? { mode, reason: shipReason, deliver: () => latestDeliver.current(true) } : undefined);
+    offer?.(offered ? { mode, reason: shipReason, deliver: () => void latestDeliver.current(true) } : undefined);
   }, [offer, offered, mode, shipReason]);
   useEffect(() => () => offer?.(undefined), [offer]);
 
@@ -184,7 +186,7 @@ export function DeliveryActions({ thread, project, canRun }: { thread: ThreadVie
         : offerShip && <span ref={pill} className="delivery-split">
           <button disabled={!!shipBlocked || busy} aria-pressed={composer ? composer.armed : undefined}
             title={shipBlocked ?? (arming ? `${shipWhenDoneLabel(mode)}: sends with your message (Alt+S)` : mode === 'review' ? 'Prepare a PR without merging' : `Finish, verify and ship to ${target}`)}
-            onClick={() => { if (arming) composer.toggle(); else deliver(); }}><Ship />{mode === 'review' ? 'Prepare for review' : 'Ship'}</button>
+            onClick={() => { if (arming) composer.toggle(); else void ship(); }}><Ship />{mode === 'review' ? 'Prepare for review' : 'Ship'}</button>
           <button ref={trigger} popoverTarget={id} disabled={!!unavailable || busy || !summary?.available || !!thread.queuedMessages?.length} aria-label="Shipping options" aria-haspopup="menu"><ChevronDown /></button>
         </span>}
         {status?.canCheck && <Button className="delivery-pill" disabled={!!unavailable || busy} busy={calling === 'threads.checkDelivery'} busyLabel="Checking…" onClick={() => call('threads.checkDelivery')}><Refresh />Check now</Button>}
