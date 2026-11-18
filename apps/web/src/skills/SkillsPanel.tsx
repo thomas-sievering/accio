@@ -55,7 +55,8 @@ export function SkillsPanel({ context, composer }: { context: SkillContext; comp
     <div className="skills-panel" aria-busy={loading}>
       <div className="skills-head">
         <p className="note grow">{project ? <>For <b>{project.name}</b></> : value.projectId ? 'For this project' : 'No project'}</p>
-        <button type="button" className="side-icon" title="Refresh skills. Changes apply from the next turn." aria-label="Refresh skills" disabled={loading} onClick={reload}><Refresh /></button>
+        {/* aria-disabled, not disabled: a background reload must not drop the keyboard focus out of the panel. */}
+        <button type="button" className="side-icon" title="Refresh skills. Changes apply from the next turn." aria-label="Refresh skills" aria-disabled={loading} onClick={() => { if (!loading) reload(); }}><Refresh /></button>
       </div>
       {error && <p className="error skills-message" role="alert">Could not refresh skills: {error} <button type="button" className="link" onClick={reload}>Retry</button></p>}
       {value.unavailable && <p className="note skills-message" role="status">{value.unavailable}</p>}

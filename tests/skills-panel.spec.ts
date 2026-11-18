@@ -28,6 +28,16 @@ test('narrow panel wraps focus in both directions without a blank or background 
     }
   }
   await page.screenshot({ path: info.outputPath('overlay-keyboard-focus.png') });
+  // A reload the hub starts (any resources change) keeps the focus on Refresh, inside the panel.
+  const refresh = panel(page).getByRole('button', { name: 'Refresh skills', exact: true });
+  await refresh.focus();
+  const client = await chatClient(baseURL!);
+  try {
+    const [mcp] = (await client.call('resources.get', {})).mcps;
+    await client.call('mcp.save', mcp!);
+  } finally { client.close(); }
+  await expect(refresh).toHaveAttribute('aria-disabled', 'false');
+  await expect(refresh).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(toggle).toBeFocused();
   await expect(toggle).toHaveAttribute('aria-pressed', 'false');
