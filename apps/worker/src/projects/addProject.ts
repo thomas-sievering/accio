@@ -82,12 +82,28 @@ export function addProjectTool(deps: AddProjectDeps) {
       const alreadyText = already.length ? `${list(already)} ${already.length > 1 ? 'are' : 'is'} already a project.` : '';
       if (!plans.length) return `${alreadyText} Nothing was changed.`;
 
-      const lines = plans.map((p) => p.path
-        ? `${p.name} (${p.repoKey ?? 'no remote, stays on this machine'}) from ${p.path}, ${p.joins ? 'joining its project in' : 'in'} profile ${nameOf(p.profileId)}.`
-        : `${p.name} (${p.repoKey}) in profile ${nameOf(p.profileId)}, cloned when a thread starts in it.`);
+      // One row per project; what they share is said once, above the rows.
+      const oneProfile = plans.every((p) => p.profileId === plans[0]!.profileId);
+      const allCloned = plans.every((p) => !p.path);
+      const items = plans.map((p) => ({
+        label: p.name,
+        note: [
+          p.repoKey ?? 'no remote, stays on this machine',
+          p.path && `from ${p.path}`,
+          !oneProfile && `profile ${nameOf(p.profileId)}`,
+          p.joins && 'joins its existing project',
+          !allCloned && !p.path && 'cloned when a thread starts in it',
+        ].filter(Boolean).join(' · '),
+      }));
+      const shared = [
+        oneProfile && `In profile ${nameOf(plans[0]!.profileId)}.`,
+        allCloned && (plans.length > 1 ? 'Each is cloned when a thread starts in it.' : 'Cloned when a thread starts in it.'),
+        "A project's profile holds on every machine.",
+      ].filter(Boolean).join(' ');
       const outcome = await deps.confirm(threadId, {
         title: plans.length > 1 ? `Add ${plans.length} projects?` : `Add the project ${plans[0]!.name}?`,
-        detail: `${lines.join(' ')} A project's profile holds on every machine.`,
+        detail: shared,
+        items,
         allowLabel: plans.length > 1 ? 'Add projects' : 'Add project',
       }, signal);
       if (outcome !== 'allowed') return outcome === 'declined' ? 'The user declined adding these projects. Nothing was added.' : 'The confirmation ended without an answer. Nothing was added.';

@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import type { ConfirmationItem, ParamsOf } from '@accio/protocol';
+import type { ConfirmationEntry, ConfirmationItem, ParamsOf } from '@accio/protocol';
 import { UserError, type Router } from '../rpc/router.js';
 
 type Outcome = Exclude<ConfirmationItem['status'], 'pending'>;
 type Pending = { item: ConfirmationItem; threadId: string; resolve: (outcome: Outcome) => void; timer: NodeJS.Timeout };
-export type ConfirmationRequest = { title: string; detail: string; allowLabel: string };
+export type ConfirmationRequest = { title: string; detail: string; items?: ConfirmationEntry[]; allowLabel: string };
 
 /**
  * GLOSSARY: Confirmation. Cards an accio tool waits on until you allow or decline its action.

@@ -33,6 +33,13 @@ export function ConfirmationCard({ threadId, item }: { threadId: string; item: C
           <b>{item.title}</b>
           <span className="secret-state"><span className="secret-dot" />Needs your answer</span>
         </div>
+        {!!item.items?.length && (
+          <ul className="confirmation-items">
+            {item.items.map((entry, i) => (
+              <li key={i}><b>{entry.label}</b>{entry.note && <span>{entry.note}</span>}</li>
+            ))}
+          </ul>
+        )}
         <p className="secret-why">{item.detail}</p>
         {error && <p className="secret-error" role="alert">{error}</p>}
         <div className="secret-foot">

@@ -35,7 +35,7 @@ describe('add_project', () => {
     const { tool, deps, added } = setup();
     const text = await call(tool, { folders: [at('agent-odoo'), at('agent-epa'), at('remote-app')] });
     expect(deps.confirm).toHaveBeenCalledTimes(1);
-    expect(deps.confirm).toHaveBeenCalledWith('t1', expect.objectContaining({ title: 'Add 3 projects?', detail: expect.stringContaining('joining its project in profile HRC') }), expect.anything());
+    expect(deps.confirm).toHaveBeenCalledWith('t1', expect.objectContaining({ title: 'Add 3 projects?', items: expect.arrayContaining([{ label: 'remote-app', note: `github.com/hrc/remote-app · from ${at('remote-app')} · profile HRC · joins its existing project` }]) }), expect.anything());
     expect(added).toEqual([[at('agent-odoo'), 'work'], [at('agent-epa'), 'personal'], [at('remote-app'), 'work']]);
     expect(text).toContain('agent-epa (github.com/hrc/agent-epa) in profile Personal');
   });
@@ -70,7 +70,8 @@ describe('add_project', () => {
     const { tool, added, deps } = setup();
     const text = await call(tool, { repositories: ['github.com/hrc/agent-odoo', 'https://github.com/HRC/agent-epa.git', 'git@github.com:hrc/remote-app.git'] });
     expect(deps.checkRepository).toHaveBeenCalledWith('github.com/hrc/agent-odoo', 'personal');
-    expect(deps.confirm).toHaveBeenCalledWith('t1', expect.objectContaining({ detail: expect.stringContaining('agent-odoo (github.com/hrc/agent-odoo) in profile Personal, cloned when a thread starts in it.') }), expect.anything());
+    expect(deps.confirm).toHaveBeenCalledWith('t1', expect.objectContaining({ detail: "In profile Personal. Each is cloned when a thread starts in it. A project's profile holds on every machine.",
+      items: [{ label: 'agent-odoo', note: 'github.com/hrc/agent-odoo' }, { label: 'agent-epa', note: 'github.com/hrc/agent-epa' }] }), expect.anything());
     expect(added).toEqual([['github.com/hrc/agent-odoo', 'personal'], ['github.com/hrc/agent-epa', 'personal']]);
     expect(text).toContain('remote-app (github.com/hrc/remote-app) is already a project.');
     const named = setup();

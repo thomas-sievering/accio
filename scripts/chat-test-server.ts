@@ -125,6 +125,11 @@ const harness = new FakeHarness(async function* (run) {
     const result = await callAccioTool(run, 'add_cli', { package: name, version: '1.0.0', executable: name, level: 'everywhere' });
     yield* replyWith(result.split('\n').slice(0, 2).join(' ')); return;
   }
+  // GLOSSARY: Confirmation. "Projects fixture" asks add_project to add two folders, so the card lists each on its own row.
+  if (run.prompt === 'Projects fixture: add') {
+    const result = await callAccioTool(run, 'add_project', { folders: projectFolders });
+    yield* replyWith(result); return;
+  }
   // GLOSSARY: Wait. "Wait fixture: long" waits on a command that never exits on its own; "Wait fixture: short" on one that exits at once.
   if (run.prompt.startsWith('Wait fixture: ')) {
     const long = run.prompt.endsWith('long');
@@ -471,6 +476,16 @@ await client.waitFor('threads.changed', (threads) => threads.some((entry) => ent
 const waitThread = await client.call('threads.start', { profileId: 'personal', text: 'Wait fixture' });
 await client.waitFor('threads.changed', (threads) => threads.some((entry) => entry.id === waitThread.id && entry.status === 'idle'));
 const cliThread = await client.call('threads.start', { profileId: 'personal', text: 'CLI fixture' });
+// add_project: two folders with GitHub remotes, for the confirmation's one row per project.
+const projectFolders = await Promise.all(['agent-odoo', 'agent-swisscard'].map(async (name) => {
+  const folder = join(home, 'add-project', name);
+  await mkdir(folder, { recursive: true });
+  await git(folder, 'init', '-q');
+  await git(folder, 'remote', 'add', 'origin', `https://github.com/test/${name}.git`);
+  return folder;
+}));
+const projectsThread = await client.call('threads.start', { profileId: 'personal', text: 'Projects fixture' });
+await client.waitFor('threads.changed', (threads) => threads.some((entry) => entry.id === projectsThread.id && entry.status === 'idle'));
 await client.waitFor('threads.changed', (threads) => threads.some((entry) => entry.id === cliThread.id && entry.status === 'idle'));
 const needsYouThread = await client.call('threads.start', { profileId: 'personal', text: 'Needs you thread' });
 await client.waitFor('threads.changed', (threads) => threads.some((entry) => entry.id === needsYouThread.id && entry.status === 'idle'));

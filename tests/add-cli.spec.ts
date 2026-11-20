@@ -26,3 +26,19 @@ test('add_cli asks before adding a CLI everywhere, and the answer shapes what th
   await expect(page.getByRole('region', { name: 'Add allowed-cli for every thread?' })).toContainText('Allowed');
   await page.screenshot({ path: testInfo.outputPath('confirmation-allowed.png') });
 });
+
+test('add_project lists each project on its own row, with what they share said once', async ({ page, baseURL }, testInfo) => {
+  await page.goto(`${baseURL}/#token=${token}`);
+  await page.getByRole('button', { name: /Projects fixture/ }).first().click();
+  await page.locator('.composer textarea').fill('Projects fixture: add');
+  await page.keyboard.press('Enter');
+  const pending = page.getByRole('region', { name: 'Needs your answer: Add 2 projects?' });
+  const rows = pending.getByRole('listitem');
+  await expect(rows).toHaveCount(2);
+  await expect(rows.first()).toContainText('agent-odoo');
+  await expect(rows.first()).toContainText('github.com/test/agent-odoo');
+  await expect(pending).toContainText("In profile Personal. A project's profile holds on every machine.");
+  await pending.screenshot({ path: testInfo.outputPath('add-project-confirmation.png') });
+  await pending.getByRole('button', { name: 'Decline' }).click();
+  await expect(page.getByRole('region', { name: 'Add 2 projects?' })).toContainText('Declined');
+});

@@ -110,6 +110,26 @@ describe('thread relay between machines', () => {
     expect(read).toBe(marker);
   }, 30_000);
 
+  it('answers another machine’s confirmation through the hub', async () => {
+    let said: string | undefined;
+    const harness = new FakeHarness(async function* (run) {
+      const result = await callAccioTools(run, 'tools/call', { name: 'add_cli', arguments: { package: 'surf-cli', version: '1.0.0', executable: 'surf', level: 'everywhere' } });
+      said = result.content[0].text;
+      yield* replyWith('done');
+    });
+    const { mac, pc } = await machines(harness);
+    const profile = await mac.client.signedIn('Personal');
+    const thread = await mac.client.call('threads.start', { profileId: profile.id, text: 'add a cli' });
+    await pc.client.waitFor('threads.changed', (threads) => !!remote(threads, thread.id), 10_000);
+    const pending = async () => (await pc.client.call('threads.observe', { threadId: thread.id })).items.find((i) => i.kind === 'confirmation' && i.status === 'pending');
+    await expect.poll(pending, { timeout: 10_000 }).toBeTruthy();
+    const card = (await pending())!;
+    if (card.kind !== 'confirmation') throw new Error('Missing confirmation card');
+    await pc.client.call('confirmations.answer', { threadId: thread.id, requestId: card.requestId, allow: false });
+    await expect.poll(async () => remote(await mac.client.call('threads.list', {}), thread.id)?.status, { timeout: 10_000 }).toBe('idle');
+    expect(said).toContain('declined');
+  }, 30_000);
+
   it('shows another machine’s images and linked files, fetched once through the hub', async () => {
     const image = await readFile(fileURLToPath(new URL('../../../../tests/fixtures/chat.png', import.meta.url)));
     const harness = new FakeHarness(async function* (run) {

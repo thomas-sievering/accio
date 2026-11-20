@@ -45,7 +45,7 @@ export const RELAY_THREAD_METHODS = [
   'threads.deliver', 'threads.cancelDelivery', 'threads.checkDelivery', 'threads.archive',
   'threads.goal', 'threads.cancelWait', 'threads.setModel', 'threads.snooze', 'threads.settle', 'threads.reopen',
   'threads.rename', 'threads.regenerateTitle', 'threads.previewTitle', 'threads.delete',
-  'threads.offeredIssues', 'threads.implementIssue', 'secretRequests.answer',
+  'threads.offeredIssues', 'threads.implementIssue', 'secretRequests.answer', 'confirmations.answer',
 ] as const satisfies readonly MethodName[];
 
 /**

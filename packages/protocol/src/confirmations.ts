@@ -12,10 +12,15 @@ export type ConfirmationItem = {
   requestId: string;
   title: string;
   detail: string;
+  /** What the action covers, one row each, such as the projects add_project adds; shown under the detail. */
+  items?: ConfirmationEntry[];
   allowLabel: string;
   status: 'pending' | 'allowed' | 'declined' | 'expired' | 'cancelled';
   expiresAt: string;
 };
+
+/** One row of a confirmation: what it is, and a quieter note on where or how. */
+export type ConfirmationEntry = { label: string; note?: string };
 
 const Answer = z.object({ threadId: z.string().min(1).max(160), requestId: z.string().min(1).max(160), allow: z.boolean() });
 
