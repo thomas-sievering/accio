@@ -66,6 +66,8 @@ export class Projects {
   private shownElsewhere = '[]';
   /** Whether this run has compared each project's key with its checkout's remote yet. */
   private remotesChecked = false;
+  /** Whether projects.json has been read; a sync before then would see no projects. */
+  private loaded = false;
   private closed = false;
 
   constructor(
@@ -85,6 +87,7 @@ export class Projects {
 
   async load() {
     this.data = await this.file.read();
+    this.loaded = true;
     this.sync();
   }
 
@@ -141,7 +144,8 @@ export class Projects {
 
   /** Brings this machine in line with the hub, one pass at a time. */
   private sync() {
-    if (this.closed) return;
+    // The hub's list can arrive before this machine's projects are read; load() syncs then.
+    if (this.closed || !this.loaded) return;
     if (this.syncing) { this.syncAgain = true; return; }
     this.syncing = this.reconcile().catch((error) => console.error('[projects] hub sync failed', error)).finally(() => {
       this.syncing = undefined;

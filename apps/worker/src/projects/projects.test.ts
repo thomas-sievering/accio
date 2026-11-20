@@ -58,7 +58,9 @@ describe('projects slice', () => {
     execFileSync('git', ['-C', repo, 'remote', 'set-url', 'origin', 'https://github.com/me/notes.git']);
     t = await startTestApp({}, t.home);
     const next = await t.connect();
-    await expect.poll(async () => (await next.call('projects.get', {})).projects).toEqual([expect.objectContaining({ id: added.projectId, name: 'notes', repoKey: 'github.com/me/notes' })]);
+    // The worker follows the rename in the background after it starts (hub list, git, hub rename),
+    // which can take longer than the default second on a busy runner.
+    await expect.poll(async () => (await next.call('projects.get', {})).projects, { timeout: 10_000 }).toEqual([expect.objectContaining({ id: added.projectId, name: 'notes', repoKey: 'github.com/me/notes' })]);
     expect(await next.call('spaces.list', {})).toEqual([expect.objectContaining({ projectKeys: ['github.com/me/notes'], homeProjectKey: 'github.com/me/notes' })]);
     expect((await next.call('projects.get', {})).elsewhere).toEqual([]);
   });
