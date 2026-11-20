@@ -15,6 +15,14 @@ const OBSERVED_PER_PEER = 16;
 const MEDIA_TIMEOUT_MS = 5 * 60_000;
 /** What a machine answers for a method it doesn't serve to others. */
 const NOT_RELAYED = 'Not available from another machine.';
+/**
+ * How long a machine that left the relay still counts as holding its projects, so a brief drop doesn't
+ * hide them; as long as its threads wait before moving to the Offline shelf (web OFFLINE_GRACE_MS).
+ */
+export const HOLDING_GRACE_MS = 10_000;
+
+/** GLOSSARY: Relay. Another machine's projects and checkouts, while it is on the relay or only just left it. */
+export type Holding = { machineId: string; projects: ProjectsState['projects']; checkouts: ProjectsState['checkouts'] };
 
 export type RelayDeps = {
   here: string;
@@ -32,6 +40,8 @@ export type RelayDeps = {
   send: <E extends keyof Events>(event: E, data: Events[E]) => void;
   /** GLOSSARY: Shared settings. The hub's profile for a repository, else this machine's project's. */
   profileOf: (repoKey: string) => string | undefined;
+  /** Called when `holdings()` may have changed. */
+  holdingsChanged?: () => void;
 };
 
 type Cache = { machines: Record<string, RelaySnapshot> };
@@ -56,6 +66,9 @@ export class Relay {
   private seq = 0;
   private pushTimer?: ReturnType<typeof setTimeout>;
   private saveTimer?: ReturnType<typeof setTimeout>;
+  /** Machines that left the relay recently, by when they left. */
+  private left = new Map<string, number>();
+  private leftTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   constructor(home: string, private deps: RelayDeps) {
     this.file = new JsonFile(join(home, 'relay-cache.json'), () => ({ machines: {} }));
@@ -121,6 +134,16 @@ export class Relay {
     const snapshot = this.remote.get(machineId);
     if (machineId === this.deps.here || !this.online.has(machineId) || !snapshot) return undefined;
     return { projects: snapshot.projects, checkouts: snapshot.checkouts };
+  }
+
+  /**
+   * Other paired machines' projects and checkouts, while each is on the relay or left it less than
+   * HOLDING_GRACE_MS ago, so a project only on one of them stays listed through a brief drop.
+   */
+  holdings(): Holding[] {
+    return [...this.remote].flatMap(([machineId, snapshot]) => machineId !== this.deps.here && this.deps.machineName(machineId)
+      && (this.online.has(machineId) || this.left.has(machineId))
+      ? [{ machineId, projects: snapshot.projects, checkouts: snapshot.checkouts }] : []);
   }
 
   /**
@@ -325,7 +348,8 @@ export class Relay {
   private peers(machines: string[]) {
     const next = new Set(machines.filter((id) => id !== this.deps.here));
     const joined = [...next].filter((id) => !this.online.has(id));
-    for (const id of this.online) if (!next.has(id)) this.observers.delete(id);
+    for (const id of this.online) if (!next.has(id)) { this.observers.delete(id); this.leave(id); }
+    for (const id of joined) this.arrive(id);
     this.online = next;
     this.announce();
     this.announceMachines();
@@ -337,6 +361,22 @@ export class Relay {
     }
     // A machine that joined after this one changed has not seen its latest threads.
     if (joined.length) this.localChanged();
+    this.deps.holdingsChanged?.();
+  }
+
+  /** A machine that left keeps its projects listed a little longer, in case it is back at once. */
+  private leave(id: string) {
+    this.left.set(id, Date.now());
+    clearTimeout(this.leftTimers.get(id));
+    const timer = setTimeout(() => { this.left.delete(id); this.leftTimers.delete(id); this.deps.holdingsChanged?.(); }, HOLDING_GRACE_MS);
+    timer.unref?.();
+    this.leftTimers.set(id, timer);
+  }
+
+  private arrive(id: string) {
+    this.left.delete(id);
+    clearTimeout(this.leftTimers.get(id));
+    this.leftTimers.delete(id);
   }
 
   private store(machineId: string, snapshot: RelaySnapshot) {
@@ -347,6 +387,7 @@ export class Relay {
     this.index();
     this.announce();
     this.announceMachines();
+    this.deps.holdingsChanged?.();
     clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(() => { void this.file.write({ machines: Object.fromEntries(this.remote) }).catch(() => {}); }, 500);
     this.saveTimer.unref?.();
@@ -387,7 +428,8 @@ export class Relay {
     const online = this.online.has(machineId);
     return {
       ...view,
-      projectId: here?.id ?? thread.projectId,
+      // GLOSSARY: Project. Without one here, a repository's threads on every machine share its key, the id it is listed under.
+      projectId: here?.id ?? project?.repoKey ?? thread.projectId,
       ...(project && !here ? { projectName: project.name } : {}),
       machine: { id: machineId, name: this.deps.machineName(machineId) ?? 'Other machine', online },
     };
@@ -395,6 +437,7 @@ export class Relay {
 
   async close() {
     clearTimeout(this.pushTimer);
+    for (const timer of this.leftTimers.values()) clearTimeout(timer);
     this.socket?.close();
     if (this.saveTimer) { clearTimeout(this.saveTimer); await this.file.write({ machines: Object.fromEntries(this.remote) }).catch(() => {}); }
     await this.file.idle();

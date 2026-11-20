@@ -132,6 +132,7 @@ export async function openWorkspace(record: SavedHub, deps: WorkspaceDeps, slot:
     rename: (from, to, name) => settings.renameProject(from, to, name),
     onChanged: (listener) => { settings.onMachinesChanged(listener); },
     checkoutElsewhere: (repoKey) => relay.checkoutElsewhere(repoKey),
+    holdings: () => relay.holdings(),
   });
   const spaces = new Spaces(settings, broadcast);
 
@@ -231,6 +232,7 @@ export async function openWorkspace(record: SavedHub, deps: WorkspaceDeps, slot:
     machineName: (id) => settings.machine(id)?.name,
     send: (event, data) => { if (event === 'threads.changed') threads.threadsChanged(); send(event, data); },
     profileOf: (repoKey) => projects.profileOf(repoKey),
+    holdingsChanged: () => projects.refreshElsewhere(),
   });
   // GLOSSARY: Home. "New home…" in Settings → Spaces; a user action, not an accio tool.
   const newHomes = new NewHomes({

@@ -1,18 +1,24 @@
 import type { ProjectView } from '@accio/protocol';
 import { useProfiles } from '../profiles/profiles';
 import { ProjectMark } from '../projects/ProjectMark';
-import { useProjects } from '../projects/projects';
+import { useProjects, whereElsewhere } from '../projects/projects';
 import { useThreads } from '../threads/threads';
 import { usePopoverMenu } from '../ui/usePopoverMenu';
+import { useClient } from './connection';
 import { Check, Layers, ListFilter, Settings, User } from './icons';
+import { useLive } from './useLive';
 
 /**
  * Filter the thread list by profile or project without changing the open thread.
- * Projects sit under their profile, with a shortcut to each project's settings.
+ * Projects sit under their profile, with a shortcut to each project's settings; those with no
+ * checkout here say where they are (GLOSSARY: Project).
  */
 export function ScopeMenu({ onOpenProject }: { onOpenProject: (p: ProjectView) => void }) {
   const { profiles = [], filter, setFilter } = useProfiles();
   const { state } = useProjects();
+  const client = useClient();
+  const machines = useLive(() => client.call('machines.list', {}), 'machines.changed');
+  const elsewhere = state?.elsewhere ?? [];
   const { projectScope, setProjectScope } = useThreads();
   const { props, popover: menu } = usePopoverMenu({});
   const projects = [...(state?.projects ?? [])].sort((a, b) => a.name.localeCompare(b.name));
@@ -78,6 +84,16 @@ export function ScopeMenu({ onOpenProject }: { onOpenProject: (p: ProjectView) =
                     <Settings />
                   </button>
                 </div>
+              ))}
+            {elsewhere
+              .filter((p) => p.profileId === profile.id)
+              .map((p) => (
+                <button key={p.id} className="menu-item scope-project scope-elsewhere" role="menuitemradio"
+                  aria-checked={checked(profile.id, p.id)} title={p.repoKey ?? undefined} onClick={() => pick(profile.id, p.id)}>
+                  <ProjectMark id={p.id} name={p.name} size={16} />
+                  <span className="menu-text"><span>{p.name}</span><small>{whereElsewhere(p, machines)}</small></span>
+                  {checked(profile.id, p.id) && <Check />}
+                </button>
               ))}
           </div>
         ))}

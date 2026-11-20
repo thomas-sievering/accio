@@ -131,13 +131,18 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
  * A new thread before its first message, centred under a question as in T3 Code.
  * Sending creates the thread and its first turn together.
  */
-export function DraftPane({ checkoutId, profileId, repoKey: hubRepoKey, active = true, onOpenProfile, onOpenLimits }: { checkoutId: string; profileId?: string; repoKey?: string; active?: boolean; onOpenProfile: (profileId: string) => void; onOpenLimits: (profileId: string) => void }) {
+export function DraftPane({ checkoutId, profileId, elsewhereId, active = true, onOpenProfile, onOpenLimits }: { checkoutId: string; profileId?: string; elsewhereId?: string; active?: boolean; onOpenProfile: (profileId: string) => void; onOpenLimits: (profileId: string) => void }) {
   const client = useClient();
   const { select, threads } = useThreads();
-  // GLOSSARY: Project. A hub project this machine has no checkout of: the thread clones it on the machine chosen, under the hub's profile.
+  // GLOSSARY: Project. One this machine has no checkout of: a hub project is cloned on the machine chosen,
+  // under the hub's profile; a folder without a remote runs on the machine that has it.
   const { state: projectsState } = useProjects();
-  const hubProject = hubRepoKey ? projectsState?.elsewhere?.find((p) => p.repoKey === hubRepoKey) ?? projectsState?.projects.find((p) => p.repoKey === hubRepoKey) : undefined;
-  const projectName = hubRepoKey ? hubProject?.name ?? hubRepoKey.split('/').pop() : undefined;
+  const elsewhere = elsewhereId ? projectsState?.elsewhere?.find((p) => p.id === elsewhereId) : undefined;
+  // A repository cloned here since is this machine's project now; a folder's id has no slash.
+  const hubRepoKey = elsewhereId ? elsewhere ? elsewhere.repoKey ?? undefined : elsewhereId.includes('/') ? elsewhereId : undefined : undefined;
+  const folderElsewhere = !!elsewhereId && !hubRepoKey;
+  const hubProject = elsewhere ?? (hubRepoKey ? projectsState?.projects.find((p) => p.repoKey === hubRepoKey) : undefined);
+  const projectName = elsewhereId ? hubProject?.name ?? (hubRepoKey ? hubRepoKey.split('/').pop() : 'this project') : undefined;
   const place = usePlace(checkoutId, hubProject?.profileId ?? profileId);
   const [choice, setChoice] = useState<{ checkoutId: string; profileId?: string; model: ModelSelection; borrowFrom?: string }>();
   const chosen = choice?.checkoutId === checkoutId && choice.profileId === place.profile?.id ? choice : undefined;
@@ -151,13 +156,16 @@ export function DraftPane({ checkoutId, profileId, repoKey: hubRepoKey, active =
   const [chosenMachineId, setChosenMachineId] = useState<string>();
   // GLOSSARY: Relay. Another machine on the relay can run it; one without a checkout of the repository clones it first.
   const repoKey = hubRepoKey ?? place.project?.repoKey;
-  const startable = machines?.filter((m) => m.thisMachine || (m.relay && (!checkoutId || !!repoKey)));
+  // A folder without a remote can only run on a machine that has it.
+  const holders = folderElsewhere ? elsewhere?.on ?? [] : undefined;
+  const startable = machines?.filter((m) => holders ? !!m.relay && holders.some((c) => c.machineId === m.id) : m.thisMachine || (m.relay && (!checkoutId || !!repoKey)));
   const noCheckout = (m: MachineView) => !!repoKey && (m.thisMachine ? !checkoutId : !m.relay?.repos.includes(repoKey));
   const local = machines?.find((m) => m.thisMachine);
-  const machineId = chosenMachineId ?? local?.id;
+  const machineId = chosenMachineId ?? (holders ? startable?.[0]?.id : local?.id);
+  const remoteCheckoutId = holders?.find((c) => c.machineId === machineId)?.checkoutId;
   const machine = startable?.find((m) => m.id === machineId);
   // Until the list loads, a send goes to this machine, as the server does without a machine id.
-  const unavailable = !!machines && !machine?.connected;
+  const unavailable = holders ? !remoteCheckoutId || !machine?.connected : !!machines && !machine?.connected;
   const [starting, setStarting] = useState<FirstMessage>();
   // GLOSSARY: Issue. The checkout's open issues, offered on this machine, where the checkout is.
   const [issues, setIssues] = useState<{ checkoutId: string; list: IssueList }>();
@@ -193,9 +201,10 @@ export function DraftPane({ checkoutId, profileId, repoKey: hubRepoKey, active =
         <h1>{checkoutId ? <>What should we build in {place.project ? <span className="hero-project">{place.project.name}</span> : 'this checkout'}?</> : projectName ? <>What should we build in <span className="hero-project">{projectName}</span>?</> : 'What should we build?'}</h1>
         <ThreadNotice profile={spending} borrowed={!!borrowFrom} model={model} onOpenProfile={onOpenProfile} />
         {chosenMachineId && unavailable && <p className="note" role="status">The selected machine is offline. Choose an online machine.</p>}
+        {holders && !!machines && !startable?.length && <p className="note" role="status">No machine that has {projectName} is online, and it has no remote to clone here.</p>}
         <Composer
           target="draft"
-          draftId={newThreadDraftId(checkoutId, profileId, hubRepoKey)}
+          draftId={newThreadDraftId(checkoutId, profileId, elsewhereId)}
           profileId={place.profile?.id}
           skills={checkoutId ? { checkoutId, ...(place.profile ? { profileId: place.profile.id } : {}), harnessId: model.harnessId } : place.profile ? { profileId: place.profile.id, harnessId: model.harnessId } : undefined}
           imagesUnavailable={machine && !machine.thisMachine ? remoteImagesReason : undefined}
@@ -212,7 +221,8 @@ export function DraftPane({ checkoutId, profileId, repoKey: hubRepoKey, active =
               const images = uploads.length ? { images: uploads } : {};
               const lent = borrowFrom ? { borrowFrom } : {};
               const thread = await client.call('threads.start', checkoutId ? { checkoutId, text, model, machineId, ...lent, ...images, ...(sent ? { issue: { ref: sent.ref, title: sent.title } } : {}) }
-                : hubRepoKey ? { repoKey: hubRepoKey, text, model, machineId, ...lent, ...images } : { profileId: profileId!, text, model, machineId, ...lent, ...images });
+                : remoteCheckoutId ? { checkoutId: remoteCheckoutId, text, model, machineId, ...lent, ...images }
+                  : hubRepoKey ? { repoKey: hubRepoKey, text, model, machineId, ...lent, ...images } : { profileId: profileId!, text, model, machineId, ...lent, ...images });
               keepFirstMessage(client, thread.id, text, previews);
               await shown;
               if (open.current) await viewTransition('thread-open', () => select(thread.id));

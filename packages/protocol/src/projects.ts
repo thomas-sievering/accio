@@ -29,11 +29,26 @@ export type CheckoutView = {
  */
 export type HubProject = { repoKey: string; name: string; profileId: string };
 
+/**
+ * GLOSSARY: Project. One this machine has no checkout of that a thread can still start in from here:
+ * a hub project, which the thread clones first, or a folder without a remote on another machine that
+ * is online, where its thread runs.
+ */
+export type ProjectElsewhere = {
+  /** Its repository key, else that machine's project id; other machines' threads in it carry this id. */
+  id: string;
+  name: string;
+  profileId: string;
+  repoKey: string | null;
+  /** The other machines on the relay with a checkout of it, and those checkouts. */
+  on: { machineId: string; checkoutId: string; path: string }[];
+};
+
 export type ProjectsState = {
   projects: ProjectView[];
   checkouts: CheckoutView[];
-  /** The hub's projects this machine has no checkout of; a thread started in one clones it first. */
-  elsewhere?: HubProject[];
+  /** Projects this machine has no checkout of that a thread can start in from here. */
+  elsewhere?: ProjectElsewhere[];
 };
 
 /** What accio would do with a folder, before you add it. */

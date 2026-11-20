@@ -31,6 +31,47 @@ test('lists a hub project only another machine has, and starts it there', async 
   await expect(page.locator('.msg.assistant').last()).toContainText('MacBook here.');
 });
 
+test('lists another machine\'s folder without a remote while it is online, and runs its thread there', async ({ page, baseURL }, info) => {
+  test.setTimeout(60_000);
+  await page.goto(`${baseURL}/#token=relay-test-token`);
+  await page.getByRole('button', { name: 'Filter threads', exact: true }).click();
+  const scope = page.getByRole('menu', { name: 'Filter threads' });
+  await expect(scope.getByRole('menuitemradio', { name: /^mac-notes/ })).toContainText('On MacBook');
+  await page.screenshot({ path: info.outputPath('filter-elsewhere.png') });
+  await page.keyboard.press('Escape');
+
+  const picker = page.locator('.sidebar').getByRole('button', { name: 'New thread', exact: true });
+  await picker.click();
+  await page.getByRole('combobox', { name: 'Search projects' }).fill('mac-notes');
+  await page.getByRole('option', { name: /^mac-notes/ }).click();
+  await expect(page.getByRole('heading', { name: 'What should we build in mac-notes?' })).toBeVisible();
+  // Only the MacBook has it, so the thread runs there.
+  await page.getByRole('button', { name: 'Run on machine: MacBook', exact: true }).click();
+  const menu = page.getByRole('menu', { name: 'Run on machine' });
+  await expect(menu.getByRole('menuitemradio')).toHaveText(['MacBook']);
+  await page.keyboard.press('Escape');
+  await page.screenshot({ path: info.outputPath('folder-elsewhere-draft.png') });
+  await page.locator('.composer textarea').fill('Start in mac-notes');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect(page.locator('.thread-machine')).toContainText('MacBook');
+  await expect(page.locator('.thread-project-name')).toContainText('mac-notes');
+  await expect(page.locator('.msg.assistant').last()).toContainText('MacBook here.');
+
+  // With the MacBook off the relay it leaves the list once the grace runs out, and is back with it.
+  const client = await TestClient.open(`${baseURL!.replace('http:', 'ws:')}/ws?token=relay-test-token`);
+  try {
+    const checkoutId = (await client.call('projects.get', {})).checkouts[0]!.id;
+    await client.call('threads.start', { checkoutId, text: 'Put the MacBook to sleep' });
+    await expect.poll(async () => (await client.call('projects.get', {})).elsewhere?.some((p) => p.name === 'mac-notes'), { timeout: 20_000 }).toBe(false);
+    await picker.click();
+    await page.getByRole('combobox', { name: 'Search projects' }).fill('mac-notes');
+    await expect(page.getByRole('option', { name: /^mac-notes/ })).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await client.call('threads.start', { checkoutId, text: 'Wake the MacBook' });
+    await expect.poll(async () => (await client.call('projects.get', {})).elsewhere?.some((p) => p.name === 'mac-notes'), { timeout: 20_000 }).toBe(true);
+  } finally { client.close(); }
+});
+
 test('an offline machine\'s threads move to the Offline shelf and come back with it', async ({ page, baseURL }, info) => {
   // Each move waits out the flicker grace (10 s).
   test.setTimeout(60_000);

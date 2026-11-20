@@ -23,11 +23,11 @@ type ThreadsCtx = {
   /** After a send from `sentId` that started a turn: opens the top of the inbox, or the empty page. */
   moveOn: (sentId: string) => void;
   /**
-   * A new thread not yet started: just the checkout it will run in, or a hub project this machine has no
-   * checkout of (`repoKey`, with its profile). It exists on the server only once its first message is sent.
+   * A new thread not yet started: just the checkout it will run in, or a project this machine has no
+   * checkout of (`elsewhereId`, with its profile). It exists on the server only once its first message is sent.
    */
   draft: Draft | null;
-  openDraft: (checkoutId: string, profileId?: string, repoKey?: string) => void;
+  openDraft: (checkoutId: string, profileId?: string, elsewhereId?: string) => void;
   /** The open list plus the Working, Snoozed and Settled shelves, after the project scope and search. */
   shelves: ThreadShelves;
   /** Where the sidebar places a thread, so other lists of threads group them as it does. */
@@ -47,7 +47,17 @@ const EMPTY_PAGE = ':empty';
 // One switch per client, not per hub. The Playwright config and tests/electron-shell.cjs set it off by this name.
 const MOVES_ON_KEY = 'accio.moveOn';
 
-type Draft = { checkoutId: string; profileId?: string; repoKey?: string };
+type Draft = { checkoutId: string; profileId?: string; elsewhereId?: string };
+
+/** A saved draft; one saved before projects elsewhere had ids names its hub project's repository. */
+function readDraft(saved: string | null): Draft | null {
+  try {
+    const draft = JSON.parse(saved ?? 'null') as (Draft & { repoKey?: string }) | null;
+    if (!draft) return null;
+    const { repoKey, ...rest } = draft;
+    return repoKey && !rest.elsewhereId ? { ...rest, elsewhereId: repoKey } : rest;
+  } catch { return null; }
+}
 
 export type ThreadActions = {
   snooze: (id: string) => Promise<unknown>;
@@ -67,14 +77,16 @@ export function ThreadsProvider({ children, onNavigate }: { children: ReactNode;
   const [selectedId, setSelected] = useLocalState<string>('accio.thread', '');
   const draftKey = `accio:${client.hubId}:draft`;
   // Kept across restarts, like the selected thread, so the app reopens on the draft it closed on.
-  const [draft, updateDraft] = useState<ThreadsCtx['draft']>(() => { try { return JSON.parse(localStorage.getItem(draftKey) ?? 'null'); } catch { return null; } });
+  const [draft, updateDraft] = useState<ThreadsCtx['draft']>(() => readDraft(localStorage.getItem(draftKey)));
   const setDraft = (value: ThreadsCtx['draft']) => { updateDraft(value); if (value) localStorage.setItem(draftKey, JSON.stringify(value)); else localStorage.removeItem(draftKey); };
   const { filter } = useProfiles();
-  const { visible, state: projects } = useProjects();
+  const { visible, elsewhere, state: projects } = useProjects();
   const [storedScope, setProjectScope] = useLocalState<string>('accio.projectScope', '');
   const [query, setQuery] = useState('');
-  // A scope outside the selected profile (or a removed project) falls back to every project.
-  const projectScope = visible.some((p) => p.id === storedScope) ? storedScope : '';
+  // A scope outside the selected profile (or a removed project) falls back to every project. One
+  // whose machine went offline holds while threads in it are listed, until you change it.
+  const projectScope = visible.some((p) => p.id === storedScope) || elsewhere.some((p) => p.id === storedScope)
+    || (!!storedScope && !!threads?.some((t) => t.projectId === storedScope && (filter === 'all' || t.profileId === filter))) ? storedScope : '';
   const now = useMinuteClock();
   useMoveLegacyShelfMarks(threads);
   const placement = usePlacement(threads, now);
@@ -111,8 +123,8 @@ export function ThreadsProvider({ children, onNavigate }: { children: ReactNode;
         onNavigate();
       },
       draft,
-      openDraft: (checkoutId, profileId, repoKey) => {
-        setDraft({ checkoutId, profileId, ...(repoKey ? { repoKey } : {}) });
+      openDraft: (checkoutId, profileId, elsewhereId) => {
+        setDraft({ checkoutId, profileId, ...(elsewhereId ? { elsewhereId } : {}) });
         onNavigate();
       },
       placement,

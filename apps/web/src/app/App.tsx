@@ -65,6 +65,7 @@ function Shell({ page, setPage }: { page: Page; setPage: Dispatch<SetStateAction
   const { spaces } = useSpaces();
   const { threads, selectedId, select, draft, emptyPage, projectScope, setProjectScope } = useThreads();
   const filterLabel = state?.projects.find((p) => p.id === projectScope)?.name
+    ?? state?.elsewhere?.find((p) => p.id === projectScope)?.name
     ?? profiles?.find((p) => p.id === filter)?.name;
   const thread = threads?.find((t) => t.id === selectedId);
   const [sheet, setSheet] = useState<OpenSheet>(null);
@@ -223,7 +224,7 @@ function Shell({ page, setPage }: { page: Page; setPage: Dispatch<SetStateAction
           {/* Keep the composer and reading position mounted under every other page. */}
           <div className="thread-surface" hidden={!threadActive}>
             {draft ? (
-              <DraftPane key={`${draft.checkoutId}:${draft.profileId}:${draft.repoKey ?? ''}`} {...draft} active={threadActive} onOpenProfile={openProfile} onOpenLimits={openLimits} />
+              <DraftPane key={`${draft.checkoutId}:${draft.profileId}:${draft.elsewhereId ?? ''}`} {...draft} active={threadActive} onOpenProfile={openProfile} onOpenLimits={openLimits} />
             ) : thread ? (
               <ThreadPane key={thread.id} thread={thread} onOpenSecrets={openSecrets} active={threadActive} onOpenProfile={openProfile} onOpenLimits={openLimits} />
             ) : (

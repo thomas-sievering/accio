@@ -4,7 +4,7 @@ import { useProjects } from './projects';
 /** A project's mark: its initial on a tile tinted with the project's own colour. */
 export function ProjectMark({ id, size = 18, name: fallback }: { id: string; size?: number; name?: string }) {
   const { state } = useProjects();
-  const name = state?.projects.find((p) => p.id === id)?.name ?? fallback ?? '';
+  const name = state?.projects.find((p) => p.id === id)?.name ?? state?.elsewhere?.find((p) => p.id === id)?.name ?? fallback ?? '';
   const initial = name.match(/[\p{L}\p{N}]/u)?.[0]?.toUpperCase() ?? '';
   return (
     <span

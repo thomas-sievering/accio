@@ -106,7 +106,7 @@ function ownSpace(deps: EditSpaceDeps, threadId: string, spaces: readonly Space[
 function knownProjects(state: ProjectsState, space: Space): Known[] {
   const all: Known[] = [
     ...state.projects.map((p) => ({ key: projectKey(p), name: p.name })),
-    ...(state.elsewhere ?? []).map((p) => ({ key: p.repoKey, name: p.name })),
+    ...(state.elsewhere ?? []).flatMap((p) => p.repoKey ? [{ key: p.repoKey, name: p.name }] : []),
     ...space.projectKeys.map((key) => ({ key, name: nameOfKey(key) })),
   ];
   return all.filter((p, i) => all.findIndex((q) => q.key === p.key) === i);

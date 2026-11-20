@@ -1,5 +1,5 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
-import type { CheckoutView, HubProject, ProjectView, ProjectsState } from '@accio/protocol';
+import type { CheckoutView, MachineView, ProjectElsewhere, ProjectView, ProjectsState } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { useLive } from '../app/useLive';
 import { useProfiles } from '../profiles/profiles';
@@ -8,8 +8,11 @@ type ProjectsCtx = {
   state: ProjectsState | undefined;
   /** Projects of the selected profile (or all), sorted by name. */
   visible: ProjectView[];
-  /** GLOSSARY: Project. The hub's projects of the selected profile (or all) that this machine has no checkout of, sorted by name. */
-  elsewhere: HubProject[];
+  /**
+   * GLOSSARY: Project. Projects of the selected profile (or all) that this machine has no checkout of
+   * but a thread can start in from here, sorted by name.
+   */
+  elsewhere: ProjectElsewhere[];
   checkoutsOf: (projectId: string) => CheckoutView[];
 };
 
@@ -38,4 +41,10 @@ export function useProjects(): ProjectsCtx {
   const c = useContext(Ctx);
   if (!c) throw new Error('useProjects outside ProjectsProvider');
   return c;
+}
+
+/** Where a project with no checkout here is: the online machines that have it, else nowhere yet. */
+export function whereElsewhere(project: ProjectElsewhere, machines: MachineView[] | undefined): string {
+  const names = project.on.map((c) => machines?.find((m) => m.id === c.machineId)?.name).filter((n): n is string => !!n);
+  return names.length ? `On ${[...new Set(names)].join(', ')}` : 'Not on this machine';
 }

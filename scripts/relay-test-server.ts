@@ -73,6 +73,10 @@ const macOnly = join(root, 'MacBook', 'mac-only');
 await mkdir(macOnly); await git(macOnly, 'init', '--quiet'); await git(macOnly, 'remote', 'add', 'origin', 'https://github.com/example/mac-only.git');
 const macOnlyCheckout = await mac.client.call('checkouts.add', { path: macOnly, profileId: profile.id });
 await mac.client.call('threads.start', { checkoutId: macOnlyCheckout.id, text: 'Only the MacBook has this repository' });
+// A folder without a remote, only on the MacBook: listed on the PC while the MacBook is online, and its threads run there.
+const macNotes = join(root, 'MacBook', 'mac-notes');
+await mkdir(macNotes); await git(macNotes, 'init', '--quiet');
+await mac.client.call('checkouts.add', { path: macNotes, profileId: profile.id });
 
 console.log(`Relay fixture ready: http://127.0.0.1:${pc.app.port}/#token=${token}`);
 process.send?.({ type: 'ready' });

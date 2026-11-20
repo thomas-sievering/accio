@@ -1,9 +1,11 @@
 import { useId, useRef, useState } from 'react';
+import { useClient } from '../app/connection';
 import { ArrowLeft, Chevron, MessageSquarePlus } from '../app/icons';
+import { useLive } from '../app/useLive';
 import { useProfiles } from '../profiles/profiles';
 import { folderName } from '../projects/folderName';
 import { ProjectMark } from '../projects/ProjectMark';
-import { useProjects } from '../projects/projects';
+import { useProjects, whereElsewhere } from '../projects/projects';
 import { usePopoverMenu } from '../ui/usePopoverMenu';
 import { useThreads } from './threads';
 
@@ -12,6 +14,8 @@ export function NewThreadButton({ className = 'side-icon', label }: { className?
   const { openDraft, projectScope, setProjectScope, threads, selectedId } = useThreads();
   const { visible, elsewhere, checkoutsOf } = useProjects();
   const { profiles = [], filter } = useProfiles();
+  const client = useClient();
+  const machines = useLive(() => client.call('machines.list', {}), 'machines.changed');
   const search = useRef<HTMLInputElement>(null);
   const id = useId();
   const [query, setQuery] = useState('');
@@ -26,17 +30,18 @@ export function NewThreadButton({ className = 'side-icon', label }: { className?
     focus: () => search.current,
     onToggle: (open) => { if (open) go(''); },
   });
-  const start = (checkoutId: string, profileId?: string, repoKey?: string) => {
+  const start = (checkoutId: string, profileId?: string, elsewhereId?: string) => {
     menu.current?.hidePopover();
     setProjectScope('');
-    openDraft(checkoutId, profileId, repoKey);
+    openDraft(checkoutId, profileId, elsewhereId);
   };
   const go = (next: string) => {
     setStep(next); setQuery(''); setActiveId(next ? '' : currentProject);
     search.current?.focus();
   };
   type Choice = { id: string; name: string; detail?: string; projectId?: string; next?: boolean; disabled?: boolean; pick: () => void };
-  // GLOSSARY: Project. The hub's projects without a checkout here are listed among them; sending clones one on the chosen machine.
+  // GLOSSARY: Project. Those without a checkout here are listed among them: a hub project is cloned on the
+  // machine chosen, and a folder without a remote runs on the machine that has it.
   const projectChoices: Choice[] = [
     ...visible.map((p) => {
       const checkouts = checkoutsOf(p.id);
@@ -46,7 +51,7 @@ export function NewThreadButton({ className = 'side-icon', label }: { className?
         pick: () => checkouts.length === 1 ? start(checkouts[0]!.id) : go(p.id),
       };
     }),
-    ...elsewhere.map((p) => ({ id: `hub:${p.repoKey}`, name: p.name, projectId: p.repoKey, pick: () => start('', p.profileId, p.repoKey) })),
+    ...elsewhere.map((p) => ({ id: `elsewhere:${p.id}`, name: p.name, detail: whereElsewhere(p, machines), projectId: p.id, pick: () => start('', p.profileId, p.id) })),
   ].sort((a, b) => a.name.localeCompare(b.name));
   const project = visible.find((p) => p.id === step);
   const choices: Choice[] = step === 'profiles'

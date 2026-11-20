@@ -308,8 +308,9 @@ describe('thread relay between machines', () => {
     const notes = await checkout(mac, 'notes', 'https://github.com/me/notes', work.id);
     fetchFrom(join(mac.app.home, 'notes.git'), 'https://github.com/me/notes');
     cleanup.push(async () => forgetFetchFrom());
-    const listed = await pc.client.waitFor('projects.changed', (s) => !!s.elsewhere?.some((p) => p.repoKey === 'github.com/me/notes'), 10_000);
-    expect(listed.elsewhere).toEqual([{ repoKey: 'github.com/me/notes', name: 'notes', profileId: work.id }]);
+    // Listed from the hub, and from the MacBook's checkout of it once the relay has its list.
+    await expect.poll(async () => (await pc.client.call('projects.get', {})).elsewhere?.find((p) => p.id === 'github.com/me/notes')?.on.length, { timeout: 10_000 }).toBe(1);
+    expect((await pc.client.call('projects.get', {})).elsewhere).toEqual([{ id: 'github.com/me/notes', repoKey: 'github.com/me/notes', name: 'notes', profileId: work.id, on: [{ machineId: macId, checkoutId: notes.id, path: notes.path }] }]);
     expect((await mac.client.call('projects.get', {})).elsewhere).toEqual([]);
 
     // Sending on this machine clones it into the profile's folder here, under the hub's profile.
@@ -360,5 +361,27 @@ describe('thread relay between machines', () => {
     await mac.client.waitFor('projects.changed', (s) => !!s.elsewhere?.some((p) => p.repoKey === 'github.com/me/docs'), 10_000);
     await pc.client.call('checkouts.remove', { id: docs.id });
     await expect.poll(async () => (await mac.client.call('projects.get', {})).elsewhere?.map((p) => p.repoKey), { timeout: 10_000 }).toEqual(['github.com/me/notes']);
+  }, 60_000);
+
+  it('lists another machine’s folder without a remote while that machine is online, and starts its threads there', async () => {
+    const { mac, pc } = await machines();
+    const personal = await mac.client.signedIn('Personal');
+    const macId = (await mac.client.thisMachine()).id;
+    const path = join(mac.app.home, 'scratch');
+    await mkdir(path);
+    const scratch = await mac.client.call('checkouts.add', { path, profileId: personal.id });
+    const macProject = (await mac.client.call('projects.get', {})).projects.find((p) => p.id === scratch.projectId)!;
+    expect(macProject.repoKey).toBeNull();
+
+    const listed = await pc.client.waitFor('projects.changed', (s) => !!s.elsewhere?.some((p) => p.id === macProject.id), 10_000);
+    expect(listed.elsewhere?.find((p) => p.id === macProject.id)).toEqual({
+      id: macProject.id, name: 'scratch', profileId: personal.id, repoKey: null, on: [{ machineId: macId, checkoutId: scratch.id, path: scratch.path }],
+    });
+
+    // Started from the PC, it runs in the MacBook's folder, and is listed under the same project.
+    const thread = await pc.client.call('threads.start', { checkoutId: scratch.id, text: 'from the pc', machineId: macId });
+    expect(thread.machine?.id).toBe(macId);
+    expect(thread.projectId).toBe(macProject.id);
+    expect((await mac.client.call('threads.list', {})).find((t) => t.id === thread.id)?.checkoutId).toBe(scratch.id);
   }, 60_000);
 });

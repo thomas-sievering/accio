@@ -1,6 +1,6 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import type { HubProject, ProjectsState } from '@accio/protocol';
+import type { HubProject, ProjectElsewhere, ProjectsState } from '@accio/protocol';
 import type { Profiles } from '../profiles/profiles.js';
 import type { Machines } from '../machine/machine.js';
 import type { Broadcast, Router } from '../rpc/router.js';
@@ -38,6 +38,8 @@ export type ProjectsHub = {
   onChanged: (listener: () => void) => void;
   /** Whether another machine has a checkout of the repository, by its last list even while offline. */
   checkoutElsewhere: (repoKey: string) => boolean;
+  /** GLOSSARY: Relay. Other machines' projects and checkouts, while each is on the relay or only just left it. */
+  holdings: () => { machineId: string; projects: ProjectsState['projects']; checkouts: ProjectsState['checkouts'] }[];
 };
 
 /** How long a project the hub didn't take, such as while it was offline, waits before it is registered again. */
@@ -96,9 +98,35 @@ export class Projects {
     return { ...this.data, elsewhere: this.elsewhere() };
   }
 
-  private elsewhere(): HubProject[] {
-    const here = new Set(this.data.projects.map((p) => p.repoKey));
-    return (this.hub.list() ?? []).filter((p) => !here.has(p.repoKey));
+  /**
+   * GLOSSARY: Project. The projects with no checkout here that a thread can still start in: every
+   * repository the hub or another machine has, which a thread clones first, and each folder without
+   * a remote on another machine on the relay, where its thread runs. One only on a machine that is
+   * off the relay is left out until it is back.
+   */
+  private elsewhere(): ProjectElsewhere[] {
+    const here = new Set(this.data.projects.flatMap((p) => p.repoKey ? [p.repoKey] : []));
+    const found = new Map<string, ProjectElsewhere>();
+    for (const p of this.hub.list() ?? []) {
+      if (!here.has(p.repoKey)) found.set(p.repoKey, { id: p.repoKey, name: p.name, profileId: p.profileId, repoKey: p.repoKey, on: [] });
+    }
+    for (const { machineId, projects, checkouts } of this.hub.holdings()) {
+      for (const c of checkouts) {
+        const p = projects.find((x) => x.id === c.projectId);
+        if (!p || (p.repoKey && here.has(p.repoKey))) continue;
+        const id = p.repoKey ?? p.id;
+        const entry = found.get(id) ?? { id, name: p.name, profileId: p.profileId, repoKey: p.repoKey, on: [] };
+        entry.on.push({ machineId, checkoutId: c.id, path: c.path });
+        found.set(id, entry);
+      }
+    }
+    return [...found.values()].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+  }
+
+  /** Tells clients when the projects listed from elsewhere change, such as when another machine comes or goes. */
+  refreshElsewhere() {
+    if (this.closed || JSON.stringify(this.elsewhere()) === this.shownElsewhere) return;
+    this.announce();
   }
 
   /** GLOSSARY: Project. The profile the hub keeps for a repository, else this machine's project's. */
