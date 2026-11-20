@@ -12,13 +12,27 @@ const suites = {
 
 // Each invocation owns its ports; never reuse another checkout's server. Workers reload this
 // config, so they inherit the invocation's ports (ACCIO_<SUITE>_TEST_PORT) instead of allocating again.
+// Ports come from below every OS's ephemeral range (Linux starts at 32768, macOS and Windows at
+// 49152): the fixtures' own port-0 listeners could otherwise take a port between this check and
+// the fixture server binding it.
+const chosen = new Set<number>();
+function free(port: number) {
+  return new Promise<boolean>((resolve) => {
+    const listener = createServer();
+    listener.once('error', () => resolve(false));
+    listener.listen(port, '127.0.0.1', () => listener.close(() => resolve(true)));
+  });
+}
 async function port(suite: string) {
   const name = `ACCIO_${suite.toUpperCase()}_TEST_PORT`;
   if (!process.env[name]) {
-    const listener = createServer();
-    await new Promise<void>((resolve, reject) => { listener.once('error', reject); listener.listen(0, '127.0.0.1', resolve); });
-    process.env[name] = String((listener.address() as { port: number }).port);
-    await new Promise<void>(resolve => listener.close(() => resolve()));
+    for (;;) {
+      const candidate = 20_000 + Math.floor(Math.random() * 12_000);
+      if (chosen.has(candidate) || !(await free(candidate))) continue;
+      chosen.add(candidate);
+      process.env[name] = String(candidate);
+      break;
+    }
   }
   return process.env[name];
 }

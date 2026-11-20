@@ -4,7 +4,7 @@ import type { UserActionItem } from '@accio/protocol';
 import { UserError } from '../rpc/router.js';
 import { accioTool } from '../tools/tools.js';
 
-export const NEEDS_YOU_TOOL = 'needs_you';
+const NEEDS_YOU_TOOL = 'needs_you';
 
 /**
  * GLOSSARY: User action. At most one pending per thread; asking again replaces its wording.
