@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import WebSocket from 'ws';
@@ -85,7 +85,9 @@ export function claudeAccount(profile: ProfileView, accounts: readonly AccountVi
  * restart on the same machine.
  */
 export async function startTestApp(deps: Partial<AppDeps> & TestHatDeps = {}, existingHome?: string) {
-  const home = existingHome ?? (await mkdtemp(join(tmpdir(), 'accio-test-')));
+  // Resolved, so paths the tests build match the real paths the worker reports (macOS's
+  // temp folder is behind the /var -> /private/var symlink).
+  const home = existingHome ?? (await realpath(await mkdtemp(join(tmpdir(), 'accio-test-'))));
   const { claudeFetch, anthropicUrl, openaiUrl, openaiFetch, ...appDeps } = deps;
   const hat = await startTestSortingHat(home, { claudeFetch, anthropicUrl, openaiUrl, openaiFetch, codexFactory: deps.codexFactory });
   let app: Awaited<ReturnType<typeof startApp>>;

@@ -1,5 +1,5 @@
 /** Isolated real server + deterministic harness for the committed chat browser checks. */
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
@@ -16,7 +16,9 @@ import { lineCount, pastesIn, reactionsIn, typedText } from '../packages/protoco
 import { reactionInfo } from '../packages/protocol/src/reactions.js';
 import { measurePrompt } from '../apps/worker/src/harnesses/promptMeasurement.js';
 
-const home = await mkdtemp(join(tmpdir(), 'accio-chat-browser-'));
+// Resolved, so the fixture's paths match the real paths the worker reports (macOS's temp
+// folder is behind the /var -> /private/var symlink).
+const home = await realpath(await mkdtemp(join(tmpdir(), 'accio-chat-browser-')));
 // Disposable encryption for this isolated fixture, including headless Linux runners.
 process.env.ACCIO_SECRET_KEY = Buffer.alloc(32, 42).toString('base64');
 const fixture = (name: string) => readFile(resolve('tests/fixtures', name));

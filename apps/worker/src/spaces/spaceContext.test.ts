@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -29,7 +29,7 @@ describe('the Space section of a thread in a space', () => {
   afterEach(async () => { forgetFetchFrom(); await t?.stop(); t = undefined; await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); });
 
   it('names the space and lists the other projects with their checkout and branch, or that they are not available on this machine', async () => {
-    root = await mkdtemp(join(tmpdir(), 'accio-space-'));
+    root = await realpath(await mkdtemp(join(tmpdir(), 'accio-space-')));
     const harness = new FakeHarness();
     t = await startTestApp({ harness });
     const c = await t.signedIn('Personal');
@@ -51,7 +51,7 @@ describe('the Space section of a thread in a space', () => {
   });
 
   it('clones a missing sibling in the background, listing it as not on this machine yet until it is there', async () => {
-    root = await mkdtemp(join(tmpdir(), 'accio-space-'));
+    root = await realpath(await mkdtemp(join(tmpdir(), 'accio-space-')));
     const harness = new FakeHarness();
     t = await startTestApp({ harness });
     const c = await t.signedIn('Personal');
@@ -79,7 +79,7 @@ describe('the Space section of a thread in a space', () => {
   });
 
   it('gives no section outside a space, and follows the space from the next turn', async () => {
-    root = await mkdtemp(join(tmpdir(), 'accio-space-'));
+    root = await realpath(await mkdtemp(join(tmpdir(), 'accio-space-')));
     const harness = new FakeHarness();
     t = await startTestApp({ harness });
     const c = await t.signedIn('Personal');
@@ -110,7 +110,7 @@ describe('the Space section of a thread in a space', () => {
   });
 
   it('gives sub-agents the same section as their thread', async () => {
-    root = await mkdtemp(join(tmpdir(), 'accio-space-'));
+    root = await realpath(await mkdtemp(join(tmpdir(), 'accio-space-')));
     const harness = new FakeHarness(async function* (run) {
       // The thread asks for a sub-agent; the sub-agent's own run has no accio tools.
       if (run.tools) await callAccioTools(run, 'tools/call', { name: 'agent', arguments: { description: 'Read hrc_api', prompt: 'Summarise hrc_api.' } });
@@ -130,7 +130,7 @@ describe('the Space section of a thread in a space', () => {
   });
 
   it('lists a checkout that is still there when an earlier one of the same project was deleted', async () => {
-    root = await mkdtemp(join(tmpdir(), 'accio-space-'));
+    root = await realpath(await mkdtemp(join(tmpdir(), 'accio-space-')));
     const harness = new FakeHarness();
     t = await startTestApp({ harness });
     const c = await t.signedIn('Personal');
@@ -153,7 +153,7 @@ describe('the home part of the Space section', () => {
 
   /** A space hrc with the home hrc_home (whose AGENTS.md says `agents`, when given) and the project hrc_mcp. */
   async function hrcSpace(agents?: string) {
-    root = await mkdtemp(join(tmpdir(), 'accio-space-'));
+    root = await realpath(await mkdtemp(join(tmpdir(), 'accio-space-')));
     const harness = new FakeHarness();
     t = await startTestApp({ harness });
     const c = await t.signedIn('Personal');
@@ -211,7 +211,7 @@ describe('the home part of the Space section', () => {
 
   it("gives a thread in the home the other projects but not the home's AGENTS.md again", async () => {
     // A local home, so its thread needs no fetch.
-    root = await mkdtemp(join(tmpdir(), 'accio-space-'));
+    root = await realpath(await mkdtemp(join(tmpdir(), 'accio-space-')));
     const harness = new FakeHarness();
     t = await startTestApp({ harness });
     const c = await t.signedIn('Personal');

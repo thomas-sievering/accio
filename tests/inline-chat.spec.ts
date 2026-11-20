@@ -133,7 +133,7 @@ test('Enter steers, Ctrl changes Send and queues; an unsaved queued edit closes 
   const tray = page.getByRole('region', { name: 'Queued messages' });
   await expect(tray).toContainText('Queued first');
   await input.fill('Queued second');
-  await page.getByRole('button', { name: 'Send', exact: true }).click({ modifiers: ['Control'] });
+  await page.getByRole('button', { name: 'Send', exact: true }).click({ modifiers: ['ControlOrMeta'] });
   await expect(tray.locator('.queued-message')).toHaveCount(2);
   await tray.getByRole('button', { name: 'Steer now', exact: true }).first().click();
   await expect(page.getByText('Steered: Queued first', { exact: true })).toBeVisible();

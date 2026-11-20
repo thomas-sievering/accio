@@ -49,8 +49,8 @@ test('keyboard focus visibly reveals a complete title without moving adjacent ro
   // Wait until the completed turn leaves Working; that move remounts its row. The draft's own row is not the thread.
   await expect(page.locator('.sidebar nav > .rows .row:not(.draft) .row-main').filter({ hasText: 'Queued title tooltip' })).toBeVisible();
   const row = page.locator('.row:not(.draft) .row-main').filter({ hasText: 'Queued title tooltip' });
-  await row.focus();
-  await page.keyboard.press('Shift+F10');
+  // Renaming is only setup here. Shift+F10 opens no menu on macOS, so right-click.
+  await row.click({ button: 'right' });
   await page.getByRole('menuitem', { name: /Rename/ }).click();
   const title = 'A complete saved title with enough words to wrap beyond the compact sidebar row and still be readable by keyboard';
   await page.getByRole('textbox', { name: 'Thread title', exact: true }).fill(title);
@@ -61,15 +61,17 @@ test('keyboard focus visibly reveals a complete title without moving adjacent ro
   const search = page.getByRole('searchbox', { name: 'Search threads', exact: true });
   await search.fill(title);
   await expect(page.locator('.row-main')).toHaveCount(1);
-  const before = await renamed.boundingBox();
+  // Layout height, which a row's arrival scale doesn't change; a focus style that moved
+  // adjacent rows would.
+  const layoutHeight = () => renamed.evaluate(el => (el as HTMLElement).offsetHeight);
+  const before = await layoutHeight();
   await search.focus();
   for (let i = 0; i < 12 && !(await renamed.evaluate(el => el === document.activeElement)); i++) await page.keyboard.press('Tab');
   await expect(renamed).toBeFocused();
   const tip = page.getByRole('tooltip');
   await expect(tip).toHaveText(title);
   await expect(tip).toBeInViewport();
-  // Sub-pixel layout rounding differs between renderers; a moved row changes height by whole pixels.
-  expect((await renamed.boundingBox())?.height).toBeCloseTo(before!.height, 1);
+  expect(await layoutHeight()).toBe(before);
   // Composer controls carry no tooltip.
   await effort(page).hover();
   await expect(tip.filter({ hasText: 'Effort' })).toHaveCount(0);

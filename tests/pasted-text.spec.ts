@@ -25,7 +25,8 @@ test('a long paste folds into Pasted text, reaches the model whole and shows fol
   expect(await pasteText(page, log)).toBe(true);
   await expect(chip).toHaveCount(1);
   await expect(chip).toContainText('200 lines');
-  await expect(page.locator('.composer-hint')).toContainText('Ctrl+Shift+V');
+  // The hint names the shortcut as the platform writes it.
+  await expect(page.locator('.composer-hint')).toContainText(process.platform === 'darwin' ? '⌘⇧V' : 'Ctrl+Shift+V');
   await expect(textarea).toHaveValue('');
   await page.screenshot({ path: testInfo.outputPath('composer-paste.png') });
 
