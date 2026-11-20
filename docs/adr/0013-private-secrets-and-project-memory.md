@@ -23,4 +23,6 @@ The Hub encrypts saved values with AES-256-GCM and authenticated secret/profile/
 
 Metadata/status alone enters transcripts, copied transcripts, events and Settings responses. Concurrent answers are claimed once; retries do not duplicate deliveries. Changing/deleting a secret removes future access and attempts to remove active copies, but cannot recall values held by an external process or revoke them at their service. Network or unlock errors do not cause another request to paste the same credential.
 
-The current in-process Hub is a deployment boundary, not OS isolation from a same-user full-access harness. Remote pairing/relay is not implemented by this feature. Opaque one-use references and external vaults can be added when a registered operation exists that consumes them inside trusted service code.
+The current in-process Hub is a deployment boundary, not OS isolation from a same-user full-access harness. Opaque one-use references and external vaults can be added when a registered operation exists that consumes them inside trusted service code.
+
+*Amended 2026-11-20.* A secret request can be answered from another machine paired with the hub: the answer goes through the relay to the machine running the thread, which delivers the file there as before. The hub forwards relay frames without reading them, and Save & use already sends the value to the hub, so the relay adds no new holder of the value.

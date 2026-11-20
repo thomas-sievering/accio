@@ -89,6 +89,27 @@ describe('thread relay between machines', () => {
     await expect.poll(async () => (await pc.client.call('threads.transcript', { threadId: pcThread.id })).some((i) => i.kind === 'user' && i.text === 'from the mac'), { timeout: 10_000 }).toBe(true);
   }, 30_000);
 
+  it('answers another machine’s secret request through the hub', async () => {
+    const marker = 'accio-test-marker-relayed-secret';
+    let read: string | undefined;
+    const harness = new FakeHarness(async function* (run) {
+      const result = await callAccioTools(run, 'tools/call', { name: 'request_secret', arguments: { slot: 'deploy:test', label: 'Deploy token', reason: 'Deploy the site' } });
+      read = await readFile(JSON.parse(result.content[0].text).file, 'utf8');
+      yield* replyWith('done');
+    });
+    const { mac, pc } = await machines(harness);
+    const profile = await mac.client.signedIn('Personal');
+    const thread = await mac.client.call('threads.start', { profileId: profile.id, text: 'request secret' });
+    await pc.client.waitFor('threads.changed', (threads) => !!remote(threads, thread.id), 10_000);
+    const pending = async () => (await pc.client.call('threads.observe', { threadId: thread.id })).items.find((i) => i.kind === 'secret' && i.status === 'pending');
+    await expect.poll(pending, { timeout: 10_000 }).toBeTruthy();
+    const card = { item: (await pending())! };
+    if (card.item.kind !== 'secret') throw new Error('Missing secret card');
+    await pc.client.call('secretRequests.answer', { threadId: thread.id, requestId: card.item.requestId, answer: { type: 'once', value: marker } });
+    await expect.poll(async () => remote(await mac.client.call('threads.list', {}), thread.id)?.status, { timeout: 10_000 }).toBe('idle');
+    expect(read).toBe(marker);
+  }, 30_000);
+
   it('shows another machine’s images and linked files, fetched once through the hub', async () => {
     const image = await readFile(fileURLToPath(new URL('../../../../tests/fixtures/chat.png', import.meta.url)));
     const harness = new FakeHarness(async function* (run) {
