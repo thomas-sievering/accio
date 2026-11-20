@@ -26,8 +26,9 @@ export function ThreadRow({ thread: t, place, withinProject = false }: { thread:
   // Every row has the same layout; only open rows carry the live status mark.
   // Working rows keep the full open look: project mark and the live status.
   const open = place === 'open' || place === 'working';
-  // Only a running turn can wait on a secret.
-  const needsSecret = (useNeedsSecret(t.id) || t.needsSecret === true) && t.status === 'running' && open;
+  // Only a running turn can wait on you; this client may learn of a secret request before the thread list says so.
+  const knownSecret = useNeedsSecret(t.id);
+  const needsYou = t.status === 'running' && open ? t.needsYou ?? (knownSecret ? 'secret' : undefined) : undefined;
   const openMenu = useThreadMenu();
   const [renamingId] = useRenaming();
   const renaming = renamingId === t.id;
@@ -60,7 +61,7 @@ export function ThreadRow({ thread: t, place, withinProject = false }: { thread:
       ))}
     </span>
   );
-  const status = threadStatus(t, { needsSecret });
+  const status = threadStatus(t, { needsYou });
   const statusLine = statusText(status.label, status.delivery?.pullRequest);
   const delivery = status.delivery;
   // Shelved rows say nothing of an idle turn; a delivery outcome stays visible.

@@ -29,8 +29,10 @@ describe('threadStatus without delivery', () => {
     expect(threadStatus(thread({ wait, status: 'running' })).label).toBe('Working');
   });
 
-  it('puts a pending secret first', () => {
-    expect(threadStatus(thread({ status: 'running' }), { needsSecret: true })).toMatchObject({ label: 'Needs a secret', tone: 'secret', showLabel: true });
+  it('puts what waits on you first', () => {
+    expect(threadStatus(thread({ status: 'running' }), { needsYou: 'secret' })).toMatchObject({ label: 'Needs a secret', tone: 'needs', showLabel: true });
+    expect(threadStatus(thread({ status: 'running' }), { needsYou: 'confirmation' })).toMatchObject({ label: 'Needs your OK', tone: 'needs' });
+    expect(threadStatus(thread({ status: 'running' }), { needsYou: 'action' })).toMatchObject({ label: 'Needs you', tone: 'needs', glyph: 'dot' });
   });
 });
 

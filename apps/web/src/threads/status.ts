@@ -1,4 +1,4 @@
-import { deliveryPhase, deliveryWaitsOn, observedPhase, type DeliveryMode, type DeliveryPhase, type ThreadDelivery, type ThreadView } from '@accio/protocol';
+import { deliveryPhase, deliveryWaitsOn, observedPhase, type DeliveryMode, type DeliveryPhase, type NeedsYou, type ThreadDelivery, type ThreadView } from '@accio/protocol';
 import { ciSummary } from './DeliveryProgress';
 
 /**
@@ -10,7 +10,7 @@ import { ciSummary } from './DeliveryProgress';
  */
 
 /** The colour family a status uses; text always carries the meaning on its own. */
-export type StatusTone = 'working' | 'ready' | 'waiting' | 'attention' | 'unavailable' | 'delivered' | 'interrupted' | 'failed' | 'secret';
+export type StatusTone = 'working' | 'ready' | 'waiting' | 'attention' | 'unavailable' | 'delivered' | 'interrupted' | 'failed' | 'needs';
 /** The mark beside the status: a spinner for running turns only, otherwise a static glyph or dot. */
 export type StatusGlyph = 'spinner' | 'dot' | 'pr' | 'merge' | 'ship' | 'push' | 'alert';
 
@@ -153,11 +153,13 @@ export function deliveryStatus(t: ThreadView): DeliveryStatus | undefined {
 
 const turnLabels: Record<ThreadView['status'], string> = { running: 'Working', idle: 'Ready', interrupted: 'Interrupted', failed: 'Failed' };
 
-/** The sidebar's reading: a current delivery wins over an idle turn; a running turn always spins. */
-export function threadStatus(t: ThreadView, { needsSecret = false }: { needsSecret?: boolean } = {}): ThreadStatusView {
+const needsLabels: Record<NeedsYou, string> = { secret: 'Needs a secret', confirmation: 'Needs your OK', action: 'Needs you' };
+
+/** The sidebar's reading: what waits on you first, then a current delivery over an idle turn; a running turn always spins. */
+export function threadStatus(t: ThreadView, { needsYou }: { needsYou?: NeedsYou } = {}): ThreadStatusView {
   const own = deliveryStatus(t);
   const delivery = own?.phase === 'superseded' ? undefined : own;
-  if (needsSecret) return { label: 'Needs a secret', tone: 'secret', glyph: 'dot', showLabel: true, delivery };
+  if (needsYou) return { label: needsLabels[needsYou], tone: 'needs', glyph: 'dot', showLabel: true, delivery };
   if (t.status === 'running') {
     const carries = delivery?.phase === 'queued' || delivery?.phase === 'shipping';
     return { label: carries ? delivery!.label : 'Working', tone: 'working', glyph: 'spinner', showLabel: carries, delivery };

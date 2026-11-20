@@ -41,7 +41,7 @@ export type Placement = {
 
 /** Only a plain finish is held; a failure, interruption or delivery problem comes back at once. */
 function quietlyDone(t: ThreadView): boolean {
-  if (t.status !== 'idle' || t.needsSecret) return false;
+  if (t.status !== 'idle' || t.needsYou) return false;
   const phase = deliveryPhase(t);
   return phase !== 'attention' && phase !== 'closed' && phase !== 'unavailable';
 }

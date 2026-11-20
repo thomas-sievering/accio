@@ -28,6 +28,7 @@ export function ThreadActionsMenu({ thread, items, onRename }: { thread: ThreadV
         // Metadata only: a secret request never carries its value.
         case 'secret': return `## Secret request: ${item.label} (${item.status}${item.source ? `, ${item.source}` : ''})`;
         case 'confirmation': return `## Confirmation: ${item.title} (${item.status})`;
+        case 'userAction': return `## Needs you: ${item.action} (${item.status})`;
         case 'tool': {
           const detail = item.detailRevision === undefined ? undefined : await client.call('threads.toolDetails', { threadId: thread.id, itemId: item.id });
           return [`## Tool: ${item.name} (${item.status})`, item.summary, detail ? formatDetails(detail) : item.output].filter((text) => text !== undefined && text !== '').join('\n\n');

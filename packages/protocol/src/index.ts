@@ -15,6 +15,7 @@ import { updateMethods, type UpdateEvents } from './update.js';
 import { workspaceSkillMethods } from './workspaceSkills.js';
 
 export * from './confirmations.js';
+export * from './userActions.js';
 export * from './hub.js';
 export * from './issues.js';
 export * from './limits.js';

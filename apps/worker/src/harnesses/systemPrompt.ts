@@ -66,6 +66,11 @@ const SECTIONS: Section[] = [
     text: () => 'After you publish issues to the project\'s issue tracker, such as tickets from a spec, offer the ones to implement with the offer_issues tool. The user can then start a thread on each ready one, so don\'t repeat them in full in your reply.',
   },
   {
+    id: 'needs-you',
+    title: 'Steps only the user can do',
+    text: () => 'When the user must do something outside Accio before you can go on, such as approving a sign-in on their phone or signing in in a browser window, call the needs_you tool first and then wait or poll: the thread only shows up in their inbox through it, not through your chat message. Call it with done: true once you see the step is done.',
+  },
+  {
     id: 'files',
     title: 'File links',
     text: ({ platform }) => `Link any other file you produce by its absolute path, such as [report.pdf](${exampleDir(platform)}/report.pdf), so the user can download it.`,

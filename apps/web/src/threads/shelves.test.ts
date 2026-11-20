@@ -41,7 +41,7 @@ describe('shelveThreads', () => {
   });
 
   it('brings a running thread that waits for a secret up to the open list', () => {
-    const s = shelveThreads([thread('secret', { status: 'running', needsSecret: true })], now);
+    const s = shelveThreads([thread('secret', { status: 'running', needsYou: 'secret' })], now);
     expect(ids(s.open)).toEqual(['secret']);
   });
 
@@ -228,7 +228,7 @@ describe('nextAfterSend', () => {
   });
 
   it('counts every inbox thread: Failed, Interrupted and ones that need you', () => {
-    for (const extra of [{ status: 'failed' }, { status: 'interrupted' }, { status: 'running', needsSecret: true }] as Partial<ThreadView>[])
+    for (const extra of [{ status: 'failed' }, { status: 'interrupted' }, { status: 'running', needsYou: 'secret' }] as Partial<ThreadView>[])
       expect(nextAfterSend(inbox([thread('sent', { status: 'running' }), thread('next', extra)]), 'sent')).toEqual({ kind: 'thread', id: 'next' });
   });
 

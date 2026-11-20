@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import { JsonFile } from '@accio/persistence';
+import type { NeedsYou } from '@accio/protocol';
 import type { Projects } from '../projects/projects.js';
 import { UserError, type Broadcast } from '../rpc/router.js';
 import { toView, type Thread } from './thread.js';
@@ -50,7 +51,7 @@ export class ThreadState {
   readonly starts = new Set<Promise<unknown>>();
   closing = false;
 
-  constructor(readonly home: string, private projects: Projects, readonly broadcast: Broadcast, private needsSecret: (threadId: string) => boolean) {
+  constructor(readonly home: string, private projects: Projects, readonly broadcast: Broadcast, private needsYou: (threadId: string) => NeedsYou | undefined) {
     this.file = new JsonFile(join(home, 'threads.json'), () => []);
     this.transcripts = new TranscriptStore(home, broadcast);
   }
@@ -98,7 +99,7 @@ export class ThreadState {
     return thread.workspace && !thread.workspace.releasedAt ? thread.workspace.path : thread.checkoutId ? this.projects.checkout(thread.checkoutId).path : join(this.home, 'workspaces', thread.id);
   }
 
-  views() { return this.list.filter(t => !this.starting.has(t.id)).map(t => ({ ...toView(t), ...(this.needsSecret(t.id) ? { needsSecret: true } : {}) })); }
+  views() { return this.list.filter(t => !this.starting.has(t.id)).map(t => { const needsYou = this.needsYou(t.id); return { ...toView(t), ...(needsYou ? { needsYou } : {}) }; }); }
 
   announce() { this.broadcast('threads.changed', this.views()); }
 

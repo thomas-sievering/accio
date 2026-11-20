@@ -5,6 +5,7 @@ import type { TranscriptItem } from '@accio/protocol';
 import { AssistantMarkdown } from './AssistantMarkdown';
 import { SecretRequestCard } from '../secrets/SecretRequestCard';
 import { ConfirmationCard } from './ConfirmationCard';
+import { UserActionCard } from './UserActionCard';
 import { ToolGroup } from './ToolGroup';
 import { Chevron } from '../app/icons';
 import { useAppEvent } from '../app/appEvents';
@@ -239,6 +240,8 @@ const Item = memo(function Item({ threadId, item, preparing, picked, pickName }:
       return <SecretRequestCard threadId={threadId} item={item} onOpenSecrets={onOpenSecrets} />;
     case 'confirmation':
       return <ConfirmationCard threadId={threadId} item={item} />;
+    case 'userAction':
+      return <UserActionCard threadId={threadId} item={item} />;
     case 'finished':
       return <div className="turn-finished">Worked for {formatDuration(item.ms)}</div>;
     case 'shipped':

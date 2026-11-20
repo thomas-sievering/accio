@@ -182,6 +182,22 @@ const harness = new FakeHarness(async function* (run) {
     yield* replyWith('CI fixture ready.');
     return;
   }
+  // GLOSSARY: User action. "Needs you fixture" asks the user to approve a sign-in and keeps the turn running until steered.
+  if (run.prompt === 'Needs you fixture') {
+    let heard: string | undefined;
+    let wake = () => {};
+    const abort = () => wake();
+    run.signal.addEventListener('abort', abort, { once: true });
+    run.registerSteer?.(async text => { heard = text; wake(); });
+    try {
+      await callAccioTool(run, 'needs_you', { action: 'Approve the sign-in in Authenticator (14)', detail: 'Open Microsoft Authenticator on your phone and enter 14.' });
+      yield { type: 'harness_event', event: { kind: 'text', id: 'needs-you-asked', text: 'Waiting for the sign-in.' } };
+      while (heard === undefined && !run.signal.aborted) await new Promise<void>(resolve => { wake = resolve; });
+      if (heard !== undefined) yield { type: 'harness_event', event: { kind: 'text', id: 'needs-you-heard', text: `Heard: ${heard}` } };
+      if (!run.signal.aborted) yield { type: 'harness_event', event: { kind: 'end' } };
+    } finally { run.registerSteer?.(undefined); run.signal.removeEventListener('abort', abort); }
+    return;
+  }
   if (run.prompt === 'Steering fixture') {
     const messages: string[] = [];
     let finished = false;
@@ -456,6 +472,8 @@ const waitThread = await client.call('threads.start', { profileId: 'personal', t
 await client.waitFor('threads.changed', (threads) => threads.some((entry) => entry.id === waitThread.id && entry.status === 'idle'));
 const cliThread = await client.call('threads.start', { profileId: 'personal', text: 'CLI fixture' });
 await client.waitFor('threads.changed', (threads) => threads.some((entry) => entry.id === cliThread.id && entry.status === 'idle'));
+const needsYouThread = await client.call('threads.start', { profileId: 'personal', text: 'Needs you thread' });
+await client.waitFor('threads.changed', (threads) => threads.some((entry) => entry.id === needsYouThread.id && entry.status === 'idle'));
 // MCP tab: a remote server that still needs signing in, and a local one.
 // ADR 0024: on nowhere, so the MCP tab leaves it out and counts it as elsewhere.
 await client.call('mcp.save', { id: 'other-team', name: 'other-team', transport: 'stdio', command: 'other-mcp', args: [], auth: 'none', scope: { global: false, profileIds: [], spaceIds: [], projectKeys: [] } });

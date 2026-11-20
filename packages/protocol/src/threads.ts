@@ -6,6 +6,7 @@ import { IMAGE_ATTACHMENT_BYTES, IMAGE_TYPES, IMAGES_PER_MESSAGE, type AssetUrl,
 import type { LoadedSkill } from './workspaceSkills.js';
 import type { SecretRequestItem } from './secrets.js';
 import type { ConfirmationItem } from './confirmations.js';
+import type { NeedsYou, UserActionItem } from './userActions.js';
 import type { RemoteMachine } from './relay.js';
 import type { OfferedIssue } from './issues.js';
 
@@ -35,8 +36,8 @@ export type ThreadView = {
   model: ModelSelection;
   title: string;
   status: ThreadStatus;
-  /** Live metadata only; the turn remains running while waiting for private input. */
-  needsSecret?: boolean;
+  /** Live metadata only: what a running turn waits on you for; the turn stays running meanwhile. */
+  needsYou?: NeedsYou;
   createdAt: string;
   updatedAt: string;
   /** When the running turn started. */
@@ -261,6 +262,7 @@ export type PromptCacheUsage = {
 export type TranscriptItem =
   | SecretRequestItem
   | ConfirmationItem
+  | UserActionItem
   | { kind: 'usage'; id: string; turnId: string; provider: 'anthropic'; usage: PromptCacheUsage }
   /** GLOSSARY: Context window. How full it was at the turn's latest request, as the harness reported; one per turn. */
   | { kind: 'context'; id: string; turnId: string; usedTokens: number; windowTokens: number; compactAtTokens?: number }

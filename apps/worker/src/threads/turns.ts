@@ -9,6 +9,7 @@ import { observedSkillLoads } from '../resources/workspaceSkills.js';
 import { UserError } from '../rpc/router.js';
 import type { SecretRequests } from '../secrets/secrets.js';
 import type { Confirmations } from './confirmations.js';
+import type { UserActions } from './userActions.js';
 import type { SpaceContext } from '../spaces/spaceContext.js';
 import { now } from '../time.js';
 import type { AccioTools } from '../tools/tools.js';
@@ -47,6 +48,7 @@ export type TurnDeps = {
   harnesses: Record<string, Harness>;
   secrets: SecretRequests;
   confirmations?: Confirmations;
+  userActions?: UserActions;
   content: ThreadContent;
   deliveries: Deliveries;
   tools?: AccioTools;
@@ -327,6 +329,7 @@ export class Turns {
       try {
         await deps.secrets.endTurn(turnId);
         await deps.confirmations?.endTurn(turnId);
+        await deps.userActions?.endTurn(turnId);
         // Shutdown, not Stop: the turn continues when accio starts again (see `Threads.close`).
         const restarting = outcome === 'interrupted' && state.closing && !!state.require(thread.id).resumeAfterRestart;
         if (delivering && restarting) {

@@ -66,7 +66,7 @@
 }
 .row-flag.tone-interrupted,
 .row-flag.tone-waiting,
-.row-flag.tone-secret {
+.row-flag.tone-needs {
   background: var(--amber);
 }
 .row-flag.tone-failed,
@@ -79,7 +79,7 @@
 /* Status tones shared by the row's second line, its mark and shelf badges. Text carries the meaning. */
 .tone-waiting,
 .tone-interrupted,
-.tone-secret {
+.tone-needs {
   color: color-mix(in srgb, var(--amber) 82%, var(--muted));
 }
 .row-mark.tone-waiting,

@@ -20,7 +20,7 @@ function placeOf(t: ThreadView, now: Date): string {
     case 'working': return t.status === 'running' ? 'working' : 'working, delivery in progress';
     case 'offline': return 'offline shelf, until its machine is back';
   }
-  if (t.needsSecret) return 'open, waiting for a secret';
+  if (t.needsYou) return `open, waiting for ${t.needsYou === 'secret' ? 'a secret' : t.needsYou === 'confirmation' ? 'a confirmation' : 'the user to do something'}`;
   if (t.status === 'failed') return 'open, last turn failed';
   if (t.status === 'interrupted') return 'open, last turn interrupted';
   return 'open';

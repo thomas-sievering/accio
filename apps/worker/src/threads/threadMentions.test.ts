@@ -76,7 +76,7 @@ describe('where a mentioned thread sits', () => {
   const placed = (t: ThreadView) => threadMentionContext(`@${threadHandle(t)}`, [t], caller).match(/\((.*)\)\]$/)![1];
 
   it('agrees with the sidebar on a thread waiting on a secret and one with a delivery in progress', () => {
-    expect(placed({ ...base, needsSecret: true })).toBe('open, waiting for a secret');
+    expect(placed({ ...base, needsYou: 'secret' })).toBe('open, waiting for a secret');
     const delivery = { mode: 'ship', policy: 'pull-request', status: 'waiting', waitingOn: 'checks', baseBranch: 'main', requestedAt: base.createdAt } as const;
     expect(placed({ ...base, status: 'idle', delivery })).toBe('working, delivery in progress');
   });

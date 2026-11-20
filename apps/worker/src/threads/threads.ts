@@ -53,6 +53,7 @@ import type { SpaceContext } from '../spaces/spaceContext.js';
 import { cleanExecutionEnv, harnessHomeEnv } from './harnessEnv.js';
 import { Waits, waitForTool } from './waits.js';
 import { Confirmations } from './confirmations.js';
+import { UserActions, needsYouTool } from './userActions.js';
 
 export type ThreadsOptions = {
   /** GLOSSARY: Thread mention. Every thread this machine knows, other machines' included: the relay's merged list. */
@@ -91,6 +92,8 @@ export class Threads {
   readonly secrets: SecretRequests;
   /** GLOSSARY: Confirmation. */
   readonly confirmations: Confirmations;
+  /** GLOSSARY: User action. */
+  private userActions: UserActions;
   private state: ThreadState;
   private content: ThreadContent;
   private previews: Previews;
@@ -120,7 +123,8 @@ export class Threads {
   ) {
     this.resources = resources;
     this.checkoutOf = checkoutOf;
-    this.state = new ThreadState(home, projects, broadcast, (threadId) => this.secrets.hasPending(threadId));
+    this.state = new ThreadState(home, projects, broadcast, (threadId) => this.secrets.hasPending(threadId) ? 'secret'
+      : this.confirmations.hasPending(threadId) ? 'confirmation' : this.userActions.hasPending(threadId) ? 'action' : undefined);
     this.naming = new ThreadNaming(this.state, profiles, models, harnesses);
     this.issues = new Issues((profileId, cwd, args) => machines.github.run(profileId, cwd, args));
     this.previews = new Previews(home);
@@ -136,6 +140,10 @@ export class Threads {
       await this.state.transcripts.add(threadId, item);
       this.state.announce();
     });
+    this.userActions = new UserActions(async (threadId, item) => {
+      await this.state.transcripts.add(threadId, item);
+      this.state.announce();
+    });
     this.deliveries = new Deliveries(this.state, projects, this.previews, {
       beginTurn: (threadId, text, options) => this.turns.begin(threadId, text, options),
       withLifecycle: (threadId, action) => this.withLifecycle(threadId, action),
@@ -143,7 +151,7 @@ export class Threads {
       describeShip: (threadId, files, signal) => this.naming.describeShip(threadId, files, signal),
       githubEnv: (profileId, cwd) => machines.github.env(profileId, cwd),
     }, deliveryHosting);
-    this.turns = new Turns(this.state, { profiles, projects, models, machines, harnesses, secrets: this.secrets, confirmations: this.confirmations, content: this.content, deliveries: this.deliveries, tools,
+    this.turns = new Turns(this.state, { profiles, projects, models, machines, harnesses, secrets: this.secrets, confirmations: this.confirmations, userActions: this.userActions, content: this.content, deliveries: this.deliveries, tools,
       images: { claim: (threadId, ids) => this.uploads.claim(threadId, ids, this.assets), file: (threadId, asset) => this.assets.harnessFile(threadId, asset) },
       resources: () => resources, spaceContext: () => spaceContext, toolsOff: (harnessId) => builtinToolsOff(harnessId, toolOverrides()[harnessId]), onWorkFinished: id => this.naming.refine(id), onRepairFinished, knownThreads,
       offeredIssues: (threadId, refs) => this.offeredIssues(threadId, refs) });
@@ -160,6 +168,7 @@ export class Threads {
         return { cwd, env: { ...cleanExecutionEnv(process.env), ...await machines.github.env(thread.profileId, cwd).catch(() => ({})) } };
       },
     });
+    tools?.add(needsYouTool({ actions: this.userActions, runningTurn: (threadId) => this.turns.runningTurn(threadId) }));
     tools?.add(waitForTool((threadId, request) => this.waits.set(threadId, request)));
     tools?.add(agentTool((threadId, input, { signal, progress }) => this.turns.startSubagent(threadId, input, signal, progress)));
     projects.onRemoveThreads((id) => this.deleteThreads(this.state.list.filter((t) => t.checkoutId === id)));
@@ -195,7 +204,8 @@ export class Threads {
     const recoveredRelease = await this.deliveries.recoverReleases();
     for (const thread of interrupted) {
       const live = await state.transcripts.get(thread.id);
-      live.items = live.items.map(item => item.kind === 'secret' && item.status === 'pending' ? { ...item, status: 'cancelled', candidates: [] } : item);
+      live.items = live.items.map(item => item.kind === 'secret' && item.status === 'pending' ? { ...item, status: 'cancelled', candidates: [] }
+        : item.kind === 'userAction' && item.status === 'pending' ? { ...item, status: 'ended' } : item);
       const turnId = [...live.items].reverse().find((i) => i.kind === 'user')?.turnId ?? 'restart';
       live.items = upsertItem(closeOpenTools(live.items), {
         kind: 'notice',
@@ -347,6 +357,8 @@ export class Threads {
         if (goal && !pick && !uploads.length) return this.withMessages(threadId, () => this.goalCommand(threadId, goal, text));
         return this.withMessages(threadId, async () => {
           this.assertMessageAllowed(threadId);
+          // GLOSSARY: User action. Writing to the thread answers it.
+          await this.userActions.done(threadId);
           const thread = state.require(threadId);
           const images = await this.uploads.claim(threadId, uploads, this.assets);
           if (!state.running.has(threadId)) await turns.begin(threadId, text, { pick, images });

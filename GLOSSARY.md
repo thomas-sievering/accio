@@ -223,6 +223,10 @@ _Avoid_: Errored, crashed
 A card in a thread on which an accio tool waits until you allow or decline its action, such as add_cli turning a CLI on Everywhere. It ends unanswered when its turn ends or after ten minutes, and then counts as declined.
 _Avoid_: Approval, permission prompt, dialog
 
+**User action**:
+A card in a thread for something only you can do outside Accio, such as approving a sign-in on your phone, which a running turn asks for with the needs_you accio tool. Unlike a Confirmation, nothing waits on it: the turn goes on, polling for the result, while the thread sits in the inbox as Needs you. It ends when the agent marks it done, when you press Done (which tells the agent by steering the turn) or write to the thread, or when its turn ends.
+_Avoid_: Task, prompt, reminder
+
 **Choice**:
 Two or more screenshots a harness shows side by side, through the offer_choice accio tool, when you ask it to prototype, try or mock up UI for a feature. You pick one in your next message and add feedback if you like; the harness reads the pick on the message's first line.
 _Avoid_: Board, gallery, poll, variants (for the whole set)
@@ -322,7 +326,7 @@ A space's page, opened through Space in the menu on the project name in a thread
 _Avoid_: Space dashboard, space settings (for this page)
 
 **Inbox**:
-The threads at the top of the sidebar, above the shelves: those back with you, most recently returned first. A thread in it can be Ready, Interrupted or Failed, or wait on you for a secret, a review, a manual merge or a delivery that needs attention. A thread leaves it when a turn starts (to Working), when its machine goes offline (to Offline), when you snooze it or when it settles.
+The threads at the top of the sidebar, above the shelves: those back with you, most recently returned first. A thread in it can be Ready, Interrupted or Failed, or wait on you for a secret, a Confirmation, a User action, a review, a manual merge or a delivery that needs attention. A running turn waiting on a secret, a Confirmation or a User action is in the inbox, not on Working, labelled Needs a secret, Needs your OK or Needs you. A thread leaves it when a turn starts (to Working), when its machine goes offline (to Offline), when you snooze it or when it settles.
 _Avoid_: Open list, active threads, ready threads (Ready is one state within it)
 
 **Shelf**:

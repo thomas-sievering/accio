@@ -5,7 +5,7 @@ const HARNESSES = [{ id: 'claudeCode', name: 'Claude Code' }, { id: 'codex', nam
 
 it('lists each section once, grouped by the harnesses that get the same text', () => {
   const view = systemPromptView(HARNESSES, 'linux');
-  expect(view.sections.map((s) => s.id)).toEqual(['accio', 'runtime', 'media', 'choices', 'issues', 'files']);
+  expect(view.sections.map((s) => s.id)).toEqual(['accio', 'runtime', 'media', 'choices', 'issues', 'needs-you', 'files']);
   // Placeholders stand in for the harness and model, so every section is shared.
   for (const s of view.sections) expect(s.variants.map((v) => v.harnessIds)).toEqual([['claudeCode', 'codex']]);
 });
