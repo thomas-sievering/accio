@@ -277,6 +277,25 @@ export class Projects {
     }
   }
 
+  /**
+   * GLOSSARY: Project. A repository the hub keeps without a checkout anywhere yet, in the profile; a
+   * thread started in it clones it first. One the hub or this machine already has keeps its project.
+   */
+  async addRepository(repoKey: string, profileId: string): Promise<HubProject> {
+    const known = this.hubProject(repoKey) ?? this.data.projects.find((p) => p.repoKey === repoKey);
+    if (known) return { repoKey, name: known.name, profileId: known.profileId };
+    if (!this.hub.list()) throw new UserError('This hub keeps no projects yet, so a repository can only be added with a folder of it.');
+    const release = this.profiles.useProfile(profileId);
+    try {
+      const project = { repoKey, name: projectNameFor({ root: '', repoKey }), profileId };
+      const kept = await this.hub.register([project]).catch((error: Error) => { throw new UserError(error.message); });
+      if (Array.isArray(kept) && !kept.some((p: HubProject) => p.repoKey === repoKey)) throw new UserError(`The hub did not take ${repoKey}.`);
+      return (Array.isArray(kept) && kept.find((p: HubProject) => p.repoKey === repoKey)) || project;
+    } finally {
+      release();
+    }
+  }
+
   /** Adds a folder on this machine: a known repository joins its project, anything else starts one in the profile. */
   async addFolder(path: string, profileId?: string): Promise<Checkout> {
     const release = profileId ? this.profiles.useProfile(profileId) : () => {};

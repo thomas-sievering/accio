@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { homedir } from 'node:os';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { HubClient, remoteSettings, remoteResources, remoteMcp, remoteSecrets, type SecretsAccess, type HubSnapshot, type HarnessInstall } from '@accio/hub';
 import { projectKey, type Events, type LevelContext, type MachineInfo } from '@accio/protocol';
@@ -17,6 +18,7 @@ import { Projects } from '../projects/projects.js';
 import { Spaces, refused } from '../spaces/spaces.js';
 import { NewHomes } from '../spaces/newHome.js';
 import { editSpaceTool } from '../spaces/editSpace.js';
+import { addProjectTool, githubRepoProblem } from '../projects/addProject.js';
 import { SpaceContext } from '../spaces/spaceContext.js';
 import { SiblingThreads } from '../spaces/siblingThreads.js';
 import { MissingCheckouts } from '../spaces/missingCheckouts.js';
@@ -218,6 +220,15 @@ export async function openWorkspace(record: SavedHub, deps: WorkspaceDeps, slot:
     spaces: () => spaces.list(),
     projects: () => projects.state(),
     save: (space) => refused(() => settings.saveSpace(space)),
+    confirm: levelTool.confirm,
+  }), addProjectTool({
+    caller: levelTool.caller,
+    profiles: () => profiles.all(),
+    inspect: (path) => router.call('checkouts.inspect', { path }),
+    addFolder: (path, profileId) => projects.addFolder(path, profileId),
+    known: (repoKey) => projects.hubProject(repoKey) ?? projects.state().projects.find((p) => p.repoKey === repoKey),
+    checkRepository: (repoKey, profileId) => githubRepoProblem(repoKey, (args) => machines.github.run(profileId, homedir(), args)),
+    addRepository: (repoKey, profileId) => projects.addRepository(repoKey, profileId),
     confirm: levelTool.confirm,
   }));
   // GLOSSARY: Relay. The only answer for the thread and machine lists: other machines' threads join

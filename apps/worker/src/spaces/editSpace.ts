@@ -31,7 +31,7 @@ export function editSpaceTool(deps: EditSpaceDeps) {
     name: 'edit_space',
     description: 'Change a space: add projects to it, remove projects, set or clear its home, or rename it. The user is asked to allow the change first. '
       + 'Use it when the user asks to change which projects are in a space. A project is in at most one space, so remove it from its other space first. '
-      + 'Threads in the space see the change from their next turn. It can\'t create or delete a space: that is in Settings → Spaces.',
+      + 'Threads in the space see the change from their next turn. It can\'t create or delete a space: that is in Settings → Spaces. Add a project that is not in Settings → Projects yet with add_project first.',
     input: {
       space: z.string().trim().min(1).max(200).optional().describe('Name or id of the space to change. Defaults to the space of this thread\'s project.'),
       add_projects: z.array(z.string().trim().min(1).max(300)).max(50).optional().describe('Projects to add, by name as in Settings → Projects or by repository key, such as github.com/owner/repo'),
@@ -121,7 +121,7 @@ function findProject(candidates: Known[], wanted: string, where = 'Settings → 
   if (byName.length > 1) throw new UserError(`More than one project is called ${wanted}. Name one by its key: ${byName.map((p) => p.key).join(', ')}.`);
   const names = candidates.map((p) => p.name).slice(0, 40);
   throw new UserError(`${wanted} is not a project in ${where}.${names.length ? ` Projects there: ${names.join(', ')}${candidates.length > names.length ? ', …' : ''}.` : ''}`
-    + (where === 'Settings → Projects' ? ' Add it there first.' : ''));
+    + (where === 'Settings → Projects' ? ' Add it first with add_project, or in Settings → Projects.' : ''));
 }
 
 function list(items: string[]) {
