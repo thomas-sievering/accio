@@ -25,8 +25,9 @@ test('a long paste folds into Pasted text, reaches the model whole and shows fol
   expect(await pasteText(page, log)).toBe(true);
   await expect(chip).toHaveCount(1);
   await expect(chip).toContainText('200 lines');
-  // The hint names the shortcut as the platform writes it.
-  await expect(page.locator('.composer-hint')).toContainText(process.platform === 'darwin' ? '⌘⇧V' : 'Ctrl+Shift+V');
+  // The hint names the shortcut as the browser's platform writes it.
+  const mac = await page.evaluate(() => /Mac/.test(navigator.platform));
+  await expect(page.locator('.composer-hint')).toContainText(mac ? '⌘⇧V' : 'Ctrl+Shift+V');
   await expect(textarea).toHaveValue('');
   await page.screenshot({ path: testInfo.outputPath('composer-paste.png') });
 

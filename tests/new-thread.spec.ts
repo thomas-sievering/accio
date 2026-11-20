@@ -49,8 +49,9 @@ test('keyboard focus visibly reveals a complete title without moving adjacent ro
   // Wait until the completed turn leaves Working; that move remounts its row. The draft's own row is not the thread.
   await expect(page.locator('.sidebar nav > .rows .row:not(.draft) .row-main').filter({ hasText: 'Queued title tooltip' })).toBeVisible();
   const row = page.locator('.row:not(.draft) .row-main').filter({ hasText: 'Queued title tooltip' });
-  // Renaming is only setup here. Shift+F10 opens no menu on macOS, so right-click.
-  await row.click({ button: 'right' });
+  // Chromium on macOS opens no menu on Shift+F10, so there it right-clicks.
+  if (await page.evaluate(() => /Mac/.test(navigator.platform))) await row.click({ button: 'right' });
+  else { await row.focus(); await page.keyboard.press('Shift+F10'); }
   await page.getByRole('menuitem', { name: /Rename/ }).click();
   const title = 'A complete saved title with enough words to wrap beyond the compact sidebar row and still be readable by keyboard';
   await page.getByRole('textbox', { name: 'Thread title', exact: true }).fill(title);
