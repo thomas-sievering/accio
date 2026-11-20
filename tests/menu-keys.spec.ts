@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { startProjectThread } from './chat.js';
+import { chatClient, startProjectThread } from './chat.js';
 
 const token = 'isolated-chat-test-token';
 
@@ -78,7 +78,14 @@ test('the right-click menu opens at the pointer and above it when there is no ro
 test('the Ship options open above Ship on the chosen mode and share the keys', async ({ page, baseURL }) => {
   await startProjectThread(page, baseURL!, /delivery-project/, 'Build delivery fixture');
   await expect(page.getByText('Feature implemented. Running checks…', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Shipping options', exact: true }).click();
-  const menu = page.getByRole('menu', { name: 'Shipping options', exact: true });
-  await expectMenuKeys(page, menu, menu.getByRole('menuitemradio'), menu.getByRole('menuitemradio', { checked: true }));
+  const threadId = await page.evaluate(() => Object.entries(localStorage).find(([key]) => key.endsWith(':accio.thread'))?.[1]);
+  try {
+    await page.getByRole('button', { name: 'Shipping options', exact: true }).click();
+    const menu = page.getByRole('menu', { name: 'Shipping options', exact: true });
+    await expectMenuKeys(page, menu, menu.getByRole('menuitemradio'), menu.getByRole('menuitemradio', { checked: true }));
+  } finally {
+    // Its turn would otherwise finish during a later spec and take the top of that spec's inbox.
+    const client = await chatClient(baseURL!);
+    try { if (threadId) await client.call('threads.stop', { threadId }); } finally { client.close(); }
+  }
 });

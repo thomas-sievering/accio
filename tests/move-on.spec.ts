@@ -4,11 +4,16 @@ import { CHAT_TOKEN, chatClient, startProjectThread } from './chat.js';
 // GLOSSARY: Move on. The other chat specs turn it off (playwright.config.ts); these run with the default.
 test.use({ storageState: { cookies: [], origins: [] } });
 
-/** Starts idle threads without a project, oldest first, and returns their ids by text. */
+/**
+ * Starts idle threads without a project, oldest first, and returns their ids by text. It waits for
+ * other specs' turns to end first, so none of their threads returns to the inbox above these.
+ */
 async function startThreads(baseURL: string, texts: string[]) {
   const client = await chatClient(baseURL);
   const ids: Record<string, string> = {};
   try {
+    await expect.poll(async () => (await client.call('threads.list', {})).filter((t) => t.status === 'running').map((t) => t.title),
+      { message: 'turns of other threads still running', timeout: 15_000 }).toEqual([]);
     for (const text of texts) {
       const started = await client.call('threads.start', { profileId: 'personal', text });
       await client.waitFor('threads.changed', (threads) => threads.some((t) => t.id === started.id && t.status === 'idle'));
