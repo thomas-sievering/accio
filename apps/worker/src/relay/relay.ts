@@ -19,7 +19,7 @@ const NOT_RELAYED = 'Not available from another machine.';
  * How long a machine that left the relay still counts as holding its projects, so a brief drop doesn't
  * hide them; as long as its threads wait before moving to the Offline shelf (web OFFLINE_GRACE_MS).
  */
-export const HOLDING_GRACE_MS = 10_000;
+const HOLDING_GRACE_MS = 10_000;
 
 /** GLOSSARY: Relay. Another machine's projects and checkouts, while it is on the relay or only just left it. */
 export type Holding = { machineId: string; projects: ProjectsState['projects']; checkouts: ProjectsState['checkouts'] };
