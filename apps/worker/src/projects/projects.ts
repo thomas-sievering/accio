@@ -336,7 +336,10 @@ export class Projects {
           await this.commit(removeCheckout(this.data, id));
           // GLOSSARY: Project. The hub forgets it once no machine has a checkout of it, not even one offline.
           const gone = !this.data.projects.some((p) => p.id === project.id);
-          if (gone && project.repoKey && this.hubProject(project.repoKey) && !this.hub.checkoutElsewhere(project.repoKey)) {
+          // One still being registered is forgotten once the hub has taken it, so it isn't left there.
+          const registering = !!project.repoKey && this.registering.has(project.repoKey);
+          if (registering) await this.syncing;
+          if (gone && project.repoKey && (registering || this.hubProject(project.repoKey)) && !this.hub.checkoutElsewhere(project.repoKey)) {
             await this.hub.forget(project.repoKey).catch((error) => console.error('[projects] could not forget the project on the hub', error));
           }
           return null;
