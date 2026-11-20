@@ -191,7 +191,7 @@ export class Turns {
         // An archived delivery restores its published revision with a fresh session.
         // A worktree released unchanged on Settle held no work: start from the latest default branch and keep the conversation.
         const archived = !!thread.delivery;
-        const workspace = await deps.deliveries.git.allocate(threadId, thread.workspace.sourcePath, archived ? thread.delivery!.publishedRevision ?? 'HEAD' : undefined);
+        const workspace = await deps.deliveries.allocate(thread, thread.workspace.sourcePath, archived ? thread.delivery!.publishedRevision ?? 'HEAD' : undefined);
         if (!workspace) throw new UserError('Could not restore an owned workspace.');
         thread = { ...thread, workspace, sessionId: archived ? null : thread.sessionId, delivery: undefined };
       }

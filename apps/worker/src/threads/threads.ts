@@ -510,7 +510,7 @@ export class Threads {
         if (input.startedBy) thread.startedBy = input.startedBy;
         if (lender) thread.borrowFrom = lender;
         if (options.repairToolId) { thread.repairToolId = options.repairToolId; thread.title = `Repair ${this.resources.state().tools.find(tool => tool.id === options.repairToolId)?.name ?? options.repairToolId}`; }
-        if (checkout) thread.workspace = await this.deliveries.git.allocate(thread.id, checkout.path);
+        if (checkout) thread.workspace = await this.deliveries.allocate(thread, checkout.path);
         if (!checkout) await mkdir(join(state.home, 'workspaces', thread.id), { recursive: true });
         // Quiet: clients first see the thread once its turn is running, never as an idle empty thread.
         state.starting.add(thread.id);

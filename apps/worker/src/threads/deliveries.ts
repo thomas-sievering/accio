@@ -76,6 +76,12 @@ export class Deliveries {
     return { ...summary, previewAvailable: !!(project?.previewCommand && thread.workspace && !thread.workspace.releasedAt) };
   }
 
+  /** A thread's owned worktree, based on origin as fetched by its profile's GitHub account. */
+  async allocate(thread: Pick<Thread, 'id' | 'profileId'>, sourcePath: string, revision?: string) {
+    const env = revision === undefined && this.host.githubEnv ? await this.host.githubEnv(thread.profileId, sourcePath).catch(() => undefined) : undefined;
+    return this.git.allocate(thread.id, sourcePath, revision, env);
+  }
+
   /** The thread's profile's GitHub account, so host reads see what its pushes can. */
   private async githubEnv(thread: Thread): Promise<GitHubEnv | undefined> {
     if (!thread.workspace || !this.host.githubEnv) return undefined;

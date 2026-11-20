@@ -5,7 +5,7 @@ import { promisify } from 'node:util';
 import type { DeliveryCI, DeliveryPullRequest, DeliverySummary, ThreadDelivery, ThreadWorkspace } from '@accio/protocol';
 import { UserError } from '../rpc/router.js';
 import { now } from '../time.js';
-import { git, maybeGit } from '../git.js';
+import { git, gitWith, maybeGit } from '../git.js';
 import { DELIVERY_STEP_INSTRUCTIONS } from './deliveryStep.js';
 import { SHIPPED_NOTE_INSTRUCTIONS } from './shippedNote.js';
 import { type TriggerEvent, workflowMayRun } from './workflowTriggers.js';
@@ -65,19 +65,22 @@ export class DeliveryGit {
     return this.host(env)(cwd, ['pr', 'view', ref, '--json', PR_FIELDS], GhPullRequest);
   }
 
-  /** Fetch once for concurrent starts; leave the source checkout's branch and files alone. */
-  private async freshBase(sourcePath: string, localRevision: string): Promise<string> {
+  /**
+   * Fetch once for concurrent starts; leave the source checkout's branch and files alone.
+   * `env` reaches origin as the thread's profile's GitHub account, which need not be gh's active one.
+   */
+  private async freshBase(sourcePath: string, localRevision: string, env?: GitHubEnv): Promise<string> {
     if (!await maybeGit(sourcePath, 'remote', 'get-url', 'origin')) return localRevision;
-    const key = resolve(sourcePath, await git(sourcePath, 'rev-parse', '--git-common-dir'));
+    const key = JSON.stringify([resolve(sourcePath, await git(sourcePath, 'rev-parse', '--git-common-dir')), env?.GH_TOKEN ?? '']);
     const existing = this.bases.get(key);
     if (existing) return existing;
     const read = (async () => {
       try {
-        const remote = await git(sourcePath, 'ls-remote', '--symref', 'origin', 'HEAD');
+        const remote = await gitWith(env, sourcePath, 'ls-remote', '--symref', 'origin', 'HEAD');
         const branch = remote.match(/^ref: refs\/heads\/(.+)\tHEAD$/m)?.[1];
         if (!branch) throw new Error('Origin has no default branch');
         const ref = `refs/remotes/origin/${branch}`;
-        await git(sourcePath, 'fetch', '--quiet', '--no-tags', '--no-write-fetch-head', 'origin', `+refs/heads/${branch}:${ref}`);
+        await gitWith(env, sourcePath, 'fetch', '--quiet', '--no-tags', '--no-write-fetch-head', 'origin', `+refs/heads/${branch}:${ref}`);
         const revision = await git(sourcePath, 'rev-parse', '--verify', `${ref}^{commit}`);
         await git(sourcePath, 'symbolic-ref', 'refs/remotes/origin/HEAD', ref);
         return revision;
@@ -89,13 +92,13 @@ export class DeliveryGit {
     return read;
   }
 
-  async allocate(threadId: string, sourcePath: string, revision?: string): Promise<ThreadWorkspace | undefined> {
+  async allocate(threadId: string, sourcePath: string, revision?: string, env?: GitHubEnv): Promise<ThreadWorkspace | undefined> {
     if (!await maybeGit(sourcePath, 'rev-parse', '--show-toplevel')) return undefined;
     let startRevision = await maybeGit(sourcePath, 'rev-parse', '--verify', `${revision ?? 'HEAD'}^{commit}`);
     // Empty repositories still support ordinary conversations; shipping needs a commit.
     if (!startRevision) return undefined;
     // Explicit revisions restore archived work; only a new thread chooses a fresh remote base.
-    if (revision === undefined) startRevision = await this.freshBase(sourcePath, startRevision);
+    if (revision === undefined) startRevision = await this.freshBase(sourcePath, startRevision, env);
     const path = join(this.home, 'workspaces', threadId);
     const branch = `accio/${threadId}`;
     await mkdir(join(this.home, 'workspaces'), { recursive: true });

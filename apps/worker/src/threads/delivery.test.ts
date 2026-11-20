@@ -7,6 +7,7 @@ import { RESTART_NOTICE, RESUME_PROMPT } from './thread.js';
 import { startTestApp, type TestClient } from '../testing/testApp.js';
 import { DeliveryGit, DeliveryPending, deliveryPrompt, ghFailure } from './delivery.js';
 import { git } from '../git.js';
+import { GitHubAccounts } from '../github/accounts.js';
 import { cloneRepo, initRepoWithOrigin } from '../testing/gitRepo.js';
 import type { ThreadDelivery, ThreadView } from '@accio/protocol';
 
@@ -161,6 +162,19 @@ it('refuses to start from a cached base when origin cannot be fetched', async ()
   expect(await c.call('threads.list', {})).toEqual([]);
   expect(harness.runs).toHaveLength(0);
   expect(await git(source, 'for-each-ref', '--format=%(refname)', 'refs/heads/accio/')).toBe('');
+});
+
+it('fetches a new thread\'s base as its profile\'s GitHub account, not gh\'s active one', async () => {
+  const { c, source, origin, checkout } = await setup();
+  const { revision } = await advanceOrigin(origin);
+  // Origin is reachable only with the profile's environment, as a private repo is only with its owner's GH_TOKEN.
+  const hidden = join(t.home, 'private.git');
+  await git(source, 'remote', 'set-url', 'origin', hidden);
+  const env = vi.spyOn(GitHubAccounts.prototype, 'env').mockResolvedValue({ GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: `url.${origin.replaceAll('\\', '/')}.insteadOf`, GIT_CONFIG_VALUE_0: hidden });
+  const thread = await c.call('threads.start', { checkoutId: checkout.id, text: 'private work' });
+  await wait(c, thread.id);
+  expect(env).toHaveBeenCalledWith('personal', source);
+  expect(thread.workspace!.startRevision).toBe(revision);
 });
 
 it('uses local HEAD without origin and keeps empty repositories and plain folders usable', async () => {
