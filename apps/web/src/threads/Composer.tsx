@@ -130,7 +130,7 @@ export function Composer({
     const end = mention.start + insert.length;
     setText(text.slice(0, mention.start) + insert + after);
     setCaret(end);
-    requestAnimationFrame(() => el.setSelectionRange(end, end));
+    placeCaret.current = { at: end, focus: false };
   };
   const trackCaret = () => {
     const el = input.current;
@@ -182,7 +182,7 @@ export function Composer({
     const next = before + lead + insert + trail + after;
     const end = (before + lead + insert + trail).length;
     setText(next);
-    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(end, end); });
+    placeCaret.current = { at: end, focus: true };
   });
 
   // The same passage reacted to again takes the new reaction rather than a second chip.
@@ -190,6 +190,18 @@ export function Composer({
     if (!target || to !== target) return;
     setReactions((current) => [...current.filter((r) => r.quote !== reaction.quote), reaction]);
     input.current?.focus();
+  });
+
+  // Where the caret goes once the text set beside it renders. Placed in the same commit, before
+  // the next keypress: a later frame would pull the caret back past letters typed meanwhile.
+  const placeCaret = useRef<{ at: number; focus: boolean }>(undefined);
+  useLayoutEffect(() => {
+    const el = input.current;
+    const place = placeCaret.current;
+    if (!el || !place) return;
+    placeCaret.current = undefined;
+    if (place.focus) el.focus();
+    el.setSelectionRange(place.at, place.at);
   });
 
   // Opening a thread, by Move on or otherwise, continues its kept draft: the cursor goes after it.
@@ -226,7 +238,7 @@ export function Composer({
     const next = text.slice(0, el.selectionStart) + insert + text.slice(el.selectionEnd);
     const end = el.selectionStart + insert.length;
     setText(next);
-    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(end, end); });
+    placeCaret.current = { at: end, focus: true };
   };
   const editPaste = (index: number) => {
     const paste = pastes[index];
@@ -382,9 +394,8 @@ export function Composer({
             // Like shell history: only an empty composer takes it, so Up never replaces a draft or fights the cursor.
             if (e.key === 'ArrowUp' && lastMessage && !text && pastes.length === 0 && reactions.length === 0 && images.length === 0 && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !e.nativeEvent.isComposing && e.keyCode !== 229) {
               e.preventDefault();
-              const el = e.currentTarget;
               setText(lastMessage);
-              requestAnimationFrame(() => el.setSelectionRange(lastMessage.length, lastMessage.length));
+              placeCaret.current = { at: lastMessage.length, focus: false };
               return;
             }
             if (e.key === 'Tab' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !e.nativeEvent.isComposing && e.keyCode !== 229) {

@@ -136,3 +136,25 @@ test('typing / lists the thread\'s skills, typing after it filters them, and pic
   await input.pressSequentially('/zzz-nothing');
   await expect(menu).toBeHidden();
 });
+
+test('a letter typed straight after picking a mention stays where it was typed', async ({ page, baseURL }) => {
+  await page.goto(`${baseURL}/#token=${token}`);
+  await newChatDraft(page);
+  const input = page.locator('.composer textarea');
+  const menu = page.getByRole('listbox', { name: 'Mention a model, machine or thread' });
+  // Within Models, so threads earlier tests named after Sonnet can't match.
+  await input.pressSequentially('use @');
+  await expect(menu.getByRole('option').first()).toHaveText('Models');
+  await input.press('Enter');
+  await input.pressSequentially('so');
+  await expect(menu.getByRole('option')).toHaveText(['Sonnet']);
+  // Enter picks, and the next letter arrives in the following task, before the browser draws
+  // another frame, as a fast typist's would.
+  await input.evaluate(async (el: HTMLTextAreaElement) => {
+    el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    document.execCommand('insertText', false, 'f');
+  });
+  await input.pressSequentially('or this');
+  await expect(input).toHaveValue('use @sonnet for this');
+});
