@@ -44,6 +44,25 @@ describe('projects slice', () => {
     await expect(c.call('profiles.delete', { id: 'personal' })).rejects.toThrow(/still used by project accio/);
   });
 
+  it('follows a repository renamed on its host, keeping the project and its place in a space', async () => {
+    t = await startTestApp();
+    const c = await t.connect();
+    const repo = join(t.home, 'notes-home');
+    await mkdir(repo);
+    gitRepo(repo, 'https://github.com/me/notes-home.git');
+    await c.call('profiles.save', { name: 'Personal' });
+    const added = await c.call('checkouts.add', { path: repo, profileId: 'personal' });
+    await c.call('spaces.save', { name: 'notes', projectKeys: ['github.com/me/notes-home'], homeProjectKey: 'github.com/me/notes-home' });
+    await t.stop({ keepHome: true });
+
+    execFileSync('git', ['-C', repo, 'remote', 'set-url', 'origin', 'https://github.com/me/notes.git']);
+    t = await startTestApp({}, t.home);
+    const next = await t.connect();
+    await expect.poll(async () => (await next.call('projects.get', {})).projects).toEqual([expect.objectContaining({ id: added.projectId, name: 'notes', repoKey: 'github.com/me/notes' })]);
+    expect(await next.call('spaces.list', {})).toEqual([expect.objectContaining({ projectKeys: ['github.com/me/notes'], homeProjectKey: 'github.com/me/notes' })]);
+    expect((await next.call('projects.get', {})).elsewhere).toEqual([]);
+  });
+
   it('treats a folder without git as its own project', async () => {
     t = await startTestApp();
     const c = await t.connect();

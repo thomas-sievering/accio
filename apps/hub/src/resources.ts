@@ -62,6 +62,12 @@ export class Resources {
       return { ...d, skillSelections: { ...d.skillSelections, [id]: scope }, skills: d.skills.map(skill => skill.id === id ? { ...skill, scope } : skill) };
     });
   }
+  /** GLOSSARY: Project. A renamed repository keeps the CLIs, MCP servers and skills turned on for it. */
+  renameProjectKey(from: string, to: string) {
+    const swap = (scope: ResourceScope): ResourceScope => scope.projectKeys.includes(from) ? { ...scope, projectKeys: [...new Set(scope.projectKeys.map(key => key === from ? to : key))] } : scope;
+    const swapAll = (selections?: Record<string, ResourceScope>) => selections && Object.fromEntries(Object.entries(selections).map(([id, scope]) => [id, swap(scope)]));
+    return this.save(d => ({ ...d, skills: d.skills.map(skill => ({ ...skill, scope: swap(skill.scope) })), toolSelections: swapAll(d.toolSelections), mcpSelections: swapAll(d.mcpSelections), skillSelections: swapAll(d.skillSelections) }));
+  }
   saveMcp(input: McpSave) { return this.save(d => {
     const { scope, ...rest } = input; const mcp = McpDefinition.parse(rest);
     return { ...d, mcps: [...d.mcps.filter(m => m.id !== mcp.id), mcp], mcpSelections: scope ? { ...d.mcpSelections, [mcp.id]: scope } : d.mcpSelections };

@@ -138,7 +138,7 @@ _Avoid_: Quota, usage, rate limit (in UI text)
 ## Work
 
 **Project**:
-A repository, recognised across machines by its git remote URL. It belongs to exactly one profile, which can change only while the project has no threads on any machine. The hub keeps each project with a remote and its profile, whether or not any machine has a checkout of it, so New thread lists it on every machine. A machine adding a checkout of a repository the hub already has joins it under the hub's profile: the first machine to add a repository decides it. The hub forgets a project once its last checkout anywhere is removed (an offline machine counts by its last list). A folder without a remote is a project on its own machine only.
+A repository, recognised across machines by its git remote URL. It belongs to exactly one profile, which can change only while the project has no threads on any machine. The hub keeps each project with a remote and its profile, whether or not any machine has a checkout of it, so New thread lists it on every machine. A machine adding a checkout of a repository the hub already has joins it under the hub's profile: the first machine to add a repository decides it. The hub forgets a project once its last checkout anywhere is removed (an offline machine counts by its last list). A repository renamed on its host keeps its project: when Accio starts and a checkout's remote names the new repository, the project takes the new name everywhere, with its threads, its place in a space and the tools turned on for it, and other machines follow. A folder without a remote is a project on its own machine only.
 _Avoid_: Workspace, repo (in UI text)
 
 **Space**:

@@ -38,6 +38,8 @@ type Data = {
   spaces?: Space[];
   /** GLOSSARY: Project. Each repository with a remote and its profile, whether or not a machine has a checkout of it. */
   projects?: HubProject[];
+  /** GLOSSARY: Project. Old repository key → its current one, so every machine follows a renamed repository. */
+  projectRenames?: Record<string, string>;
 };
 
 /**
@@ -160,6 +162,28 @@ export class SharedSettings {
     return this.change(async () => {
       const known = this.data.projects ?? [];
       if (known.some((p) => p.repoKey === repoKey)) await this.commit({ ...this.data, projects: known.filter((p) => p.repoKey !== repoKey) });
+    });
+  }
+
+  projectRenames(): Record<string, string> { return { ...this.data.projectRenames }; }
+
+  /**
+   * GLOSSARY: Project. A repository renamed or moved on its host: its project, and its place in spaces,
+   * take the new key and name, keeping the profile. The rename is kept so other machines follow it.
+   */
+  async renameProject(from: string, to: string, name: string) {
+    return this.change(async () => {
+      if (from === to) return;
+      const known = this.data.projects ?? [];
+      const projects = known.some((p) => p.repoKey === to) ? known.filter((p) => p.repoKey !== from) : known.map((p) => (p.repoKey === from ? { ...p, repoKey: to, name } : p));
+      const swap = (key: string) => (key === from ? to : key);
+      const spaces = (this.data.spaces ?? []).map((s) => {
+        if (!s.projectKeys.includes(from) && s.homeProjectKey !== from) return s;
+        return { ...s, projectKeys: [...new Set(s.projectKeys.map(swap))], ...(s.homeProjectKey ? { homeProjectKey: swap(s.homeProjectKey) } : {}) };
+      });
+      const renames = Object.fromEntries(Object.entries(this.data.projectRenames ?? {}).filter(([key]) => key !== to).map(([key, value]) => [key, swap(value)]));
+      renames[from] = to;
+      await this.commit({ ...this.data, projects, spaces, projectRenames: renames });
     });
   }
 

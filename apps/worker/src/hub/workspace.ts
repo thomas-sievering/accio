@@ -128,6 +128,8 @@ export async function openWorkspace(record: SavedHub, deps: WorkspaceDeps, slot:
     register: (list) => settings.registerProjects(list),
     setProfile: (project) => refused(() => settings.setProjectProfile(project)),
     forget: (repoKey) => settings.forgetProject(repoKey),
+    renames: () => settings.projectRenames(),
+    rename: (from, to, name) => settings.renameProject(from, to, name),
     onChanged: (listener) => { settings.onMachinesChanged(listener); },
     checkoutElsewhere: (repoKey) => relay.checkoutElsewhere(repoKey),
   });

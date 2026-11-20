@@ -119,3 +119,19 @@ it('keeps projects by repository: the first profile registered wins, until one i
   await settings.setProfiles([{ id: 'work', name: 'Work' }]);
   expect(settings.projects()).toEqual([]);
 });
+
+it('moves a renamed repository’s project and spaces to its new key, and keeps the rename for other machines', async () => {
+  const settings = await setup();
+  const notes = { repoKey: 'github.com/me/notes-home', name: 'notes-home', profileId: 'work' };
+  await settings.registerProjects([notes]);
+  await settings.saveSpace({ name: 'notes', projectKeys: [notes.repoKey], homeProjectKey: notes.repoKey });
+  await settings.renameProject(notes.repoKey, 'github.com/me/notes', 'notes');
+  await settings.renameProject('github.com/me/notes', 'github.com/team/notes', 'notes');
+  expect(settings.projects()).toEqual([{ repoKey: 'github.com/team/notes', name: 'notes', profileId: 'work' }]);
+  expect(settings.spaces()).toEqual([expect.objectContaining({ projectKeys: ['github.com/team/notes'], homeProjectKey: 'github.com/team/notes' })]);
+  // A machine still on either old name follows straight to the current one.
+  expect(settings.projectRenames()).toEqual({ 'github.com/me/notes-home': 'github.com/team/notes', 'github.com/me/notes': 'github.com/team/notes' });
+  // Renaming back drops the rename that would loop.
+  await settings.renameProject('github.com/team/notes', 'github.com/me/notes', 'notes');
+  expect(settings.projectRenames()).toEqual({ 'github.com/me/notes-home': 'github.com/me/notes', 'github.com/team/notes': 'github.com/me/notes' });
+});

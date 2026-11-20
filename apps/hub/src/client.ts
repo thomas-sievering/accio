@@ -114,8 +114,10 @@ export class HubClient {
   async close() { this.stopped = true; clearTimeout(this.retry); this.ws?.terminate(); }
 }
 
-export type SettingsAccess = Pick<SharedSettings, 'threadNaming' | 'setThreadNaming' | 'spaces' | 'saveSpace' | 'deleteSpace' | 'registerProjects' | 'setProjectProfile' | 'forgetProject' | 'profiles' | 'machines' | 'machine' | 'modelFavorites' | 'setModelFavorite' | 'harnessTools' | 'setHarnessTools' | 'onMachinesChanged' | 'machineConnected' | 'machineDisconnected' | 'renameMachine' | 'setProfileFolders'> & {
+export type SettingsAccess = Pick<SharedSettings, 'threadNaming' | 'setThreadNaming' | 'spaces' | 'saveSpace' | 'deleteSpace' | 'registerProjects' | 'setProjectProfile' | 'forgetProject' | 'projectRenames' | 'profiles' | 'machines' | 'machine' | 'modelFavorites' | 'setModelFavorite' | 'harnessTools' | 'setHarnessTools' | 'onMachinesChanged' | 'machineConnected' | 'machineDisconnected' | 'renameMachine' | 'setProfileFolders'> & {
   refresh?: () => Promise<void>;
+  /** GLOSSARY: Project. Moves a project, its spaces and its tool levels to the repository's new key. */
+  renameProject: (from: string, to: string, name: string) => Promise<void>;
   /** GLOSSARY: Project. Undefined from a hub that keeps no projects yet, whose machines keep each project's profile themselves. */
   projects: () => HubProject[] | undefined;
 };
@@ -133,6 +135,8 @@ export function remoteSettings(client: HubClient): SettingsAccess {
     registerProjects: (projects) => client.call('hubProjects.register', { projects }),
     setProjectProfile: async (project) => { await client.call('hubProjects.setProfile', project); },
     forgetProject: async (repoKey) => { await client.call('hubProjects.forget', { repoKey }); },
+    projectRenames: () => ({ ...client.snapshot?.projectRenames }),
+    renameProject: async (from, to, name) => { await client.call('hubProjects.rename', { from, to, name }); },
     refresh: () => client.refresh(true),
     profiles: () => client.snapshot?.profiles.map(({ id, name, githubLogin }) => ({ id, name, ...(githubLogin ? { githubLogin } : {}) })) ?? [],
     machines: () => client.snapshot?.machines ?? [],

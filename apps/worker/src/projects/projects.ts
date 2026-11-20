@@ -31,6 +31,10 @@ export type ProjectsHub = {
   register: (projects: HubProject[]) => Promise<unknown>;
   setProfile: (project: HubProject) => Promise<void>;
   forget: (repoKey: string) => Promise<void>;
+  /** Old repository key → its current one, for repositories renamed on their host. */
+  renames: () => Record<string, string>;
+  /** Moves the hub's project, its spaces and its tool levels to the repository's new key. */
+  rename: (from: string, to: string, name: string) => Promise<void>;
   onChanged: (listener: () => void) => void;
   /** Whether another machine has a checkout of the repository, by its last list even while offline. */
   checkoutElsewhere: (repoKey: string) => boolean;
@@ -58,6 +62,8 @@ export class Projects {
   private syncing?: Promise<void>;
   private syncAgain = false;
   private shownElsewhere = '[]';
+  /** Whether this run has compared each project's key with its checkout's remote yet. */
+  private remotesChecked = false;
   private closed = false;
 
   constructor(
@@ -120,9 +126,9 @@ export class Projects {
    * doesn't have. The first machine to register a repository decides its profile; threads keep theirs.
    */
   private async reconcile() {
-    const hub = this.hub.list();
-    if (!hub) return;
-    const kept = new Map(hub.map((p) => [p.repoKey, p]));
+    if (!this.hub.list()) return;
+    await this.followRenames();
+    const kept = new Map(this.hub.list()!.map((p) => [p.repoKey, p]));
     for (const key of this.registering) if (kept.has(key)) this.registering.delete(key);
     const adopted = this.data.projects.map((p) => {
       const shared = p.repoKey ? kept.get(p.repoKey) : undefined;
@@ -137,6 +143,42 @@ export class Projects {
     // One the hub refused, or couldn't take while offline, is tried again later rather than on every change.
     const retry = () => { const timer = setTimeout(() => { for (const key of keys) this.registering.delete(key); this.sync(); }, REGISTER_RETRY_MS); timer.unref?.(); };
     await this.hub.register(missing.map(({ repoKey, name, profileId }) => ({ repoKey, name, profileId }))).then(retry, retry);
+  }
+
+  /**
+   * GLOSSARY: Project. A repository renamed or moved on its host keeps its project, threads and spaces.
+   * Once per run, a checkout whose remote now names another repository moves its project there, on the
+   * hub too; a rename another machine made is taken over here, even while this checkout's remote still
+   * uses the old name, which the host redirects.
+   */
+  private async followRenames() {
+    const renames = this.hub.renames();
+    for (const project of this.data.projects) {
+      const to = project.repoKey && renames[project.repoKey];
+      if (to && to !== project.repoKey) await this.rekey(project.id, to);
+    }
+    if (this.remotesChecked) return;
+    this.remotesChecked = true;
+    for (const project of this.data.projects) {
+      if (!project.repoKey) continue;
+      const checkout = await checkoutHere(this.data, project);
+      const to = checkout && (await inspectFolder(checkout.path).catch(() => null))?.repoKey;
+      if (!to || to === project.repoKey || renames[to] === project.repoKey || this.data.projects.some((p) => p.repoKey === to)) continue;
+      try {
+        await this.hub.rename(project.repoKey, to, projectNameFor({ root: checkout.path, repoKey: to }));
+      } catch (error) {
+        console.error('[projects] could not rename the project on the hub', error);
+        continue;
+      }
+      await this.rekey(project.id, to);
+    }
+  }
+
+  /** Gives a project its repository's new key and the name that goes with it. */
+  private async rekey(projectId: string, repoKey: string) {
+    if (this.data.projects.some((p) => p.repoKey === repoKey)) return;
+    const name = projectNameFor({ root: '', repoKey });
+    await this.commit({ ...this.data, projects: this.data.projects.map((p) => (p.id === projectId ? { ...p, repoKey, name } : p)) });
   }
 
   checkout(id: string): Checkout {

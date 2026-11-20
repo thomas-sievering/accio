@@ -32,6 +32,8 @@ export type HubSnapshot = {
   spaces?: ReturnType<SharedSettings['spaces']>;
   /** GLOSSARY: Project. Absent from hubs before they kept projects. */
   projects?: ReturnType<SharedSettings['projects']>;
+  /** GLOSSARY: Project. Absent from hubs before they followed renamed repositories. */
+  projectRenames?: ReturnType<SharedSettings['projectRenames']>;
   models: Record<string, CodexModel[]>;
   resources: ResourcesState;
   limits: AccountLimitsView[];
@@ -103,6 +105,7 @@ const machineCalls = {
   'hubProjects.register': z.object({ projects: z.array(HubProjectInput).max(10_000) }),
   'hubProjects.setProfile': HubProjectInput,
   'hubProjects.forget': z.object({ repoKey: HubProjectInput.shape.repoKey }),
+  'hubProjects.rename': z.object({ from: HubProjectInput.shape.repoKey, to: HubProjectInput.shape.repoKey, name: HubProjectInput.shape.name }),
   'hub.pairingCode': z.object({}),
   'hub.revokeMachine': z.object({ machineId: z.string().min(1).max(128) }),
   'resources.write': ResourceWrite,
@@ -168,7 +171,7 @@ export async function startHubService(opts: HubServiceOptions) {
     const remote = link.view();
     return { hubId: trust.id, protocol: HUB_PROTOCOL, revision, epoch, ...(opts.version ? { version: opts.version } : {}), profiles: profileViews(profiles, link), accounts: link.accountViews(), machines: settings.machines(),
       favorites: Object.fromEntries(profiles.map((p) => [p.id, settings.modelFavorites(p.id)])), harnessTools: settings.harnessTools(),
-      threadNaming: settings.threadNaming(), spaces: settings.spaces(), projects: settings.projects(),
+      threadNaming: settings.threadNaming(), spaces: settings.spaces(), projects: settings.projects(), projectRenames: settings.projectRenames(),
       models: Object.fromEntries(profiles.map((p) => [p.id, p.houseId ? link.codexModels(p.houseId) : []])), resources: resources.state(), limits: link.limitViews(), secrets: profiles.flatMap(p => secrets.list(p.id)),
       ...(remote ? { sortingHat: remote } : {}) };
   }
@@ -196,6 +199,7 @@ export async function startHubService(opts: HubServiceOptions) {
       case 'hubProjects.register': return settings.registerProjects(p.projects);
       case 'hubProjects.setProfile': await settings.setProjectProfile(p); return null;
       case 'hubProjects.forget': await settings.forgetProject(p.repoKey); return null;
+      case 'hubProjects.rename': await settings.renameProject(p.from, p.to, p.name); await resources.renameProjectKey(p.from, p.to); return null;
       case 'machine.modelKey': {
         const profile = settings.profiles().find((profile) => profile.id === p.profileId);
         if (!profile) throw new HubError('No such profile');
