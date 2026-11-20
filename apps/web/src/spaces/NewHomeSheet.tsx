@@ -12,10 +12,14 @@ import { MenuSelect } from '../ui/MenuSelect';
 
 type Location = 'folder' | 'github';
 
-/** The home's folder and repository name, from the space's name: "hrc" makes "hrc-home". */
+/**
+ * The home's folder and repository name, from the space's name: "hrc" makes "hrc-home", while a name
+ * that already says home, such as "hrc-home-apps", is kept as it is.
+ */
 function homeName(space: string) {
   const base = space.trim().replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^[-.]+|-+$/g, '').toLowerCase();
-  return base ? `${base}-home` : 'home';
+  if (!base) return 'home';
+  return /(^|[-._])home([-._]|$)/.test(base) ? base : `${base}-home`;
 }
 
 /**
