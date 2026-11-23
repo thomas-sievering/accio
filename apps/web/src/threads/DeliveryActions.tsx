@@ -219,7 +219,7 @@ export function DeliveryActions({ thread, project, canRun, active = true }: { th
       {!released && (receipt || settled) && thread.workspace && <Button className="delivery-pill" disabled={!!unavailable || busy || thread.status === 'running'} busy={calling === 'threads.archive'} busyLabel="Archiving…" title="Frees the workspace, keeps this thread" onClick={() => call('threads.archive')}>
         <Archive />Archive
       </Button>}
-      {!released && !reason('threads.openPreview') && summary?.previewAvailable && <button className="delivery-pill" disabled={!!unavailable || busy} onClick={openApp}><Play />Open app</button>}
+      {!client.browser && !released && !reason('threads.openPreview') && summary?.previewAvailable && <button className="delivery-pill" disabled={!!unavailable || busy} onClick={openApp}><Play />Open app</button>}
     </div>
     {hint && <p className={`delivery-hint tone-${status?.tone ?? 'ready'}`} role={status?.phase === 'attention' || status?.phase === 'closed' ? 'alert' : undefined}
       title={status?.phase === 'unavailable' ? thread.delivery?.observationError : undefined}>

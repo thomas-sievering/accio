@@ -3,7 +3,9 @@ import type { EventName, Events, MethodName, ParamsOf, ResultOf, ServerEnvelope 
 /** `unreachable`: the worker did not answer. `unauthorized`: it answered and refused the token. */
 export type ConnectionStatus = 'connecting' | 'open' | 'closed' | 'unreachable' | 'unauthorized';
 
-export type AppClient = Pick<RpcClient, 'hubId' | 'status' | 'call' | 'onEvent' | 'onStatus' | 'httpUrl' | 'close'> & { readonly browser?: boolean };
+export type AppClient = Pick<RpcClient, 'hubId' | 'status' | 'call' | 'onEvent' | 'onStatus' | 'httpUrl' | 'close'> & (
+  { readonly browser?: false } | { readonly browser: true; readonly clientId: string }
+);
 
 type Pending = { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> };
 

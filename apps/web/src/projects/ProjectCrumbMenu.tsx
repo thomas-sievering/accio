@@ -1,6 +1,7 @@
 import { useEffect, useState, type MouseEvent } from 'react';
 import { projectKey, type ProjectView } from '@accio/protocol';
 import { emitAppEvent } from '../app/appEvents';
+import { useClient } from '../app/connection';
 import { useAction } from '../app/useAction';
 import { useSpaces } from '../spaces/spaces';
 import { usePopoverMenu } from '../ui/usePopoverMenu';
@@ -12,6 +13,7 @@ import { usePopoverMenu } from '../ui/usePopoverMenu';
  * listed greyed out with the reason.
  */
 export function ProjectCrumbMenu({ project, path }: { project: ProjectView; path?: string }) {
+  const { browser } = useClient();
   const { error, run, clear } = useAction();
   const [at, setAt] = useState<{ x: number; y: number }>();
   const { props, popover: menu } = usePopoverMenu({
@@ -30,6 +32,7 @@ export function ProjectCrumbMenu({ project, path }: { project: ProjectView; path
     await window.accioDesktop!.openFolder(path!);
     close();
   });
+  const hasMenu = !browser || !!space;
   const onContextMenu = (e: MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
     // Shift+F10 and the menu key report no pointer: open under the name instead.
@@ -43,15 +46,15 @@ export function ProjectCrumbMenu({ project, path }: { project: ProjectView; path
   );
 
   return <>
-    <button type="button" className="thread-project-link" aria-haspopup="menu" title={path ? `${project.name} dashboard · ${path}` : `${project.name} dashboard`}
-      onClick={() => emitAppEvent('project.dashboard', { id: project.id })} onContextMenu={onContextMenu}>
+    <button type="button" className="thread-project-link" aria-haspopup={hasMenu ? 'menu' : undefined} title={path ? `${project.name} dashboard · ${path}` : `${project.name} dashboard`}
+      onClick={() => emitAppEvent('project.dashboard', { id: project.id })} onContextMenu={hasMenu ? onContextMenu : undefined}>
       {project.name}
     </button>
-    <div {...props} className="menu project-crumb-menu" popover="auto" role="menu" aria-label={project.name}>
+    {hasMenu && <div {...props} className="menu project-crumb-menu" popover="auto" role="menu" aria-label={project.name}>
       {space && item('Space', () => { close(); emitAppEvent('space.open', { id: space.id }); })}
-      {item('Open in Explorer', () => void openFolder(), cannotOpenFolder)}
-      {item('Project settings', () => { close(); emitAppEvent('project.open', { id: project.id }); })}
+      {!browser && item('Open in Explorer', () => void openFolder(), cannotOpenFolder)}
+      {!browser && item('Project settings', () => { close(); emitAppEvent('project.open', { id: project.id }); })}
       {error && <p className="error menu-error" role="alert">Could not open the folder: {error}</p>}
-    </div>
+    </div>}
   </>;
 }

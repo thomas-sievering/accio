@@ -39,6 +39,7 @@ export type RemoteMachine = { id: string; name: string; online: boolean };
 
 export type BrowserSharedState = {
   hubId: string;
+  clientId: string;
   version?: string;
   profiles: ProfileView[];
   accounts: AccountView[];

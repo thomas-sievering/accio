@@ -39,5 +39,5 @@ The `add_project` accio tool (`apps/worker/src/projects/addProject.ts`) adds `fo
 
 - Folder inspection debounces for 250 ms. Wait for its resulting facts/button state, not a fixed sleep.
 - Plain folders have no remote grouping. A grouping journey without two matching remotes fails its fixture precondition.
-- `Browse…` and clickable OS folder opening use Electron's bridge; browser server mode leaves them unavailable and cannot prove them.
+- `Browse…` and clickable OS folder opening use Electron's bridge; a worker URL in Chromium leaves them unavailable and cannot prove them. At the paired hub URL there is no `Add project` or `Open in Explorer` control, and the project dashboard and Filter omit their Settings shortcuts (`browser-pairing.spec.ts`, relay fixture).
 - Project settings are a Settings detail page (no dialog). The Add project sheet is the only project dialog; `Close` belongs to its header.

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useClient } from '../app/connection';
 import { projectKey, threadPlace, type ProjectView, type Space } from '@accio/protocol';
 import { emitAppEvent } from '../app/appEvents';
 import { Close, MessageSquarePlus, Settings, Spaces as SpacesIcon } from '../app/icons';
@@ -17,6 +18,7 @@ import { useThreads } from '../threads/threads';
  * there. Threads still start from one project; this only gathers them.
  */
 export function SpaceView({ space, onClose }: { space: Space; onClose: () => void }) {
+  const { browser } = useClient();
   const heading = useRef<HTMLElement>(null);
   useEffect(() => { heading.current?.focus(); }, [space.id]);
   useEscapeClose(onClose);
@@ -30,8 +32,8 @@ export function SpaceView({ space, onClose }: { space: Space; onClose: () => voi
           <b ref={heading} role="heading" aria-level={1} tabIndex={-1}>{space.name}</b>
         </div>
         <span className="spacer" />
-        <button type="button" className="side-icon" title={`${space.name} settings`} aria-label={`${space.name} settings`}
-          onClick={() => emitAppEvent('settings.open', { section: 'spaces', id: space.id })}><Settings /></button>
+        {!browser && <button type="button" className="side-icon" title={`${space.name} settings`} aria-label={`${space.name} settings`}
+          onClick={() => emitAppEvent('settings.open', { section: 'spaces', id: space.id })}><Settings /></button>}
         <button type="button" className="side-icon" title="Close (Esc)" aria-label="Close space" onClick={onClose}><Close /></button>
       </header>
       <div className="settings-scroll">
