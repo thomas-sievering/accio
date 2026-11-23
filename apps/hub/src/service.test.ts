@@ -2,17 +2,19 @@ import { mkdir, mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { request } from 'node:http';
-import { afterEach, describe, expect, it } from 'vitest';
+import { once } from 'node:events';
+import WebSocket from 'ws';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { noSortingHatMessage } from '@accio/protocol';
 import { startHubService } from './service.js';
-import { HubTrust } from './trust.js';
+import { CLIENT_TTL_MS, HubTrust } from './trust.js';
 import { HubClient } from './client.js';
 import { remoteSecrets } from './secretClient.js';
 import { remoteResources } from './resourceClient.js';
 
 describe('standalone hub trust and network boundary', () => {
   const cleanup: (() => Promise<unknown>)[] = [];
-  afterEach(async () => { for (const stop of cleanup.splice(0).reverse()) await stop(); });
+  afterEach(async () => { vi.restoreAllMocks(); for (const stop of cleanup.splice(0).reverse()) await stop(); });
   async function fixture() {
     const home = await mkdtemp(join(tmpdir(), 'accio-hub-service-'));
     cleanup.push(() => rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
@@ -28,8 +30,117 @@ describe('standalone hub trust and network boundary', () => {
       await client.start(); cleanup.push(() => client.close());
       return { client, token: p.token as string, code };
     }
-    return { home, service, mcpForwarded, pair };
+    function form(path: string, params: Record<string, string>, headers: Record<string, string> = {}) {
+      return fetch(service.url + path, { method: 'POST', redirect: 'manual', headers: { origin: service.url, 'user-agent': 'iPhone Version/18.0 Safari/604.1', ...headers }, body: new URLSearchParams(params) });
+    }
+    return { home, service, mcpForwarded, pair, form };
   }
+  it('pairs a browser separately, with a one-use code and an opaque secure cookie', async () => {
+    const { home, service, pair, form } = await fixture();
+    const page = (cookie?: string) => fetch(service.url, { headers: cookie ? { cookie } : {} });
+    expect(await (await page()).text()).toContain('Pair this browser');
+    const { client } = await pair('desktop');
+    const { code: machineCode } = await service.createPairingCode();
+    const { code } = await client.call('clients.createPairingCode');
+    expect((await form('/client/pair', { code: machineCode })).status).toBe(400);
+    expect((await fetch(service.url + '/pair', { method: 'POST', body: JSON.stringify({ machineId: 'other', code }) })).status).toBe(400);
+    expect((await form('/client/pair', { code }, { origin: 'https://other.example' })).status).toBe(403);
+    const response = await form('/client/pair', { code });
+    expect(response.status).toBe(303);
+    expect(response.headers.get('location')).toBe('/');
+    const header = response.headers.get('set-cookie')!;
+    expect(header).toMatch(/^__Host-accio-client=[\w-]+; Path=\/; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000$/);
+    const cookie = header.split(';')[0]!;
+    const signedIn = await (await page(cookie)).text();
+    expect(signedIn).toContain("You're paired with Accio");
+    expect(signedIn).toContain('iPhone Safari');
+    expect(signedIn).not.toContain('Pair this browser');
+    expect(signedIn).not.toContain(cookie);
+    expect(service.snapshot().clients).toEqual([{ id: expect.any(String), name: 'iPhone Safari' }]);
+    expect(service.snapshot().machines.map((machine) => machine.id)).toEqual(['desktop']);
+    const stored = await readFile(join(home, 'hub', 'trust.json'), 'utf8');
+    expect(JSON.parse(stored)).toMatchObject({ devices: [{ kind: 'machine', id: 'desktop' }], clients: [{ kind: 'client', name: 'iPhone Safari' }] });
+    expect(stored).not.toContain(cookie.slice(cookie.indexOf('=') + 1));
+    expect((await form('/client/pair', { code })).status).toBe(400);
+  });
+  it('expires browser codes after ten minutes and shares the machine pairing rate limit', async () => {
+    const { service, pair, form } = await fixture();
+    const { client } = await pair('desktop');
+    const { code, expiresAt } = await client.call('clients.createPairingCode');
+    vi.spyOn(Date, 'now').mockReturnValue(expiresAt);
+    const expired = await form('/client/pair', { code });
+    expect(expired.status).toBe(400);
+    expect(await expired.text()).toContain('invalid or expired');
+    for (let attempt = 1; attempt < 10; attempt++) expect((await form('/client/pair', { code: 'wrong' })).status).toBe(400);
+    expect((await fetch(service.url + '/pair', { method: 'POST', body: '{}' })).status).toBe(429);
+    expect((await form('/client/pair', { code })).status).toBe(429);
+  });
+  it('extends a used browser credential but requires pairing after 30 days of inactivity', async () => {
+    const { service, pair, form } = await fixture();
+    const { client } = await pair('desktop');
+    const initial = Date.now();
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(initial);
+    const { code } = await client.call('clients.createPairingCode');
+    const cookie = (await form('/client/pair', { code })).headers.get('set-cookie')!.split(';')[0]!;
+    const page = () => fetch(service.url, { headers: { cookie } });
+    clock.mockReturnValue(initial + CLIENT_TTL_MS - 60_000);
+    const renewed = await page();
+    expect(await renewed.text()).toContain("You're paired with Accio");
+    expect(renewed.headers.get('set-cookie')).toContain('Max-Age=2592000');
+    clock.mockReturnValue(initial + CLIENT_TTL_MS);
+    expect(await (await page()).text()).toContain("You're paired with Accio");
+    clock.mockReturnValue(initial + 2 * CLIENT_TTL_MS - 60_000);
+    const ws = new WebSocket(service.url.replace('http:', 'ws:') + '/client/events', { headers: { origin: service.url, cookie } });
+    cleanup.push(async () => ws.terminate());
+    const [[upgrade]] = await Promise.all([once(ws, 'upgrade'), once(ws, 'open')]);
+    expect(upgrade.headers['set-cookie']).toEqual([expect.stringContaining('Max-Age=2592000')]);
+    clock.mockReturnValue(initial + 2 * CLIENT_TTL_MS);
+    expect(await (await page()).text()).toContain("You're paired with Accio");
+    clock.mockReturnValue(initial + 3 * CLIENT_TTL_MS);
+    const expired = await page();
+    expect(await expired.text()).toContain('Pair this browser');
+    expect(expired.headers.get('set-cookie')).toContain('Max-Age=0');
+    expect(service.snapshot().clients).toEqual([]);
+  });
+  it('refuses browser credentials on machine routes and closes sockets when either kind of client unpairs a browser', async () => {
+    const { service, pair, form } = await fixture();
+    const { client } = await pair('desktop');
+    async function browser() {
+      const { code } = await client.call('clients.createPairingCode');
+      const before = new Set(service.snapshot().clients!.map(({ id }) => id));
+      const cookie = (await form('/client/pair', { code })).headers.get('set-cookie')!.split(';')[0]!;
+      const id = service.snapshot().clients!.find((item) => !before.has(item.id))!.id;
+      return { cookie, id, authorization: `Bearer ${cookie.slice(cookie.indexOf('=') + 1)}` };
+    }
+    const first = await browser();
+    const second = await browser();
+    function socket(path: string, headers: Record<string, string>) {
+      const ws = new WebSocket(service.url.replace('http:', 'ws:') + path, { headers: { origin: service.url, ...headers } });
+      cleanup.push(async () => ws.terminate());
+      return ws;
+    }
+    for (const headers of [{ cookie: first.cookie }, { authorization: first.authorization }]) {
+      const denial = await fetch(service.url + '/rpc', { method: 'POST', headers, body: JSON.stringify({ method: 'profiles.save', params: { name: 'Forbidden' } }) });
+      expect(denial.status).toBe(401);
+      expect((await fetch(service.url + '/state', { headers })).status).toBe(401);
+      await expect(once(socket('/relay', headers), 'open')).rejects.toThrow('Unexpected server response: 401');
+    }
+    expect(service.snapshot().profiles).toEqual([]);
+    const firstSocket = socket('/client/events', { cookie: first.cookie });
+    const secondSocket = socket('/client/events', { cookie: second.cookie });
+    await Promise.all([once(firstSocket, 'open'), once(secondSocket, 'open')]);
+    const firstClosed = once(firstSocket, 'close');
+    expect((await form('/client/unpair', { id: first.id }, { cookie: second.cookie, origin: 'https://other.example' })).status).toBe(403);
+    expect((await form('/client/unpair', { id: first.id }, { cookie: second.cookie })).status).toBe(303);
+    expect((await firstClosed)[0]).toBe(4001);
+    expect(secondSocket.readyState).toBe(WebSocket.OPEN);
+    expect(await (await fetch(service.url, { headers: { cookie: first.cookie } })).text()).toContain('Pair this browser');
+    await expect(once(socket('/client/events', { cookie: first.cookie }), 'open')).rejects.toThrow('Unexpected server response: 401');
+    const secondClosed = once(secondSocket, 'close');
+    await client.call('clients.unpair', { clientId: second.id });
+    expect((await secondClosed)[0]).toBe(4001);
+    expect(service.snapshot().clients).toEqual([]);
+  });
   it('bootstraps a first device with a one-time code and stores only its credential hash', async () => {
     const { home, service, pair } = await fixture();
     expect((await fetch(service.url + '/state')).status).toBe(401);
@@ -81,7 +192,7 @@ describe('standalone hub trust and network boundary', () => {
     await mkdir(join(home, 'hub'));
     await writeFile(join(home, 'hub', 'trust.json'), JSON.stringify({ id: 'hub-1', devices: [{ id: 'laptop', tokenHash: 'hash', keys: { personal: 'accio-old-model-key' }, references: ['personal'] }] }));
     const trust = new HubTrust(home); await trust.load(); await trust.close();
-    expect(JSON.parse(await readFile(join(home, 'hub', 'trust.json'), 'utf8'))).toEqual({ id: 'hub-1', devices: [{ id: 'laptop', tokenHash: 'hash', references: ['personal'] }] });
+    expect(JSON.parse(await readFile(join(home, 'hub', 'trust.json'), 'utf8'))).toEqual({ id: 'hub-1', devices: [{ kind: 'machine', id: 'laptop', tokenHash: 'hash', references: ['personal'] }] });
   });
   it('protects profile references retained for an offline paired machine', async () => {
     const { pair } = await fixture(); const first = await pair('first'); const second = await pair('second');

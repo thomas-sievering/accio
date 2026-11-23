@@ -14,6 +14,8 @@ import { Resources } from './resources.js';
 import { McpGateway } from './mcp.js';
 import { RESOURCE_WRITES } from './resourceClient.js';
 import { SecretsVault, SecretStoreError } from './secrets.js';
+import type { PairedClientView } from '@accio/protocol';
+import { browserCookie, browserCookieValue, browserForm, browserName, browserOrigin, browserPage, browserToken, recheckBrowserSession } from './browser.js';
 
 export const HUB_PROTOCOL = 2;
 /** Largest relay WebSocket message; machines split bigger frames into chunks. */
@@ -24,6 +26,7 @@ export type HubSnapshot = {
   version?: string;
   profiles: ProfileView[]; accounts: AccountView[];
   machines: ReturnType<SharedSettings['machines']>;
+  clients?: PairedClientView[];
   favorites: Record<string, { harnessId: string; modelId: string }[]>;
   /** Absent in snapshots cached before built-in tool switches existed. */
   harnessTools?: Record<string, Record<string, boolean>>;
@@ -136,7 +139,12 @@ export async function startHubService(opts: HubServiceOptions) {
   const link = new SortingHatLink(opts.home, secrets, () => settings.profiles().flatMap((p) => p.houseId ? [p.houseId] : []));
   await link.load();
   const sockets = new WebSocketServer({ noServer: true, maxPayload: 16_384 });
+  sockets.on('headers', (headers, req) => {
+    const token = req.url === '/client/events' && browserToken(req);
+    if (token) headers.push(`Set-Cookie: ${browserCookieValue(token)}`);
+  });
   const owners = new Map<WebSocket, string>();
+  const browserOwners = new Map<WebSocket, string>();
   const relay = new WebSocketServer({ noServer: true, maxPayload: RELAY_FRAME_BYTES });
   /** GLOSSARY: Relay. One socket per machine; a newer one replaces the older. */
   const relays = new Map<string, WebSocket>();
@@ -170,7 +178,7 @@ export async function startHubService(opts: HubServiceOptions) {
     const profiles = settings.profiles();
     const remote = link.view();
     return { hubId: trust.id, protocol: HUB_PROTOCOL, revision, epoch, ...(opts.version ? { version: opts.version } : {}), profiles: profileViews(profiles, link), accounts: link.accountViews(), machines: settings.machines(),
-      favorites: Object.fromEntries(profiles.map((p) => [p.id, settings.modelFavorites(p.id)])), harnessTools: settings.harnessTools(),
+      clients: trust.clients(), favorites: Object.fromEntries(profiles.map((p) => [p.id, settings.modelFavorites(p.id)])), harnessTools: settings.harnessTools(),
       threadNaming: settings.threadNaming(), spaces: settings.spaces(), projects: settings.projects(), projectRenames: settings.projectRenames(),
       models: Object.fromEntries(profiles.map((p) => [p.id, p.houseId ? link.codexModels(p.houseId) : []])), resources: resources.state(), limits: link.limitViews(), secrets: profiles.flatMap(p => secrets.list(p.id)),
       ...(remote ? { sortingHat: remote } : {}) };
@@ -180,6 +188,10 @@ export async function startHubService(opts: HubServiceOptions) {
   link.onChanged(announce);
   secrets.onChanged(announce);
   function auth(req: IncomingMessage) { const token = /^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1]; return token ? trust.authenticate(token) : undefined; }
+  async function unpairClient(id: string, by?: string) {
+    await trust.revokeClient(id, by);
+    for (const [ws, owner] of browserOwners) if (owner === id) ws.close(4001, 'Pairing revoked');
+  }
   function ownSignIn(id: string, machineId: string) {
     if (signInOwners.get(id)?.machineId !== machineId) throw new HubError('This sign-in has expired or was cancelled. Start it again.');
   }
@@ -210,6 +222,8 @@ export async function startHubService(opts: HubServiceOptions) {
         return { key, url: link.threadUrl };
       }
       case 'hub.pairingCode': return HubTrust.createCode(opts.home);
+      case 'clients.createPairingCode': return { ...await trust.createClientCode(), url: opts.publicUrl };
+      case 'clients.unpair': await unpairClient(p.clientId); return null;
       case 'hub.revokeMachine': {
         await trust.revoke(p.machineId);
         await link.forgetMachine(p.machineId);
@@ -341,16 +355,46 @@ export async function startHubService(opts: HubServiceOptions) {
     const path = target.pathname;
     if (path.startsWith('/mcp/') && await mcp.handle(req, res)) { if (path === '/mcp/oauth/callback') announce(); return; }
     if (path === '/' && req.method === 'GET') {
-      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'" });
-      res.end('<!doctype html><meta name="viewport" content="width=device-width"><title>Accio hub</title><main style="font-family:system-ui;max-width:38rem;margin:15vh auto;padding:2rem"><h1>Accio hub</h1><p>In Accio, open Settings → Hubs and add this address.</p><p>Use a pairing code from an already connected device, or generate your first code with the hub’s setup command.</p></main>'); return;
+      const token = browserToken(req);
+      const id = token && await trust.useClient(token);
+      if (!token && !target.searchParams.has('check-session') && ['cross-site', 'same-site'].includes(req.headers['sec-fetch-site'] ?? '')) return recheckBrowserSession(res);
+      if (token) browserCookie(res, id ? token : '');
+      return browserPage(res, id ? { id, clients: trust.clients() } : undefined);
     }
     if (path === '/healthz' && req.method === 'GET') return json(res, closing ? 503 : 200, { hubId: trust.id, protocol: HUB_PROTOCOL, ready: !closing });
-    if (path === '/pair' && req.method === 'POST') {
+    if (path === '/client/unpair' && req.method === 'POST') {
+      if (!browserOrigin(req, opts.publicUrl)) return json(res, 403, { error: 'Invalid browser origin' });
+      const target = (await browserForm(req)).get('id');
+      if (!target || !z.uuid().safeParse(target).success) throw new HubError('Invalid client identity');
+      const token = browserToken(req);
+      const id = token && await trust.useClient(token);
+      if (!id) return json(res, 401, { error: 'This browser is not paired with the hub.' });
+      await unpairClient(target, id); announce();
+      browserCookie(res, target === id ? '' : token);
+      res.writeHead(303, { location: '/', 'cache-control': 'no-store' }).end(); return;
+    }
+    if ((path === '/pair' || path === '/client/pair') && req.method === 'POST') {
+      const browser = path === '/client/pair';
+      if (browser && !browserOrigin(req, opts.publicUrl)) return json(res, 403, { error: 'Invalid browser origin' });
       const address = clientAddress(req);
       if (pairingAttempts.size > 1000) for (const [key, v] of pairingAttempts) if (v.until < Date.now()) pairingAttempts.delete(key);
       const counter = pairingAttempts.get(address);
-      if (counter && counter.until > Date.now() && counter.count >= 10) return json(res, 429, { error: 'Too many pairing attempts. Try again in a minute.' });
+      if (counter && counter.until > Date.now() && counter.count >= 10) {
+        const message = 'Too many pairing attempts. Try again in a minute.';
+        return browser ? browserPage(res, undefined, { status: 429, message }) : json(res, 429, { error: message });
+      }
       pairingAttempts.set(address, counter && counter.until > Date.now() ? { ...counter, count: counter.count + 1 } : { count: 1, until: Date.now() + 60_000 });
+      if (browser) {
+        try {
+          const code = (await browserForm(req)).get('code');
+          if (!code || code.length > 64) throw new HubError('Enter a pairing code.');
+          browserCookie(res, await trust.pairClient(code, browserName(req.headers['user-agent'])));
+        } catch (error) {
+          if (error instanceof HubError) return browserPage(res, undefined, { status: 400, message: error.message });
+          throw error;
+        }
+        announce(); res.writeHead(303, { location: '/', 'cache-control': 'no-store' }).end(); return;
+      }
       const p = await readJson(req);
       if (typeof p.code !== 'string' || typeof p.machineId !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(p.machineId)) throw new HubError('Invalid pairing request');
       const paired = await trust.pair(p.code, p.machineId);
@@ -381,6 +425,26 @@ export async function startHubService(opts: HubServiceOptions) {
     return json(res, 404, { error: 'Unknown hub endpoint' });
   }
   server.on('upgrade', (req, socket, head) => {
+    const refuse = () => socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
+    if (req.url === '/client/events' && browserOrigin(req, opts.publicUrl)) {
+      const token = browserToken(req);
+      if (!token) { refuse(); return; }
+      const onError = () => socket.destroy();
+      socket.on('error', onError);
+      void trust.useClient(token).then((id) => {
+        if (socket.destroyed) return;
+        if (closing || !id || !trust.authenticateClient(token)) { refuse(); return; }
+        socket.off('error', onError);
+        sockets.handleUpgrade(req, socket, head, (ws) => {
+          browserOwners.set(ws, id);
+          keepAlive(ws, HUB_INTERVAL_MS, { endOnWake: false });
+          ws.on('error', () => {});
+          ws.once('close', () => browserOwners.delete(ws));
+          ws.send(JSON.stringify({ revision }));
+        });
+      }).catch(() => socket.destroy());
+      return;
+    }
     const machineId = auth(req);
     if (machineId && req.url === '/relay') {
       relay.handleUpgrade(req, socket, head, (ws) => {
@@ -395,7 +459,7 @@ export async function startHubService(opts: HubServiceOptions) {
       });
       return;
     }
-    if (!machineId || req.url !== '/events') { socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n'); return; }
+    if (!machineId || req.url !== '/events') { refuse(); return; }
     sockets.handleUpgrade(req, socket, head, (ws) => {
       owners.set(ws, machineId);
       keepAlive(ws, HUB_INTERVAL_MS, { endOnWake: false });
@@ -404,18 +468,22 @@ export async function startHubService(opts: HubServiceOptions) {
       ws.send(JSON.stringify({ revision }));
     });
   });
-  // The Sorting Hat expires its own sign-ins, and keeps a finished one about as long.
-  const signInSweep = setInterval(() => {
+  const expirySweep = setInterval(() => {
     for (const [id, owner] of signInOwners) if (Date.now() - owner.at > 2 * SIGN_IN_TTL_MS) signInOwners.delete(id);
+    if (browserOwners.size) {
+      const active = new Set(trust.clients().map((client) => client.id));
+      for (const [ws, id] of browserOwners) if (!active.has(id)) ws.close(4001, 'Pairing expired');
+    }
+    void trust.expireClients().then((expired) => { if (expired) announce(); }).catch(() => {});
   }, 25_000);
-  signInSweep.unref();
+  expirySweep.unref();
   await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(opts.port ?? 47322, opts.host ?? '127.0.0.1', resolve); });
   const address = server.address();
   const port = typeof address === 'object' && address ? address.port : opts.port!;
   const url = `http://${opts.host ?? '127.0.0.1'}:${port}`;
   mcp.setUrl(opts.publicUrl ?? url);
   return { sortingHatLink: link, settings, resources, secrets, trust, port, url, snapshot, createPairingCode: () => HubTrust.createCode(opts.home),
-    async close() { closing = true; clearInterval(signInSweep); for (const ws of sockets.clients) ws.terminate(); for (const ws of relay.clients) ws.terminate();
+    async close() { closing = true; clearInterval(expirySweep); for (const ws of sockets.clients) ws.terminate(); for (const ws of relay.clients) ws.terminate();
       // server.close() drops only the connections idle right now; a request finishing later would keep its socket open until the client's keep-alive timeout (~3s).
       const sweep = setInterval(() => server.closeIdleConnections(), 25);
       await new Promise<void>((resolve) => server.close(() => resolve())).finally(() => clearInterval(sweep)); sockets.close(); relay.close(); await queue; for (const grant of grants.values()) grant.release(); await link.close(); await secrets.close(); await resources.close(); await settings.close(); await trust.close(); } };
