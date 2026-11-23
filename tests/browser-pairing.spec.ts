@@ -41,7 +41,6 @@ async function browserHubLink(page: Page) {
 
 test('a phone reconnects to the hub and catches up without reloading or duplicating items', async ({ page, baseURL }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.route('**/client/pair', (route) => route.continue({ headers: { ...route.request().headers(), 'x-accio-fixture-client': 'reconnect-phone' } }));
   const link = await browserHubLink(page);
   const desktop = await TestClient.open(`${baseURL!.replace('http:', 'ws:')}/ws?token=relay-test-token`);
   let clientId: string | undefined;

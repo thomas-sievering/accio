@@ -31,7 +31,7 @@ async function machine(name: string, port: number, harness: FakeHarness, webRoot
   await mkdir(home, { recursive: true });
   await writeFile(join(home, 'machine.json'), JSON.stringify({ id }));
   const { code } = await hub.createPairingCode();
-  const paired = await fetch(hub.url + '/pair', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code, machineId: id }) }).then((r) => r.json()) as { hubId: string; token: string };
+  const paired = await fetch(hub.url + '/pair', { method: 'POST', headers: { 'content-type': 'application/json', 'x-accio-fixture-client': 'machine-setup' }, body: JSON.stringify({ code, machineId: id }) }).then((r) => r.json()) as { hubId: string; token: string };
   await writeFile(join(home, 'hub-connections.json'), JSON.stringify([{ id: paired.hubId, name: 'Home', url: hub.url, token: paired.token, home: join(home, 'hubs', paired.hubId), local: true }]));
   const app = await startApp({ home, host: '127.0.0.1', port, hubPort: 0, token, webRoot }, { harness, deliveryHosting });
   const client = await TestClient.open(`ws://127.0.0.1:${app.port}/ws?token=${token}`);
