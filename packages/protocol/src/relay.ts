@@ -70,4 +70,11 @@ export const RELAY_THREAD_METHODS = [
 export const RELAY_MACHINE_METHODS = ['update.status', 'update.start', 'app.screenshot', 'checkouts.clone', 'checkouts.cloneUrl'] as const satisfies readonly MethodName[];
 export type RelayMachineMethod = typeof RELAY_MACHINE_METHODS[number];
 
-export const RELAY_CLIENT_READS = ['harnesses.list', 'models.list'] as const satisfies readonly MethodName[];
+export const RELAY_CLIENT_READS = [
+  'threads.observe', 'threads.transcript', 'threads.toolDetails', 'threads.deliverySummary', 'threads.media',
+  'harnesses.list', 'models.list', 'secrets.status',
+] as const satisfies readonly MethodName[];
+
+export const RELAY_CLIENT_THREAD_ACTIONS = [
+  'threads.send', 'threads.queued', 'threads.stop', 'threads.setModel', 'secretRequests.answer', 'confirmations.answer',
+] as const satisfies readonly (typeof RELAY_THREAD_METHODS[number])[];
