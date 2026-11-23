@@ -217,7 +217,8 @@ ipcMain.handle('accio:open-folder', async (event, path: unknown) => {
 if (process.platform === 'win32') app.setAppUserModelId(process.env.ACCIO_WINDOW_TITLE ? `accio.${process.env.ACCIO_WINDOW_TITLE}` : 'accio');
 
 app.whenReady().then(async () => {
-  Menu.setApplicationMenu(Menu.buildFromTemplate(appMenuTemplate(process.platform, () => webContents.getAllWebContents())));
+  const menu = appMenuTemplate(process.platform, () => webContents.getAllWebContents());
+  Menu.setApplicationMenu(menu ? Menu.buildFromTemplate(menu) : null);
   try {
     const ready = await startWorker();
     localServerOrigin = new URL(ready.url).origin;

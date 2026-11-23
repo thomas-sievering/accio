@@ -5,7 +5,8 @@ import type { MenuItemConstructorOptions, WebContents } from 'electron';
  * Ctrl/Cmd+W closed the only window and so quit Accio and interrupted its turns.
  * Ctrl/Cmd+W closes focused DevTools instead and otherwise does nothing.
  */
-export function appMenuTemplate(platform: NodeJS.Platform, allContents: () => WebContents[]): MenuItemConstructorOptions[] {
+export function appMenuTemplate(platform: NodeJS.Platform, allContents: () => WebContents[]): MenuItemConstructorOptions[] | null {
+  if (platform === 'win32') return null;
   const mac = platform === 'darwin';
   return [
     // macOS's File menu holds Close (Cmd+W), so it gets only the app menu (About, Hide, Quit).
