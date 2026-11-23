@@ -5,7 +5,7 @@ A personal app that runs coding threads in harnesses such as Claude Code across 
 ## Hub, machines and roles
 
 **Machine**:
-A connected computer, together with its files and settings. It can run a client, a worker, or both. Being connected does not mean it can run turns; that requires a worker. The Machines list shows only machines with a worker, since its name, harnesses, tools and profile folders all belong to the worker. A client-only device, such as a phone or a browser on any computer, is not listed as a machine; once clients pair directly, it will appear as a paired client that can be unpaired.
+A connected computer, together with its files and settings. It can run a client, a worker, or both. Being connected does not mean it can run turns; that requires a worker. The Machines list shows only machines with a worker, since its name, harnesses, tools and profile folders all belong to the worker. A client-only device, such as a phone or a browser on any computer, is not listed as a machine; a paired browser running the web app appears under Paired clients, where it can be unpaired.
 _Avoid_: Environment, host, node
 
 **Hub**:
@@ -17,8 +17,12 @@ Trusting a machine or client once so it can reach the hub and receive the shared
 _Avoid_: Linking, registering
 
 **Client**:
-The app you use to read threads, send prompts and change settings. It holds no threads of its own and does not execute turns; a worker does that. A client can run on a machine with or without a worker. Planned iOS and standalone web apps are clients only. Currently the desktop app combines a client with a local worker, and the web client is served by a worker.
+The app you use to read threads, send prompts and change settings. It holds no threads of its own and does not execute turns; a worker does that. A client can run on a machine with or without a worker. The web app and the planned iOS app are clients only. The desktop app combines a client with a local worker.
 _Avoid_: Thin client (in UI text), frontend, desktop (for the role)
+
+**Web app**:
+The client you open in a browser, mostly on a phone, to read and drive threads without running a worker. It reaches threads only through the hub and the relay, so it works while no particular machine is online. It covers threads: reading, sending, steering, queueing, interrupting, starting a thread on any online machine, shipping it and answering what a thread asks of you, across every profile. Shared settings and anything that needs a machine of its own, such as image attachments, account sign-in or Open app, stay in the desktop app; the web app keeps only its own look and feel, such as the theme and Move on.
+_Avoid_: App view, web client, remote UI, browser client
 
 **Developer CLI**:
 The agent-facing terminal client (`pnpm cli`) for quick testing, debugging and verification during development without opening the UI. It calls the running worker's authenticated app protocol and returns JSON; supported remote operations use the worker's relay. Use it for behavior and state checks, and the UI verification journeys for rendering and interaction checks. See [terminal client usage](README.md#terminal-client).
