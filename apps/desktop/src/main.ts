@@ -168,7 +168,7 @@ async function createWindow(ready: Ready) {
     backgroundColor: '#18191d',
     title: process.env.ACCIO_WINDOW_TITLE ?? 'accio',
     icon: join(here, '../icon.ico'),
-    autoHideMenuBar: true,
+    autoHideMenuBar: process.platform !== 'win32',
     // Same chrome as botbot: native caption buttons over a hidden title bar.
     titleBarStyle: 'hidden',
     titleBarOverlay: { color: '#00000000', symbolColor: '#898a92', height: 52 },
@@ -177,6 +177,7 @@ async function createWindow(ready: Ready) {
       additionalArguments: [`--accio-server-origin=${new URL(ready.url).origin}`],
     },
   });
+  if (process.platform === 'win32') win.setMenuBarVisibility(false);
   if (state?.maximized) win.maximize();
   rememberWindowState(win);
   // `pnpm try` names its window after the checkout so it stands apart from the real one.

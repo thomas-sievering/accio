@@ -5,6 +5,16 @@ import { appMenuTemplate } from './appMenu.js';
 const flatten = (items: MenuItemConstructorOptions[]): MenuItemConstructorOptions[] =>
   items.flatMap((item) => [item, ...(Array.isArray(item.submenu) ? flatten(item.submenu) : [])]);
 
+it('keeps the Windows menu roles and the hidden DevTools accelerator', () => {
+  const template = appMenuTemplate('win32', () => []);
+  expect(template.map((item) => item.role)).toEqual(['fileMenu', 'editMenu', 'viewMenu', 'windowMenu']);
+  expect(flatten(template)).toContainEqual(expect.objectContaining({
+    label: 'Close Developer Tools',
+    accelerator: 'CmdOrCtrl+W',
+    visible: false,
+  }));
+});
+
 it.each(['win32', 'darwin', 'linux'] as const)('on %s, Ctrl/Cmd+W closes focused DevTools and never the window', (platform) => {
   const contents = (devToolsFocused: boolean) => ({ isDestroyed: () => false, isDevToolsFocused: () => devToolsFocused, closeDevTools: vi.fn() });
   const app = contents(false);
