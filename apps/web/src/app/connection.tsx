@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { HubConnectionView } from '@accio/protocol';
 import { RpcClient, socketUrl, takeToken, type AppClient, type ConnectionStatus } from './rpcClient';
-import { HubClient, loadBrowserState } from './hubClient';
+import { HubClient, loadBrowserState, PairingRequired } from './hubClient';
+import { Reconnect } from './reconnect';
 import { HubSettings } from '../hub/HubSettings';
 
 const ClientContext = createContext<AppClient | null>(null);
@@ -18,14 +19,27 @@ function BrowserConnection({ children }: { children: ReactNode }) {
   const [connection, setConnection] = useState<{ client: HubClient; hub: HubConnectionView }>();
   const [error, setError] = useState<string>();
   useEffect(() => {
-    const lifetime = new AbortController();
+    let active = true;
+    let attempt: AbortController | undefined;
     let client: HubClient | undefined;
-    void loadBrowserState(lifetime.signal).then((shared) => {
-      if (lifetime.signal.aborted) return;
-      client = new HubClient(shared);
-      setConnection({ client, hub: { id: shared.hubId, name: 'Hub', url: location.origin, local: false, running: 0, status: 'connected', version: shared.version } });
-    }, (failure: Error) => { if (!lifetime.signal.aborted) setError(failure.message); });
-    return () => { lifetime.abort(); client?.close(); };
+    const retry = new Reconnect();
+    const connect = async () => {
+      const current = attempt = new AbortController();
+      const deadline = setTimeout(() => current.abort(), 10_000);
+      try {
+        const shared = await loadBrowserState(current.signal);
+        if (!active) return;
+        client = new HubClient(shared);
+        setConnection({ client, hub: { id: shared.hubId, name: 'Hub', url: location.origin, local: false, running: 0, status: 'connected', version: shared.version } });
+      } catch (failure) {
+        if (!active) return;
+        if (failure instanceof PairingRequired) { location.replace('/'); return; }
+        setError('Hub unreachable');
+        retry.schedule(() => void connect());
+      } finally { clearTimeout(deadline); }
+    };
+    void connect();
+    return () => { active = false; attempt?.abort(); retry.cancel(); client?.close(); };
   }, []);
   if (!connection) return <div className="center-screen" role="status">{error ?? 'Connecting to the hub…'}</div>;
   const { hub, client } = connection;

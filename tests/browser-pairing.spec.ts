@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type WebSocketRoute } from '@playwright/test';
 import jsQR from 'jsqr';
 import { TestClient } from '../apps/worker/src/testing/testApp.js';
 
@@ -18,6 +18,107 @@ async function openPairedHub(page: Page, desktop: TestClient) {
   await page.getByRole('button', { name: 'Pair browser', exact: true }).click();
   await expect(page).toHaveURL(`${hub}/`);
 }
+
+async function browserHubLink(page: Page) {
+  let down = false;
+  const sockets = new Set<WebSocketRoute>();
+  await page.route('**/client/state', (route) => down ? route.abort('internetdisconnected') : route.continue());
+  await page.routeWebSocket(/\/client\/(relay|events)$/, (socket) => {
+    if (down) { socket.close({ code: 1011 }); return; }
+    const hub = socket.connectToServer();
+    sockets.add(socket);
+    socket.onClose((code, reason) => { sockets.delete(socket); hub.close({ code, reason }); });
+    hub.onClose((code, reason) => { sockets.delete(socket); socket.close({ code, reason }); });
+  });
+  return {
+    drop: (notify = true) => {
+      down = true;
+      if (notify) for (const socket of sockets) socket.close({ code: 1011 });
+    },
+    restore: () => { down = false; },
+  };
+}
+
+test('a phone reconnects to the hub and catches up without reloading or duplicating items', async ({ page, baseURL }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const link = await browserHubLink(page);
+  const desktop = await TestClient.open(`${baseURL!.replace('http:', 'ws:')}/ws?token=relay-test-token`);
+  let clientId: string | undefined;
+  try {
+    const known = new Set((await desktop.call('clients.list', {})).map(({ id }) => id));
+    const profile = await desktop.signedIn('Browser reconnect fixture');
+    const machineId = (await desktop.call('machines.list', {})).find(({ name }) => name === 'MacBook')!.id;
+    const start = (text: string) => desktop.call('threads.start', { profileId: profile.id, machineId, text });
+    const before = 'Browser reconnect original';
+    const missed = 'Browser reconnect missed message';
+    const inbox = 'Browser reconnect new inbox thread';
+    const { id: threadId } = await start(before);
+    await openPairedHub(page, desktop);
+    const rows = page.locator('.sidebar .row-main');
+    await rows.filter({ hasText: before }).click();
+    clientId = (await desktop.call('clients.list', {})).find(({ id }) => !known.has(id))?.id;
+    const assistant = page.locator('.msg.assistant');
+    await expect(assistant.last()).toHaveText(`MacBook here. You said: ${before}`);
+    const status = async (id: string) => (await desktop.call('threads.list', {})).find((thread) => thread.id === id)?.status;
+    await expect.poll(() => status(threadId)).toBe('idle');
+    const navigations: string[] = [];
+    page.on('framenavigated', (frame) => { if (frame === page.mainFrame()) navigations.push(frame.url()); });
+
+    link.drop();
+    const notice = page.locator('.phone-navigation').getByRole('status');
+    await expect(notice).toHaveText('Hub unreachable');
+    await desktop.call('threads.send', { threadId, text: missed });
+    const created = await start(inbox);
+    await expect.poll(() => status(created.id)).toBe('idle');
+    await expect.poll(() => status(threadId)).toBe('idle');
+    await expect(notice).toHaveText('Hub unreachable');
+    await expect(page.getByText(missed, { exact: true })).toHaveCount(0);
+    await expect(rows.filter({ hasText: inbox })).toHaveCount(0);
+
+    link.restore();
+    await expect(notice).toHaveCount(0);
+    const replies = [`MacBook here. You said: ${before}`, `MacBook here. You said: ${missed}`];
+    await expect(assistant).toHaveText(replies);
+    for (const wake of ['online', 'visibilitychange', 'pageshow'] as const) {
+      if (wake === 'online') link.drop(false);
+      const relay = page.waitForEvent('websocket', { predicate: (socket) => socket.url().endsWith('/client/relay') });
+      await page.evaluate((event) => {
+        if (event === 'visibilitychange') document.dispatchEvent(new Event(event));
+        else if (event === 'pageshow') window.dispatchEvent(new PageTransitionEvent(event, { persisted: true }));
+        else window.dispatchEvent(new Event(event));
+      }, wake);
+      if (wake === 'online') {
+        await expect(notice).toHaveText('Hub unreachable');
+        link.restore();
+      }
+      await relay;
+      await expect(notice).toHaveCount(0);
+      await expect(assistant).toHaveText(replies);
+    }
+    await expect(page.locator('.msg.user')).toHaveText([before, missed]);
+    await page.getByRole('button', { name: 'Inbox', exact: true }).click();
+    const newThread = rows.filter({ hasText: inbox });
+    await expect(newThread).toHaveCount(1);
+    await expect(newThread).toBeVisible();
+    expect(navigations).toEqual([]);
+
+    await test.step('Unpair during a second outage and return to pairing on reconnect', async () => {
+      expect(clientId).toBeDefined();
+      link.drop();
+      await expect(page.locator('.connection-notice')).toHaveText('Hub unreachable');
+      await desktop.call('clients.unpair', { clientId: clientId! });
+      clientId = undefined;
+      await expect(page.locator('.connection-notice')).toHaveText('Hub unreachable');
+      link.restore();
+      await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })));
+      await expect(page.getByRole('heading', { name: 'Pair this browser' })).toBeVisible();
+      await expect(page.locator('.sidebar')).toHaveCount(0);
+    });
+  } finally {
+    if (clientId) await desktop.call('clients.unpair', { clientId }).catch(() => {});
+    desktop.close();
+  }
+});
 
 test('pairs by code or QR, keeps preferences in this browser, and unpairs from either client', async ({ browser, page, baseURL }, info) => {
   await page.goto(`${baseURL}/#token=relay-test-token`);
@@ -115,7 +216,6 @@ test('pairs by code or QR, keeps preferences in this browser, and unpairs from e
     await scannedClients.getByRole('group', { name: 'Unpair iPhone Safari?' }).getByRole('button', { name: 'Unpair iPhone Safari' }).click();
     await expect(scannedClients.getByRole('button', { name: 'Unpair iPhone Safari' })).toHaveCount(0);
     await expect(clients.getByRole('button', { name: 'Unpair iPhone Safari' })).toHaveCount(0);
-    await typed.reload();
     await expect(typed.getByRole('heading', { name: pairing })).toBeVisible();
 
     await scannedClients.getByRole('button', { name: 'Unpair', exact: true }).click();
@@ -132,7 +232,6 @@ test('pairs by code or QR, keeps preferences in this browser, and unpairs from e
     await clients.getByRole('button', { name: 'Unpair iPhone Safari' }).click();
     await clients.getByRole('group', { name: 'Unpair iPhone Safari?' }).getByRole('button', { name: 'Unpair iPhone Safari' }).click();
     await expect(clients.getByText('No paired clients yet')).toBeVisible();
-    await typed.reload();
     await expect(typed.getByRole('heading', { name: pairing })).toBeVisible();
   } finally {
     await Promise.all([phone.close(), tablet.close()]);

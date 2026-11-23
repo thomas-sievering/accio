@@ -22,7 +22,7 @@ process.env.ACCIO_SECRET_KEY = Buffer.alloc(32, 9).toString('base64');
 const root = await mkdtemp(join(tmpdir(), 'accio-relay-'));
 const token = 'relay-test-token';
 const hat = await startTestSortingHat(join(root, 'hub'));
-const hub = await startHubService({ home: join(root, 'hub'), port: 0, webRoot: resolve('apps/web/dist') });
+const hub = await startHubService({ home: join(root, 'hub'), port: 0, webRoot: resolve('apps/web/dist'), clientAddressHeader: 'x-accio-fixture-client' });
 
 /** A machine already joined to the hub, as if paired through Settings → Hubs. */
 async function machine(name: string, port: number, harness: FakeHarness, webRoot?: string, deliveryHosting?: AppDeps['deliveryHosting']) {
@@ -31,7 +31,7 @@ async function machine(name: string, port: number, harness: FakeHarness, webRoot
   await mkdir(home, { recursive: true });
   await writeFile(join(home, 'machine.json'), JSON.stringify({ id }));
   const { code } = await hub.createPairingCode();
-  const paired = await fetch(hub.url + '/pair', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code, machineId: id }) }).then((r) => r.json()) as { hubId: string; token: string };
+  const paired = await fetch(hub.url + '/pair', { method: 'POST', headers: { 'content-type': 'application/json', 'x-accio-fixture-client': 'machine-setup' }, body: JSON.stringify({ code, machineId: id }) }).then((r) => r.json()) as { hubId: string; token: string };
   await writeFile(join(home, 'hub-connections.json'), JSON.stringify([{ id: paired.hubId, name: 'Home', url: hub.url, token: paired.token, home: join(home, 'hubs', paired.hubId), local: true }]));
   const app = await startApp({ home, host: '127.0.0.1', port, hubPort: 0, token, webRoot }, { harness, deliveryHosting });
   const client = await TestClient.open(`ws://127.0.0.1:${app.port}/ws?token=${token}`);
