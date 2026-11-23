@@ -1,4 +1,4 @@
-import type { RpcClient } from '../app/rpcClient';
+import type { AppClient as RpcClient } from '../app/rpcClient';
 
 type FirstMessage = { text?: string; images: string[]; timer: ReturnType<typeof setTimeout> };
 const previews = new WeakMap<RpcClient, Map<string, FirstMessage>>();

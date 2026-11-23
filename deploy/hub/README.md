@@ -41,6 +41,8 @@ The updater changes only this hub service. It leaves existing media routes and c
 
 ## Check and recover
 
-`/healthz` returns readiness, protocol and durable hub identity. Management endpoints require a paired device credential; the hub has no model routes. Verify public HTTPS and authenticated WSS after tunnel changes, and a real streamed turn through the Sorting Hat. The public root is setup information.
+`/healthz` returns readiness, protocol and durable hub identity. Management endpoints require a paired machine credential; the hub has no model routes. Verify public HTTPS and authenticated WSS after tunnel changes, and a real streamed turn through the Sorting Hat.
+
+The public root shows **Pair this browser** until the browser is paired. In the desktop app, open **Settings → Machines → Pair a browser**, then scan the QR code or type the one-time code at the hub URL. The image serves its own version of the web app. Thread transcripts stream from their machines; the hub does not save them. A browser that has already seen a machine's threads keeps their last list on its Offline shelf when the machine is away.
 
 Back up the protected `/data/configs/accio` directory consistently while the service is stopped. Restore the entire identity and credential store together. Keep machine checkouts, threads, transcripts and harness sessions on their original machine. After restoring, restart only `accio-hub` and verify saved devices reconnect to the same identity.

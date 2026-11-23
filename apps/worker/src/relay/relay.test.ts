@@ -3,6 +3,8 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { once } from 'node:events';
+import WebSocket from 'ws';
 import { afterEach, describe, expect, it } from 'vitest';
 import { startHubService } from '@accio/hub';
 import type { ThreadView } from '@accio/protocol';
@@ -34,6 +36,48 @@ describe('thread relay between machines', () => {
     return { hub, mac, pc, join: join_ };
   }
   const remote = (threads: ThreadView[], id: string) => threads.find((t) => t.id === id);
+
+  it('serves thread work and picker reads to a paired browser but refuses machine and shared settings actions', async () => {
+    const { hub, mac } = await machines();
+    const profile = await mac.client.signedIn('Personal');
+    const machine = (await mac.client.thisMachine()).id;
+    const { code } = await mac.client.call('clients.createPairingCode', {});
+    const paired = await fetch(`${hub.url}/client/pair`, {
+      method: 'POST', redirect: 'manual', headers: { origin: hub.url }, body: new URLSearchParams({ code }),
+    });
+    expect(paired.status).toBe(303);
+    const ws = new WebSocket(`${hub.url.replace('http:', 'ws:')}/client/relay`, {
+      headers: { origin: hub.url, cookie: paired.headers.get('set-cookie')!.split(';')[0]! },
+    });
+    cleanup.push(async () => ws.terminate());
+    const peers = once(ws, 'message');
+    await once(ws, 'open');
+    expect(JSON.parse(String((await peers)[0]))).toMatchObject({ kind: 'peers', machines: expect.arrayContaining([machine]) });
+    let nextId = 0;
+    function call(method: string, params: unknown) {
+      const id = String(++nextId);
+      return new Promise<any>((resolve) => {
+        const receive = (message: WebSocket.RawData) => {
+          const frame = JSON.parse(String(message));
+          if (frame.kind !== 'response' || frame.id !== id) return;
+          ws.off('message', receive); resolve(frame);
+        };
+        ws.on('message', receive);
+        ws.send(JSON.stringify({ kind: 'request', to: machine, from: machine, fromKind: 'machine', id, method, params }));
+      });
+    }
+    expect(await call('relay.snapshot', {})).toMatchObject({ ok: true, from: machine, fromKind: 'machine' });
+    expect(await call('harnesses.list', {})).toMatchObject({ ok: true });
+    expect(await call('models.list', { profileId: profile.id })).toMatchObject({ ok: true });
+    const started = await call('threads.start', { profileId: profile.id, text: 'Browser turn' });
+    expect(started).toMatchObject({ ok: true, result: { id: expect.any(String) } });
+    const threadId = started.result.id;
+    expect(await call('threads.observe', { threadId })).toMatchObject({ ok: true, result: { items: expect.arrayContaining([expect.objectContaining({ kind: 'user', text: 'Browser turn' })]) } });
+    expect(await call('threads.rename', { threadId, title: 'Renamed from the browser' })).toMatchObject({ ok: true });
+    for (const method of ['update.status', 'update.start', 'app.screenshot', 'checkouts.clone', 'checkouts.cloneUrl', 'hubs.list', 'profiles.save', 'spaces.save', 'models.favorite', 'machines.rename', 'secrets.list', 'clients.createPairingCode']) {
+      expect(await call(method, { machineId: machine })).toMatchObject({ ok: false, error: 'Not available from another machine.' });
+    }
+  });
   /** A checkout named by its GitHub URL, added to the machine, then fetching from a bare copy beside it. */
   async function checkout(machine: { app: { home: string }; client: TestClient }, name: string, origin: string, profileId: string) {
     const home = machine.app.home;

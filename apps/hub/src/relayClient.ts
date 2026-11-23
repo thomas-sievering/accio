@@ -10,13 +10,13 @@ const CHUNK_CHARS = 256 * 1024;
 const MAX_FRAME_CHARS = 64 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 60_000;
 
-export type RelayRequest = { from: string; method: string; params: unknown };
+export type RelayRequest = { from: string; fromKind?: RelayFrame['fromKind']; method: string; params: unknown };
 export type RelayHandlers = {
   /** Serves another machine's request; throw to answer with an error. */
   request(request: RelayRequest): Promise<unknown>;
   event(from: string, event: string, data: unknown): void;
   /** The machines connected to the relay right now, this one included. */
-  peers(machines: string[]): void;
+  peers(machines: string[], clients?: string[]): void;
   /** This machine's relay socket closed; every peer counts as unreachable until it reopens. */
   disconnected(): void;
 };
@@ -104,11 +104,11 @@ export class RelaySocket {
   }
 
   private receive(text: string) {
-    let frame: (RelayFrame | RelayHubFrame) & { from?: string };
+    let frame: RelayFrame | RelayHubFrame;
     try { frame = JSON.parse(text); } catch { return; }
     if (!frame || typeof frame !== 'object') return;
     switch (frame.kind) {
-      case 'peers': if (frame.from === 'hub' && Array.isArray(frame.machines)) this.handlers.peers(frame.machines.filter((m) => typeof m === 'string')); return;
+      case 'peers': if (frame.from === 'hub' && Array.isArray(frame.machines)) this.handlers.peers(frame.machines.filter((m) => typeof m === 'string'), frame.clients); return;
       case 'undeliverable': {
         if (frame.from !== 'hub') return;
         const p = this.pending.get(frame.id);
@@ -119,7 +119,7 @@ export class RelaySocket {
       case 'request': {
         if (typeof frame.from !== 'string' || typeof frame.method !== 'string' || typeof frame.id !== 'string') return;
         const { from, id } = frame;
-        void this.handlers.request({ from, method: frame.method, params: frame.params }).then(
+        void this.handlers.request({ from, fromKind: frame.fromKind, method: frame.method, params: frame.params }).then(
           (result) => this.send({ kind: 'response', to: from, id, ok: true, result: result ?? null }),
           (error: unknown) => this.send({ kind: 'response', to: from, id, ok: false, error: error instanceof Error ? error.message : String(error) }));
         return;
@@ -148,7 +148,7 @@ export class RelaySocket {
     // Parts of one frame arrive in order over one socket, so the joined text is the original frame; `from` is restamped by the hub.
     let whole: any;
     try { whole = JSON.parse(entry.chunks.join('')); } catch { return; }
-    if (whole && typeof whole === 'object' && ['request', 'response', 'event'].includes(whole.kind)) this.receive(JSON.stringify({ ...whole, from: frame.from }));
+    if (whole && typeof whole === 'object' && ['request', 'response', 'event'].includes(whole.kind)) this.receive(JSON.stringify({ ...whole, from: frame.from, fromKind: frame.fromKind }));
   }
 
   close() {

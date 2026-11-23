@@ -21,7 +21,7 @@ process.env.ACCIO_SECRET_KEY = Buffer.alloc(32, 9).toString('base64');
 const root = await mkdtemp(join(tmpdir(), 'accio-relay-'));
 const token = 'relay-test-token';
 const hat = await startTestSortingHat(join(root, 'hub'));
-const hub = await startHubService({ home: join(root, 'hub'), port: 0 });
+const hub = await startHubService({ home: join(root, 'hub'), port: 0, webRoot: resolve('apps/web/dist') });
 
 /** A machine already joined to the hub, as if paired through Settings → Hubs. */
 async function machine(name: string, port: number, harness: FakeHarness, webRoot?: string) {

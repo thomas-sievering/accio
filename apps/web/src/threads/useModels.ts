@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { ModelsState } from '@accio/protocol';
-import type { RpcClient } from '../app/rpcClient';
+import type { AppClient as RpcClient } from '../app/rpcClient';
 import { useClient, useConnectionStatus } from '../app/connection';
 
 /** Each profile's model list as last loaded, shared by every picker and mention menu. */

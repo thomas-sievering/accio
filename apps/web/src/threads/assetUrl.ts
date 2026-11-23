@@ -1,5 +1,5 @@
 import type { AssetUrl } from '@accio/protocol';
-import type { RpcClient } from '../app/rpcClient';
+import type { AppClient as RpcClient } from '../app/rpcClient';
 
 type Entry = { value?: AssetUrl; pending?: Promise<AssetUrl> };
 const urls = new WeakMap<RpcClient, Map<string, Entry>>();
