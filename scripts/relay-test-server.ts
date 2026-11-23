@@ -13,7 +13,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { startHubService } from '../apps/hub/src/index.js';
 import { startApp } from '../apps/worker/src/app.js';
 import { FakeHarness, replyWith, toolCall } from '../apps/worker/src/testing/fakeHarness.js';
-import { startTestSortingHat, TestClient } from '../apps/worker/src/testing/testApp.js';
+import { callAccioTools, startTestSortingHat, TestClient } from '../apps/worker/src/testing/testApp.js';
 import { git } from '../apps/worker/src/git.js';
 import { onShutdown } from './fixtureLifetime.js';
 
@@ -42,6 +42,44 @@ async function machine(name: string, port: number, harness: FakeHarness, webRoot
 }
 
 const macHarness = new FakeHarness(async function* (run) {
+  if (run.prompt === 'Browser steering fixture') {
+    const messages: string[] = [];
+    let wake = () => {};
+    const abort = () => wake();
+    run.signal.addEventListener('abort', abort, { once: true });
+    run.registerSteer?.(async text => { messages.push(text); wake(); });
+    try {
+      yield { type: 'harness_event', event: { kind: 'text', id: 'browser-steer-ready', text: 'Waiting for browser steering.' } };
+      let count = 0;
+      while (!run.signal.aborted) {
+        const text = messages.shift();
+        if (text === undefined) await new Promise<void>(resolve => { wake = resolve; });
+        else yield { type: 'harness_event', event: { kind: 'text', id: `browser-steer-${count++}`, text: `Steered: ${text}` } };
+      }
+    } finally { run.registerSteer?.(undefined); run.signal.removeEventListener('abort', abort); }
+    return;
+  }
+  if (run.prompt === 'Browser choice fixture') {
+    const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a5L8AAAAASUVORK5CYII=', 'base64');
+    const options = ['Rows', 'Cards'].map(label => ({ label, path: `browser-choice-${label}.png` }));
+    for (const { path } of options) await writeFile(join(run.cwd, path), pixel);
+    yield* toolCall('mcp__accio__offer_choice', { question: 'Which browser layout?', options }, randomUUID());
+    yield* replyWith('Choose a browser layout.');
+    return;
+  }
+  if (run.prompt === 'Browser confirmation fixture') {
+    const folder = join(root, 'MacBook', 'browser-card-fixture');
+    await mkdir(folder, { recursive: true });
+    const result = await callAccioTools(run, 'tools/call', { name: 'add_project', arguments: { folders: [folder] } });
+    yield* replyWith(`Project answer: ${result.content[0].text}`);
+    return;
+  }
+  const secret = /^Browser secret fixture: (save|once|existing|decline)$/.exec(run.prompt)?.[1];
+  if (secret) {
+    const result = await run.requestSecret!({ slot: `browser:fixture:${secret}`, label: `Browser ${secret} credential`, reason: 'Test private browser entry' });
+    yield* replyWith(`Secret ${secret}: ${result.status}`);
+    return;
+  }
   const steps = /long/i.test(run.prompt) ? 6 : 1;
   for (let step = 1; step <= steps; step++) {
     if (steps > 1) {

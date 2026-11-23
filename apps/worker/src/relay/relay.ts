@@ -2,14 +2,14 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { JsonFile } from '@accio/persistence';
 import { RelaySocket, type RelayRequest } from '@accio/hub';
-import { RELAY_CLIENT_READS, RELAY_MACHINE_METHODS, RELAY_THREAD_METHODS, type CheckoutView, type Events, type MachineView, type MethodName, type ParamsOf, type ProjectsState, type ResultOf, type RelaySnapshot, type ThreadView } from '@accio/protocol';
+import { RELAY_CLIENT_READS, RELAY_CLIENT_THREAD_ACTIONS, RELAY_MACHINE_METHODS, RELAY_THREAD_METHODS, type CheckoutView, type Events, type MachineView, type MethodName, type ParamsOf, type ProjectsState, type ResultOf, type RelaySnapshot, type ThreadView } from '@accio/protocol';
 import { UserError, type Router } from '../rpc/router.js';
 import { CLONE_TIMEOUT_MS, httpsUrlOf, remoteUrlOf } from '../projects/git.js';
 import type { RemoteMediaKey, ThreadAssets } from '../threads/assets.js';
 
 const RELAY_METHODS = new Set<string>(RELAY_THREAD_METHODS);
 const MACHINE_METHODS = new Set<string>(RELAY_MACHINE_METHODS);
-const CLIENT_METHODS = new Set<string>([...RELAY_THREAD_METHODS, ...RELAY_CLIENT_READS]);
+const CLIENT_METHODS = new Set<string>([...RELAY_CLIENT_READS, ...RELAY_CLIENT_THREAD_ACTIONS]);
 /** Transcripts another machine streams from here at once; the oldest stops when it opens another. */
 const OBSERVED_PER_PEER = 16;
 /** Long enough to send the largest media through the hub. */
@@ -317,6 +317,8 @@ export class Relay {
   private async serve({ from, fromKind, method, params }: RelayRequest): Promise<unknown> {
     if (fromKind === 'client') {
       if (!this.clients.has(from) || method !== 'relay.snapshot' && !CLIENT_METHODS.has(method)) throw new Error(NOT_RELAYED);
+      const images = (params as { images?: unknown } | undefined)?.images;
+      if (method === 'threads.send' && Array.isArray(images) && images.length) throw new Error(NOT_RELAYED);
     } else if (!this.deps.machineName(from)) throw new Error('This machine is not paired with the hub.');
     if (method === 'relay.snapshot') return this.snapshot();
     if (MACHINE_METHODS.has(method)) {

@@ -17,8 +17,9 @@ import { usePopoverMenu } from '../ui/usePopoverMenu';
  * profile's models, favourites first, then each provider/harness pair. GLOSSARY: Borrowing. With
  * other profiles on the hub, it also lists theirs: choosing one of their models borrows that profile's accounts.
  */
-export function ModelPicker({ profileId, borrowFrom, value, onChange, disabled = false }: {
+export function ModelPicker({ profileId, threadId, borrowFrom, value, onChange, disabled = false }: {
   profileId?: string;
+  threadId?: string;
   /** The other profile whose accounts it uses; absent for its own. */
   borrowFrom?: string;
   value: ModelSelection;
@@ -38,8 +39,8 @@ export function ModelPicker({ profileId, borrowFrom, value, onChange, disabled =
   const using = borrowFrom ?? profileId;
   const [chosenProfile, setShownProfile] = useState<string>();
   const shownProfile = chosenProfile && lenders.some((p) => p.id === chosenProfile) ? chosenProfile : using;
-  const inUse = useModels(using);
-  const other = useModels(shownProfile !== using ? shownProfile : undefined);
+  const inUse = useModels(using, threadId);
+  const other = useModels(shownProfile !== using ? shownProfile : undefined, threadId);
   const { data, error: loadError, setError, update } = shownProfile !== using ? other : inUse;
   const { busy, error: actionError, run, clear } = useAction();
   const error = actionError ?? loadError;
@@ -188,11 +189,11 @@ export function ModelPicker({ profileId, borrowFrom, value, onChange, disabled =
               <span className="model-picker-name">{activeTab === 'favorites' && <ProviderLogo providerId={m.providerId} />}<PrettyName name={m.name} /></span>
               {m.limited && <small className="model-picker-limited">{usedUpText(m.limited)}</small>}
             </button>
-            <button type="button" className="model-star" title={isFavorite ? 'Remove from favourites' : 'Add to favourites'}
+            {!client.browser && <button type="button" className="model-star" title={isFavorite ? 'Remove from favourites' : 'Add to favourites'}
               aria-label={`${isFavorite ? 'Remove' : 'Add'} ${m.name} ${isFavorite ? 'from' : 'to'} favourites`} aria-pressed={isFavorite}
               onClick={() => void favorite(choice, !isFavorite)}>
               <Star filled={isFavorite} />
-            </button>
+            </button>}
             <span className="model-picker-check" aria-hidden>{isSelected && <Check />}</span>
           </div>;
         })}

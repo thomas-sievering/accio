@@ -102,6 +102,7 @@ export const DEFAULT_MODEL: ModelSelection = { harnessId: 'claudeCode', modelId:
 export const modelKey = (model: ModelSelection) => JSON.stringify([model.harnessId, model.modelId]);
 
 const ProfileId = z.object({ profileId: z.string() });
+const ModelList = ProfileId.extend({ threadId: z.string().optional() });
 const HarnessTool = z.object({ harnessId: z.string().min(1), toolId: z.string().min(1), on: z.boolean() });
 const HarnessId = z.object({ harnessId: z.string().min(1) });
 const Favorite = ProfileId.extend({ model: ModelSelection, favorite: z.boolean() });
@@ -120,7 +121,7 @@ export const modelMethods = {
   'harnesses.resetTools': method<typeof HarnessId, HarnessView[]>(HarnessId),
   'systemPrompt.get': method<z.ZodObject<{}>, SystemPromptView>(z.object({})),
   'systemPrompt.measure': method<typeof HarnessId, PromptMeasurement>(HarnessId),
-  'models.list': method<typeof ProfileId, ModelsState>(ProfileId),
+  'models.list': method<typeof ModelList, ModelsState>(ModelList),
   'models.favorite': method<typeof Favorite, ModelsState>(Favorite),
 };
 export type ModelEvents = { 'models.changed': null };

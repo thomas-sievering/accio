@@ -116,7 +116,7 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
           if (startsTurn && movesOn) moveOn(thread.id);
         }}
         toolbar={<>
-          <ModelPicker key={thread.id} profileId={thread.profileId} borrowFrom={thread.borrowFrom} value={thread.model} disabled={running || !!unavailable} onChange={async (model, borrowFrom) => {
+          <ModelPicker key={thread.id} threadId={thread.id} profileId={thread.profileId} borrowFrom={thread.borrowFrom} value={thread.model} disabled={running || !!unavailable} onChange={async (model, borrowFrom) => {
             setSavingModel(true);
             try { await client.call('threads.setModel', { threadId: thread.id, model, ...(borrowFrom !== undefined ? { borrowFrom } : {}) }); }
             finally { setSavingModel(false); }

@@ -13,6 +13,8 @@ export function useSavedAsset(threadId: string, assetId?: string, enabled = true
   const renewing = useRef(false);
   const resolvedVersion = useRef(-1);
 
+  useEffect(() => () => { if (url?.startsWith('blob:')) URL.revokeObjectURL(url); }, [url]);
+
   useEffect(() => {
     setUrl(undefined);
     setError(undefined);
@@ -25,8 +27,16 @@ export function useSavedAsset(threadId: string, assetId?: string, enabled = true
     let active = true;
     setPending(true);
     // Preserve the painted source while reconnecting or renewing a grant.
-    void assetUrl(client, threadId, assetId, false, version > 0).then(result => {
-      if (active) { resolvedVersion.current = version; setUrl(result.url); setError(undefined); }
+    const load = async () => {
+      if (!client.browser) return (await assetUrl(client, threadId, assetId, false, version > 0)).url;
+      const media = await client.call('threads.media', { threadId, assetId });
+      if (!active) return;
+      const bytes = Uint8Array.from(atob(media.data), character => character.charCodeAt(0));
+      return URL.createObjectURL(new Blob([bytes], { type: media.mimeType }));
+    };
+    void load().then(source => {
+      if (active) { resolvedVersion.current = version; setUrl(source); setError(undefined); }
+      else if (source?.startsWith('blob:')) URL.revokeObjectURL(source);
     }, cause => {
       if (active) setError(cause instanceof Error ? cause.message : String(cause));
     }).finally(() => { if (active) setPending(false); });

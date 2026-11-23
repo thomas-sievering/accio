@@ -69,13 +69,15 @@ describe('thread relay between machines', () => {
     expect(await call('relay.snapshot', {})).toMatchObject({ ok: true, from: machine, fromKind: 'machine' });
     expect(await call('harnesses.list', {})).toMatchObject({ ok: true });
     expect(await call('models.list', { profileId: profile.id })).toMatchObject({ ok: true });
-    const started = await call('threads.start', { profileId: profile.id, text: 'Browser turn' });
-    expect(started).toMatchObject({ ok: true, result: { id: expect.any(String) } });
-    const threadId = started.result.id;
+    expect(await call('secrets.status', {})).toMatchObject({ ok: true, result: { available: true } });
+    const { id: threadId } = await mac.client.call('threads.start', { profileId: profile.id, text: 'Browser turn' });
+    await expect.poll(async () => remote(await mac.client.call('threads.list', {}), threadId)?.status).toBe('idle');
     expect(await call('threads.observe', { threadId })).toMatchObject({ ok: true, result: { items: expect.arrayContaining([expect.objectContaining({ kind: 'user', text: 'Browser turn' })]) } });
-    expect(await call('threads.rename', { threadId, title: 'Renamed from the browser' })).toMatchObject({ ok: true });
-    for (const method of ['update.status', 'update.start', 'app.screenshot', 'checkouts.clone', 'checkouts.cloneUrl', 'hubs.list', 'profiles.save', 'spaces.save', 'models.favorite', 'machines.rename', 'secrets.list', 'clients.createPairingCode']) {
-      expect(await call(method, { machineId: machine })).toMatchObject({ ok: false, error: 'Not available from another machine.' });
+    expect(await call('threads.send', { threadId, text: 'Browser follow-up', images: ['not-a-browser-upload'] })).toMatchObject({ ok: false, error: 'Not available from another machine.' });
+    expect(await call('threads.send', { threadId, text: 'Browser follow-up' })).toMatchObject({ ok: true });
+    expect(await call('threads.transcript', { threadId })).toMatchObject({ ok: true, result: expect.arrayContaining([expect.objectContaining({ kind: 'user', text: 'Browser follow-up' })]) });
+    for (const method of ['threads.start', 'threads.rename', 'threads.deliver', 'threads.delete', 'update.status', 'update.start', 'app.screenshot', 'checkouts.clone', 'checkouts.cloneUrl', 'hubs.list', 'profiles.save', 'spaces.save', 'models.favorite', 'machines.rename', 'secrets.list', 'secrets.save', 'clients.createPairingCode']) {
+      expect(await call(method, { machineId: machine, threadId })).toMatchObject({ ok: false, error: 'Not available from another machine.' });
     }
   });
   /** A checkout named by its GitHub URL, added to the machine, then fetching from a bare copy beside it. */

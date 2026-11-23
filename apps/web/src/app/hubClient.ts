@@ -1,7 +1,7 @@
-import { RELAY_CLIENT_READS, type BrowserSharedState, type EventName, type Events, type MethodName, type ParamsOf, type ProjectView, type RelayFrame, type RelayHubFrame, type RelaySnapshot, type ResultOf } from '@accio/protocol';
+import { RELAY_CLIENT_READS, RELAY_CLIENT_THREAD_ACTIONS, type BrowserSharedState, type EventName, type Events, type MethodName, type ParamsOf, type ProjectView, type RelayFrame, type RelayHubFrame, type RelaySnapshot, type ResultOf } from '@accio/protocol';
 import type { AppClient, ConnectionStatus } from './rpcClient';
 
-const reads = new Set<string>([...RELAY_CLIENT_READS, 'threads.observe', 'threads.transcript', 'threads.toolDetails', 'threads.deliverySummary', 'threads.media']);
+const methods = new Set<string>([...RELAY_CLIENT_READS, ...RELAY_CLIENT_THREAD_ACTIONS]);
 const cachePrefix = 'accio.browser-snapshot:';
 type Pending = { machine: string; finish: (error?: string, result?: unknown) => void };
 
@@ -47,7 +47,6 @@ export class HubClient implements AppClient {
         if (isSnapshot(value)) this.snapshots.set(id, value);
       } catch { /* Storage is optional. */ }
     }
-    this.relay.onopen = () => this.setStatus('open');
     this.relay.onmessage = ({ data }) => this.receive(String(data));
     this.relay.onclose = ({ code }) => {
       this.peers([]);
@@ -130,6 +129,7 @@ export class HubClient implements AppClient {
     this.online = new Set(machines);
     for (const pending of this.pending.values()) if (!this.online.has(pending.machine)) pending.finish('This machine is offline.');
     this.publishLists();
+    if (machines.some(machine => !before.has(machine))) this.emit('models.changed', null);
     for (const machine of machines) if (!before.has(machine)) {
       void this.request(machine, 'relay.snapshot', {}).then((snapshot) => this.store(machine, snapshot), () => {});
     }
@@ -140,7 +140,10 @@ export class HubClient implements AppClient {
     try { frame = JSON.parse(text); } catch { return; }
     if (!frame || typeof frame !== 'object') return;
     if (!stampedFrom && frame.from === 'hub') {
-      if (frame.kind === 'peers') this.peers(frame.machines);
+      if (frame.kind === 'peers') {
+        this.peers(frame.machines);
+        if (this.status === 'connecting') this.setStatus('open');
+      }
       if (frame.kind === 'undeliverable') this.pending.get(frame.id)?.finish('This machine is offline.');
       return;
     }
@@ -199,7 +202,7 @@ export class HubClient implements AppClient {
       if (!response.ok) throw new Error('Could not unpair this browser.');
       return null as ResultOf<M>;
     }
-    if (!reads.has(method)) throw new Error('This action is not available in the web app.');
+    if (!methods.has(method)) throw new Error('This action is not available in the web app.');
     const { threadId } = params as { threadId?: string };
     const machine = threadId
       ? [...this.snapshots].find(([, snapshot]) => snapshot.threads.some(({ id }) => id === threadId))?.[0]

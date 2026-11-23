@@ -41,7 +41,7 @@ export function ThreadNotice({
   } else if (!profile) {
     text = borrowed ? 'The profile this thread borrows accounts from no longer exists. Choose one of its own profile’s models.' : 'The profile this thread started with no longer exists.';
     tone = 'error';
-  } else if (sortingHat === null) {
+  } else if (sortingHat === null && !client.browser) {
     text = noSortingHatMessage;
   } else if (profile.house === null) {
     text = (
@@ -58,12 +58,12 @@ export function ThreadNotice({
     );
     action = { label: 'Choose account', run: () => onOpenProfile(profile.id) };
   } else if (thread?.status === 'interrupted') {
-    text = detail ?? 'This turn was interrupted. It continues only when you resume it.';
-    action = { label: 'Resume', run: () => run(() => client.call('threads.resume', { threadId: thread.id })) };
+    text = detail ?? (client.browser ? 'This turn was interrupted.' : 'This turn was interrupted. It continues only when you resume it.');
+    if (!client.browser) action = { label: 'Resume', run: () => run(() => client.call('threads.resume', { threadId: thread.id })) };
   } else if (thread?.status === 'failed') {
     text = detail ?? 'The last turn failed.';
     tone = 'error';
-    action = { label: 'Retry', run: () => run(() => client.call('threads.retry', { threadId: thread.id })) };
+    if (!client.browser) action = { label: 'Retry', run: () => run(() => client.call('threads.retry', { threadId: thread.id })) };
   } else return null;
 
   return (
