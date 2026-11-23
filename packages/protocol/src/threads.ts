@@ -40,6 +40,8 @@ export type ThreadView = {
   needsYou?: NeedsYou;
   createdAt: string;
   updatedAt: string;
+  /** Most recent turn start, retained after the turn ends. */
+  lastTurnStartedAt?: string;
   /** When the running turn started. */
   runningSince?: string;
   /** Time this run already spent running before accio restarted, so its running time excludes the downtime. */

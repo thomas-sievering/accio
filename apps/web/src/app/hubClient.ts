@@ -183,7 +183,13 @@ export class HubClient implements Extract<AppClient, { browser: true }> {
   }
 
   private machines(): Events['machines.changed'] {
-    return this.shared.machines.map((machine) => ({ ...machine, thisMachine: false, profileFolders: {}, connected: this.online.has(machine.id) }));
+    return this.shared.machines.map((machine) => {
+      const snapshot = this.snapshots.get(machine.id);
+      const connected = this.online.has(machine.id);
+      const relay = connected && snapshot ? { repos: snapshot.projects.flatMap((project) =>
+        project.repoKey && snapshot.checkouts.some((checkout) => checkout.projectId === project.id) ? [project.repoKey] : []) } : undefined;
+      return { ...machine, thisMachine: false, profileFolders: {}, connected, relay };
+    });
   }
 
   private publishLists() {
@@ -257,7 +263,7 @@ export class HubClient implements Extract<AppClient, { browser: true }> {
     }
   }
 
-  private request(machine: string, method: string, params: unknown): Promise<unknown> {
+  private request(machine: string, method: string, params: unknown, timeout = 60_000): Promise<unknown> {
     const relay = this.link?.relay;
     if (!this.online.has(machine) || relay?.readyState !== WebSocket.OPEN) return Promise.reject(new Error('This machine is offline.'));
     const id = crypto.randomUUID();
@@ -267,7 +273,7 @@ export class HubClient implements Extract<AppClient, { browser: true }> {
         this.pending.delete(id);
         if (error !== undefined) reject(new Error(error)); else resolve(result);
       };
-      const timer = setTimeout(() => finish('The machine did not answer in time.'), 60_000);
+      const timer = setTimeout(() => finish('The machine did not answer in time.'), timeout);
       this.pending.set(id, { machine, action: actions.has(method), finish });
       relay.send(JSON.stringify({ kind: 'request', to: machine, id, method, params } satisfies RelayFrame));
     });
@@ -290,6 +296,19 @@ export class HubClient implements Extract<AppClient, { browser: true }> {
       return null as ResultOf<M>;
     }
     if (!methods.has(method)) throw new Error('This action is not available in the web app.');
+    if (method === 'threads.start') {
+      const { machineId, ...input } = params as ParamsOf<'threads.start'>;
+      if (!machineId) throw new Error('Choose an online machine.');
+      const thread = await this.request(machineId, method, input, 11 * 60_000) as ResultOf<'threads.start'>;
+      const snapshot = this.snapshots.get(machineId) ?? { threads: [], projects: [], checkouts: [], version: { boot: '', seq: -1 } };
+      if (!snapshot.threads.some(({ id }) => id === thread.id)) {
+        const project = 'repoKey' in input ? this.shared.projects.find(({ repoKey }) => repoKey === input.repoKey) : undefined;
+        const listed = project ? { ...thread, projectId: project.repoKey, projectName: project.name } : thread;
+        this.snapshots.set(machineId, { ...snapshot, threads: [listed, ...snapshot.threads] });
+        this.publishLists();
+      }
+      return thread as ResultOf<M>;
+    }
     const { threadId } = params as { threadId?: string };
     const machine = threadId
       ? [...this.snapshots].find(([, snapshot]) => snapshot.threads.some(({ id }) => id === threadId))?.[0]
