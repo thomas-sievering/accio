@@ -112,7 +112,9 @@ test('a paired phone reads threads across profiles and machines, streams a turn,
     await expect(tab.locator('.msg.user').last()).toContainText('A long browser fixture turn');
     await expect(tab.locator('.msg.assistant').last()).toContainText('MacBook here. You said: A long browser fixture turn', { timeout: 15_000 });
     expect(streamedThreads.has(thread.id)).toBe(true);
-    await tab.screenshot({ path: info.outputPath('phone-inbox.png') });
+    await tab.getByRole('button', { name: 'Inbox', exact: true }).click();
+    await expect(tab.getByRole('heading', { name: 'Inbox' })).toBeVisible();
+    await tab.screenshot({ path: info.outputPath('phone-inbox.png'), animations: 'disabled' });
 
     await desktop.call('threads.start', { checkoutId, text: 'Put the MacBook to sleep' });
     const shelf = tab.getByRole('button', { name: /^Offline/ });

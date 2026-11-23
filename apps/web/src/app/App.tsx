@@ -20,13 +20,16 @@ import { useAppEvent } from './appEvents';
 import { useClient } from './connection';
 import { ConnectionNotice } from './ConnectionNotice';
 import { FirstRun } from './FirstRun';
-import { Close, FolderPlus, Limits, Settings as Gear } from './icons';
+import { ArrowLeft, Close, FolderPlus, Limits, Settings as Gear } from './icons';
 import { closePage, limitsPage, loadPage, pageUnderSettings, savedPage, settingsPage, THREAD_PAGE, type Page } from './page';
 import { ScopeMenu } from './ScopeMenu';
 import { SidebarResizer } from './Resizer';
 import { Settings, type SettingsRoute } from './Settings';
 import { PanelToggle, SidePanel, useNarrow, usePanelOpen } from './SidePanel';
 import { SnoozeNotice } from '../threads/SnoozeNotice';
+import { PhoneMachine, usePhoneLayout } from './phoneLayout';
+import { useLive } from './useLive';
+import { viewTransition } from '../ui/viewTransition';
 
 type OpenSheet = { kind: 'addProject' } | null;
 
@@ -34,9 +37,27 @@ export function App() {
   const viewKey = `accio:${useClient().hubId}:view`;
   // The app reopens on the page it closed on; a thread or draft under it comes back on its own.
   const [page, setPage] = useState<Page>(() => loadPage(localStorage.getItem(viewKey)));
+  const phone = usePhoneLayout();
+  const [inbox, setInbox] = useState(true);
   useEffect(() => localStorage.setItem(viewKey, JSON.stringify(savedPage(page))), [viewKey, page]);
-  // Opening a thread or draft from anywhere, even the open one again, shows the thread surface.
-  const showThread = useCallback(() => setPage(THREAD_PAGE), []);
+  const showThread = useCallback((open?: () => void) => {
+    const update = () => {
+      open?.();
+      if (open) setInbox(false);
+      setPage(THREAD_PAGE);
+    };
+    if (open && phone && page.kind === 'thread' && document.querySelector('.phone-layout > .main[hidden]')) {
+      void viewTransition('phone-open', update).then(() => document.querySelector<HTMLElement>('.phone-back')?.focus());
+    } else update();
+  }, [phone, page.kind]);
+  const showInbox = () => {
+    void viewTransition('phone-back', () => setInbox(true)).then(() => {
+      const target = document.querySelector<HTMLElement>('.sidebar .row-main[aria-current="page"]')
+        ?? document.querySelector<HTMLElement>('.phone-inbox-title');
+      target?.scrollIntoView({ block: 'nearest' });
+      target?.focus({ preventScroll: true });
+    });
+  };
   return (
     <ProfilesProvider>
       <LimitsProvider>
@@ -44,7 +65,7 @@ export function App() {
           <ThreadsProvider onNavigate={showThread}>
             <ResourcesProvider>
               <PendingSecretsProvider>
-                <Shell page={page} setPage={setPage} />
+                <Shell page={page} setPage={setPage} phone={phone} inbox={inbox} onInbox={showInbox} />
               </PendingSecretsProvider>
             </ResourcesProvider>
           </ThreadsProvider>
@@ -59,8 +80,10 @@ export function App() {
  * gear opens Settings (profiles, hub, machine); everything a
  * thread can do is on its right-click menu.
  */
-function Shell({ page, setPage }: { page: Page; setPage: Dispatch<SetStateAction<Page>> }) {
-  const { browser } = useClient();
+function Shell({ page, setPage, phone, inbox, onInbox }: { page: Page; setPage: Dispatch<SetStateAction<Page>>; phone: boolean; inbox: boolean; onInbox: () => void }) {
+  const client = useClient();
+  const { browser } = client;
+  const machines = useLive(() => client.call('machines.list', {}), 'machines.changed');
   const { profiles, accounts, filter, setFilter } = useProfiles();
   const { state } = useProjects();
   const { spaces } = useSpaces();
@@ -76,6 +99,10 @@ function Shell({ page, setPage }: { page: Page; setPage: Dispatch<SetStateAction
   const dashboardProject = under.kind === 'dashboard' ? state?.projects.find((p) => p.id === under.projectId) : undefined;
   const openSpace = under.kind === 'space' ? spaces?.find((s) => s.id === under.spaceId) : undefined;
   const covered = under.kind === 'limits' || !!dashboardProject || !!openSpace;
+  // A machine without checkouts is set up once the hub has projects to clone here.
+  const setUp = profiles && state && profiles.length > 0 && profiles.some((p) => hasSignedInAccount(p, accounts)) && (state.checkouts.length > 0 || !!state.elsewhere?.length);
+  const settingUp = !browser && !!profiles && !!accounts && !!state && !setUp;
+  const phoneInbox = phone && !covered && !settingUp && (inbox || (!thread && !draft));
   const openSettings = useCallback((route: SettingsRoute) => setPage((p) => settingsPage(p, route)), [setPage]);
   const closeCurrent = useCallback(() => setPage(closePage), [setPage]);
   useAppEvent('settings.open', openSettings);
@@ -85,7 +112,7 @@ function Shell({ page, setPage }: { page: Page; setPage: Dispatch<SetStateAction
   useAppEvent('space.open', ({ id }) => setPage({ kind: 'space', spaceId: id }));
   const [panelWanted, togglePanel] = usePanelOpen();
   // The panel belongs to an open thread or draft: home, onboarding, Limits, a project dashboard and a space view have none.
-  const hasPane = !!(thread || draft) && !covered;
+  const hasPane = !!(thread || draft) && !covered && !phoneInbox;
   const panelOpen = panelWanted && hasPane;
   const narrow = useNarrow();
   const overlay = panelOpen && narrow && settings === null;
@@ -131,14 +158,10 @@ function Shell({ page, setPage }: { page: Page; setPage: Dispatch<SetStateAction
   };
   const draftProfileId = draft && (draft.profileId ?? state?.projects.find((p) => p.id === state.checkouts.find((c) => c.id === draft.checkoutId)?.projectId)?.profileId);
   const currentProfileId = draft ? draftProfileId ?? undefined : thread?.profileId;
-  // A machine without checkouts is set up once the hub has projects to clone here.
-  const setUp = profiles && state && profiles.length > 0 && profiles.some((p) => hasSignedInAccount(p, accounts)) && (state.checkouts.length > 0 || !!state.elsewhere?.length);
-  // Until setup is done there is nothing to search, filter or start a thread in.
-  const settingUp = !browser && !!profiles && !!accounts && !!state && !setUp;
   const inSettings = settings !== null;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (inSettings || settingUp || e.shiftKey || e.altKey) return;
+      if (inSettings || settingUp || (phone && !phoneInbox) || e.shiftKey || e.altKey) return;
       const key = e.key.toLowerCase();
       // Ctrl+N or Ctrl+T opens the New thread picker.
       if ((e.ctrlKey || e.metaKey) && (key === 'n' || key === 't')) {
@@ -155,7 +178,7 @@ function Shell({ page, setPage }: { page: Page; setPage: Dispatch<SetStateAction
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [inSettings, settingUp]);
+  }, [inSettings, settingUp, phone, phoneInbox]);
   // Arrow keys step between the sidebar's thread rows.
   const onRowKeys = (e: React.KeyboardEvent<HTMLElement>) => {
     if ((e.key !== 'ArrowDown' && e.key !== 'ArrowUp') || !(e.target instanceof HTMLElement) || !e.target.matches('.row-main')) return;
@@ -179,15 +202,16 @@ function Shell({ page, setPage }: { page: Page; setPage: Dispatch<SetStateAction
         return null;
     }
   };
-  const threadActive = !covered && !inSettings;
+  const threadActive = !covered && !inSettings && !phoneInbox;
 
   return (
-    <>
+    <PhoneMachine.Provider value={phone ? machines?.find((machine) => machine.thisMachine)?.name : undefined}>
       {settings && <Settings route={settings} onRoute={openSettings} onClose={closeCurrent} onOpenThread={openThread}
         onOpenLimits={() => openLimits(defaultLimitsScope(profiles, currentProfileId, filter))} />}
-      <div className={`layout${panelOpen ? ' with-panel' : ''}`} hidden={inSettings}>
-        <aside className="sidebar" inert={overlay}>
+      <div className={`layout${panelOpen ? ' with-panel' : ''}${phone ? ' phone-layout' : ''}`} hidden={inSettings}>
+        <aside className="sidebar" hidden={phone && !phoneInbox} inert={overlay}>
           <div className="side-controls drag">
+            {phone && <h1 className="phone-inbox-title" tabIndex={-1}>Inbox</h1>}
             <div className="side-tools">
               {!settingUp && <ThreadSearch />}
               {!settingUp && <ScopeMenu onOpenProject={(p) => openSettings({ section: 'projects', id: p.id })} />}
@@ -220,7 +244,10 @@ function Shell({ page, setPage }: { page: Page; setPage: Dispatch<SetStateAction
           </footer>
         </aside>
         <div inert={overlay} style={{ display: 'contents' }}><SidebarResizer /></div>
-        <div className="main" role="main" inert={overlay}>
+        <div className="main" role="main" hidden={phoneInbox} inert={overlay}>
+          {phone && threadActive && (thread || draft) && <div className="phone-navigation drag">
+            <button className="phone-back" onClick={onInbox}><ArrowLeft /> Inbox</button>
+          </div>}
           {coveringPage()}
           {/* Keep the composer and reading position mounted under every other page. */}
           <div className="thread-surface" hidden={!threadActive}>
@@ -241,7 +268,7 @@ function Shell({ page, setPage }: { page: Page; setPage: Dispatch<SetStateAction
         {hasPane && <PanelToggle open={panelOpen} onToggle={togglePanel} />}
         {sheet?.kind === 'addProject' && <AddProjectSheet onClose={close} />}
       </div>
-    </>
+    </PhoneMachine.Provider>
   );
 }
 

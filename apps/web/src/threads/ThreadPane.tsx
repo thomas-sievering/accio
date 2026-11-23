@@ -4,6 +4,7 @@ import { useShareDraftHarness } from '../skills/draftHarness';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useClient } from '../app/connection';
 import { useLive } from '../app/useLive';
+import { usePhoneMachine } from '../app/phoneLayout';
 import { accountForModel, defaultModel, useProfiles } from '../profiles/profiles';
 import { ProfileLabel } from '../profiles/ProfileLabel';
 import { LimitsIndicator } from '../limits/LimitsIndicator';
@@ -279,6 +280,7 @@ function PaneHeader(props: {
   machine?: RemoteMachine;
 }) {
   const { checkout, project, machine } = props;
+  const localMachine = usePhoneMachine();
   return (
     <header className="main-top drag">
       <div className="thread-title">
@@ -290,6 +292,7 @@ function PaneHeader(props: {
               : props.projectName ?? (checkout ? 'unknown project' : 'No project')}
           </span>
           {machine && <span className="thread-machine faint" title={machine.online ? `Runs on ${machine.name}` : `${machine.name} is offline`}>· {machine.name}{machine.online ? '' : ' (offline)'}</span>}
+          {!machine && localMachine && <span className="thread-machine faint">· {localMachine}</span>}
         </span>
         <span className="faint" aria-hidden="true">/</span>
         {props.titleEditor ?? <b title={props.title}>{props.title}</b>}

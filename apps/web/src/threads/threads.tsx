@@ -70,7 +70,7 @@ export type ThreadActions = {
 const Ctx = createContext<ThreadsCtx | null>(null);
 
 /** `onNavigate` runs on every thread or draft opening, even reselecting the open thread, so the shell can show the thread surface. */
-export function ThreadsProvider({ children, onNavigate }: { children: ReactNode; onNavigate: () => void }) {
+export function ThreadsProvider({ children, onNavigate }: { children: ReactNode; onNavigate: (open?: () => void) => void }) {
   const client = useClient();
   useEffect(() => () => clearFirstMessages(client), [client]);
   const { value: threads, error: loadError, retry: retryLoad } = useLiveState(() => client.call('threads.list', {}), 'threads.changed');
@@ -106,11 +106,10 @@ export function ThreadsProvider({ children, onNavigate }: { children: ReactNode;
       loadError,
       retryLoad,
       selectedId: draft || emptyPage ? '' : selectedId,
-      select: (id) => {
+      select: (id) => onNavigate(() => {
         setDraft(null);
         setSelected(id);
-        onNavigate();
-      },
+      }),
       emptyPage,
       movesOn,
       setMovesOn: (on) => { localStorage.setItem(MOVES_ON_KEY, on ? '1' : '0'); updateMovesOn(on); },
@@ -123,10 +122,9 @@ export function ThreadsProvider({ children, onNavigate }: { children: ReactNode;
         onNavigate();
       },
       draft,
-      openDraft: (checkoutId, profileId, elsewhereId) => {
+      openDraft: (checkoutId, profileId, elsewhereId) => onNavigate(() => {
         setDraft({ checkoutId, profileId, ...(elsewhereId ? { elsewhereId } : {}) });
-        onNavigate();
-      },
+      }),
       placement,
       shelves,
       projectScope,

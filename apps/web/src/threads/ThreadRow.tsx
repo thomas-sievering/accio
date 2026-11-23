@@ -1,6 +1,7 @@
 import type { ThreadPlace, ThreadView } from '@accio/protocol';
 import { useTooltip } from '../app/Tooltip';
 import { Check, Clock, StopSquare, Undo } from '../app/icons';
+import { usePhoneMachine } from '../app/phoneLayout';
 import { ProjectMark } from '../projects/ProjectMark';
 import { useProjects } from '../projects/projects';
 import { useNeedsSecret } from '../secrets/pendingSecrets';
@@ -23,6 +24,7 @@ export function ThreadRow({ thread: t, place, withinProject = false }: { thread:
   const where = project ?? 'No project';
   // GLOSSARY: Relay. Another machine's thread wears its machine as a tag; offline, it stays listed but greyed.
   const machineText = t.machine ? `${t.machine.name}${t.machine.online ? '' : ' (offline)'}` : undefined;
+  const localMachine = usePhoneMachine();
   // Every row has the same layout; only open rows carry the live status mark.
   // Working rows keep the full open look: project mark and the live status.
   const open = place === 'open' || place === 'working';
@@ -85,11 +87,13 @@ export function ThreadRow({ thread: t, place, withinProject = false }: { thread:
               <span className="row-machine-dot" />
               <span className="row-machine-name">{t.machine.name}</span>
             </span>}
+            {!t.machine && localMachine && <span className="row-machine"><span className="row-machine-name">{localMachine}</span></span>}
             {!withinProject && <span className="row-project-name">{where}</span>}
             {showState && <span className={`row-state tone-${status.tone}${delivery ? ' row-delivery' : ''}`}>
               <span className="row-state-label">{delivery ? shortStatus(status.label) : status.label}</span>
               {delivery?.pullRequest && <span className="row-state-pr">&nbsp;· #{delivery.pullRequest.number}</span>}
             </span>}
+            {!showState && <span className={`phone-row-state tone-${status.tone}`}>{status.label}</span>}
           </span>}
         </span>
         <span className="row-status">
