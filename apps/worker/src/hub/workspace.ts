@@ -14,6 +14,7 @@ import { shippedNoteTool } from '../threads/shippedNote.js';
 import { readThreadTool } from '../threads/handoff.js';
 import { readMentionedThread } from '../threads/threadMentions.js';
 import { startThreadTool } from '../threads/startThread.js';
+import { startedThreadTools } from '../threads/startedThreads.js';
 import { Projects } from '../projects/projects.js';
 import { Spaces, refused } from '../spaces/spaces.js';
 import { NewHomes } from '../spaces/newHome.js';
@@ -166,6 +167,12 @@ export async function openWorkspace(record: SavedHub, deps: WorkspaceDeps, slot:
     machine: (name) => { if (!name) return undefined; const found = findMachine(settings.machines(), name); return found.id === here.id ? undefined : found; },
     sibling: (projectId, project, machine) => siblings.target(projectId, project, machine),
     start: (params) => router.call('threads.start', params),
+  }), ...startedThreadTools({
+    here: here.id,
+    threads: () => relay.merged(),
+    summary: (threadId) => router.call('threads.deliverySummary', { threadId }),
+    deliver: (threadId, mode) => router.call('threads.deliver', { threadId, mode }),
+    settle: (threadId) => router.call('threads.settle', { threadId }),
   }));
   const resources = new ResourceManager(record.home, here.id, remoteResources(client), remoteMcp(client), profiles, projects, broadcast, async (tool, detail) => {
     const candidates = tool.repairProfileId ? [profiles.require(tool.repairProfileId)] : profiles.all();

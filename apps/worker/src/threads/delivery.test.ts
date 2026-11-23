@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { JsonFile } from '@accio/persistence';
 import { FakeHarness, gate, replyWith, SESSION, toolCall } from '../testing/fakeHarness.js';
 import { RESTART_NOTICE, RESUME_PROMPT } from './thread.js';
-import { startTestApp, type TestClient } from '../testing/testApp.js';
+import { callAccioTools, startTestApp, type TestClient } from '../testing/testApp.js';
 import { DeliveryGit, DeliveryPending, deliveryPrompt, ghFailure } from './delivery.js';
 import { git } from '../git.js';
 import { GitHubAccounts } from '../github/accounts.js';
@@ -324,6 +324,40 @@ it('delivers once after work, refuses dirty cleanup, releases only the owner and
     await wait(c, thread.id);
     expect(harness.runs.at(-1)!.sessionId).toBeNull();
     expect(await readFile(join(thread.workspace!.path, 'unsent.txt'), 'utf8')).toBe('keep me');
+  } finally { finish.release(); }
+});
+
+it('lets a coordinator ship the thread it started: queued behind its turn, delivered and settled', async () => {
+  const finish = gate();
+  const answers: string[] = [];
+  let workerId = '';
+  const harness = new FakeHarness(async function* (run) {
+    const call = async (name: string, args: unknown) => (await callAccioTools(run, 'tools/call', { name, arguments: args })).content[0].text as string;
+    if (run.prompt === 'coordinate') workerId = /\(([^)]+)\) on this machine/.exec(await call('start_thread', { message: 'build feature' }))![1]!;
+    if (run.prompt === 'build feature') { await finish.opened; await writeFile(join(run.cwd, 'feature.txt'), 'feature\n'); }
+    if (run.prompt === 'ship it') {
+      answers.push((await callAccioTools(run, 'tools/list')).tools.map((t: { name: string }) => t.name).join(','));
+      answers.push(await call('deliver_thread', { thread: workerId, mode: 'ship' }));
+      answers.push(await call('deliver_thread', { thread: workerId, mode: 'ship' }));
+    }
+    if (run.prompt.startsWith('Deliver the current task')) await publish(run.cwd);
+    yield* replyWith('done');
+  });
+  const { c, checkout, origin } = await setup(harness);
+  const coordinator = await c.call('threads.start', { checkoutId: checkout.id, text: 'coordinate' });
+  try {
+    await wait(c, coordinator.id);
+    await expect.poll(() => workerId).not.toBe('');
+    await c.call('threads.send', { threadId: coordinator.id, text: 'ship it' });
+    await wait(c, coordinator.id, x => x.status === 'idle' && x.updatedAt !== coordinator.updatedAt);
+    await expect.poll(() => answers.length).toBe(3);
+    expect(answers[0]).toContain('deliver_thread');
+    expect(answers[1]).toContain("Ship is queued: it starts when the thread's running turn finishes.");
+    expect(answers[2]).toContain('Delivery is already requested.');
+    finish.release();
+    const delivered = await wait(c, workerId, x => x.status === 'idle' && x.delivery?.status === 'delivered' && !!x.settledAt);
+    expect(delivered).toBeDefined();
+    expect(await git(origin, 'show', 'main:feature.txt')).toBe('feature');
   } finally { finish.release(); }
 });
 

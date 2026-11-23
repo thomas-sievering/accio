@@ -29,6 +29,19 @@ describe('Wait conditions', () => {
     expect(threadReached(view({ delivery: { ...delivery, status: 'delivered' } }), 'delivered')).toBe('delivered to main, PR https://github.com/o/r/pull/7 open');
   });
 
+  it('meets "delivered" once a delivery stops on a person, not while it is under way', () => {
+    const pullRequest = { host: 'github.com', repository: 'o/r', number: 7, url: 'https://github.com/o/r/pull/7', state: 'open', headRevision: 'abc', baseBranch: 'main' } as const;
+    const delivery = { mode: 'review', policy: 'pull-request', status: 'waiting', baseBranch: 'main', requestedAt: '', pullRequest } as const;
+    expect(threadReached(view({ delivery: { ...delivery, waitingOn: 'checks' } }), 'delivered')).toBeUndefined();
+    expect(threadReached(view({ delivery: { ...delivery, status: 'ready' } }), 'delivered')).toBe('prepared for review, PR https://github.com/o/r/pull/7 open, ready to merge by hand');
+    expect(threadReached(view({ delivery: { ...delivery, mode: 'ship', waitingOn: 'review' } }), 'delivered')).toBe('delivery waits on review, PR https://github.com/o/r/pull/7 open');
+    expect(threadReached(view({ delivery: { ...delivery, mode: 'ship', pullRequest: { ...pullRequest, state: 'closed' } } }), 'delivered')).toBe('PR https://github.com/o/r/pull/7 was closed without merging');
+    expect(threadReached(view({ delivery: { ...delivery, status: 'ready', observationError: 'gh failed' } }), 'delivered')).toBeUndefined();
+    expect(threadReached(view({ status: 'running', delivery: { ...delivery, status: 'ready' } }), 'delivered')).toBeUndefined();
+    // A Ship queued behind a turn that failed waits for someone to resume it.
+    expect(threadReached(view({ status: 'failed', delivery: { ...delivery, status: 'queued' } }), 'delivered')).toBe('failed, PR https://github.com/o/r/pull/7 open');
+  });
+
   it('meets "checks_done" when every check finished, and "merged" on merge or close', () => {
     const running = { name: 'test', status: 'IN_PROGRESS' };
     expect(pullRequestReached(pr({ statusCheckRollup: [running] }), 'checks_done', 0)).toBeUndefined();

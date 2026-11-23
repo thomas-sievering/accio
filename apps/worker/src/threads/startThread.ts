@@ -40,7 +40,8 @@ export function startThreadTool(deps: StartThreadDeps) {
     description: 'Start a new top-level thread in this project, on this machine or on another paired machine, and return without waiting for it (wait_for can wake you when it finishes). '
       + 'It is a thread of its own that the user follows and talks to, not a sub-agent: use it when the user asks for a new thread, or for one on another machine. '
       + "When this project is in a space, name another of its projects, including the home, in `project` to get a change made there: the thread works in that project's checkout under its profile and ships the change on its own. "
-      + 'It sees nothing of this conversation, so write the message as a complete task.',
+      + 'It sees nothing of this conversation, so write the message as a complete task. '
+      + "To deliver its work, call deliver_thread once it is done rather than telling it to open a PR with `gh pr create`: accio then verifies the delivery and settles the thread. settle_thread settles one you don't deliver.",
     input: {
       message: z.string().trim().min(1).max(20_000).describe('The new thread\'s first message: the complete task, with the goal, relevant paths and context.'),
       machine: z.string().trim().max(200).optional().describe("Name or id of the machine, as in Settings → Machines, or one the user mentioned with @, such as '@laptop'. Defaults to this machine."),
@@ -57,7 +58,7 @@ export function startThreadTool(deps: StartThreadDeps) {
         : sibling ? inheritedModel(offered, caller.model) : caller.model;
       const where = sibling ? { checkoutId: sibling.checkoutId } : caller.checkoutId ? { checkoutId: caller.checkoutId } : { profileId: caller.profileId };
       const started = await deps.start({ ...where, text: message, ...(model ? { model } : {}), ...(target ? { machineId: target.id } : {}), startedBy: { threadId, machineId: deps.here } });
-      return `Started thread "${started.title}" (${started.id})${sibling ? ` in ${sibling.name}` : ''} on ${target?.name ?? 'this machine'}. It runs on its own and shows in the thread list. To be woken when it finishes or opens a PR, call wait_for and end your turn.`;
+      return `Started thread "${started.title}" (${started.id})${sibling ? ` in ${sibling.name}` : ''} on ${target?.name ?? 'this machine'}. It runs on its own and shows in the thread list. To be woken when it finishes or opens a PR, call wait_for and end your turn. Deliver it with deliver_thread, or settle it with settle_thread, from your next turn.`;
     },
   });
 }

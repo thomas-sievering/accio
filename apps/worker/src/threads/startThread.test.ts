@@ -25,7 +25,7 @@ function setup(caller: ReturnType<StartThreadDeps['caller']> = { checkoutId: 'co
 
 it('starts a thread in the caller\'s checkout on its model, here by default', async () => {
   const { tool, start } = setup();
-  expect(await tool.call({ message: 'Fix it' }, context)).toBe('Started thread "Fix the window controls" (new) on this machine. It runs on its own and shows in the thread list. To be woken when it finishes or opens a PR, call wait_for and end your turn.');
+  expect(await tool.call({ message: 'Fix it' }, context)).toBe('Started thread "Fix the window controls" (new) on this machine. It runs on its own and shows in the thread list. To be woken when it finishes or opens a PR, call wait_for and end your turn. Deliver it with deliver_thread, or settle it with settle_thread, from your next turn.');
   expect(start).toHaveBeenCalledWith({ checkoutId: 'co1', text: 'Fix it', model: { harnessId: 'claudeCode', modelId: 'opus', effort: 'high' }, startedBy: { threadId: 'caller', machineId: 'here' } });
 });
 

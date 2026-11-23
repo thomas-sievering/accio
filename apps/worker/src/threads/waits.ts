@@ -1,7 +1,7 @@
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { findMentionedThread, threadHandle, type ThreadView, type ThreadWait, type WaitCondition, type WaitPullRequestState, type WaitThreadState } from '@accio/protocol';
+import { deliveryInProgress, deliveryPhase, deliveryWaitsOn, findMentionedThread, threadHandle, type ThreadView, type ThreadWait, type WaitCondition, type WaitPullRequestState, type WaitThreadState } from '@accio/protocol';
 import { UserError } from '../rpc/router.js';
 import { now } from '../time.js';
 import { accioTool } from '../tools/tools.js';
@@ -38,7 +38,7 @@ export type WaitHost = {
 const waitForInput = {
   started_threads: z.boolean().optional().describe('Wait for every thread you started with start_thread that has not yet reached thread_state.'),
   threads: z.array(z.string().trim().min(1).max(200)).max(20).optional().describe("Threads to wait for, by handle (such as '@fix-login-redirect-3f2a9c') or id."),
-  thread_state: z.enum(['stopped', 'pr_open', 'delivered']).optional().describe('What those threads must reach: "stopped" (no turn left to run; the default), "pr_open" (a pull request is open) or "delivered". A thread that fails or is interrupted also counts.'),
+  thread_state: z.enum(['stopped', 'pr_open', 'delivered']).optional().describe('What those threads must reach: "stopped" (no turn left to run; the default), "pr_open" (a pull request is open) or "delivered" (delivered, or its delivery stopped on a person: blocked, a PR waiting for review or merge by hand, or closed). A thread that fails or is interrupted also counts.'),
   pull_requests: z.array(z.string().trim().min(1).max(300)).max(20).optional().describe('Pull requests to wait for: GitHub URLs, or numbers in this repository.'),
   pull_request_state: z.enum(['merged', 'checks_done']).optional().describe('What those pull requests must reach: "checks_done" (every check finished; the default) or "merged" (merged, or closed without merging).'),
   after_minutes: z.number().min(1).max(7 * 24 * 60).optional().describe('Wake after this many minutes. With wake_when "any", this is also a timeout for the rest.'),
@@ -70,13 +70,25 @@ export function threadReached(view: ThreadView | undefined, until: WaitThreadSta
   const pr = delivery?.pullRequest;
   const prNote = pr ? `, PR ${pr.url} ${pr.state}` : '';
   const busy = view.status === 'running' || !!view.queuedMessages?.length || view.goal?.status === 'active'
-    || delivery?.status === 'queued' || delivery?.status === 'running' || !!view.wait;
+    // A delivery queued behind a failed or interrupted turn is paused: it runs only once someone resumes the thread.
+    || (delivery?.status === 'queued' && view.status !== 'failed' && view.status !== 'interrupted') || delivery?.status === 'running' || !!view.wait;
   // A thread that needs attention wakes every Wait on it, whatever it was waiting for.
   if (!busy && view.status === 'failed') return `failed${prNote}`;
   if (!busy && view.status === 'interrupted') return `was interrupted${prNote}`;
   if (delivery?.status === 'blocked' && !busy) return `delivery is blocked: ${delivery.detail ?? 'see the thread'}${prNote}`;
   if (until === 'pr_open') return pr ? `opened PR ${pr.url} (${pr.state})` : undefined;
-  if (until === 'delivered') return delivery?.status === 'delivered' ? `delivered to ${delivery.baseBranch}${prNote}` : undefined;
+  if (until === 'delivered') {
+    if (delivery?.status === 'delivered') return `delivered to ${delivery.baseBranch}${prNote}`;
+    // A delivery that stopped on a person won't get delivered by itself: a PR prepared for review or
+    // waiting on review, or one closed without merging. A failed observation is retried, so it waits.
+    const phase = deliveryPhase(view);
+    if (busy || !delivery || !phase || phase === 'unavailable' || deliveryInProgress(view)) return undefined;
+    if (phase === 'closed') return `PR ${pr!.url} was closed without merging`;
+    if (phase === 'superseded') return `has new work since its delivery; deliver it again${prNote}`;
+    if (phase === 'waiting') return delivery.mode === 'review' && deliveryWaitsOn(delivery) === 'merge'
+      ? `prepared for review${prNote}, ready to merge by hand` : `delivery waits on ${deliveryWaitsOn(delivery)}${prNote}`;
+    return undefined;
+  }
   if (busy) return undefined;
   return `stopped and is idle${prNote}${delivery ? `, delivery ${delivery.status}` : ''}`;
 }
