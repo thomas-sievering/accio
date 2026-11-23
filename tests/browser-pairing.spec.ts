@@ -101,29 +101,23 @@ test('a phone reconnects to the hub and catches up without reloading or duplicat
     await expect(newThread).toHaveCount(1);
     await expect(newThread).toBeVisible();
     expect(navigations).toEqual([]);
+
+    await test.step('Unpair during a second outage and return to pairing on reconnect', async () => {
+      expect(clientId).toBeDefined();
+      link.drop();
+      await expect(page.locator('.connection-notice')).toHaveText('Hub unreachable');
+      await desktop.call('clients.unpair', { clientId: clientId! });
+      clientId = undefined;
+      await expect(page.locator('.connection-notice')).toHaveText('Hub unreachable');
+      link.restore();
+      await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })));
+      await expect(page.getByRole('heading', { name: 'Pair this browser' })).toBeVisible();
+      await expect(page.locator('.sidebar')).toHaveCount(0);
+    });
   } finally {
     if (clientId) await desktop.call('clients.unpair', { clientId }).catch(() => {});
     desktop.close();
   }
-});
-
-test('a browser unpaired during a hub outage returns to pairing when it reconnects', async ({ page, baseURL }) => {
-  const link = await browserHubLink(page);
-  const desktop = await TestClient.open(`${baseURL!.replace('http:', 'ws:')}/ws?token=relay-test-token`);
-  try {
-    const known = new Set((await desktop.call('clients.list', {})).map(({ id }) => id));
-    await openPairedHub(page, desktop);
-    await expect(page.locator('.sidebar .row-main').filter({ hasText: 'A thread on the PC' })).toBeVisible();
-    const client = (await desktop.call('clients.list', {})).find(({ id }) => !known.has(id))!;
-    link.drop();
-    await expect(page.locator('.connection-notice')).toHaveText('Hub unreachable');
-    await desktop.call('clients.unpair', { clientId: client.id });
-    await expect(page.locator('.connection-notice')).toHaveText('Hub unreachable');
-    link.restore();
-    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })));
-    await expect(page.getByRole('heading', { name: 'Pair this browser' })).toBeVisible();
-    await expect(page.locator('.sidebar')).toHaveCount(0);
-  } finally { desktop.close(); }
 });
 
 test('pairs by code or QR, keeps preferences in this browser, and unpairs from either client', async ({ browser, page, baseURL }, info) => {
