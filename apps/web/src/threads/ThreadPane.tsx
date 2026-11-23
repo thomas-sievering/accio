@@ -159,14 +159,20 @@ export function DraftPane({ checkoutId, profileId, elsewhereId, active = true, o
   const repoKey = hubRepoKey ?? place.project?.repoKey;
   // A folder without a remote can only run on a machine that has it.
   const holders = folderElsewhere ? elsewhere?.on ?? [] : undefined;
-  const startable = machines?.filter((m) => holders ? !!m.relay && holders.some((c) => c.machineId === m.id) : m.thisMachine || (m.relay && (!checkoutId || !!repoKey)));
+  const startable = client.browser ? machines : machines?.filter((m) => holders ? !!m.relay && holders.some((c) => c.machineId === m.id) : m.thisMachine || (m.relay && (!checkoutId || !!repoKey)));
   const noCheckout = (m: MachineView) => !!repoKey && (m.thisMachine ? !checkoutId : !m.relay?.repos.includes(repoKey));
   const local = machines?.find((m) => m.thisMachine);
-  const machineId = chosenMachineId ?? (holders ? startable?.[0]?.id : local?.id);
+  const online = client.browser ? startable?.filter((m) => m.connected) : undefined;
+  const latest = client.browser ? threads?.reduce<ThreadView | undefined>((recent, thread) => {
+    if ((elsewhereId && thread.projectId !== elsewhereId) || !online?.some((m) => m.id === thread.machine?.id)) return recent;
+    const activity = thread.lastTurnStartedAt ?? thread.runningSince ?? thread.updatedAt;
+    return !recent || activity > (recent.lastTurnStartedAt ?? recent.runningSince ?? recent.updatedAt) ? thread : recent;
+  }, undefined) : undefined;
+  const machineId = chosenMachineId ?? (client.browser ? latest?.machine?.id ?? online?.[0]?.id : holders ? startable?.[0]?.id : local?.id);
   const remoteCheckoutId = holders?.find((c) => c.machineId === machineId)?.checkoutId;
   const machine = startable?.find((m) => m.id === machineId);
   // Until the list loads, a send goes to this machine, as the server does without a machine id.
-  const unavailable = holders ? !remoteCheckoutId || !machine?.connected : !!machines && !machine?.connected;
+  const unavailable = client.browser ? !machine?.connected : holders ? !remoteCheckoutId || !machine?.connected : !!machines && !machine?.connected;
   const [starting, setStarting] = useState<FirstMessage>();
   // GLOSSARY: Issue. The checkout's open issues, offered on this machine, where the checkout is.
   const [issues, setIssues] = useState<{ checkoutId: string; list: IssueList }>();
@@ -197,18 +203,20 @@ export function DraftPane({ checkoutId, profileId, elsewhereId, active = true, o
     <>
       <PaneHeader title="New thread" {...place} projectName={projectName} />
       {starting && <StartingTranscript {...starting} />}
+      {starting && client.browser && <p className="note" role="status">Starting the thread on {machine?.name ?? 'the selected machine'}…</p>}
       {/* While starting, the composer settles where the thread's own will be, so the swap is still. */}
       <div className={`hero${starting ? ' starting' : ''}`} inert={!!starting}>
         <h1>{checkoutId ? <>What should we build in {place.project ? <span className="hero-project">{place.project.name}</span> : 'this checkout'}?</> : projectName ? <>What should we build in <span className="hero-project">{projectName}</span>?</> : 'What should we build?'}</h1>
         <ThreadNotice profile={spending} borrowed={!!borrowFrom} model={model} onOpenProfile={onOpenProfile} />
         {chosenMachineId && unavailable && <p className="note" role="status">The selected machine is offline. Choose an online machine.</p>}
+        {client.browser && machines && !online?.length && !chosenMachineId && <p className="note" role="status">No machines are online.</p>}
         {holders && !!machines && !startable?.length && <p className="note" role="status">No machine that has {projectName} is online, and it has no remote to clone here.</p>}
         <Composer
           target="draft"
           draftId={newThreadDraftId(checkoutId, profileId, elsewhereId)}
           profileId={place.profile?.id}
           skills={checkoutId ? { checkoutId, ...(place.profile ? { profileId: place.profile.id } : {}), harnessId: model.harnessId } : place.profile ? { profileId: place.profile.id, harnessId: model.harnessId } : undefined}
-          imagesUnavailable={machine && !machine.thisMachine ? remoteImagesReason : undefined}
+          imagesUnavailable={client.browser || (machine && !machine.thisMachine) ? remoteImagesReason : undefined}
           handsOffImages
           disabled={!!starting || !spending || !accountForModel(spending, model, place.accounts)?.signedIn || unavailable}
           placeholder={`Ask ${model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}

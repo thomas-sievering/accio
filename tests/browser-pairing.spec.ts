@@ -279,3 +279,84 @@ test.describe('browser request cards', () => {
     }
   });
 });
+
+test('a paired browser starts threads on an online machine from the hub URL', async ({ page, baseURL }) => {
+  test.setTimeout(60_000);
+  const desktop = await TestClient.open(`${baseURL!.replace('http:', 'ws:')}/ws?token=relay-test-token`);
+  let sleepingProfileId: string | undefined;
+  try {
+    const personal = await desktop.signedIn('Personal');
+    await desktop.call('threads.start', { profileId: personal.id, text: 'Recent PC activity for browser defaults' });
+    const { code, url } = await desktop.call('clients.createPairingCode', {});
+    const hub = new URL('/', url ?? (await desktop.call('hubs.list', {}))[0]!.url).origin;
+    const requests: string[] = [];
+    page.on('websocket', (socket) => {
+      if (!socket.url().endsWith('/client/relay')) return;
+      socket.on('framesent', ({ payload }) => requests.push(JSON.parse(String(payload)).method));
+    });
+    await page.goto(`${hub}/#${code}`);
+    await expect(page).toHaveURL(`${hub}/`);
+    const sidebar = page.locator('.sidebar');
+    const newThread = sidebar.getByRole('button', { name: 'New thread', exact: true });
+    const choose = async (name: string) => {
+      await newThread.click();
+      await page.getByRole('option', { name, exact: true }).click();
+    };
+    const target = (name: string) => page.getByRole('button', { name: `Run on machine: ${name}`, exact: true });
+    const send = async (text: string) => {
+      await page.locator('.composer textarea').fill(text);
+      await page.getByRole('button', { name: 'Send', exact: true }).click();
+      await expect(page.locator('.msg.user').last()).toContainText(text);
+      await expect(sidebar.locator('.row-main').filter({ hasText: text }).locator('.row-machine')).toHaveText('PC');
+      await expect(page.locator('.msg.assistant').last()).toContainText(`PC here. You said: ${text}`);
+      await expect(sidebar.locator('.side-body > .rows .row-main').filter({ hasText: text })).toBeVisible({ timeout: 15_000 });
+    };
+
+    await expect(sidebar.getByText('Browser project history on the MacBook', { exact: true })).toBeVisible();
+    await expect(sidebar.getByText('Recent PC activity for browser defaults', { exact: true })).toBeVisible();
+    await choose('No project');
+    const profileSearch = page.getByRole('combobox', { name: 'Search profiles' });
+    if (await profileSearch.isVisible()) await page.getByRole('option', { name: 'Personal', exact: true }).click();
+    await expect(target('PC')).toBeVisible();
+    await send('Browser quick question on the PC');
+
+    await choose('browser-project');
+    await expect(target('MacBook')).toBeVisible();
+    await target('MacBook').click();
+    const pc = page.getByRole('menuitemradio', { name: /^PC/ });
+    await expect(pc).toContainText('No checkout yet');
+    await pc.click();
+    await expect(target('PC')).toBeVisible();
+    await send('Browser project thread cloned to the PC');
+    const projects = await desktop.call('projects.get', {});
+    const cloned = projects.projects.find(({ repoKey }) => repoKey === 'github.com/example/browser-project');
+    expect(projects.checkouts).toContainEqual(expect.objectContaining({ projectId: cloned?.id }));
+
+    await choose('hub-only');
+    await expect(page.getByRole('heading', { name: 'What should we build in hub-only?' })).toBeVisible();
+    await page.getByRole('button', { name: /^Run on machine:/ }).click();
+    await expect(pc).toContainText('No checkout yet');
+    await pc.click();
+    await send('Browser thread in a hub-only project');
+    expect(requests.filter((method) => method === 'threads.start')).toHaveLength(3);
+    expect(requests.filter((method) => method?.startsWith('checkouts.'))).toEqual([]);
+
+    await choose('mac-only');
+    await expect(target('MacBook')).toBeVisible();
+    sleepingProfileId = personal.id;
+    await desktop.call('threads.start', { profileId: sleepingProfileId, text: 'Put the MacBook to sleep' });
+    await expect(page.getByRole('button', { name: /^Run on machine: (PC|Old laptop)$/ })).toBeVisible();
+    await desktop.call('threads.start', { profileId: personal.id, text: 'Wake the MacBook' });
+    await expect(target('MacBook')).toBeVisible({ timeout: 15_000 });
+    sleepingProfileId = undefined;
+
+    await desktop.call('threads.start', { profileId: personal.id, text: 'Temporarily put all machines to sleep' });
+    await expect(newThread).toBeDisabled();
+    await expect(newThread).toHaveAccessibleDescription('No machines are online.');
+    await expect(sidebar.getByRole('status').filter({ hasText: 'No machines are online.' })).toBeVisible();
+    await expect(newThread).toBeEnabled({ timeout: 15_000 });
+  } finally {
+    if (sleepingProfileId) await desktop.call('threads.start', { profileId: sleepingProfileId, text: 'Wake the MacBook' }).catch(() => {});
+    desktop.close();
+  }
+});

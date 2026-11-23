@@ -16,6 +16,7 @@ export function NewThreadButton({ className = 'side-icon', label }: { className?
   const { profiles = [], filter } = useProfiles();
   const client = useClient();
   const machines = useLive(() => client.call('machines.list', {}), 'machines.changed');
+  const unavailable = client.browser && (!machines ? 'Loading machines…' : !machines.some((machine) => machine.connected) ? 'No machines are online.' : undefined);
   const search = useRef<HTMLInputElement>(null);
   const id = useId();
   const [query, setQuery] = useState('');
@@ -43,7 +44,8 @@ export function NewThreadButton({ className = 'side-icon', label }: { className?
   // GLOSSARY: Project. Those without a checkout here are listed among them: a hub project is cloned on the
   // machine chosen, and a folder without a remote runs on the machine that has it.
   const projectChoices: Choice[] = [
-    ...visible.map((p) => {
+    ...visible.filter((p) => !client.browser || p.repoKey).map((p) => {
+      if (client.browser) return { id: p.id, name: p.name, projectId: p.id, pick: () => start('', p.profileId, p.id) };
       const checkouts = checkoutsOf(p.id);
       return {
         id: p.id, name: p.name, detail: checkouts[0]?.path, projectId: p.id,
@@ -68,9 +70,11 @@ export function NewThreadButton({ className = 'side-icon', label }: { className?
   const selected = Math.max(0, filtered.findIndex((c) => c.id === activeId));
   return (
     <>
-      <button className={className} title="New thread (Ctrl+N or Ctrl+T)" aria-label="New thread" popoverTarget={id}>
+      <button className={className} title={unavailable || 'New thread (Ctrl+N or Ctrl+T)'} aria-label="New thread"
+        aria-description={unavailable || undefined} disabled={!!unavailable} popoverTarget={id}>
         <MessageSquarePlus />{label}
       </button>
+      {client.browser && machines && unavailable && <small role="status">{unavailable}</small>}
       <div className="new-thread-picker" id={id} popover="auto" {...props}>
         <div className="picker-search">
           {step && <button aria-label="Back to projects" onClick={() => go('')}><ArrowLeft /></button>}

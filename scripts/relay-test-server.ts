@@ -14,6 +14,7 @@ import { startHubService } from '../apps/hub/src/index.js';
 import { startApp } from '../apps/worker/src/app.js';
 import { FakeHarness, replyWith, toolCall } from '../apps/worker/src/testing/fakeHarness.js';
 import { callAccioTools, startTestSortingHat, TestClient } from '../apps/worker/src/testing/testApp.js';
+import { fetchFrom, initRepoWithOrigin } from '../apps/worker/src/testing/gitRepo.js';
 import { git } from '../apps/worker/src/git.js';
 import { onShutdown } from './fixtureLifetime.js';
 
@@ -94,8 +95,19 @@ const mac = await machine('MacBook', 0, macHarness);
 const spare = await machine('Old laptop', 0, new FakeHarness());
 // Driven from a PC thread, since a sleeping MacBook can't take a message.
 const pcHarness = new FakeHarness(async function* (run, n) {
+  if (run.prompt === 'Temporarily put all machines to sleep') {
+    void sleep(500, undefined, { ref: false }).then(async () => {
+      for (const { app } of [mac, pc, spare]) app.connections.setAsleep(true);
+      await sleep(5_000, undefined, { ref: false });
+      for (const { app } of [mac, pc, spare]) app.connections.setAsleep(false);
+    });
+  }
   const asleep = /put the macbook to sleep/i.test(run.prompt) ? true : /wake the macbook/i.test(run.prompt) ? false : undefined;
   if (asleep !== undefined) mac.app.connections.setAsleep(asleep);
+  if (run.prompt.startsWith('Browser ')) {
+    yield* replyWith(`PC here. You said: ${run.prompt}`);
+    return;
+  }
   yield* replyWith(asleep === undefined ? `reply ${n}` : asleep ? 'The MacBook is asleep.' : 'The MacBook is awake.');
 });
 const pc = await machine('PC', Number(process.env.ACCIO_RELAY_TEST_PORT ?? 47491), pcHarness, resolve('apps/web/dist'));
@@ -111,6 +123,17 @@ const macOnly = join(root, 'MacBook', 'mac-only');
 await mkdir(macOnly); await git(macOnly, 'init', '--quiet'); await git(macOnly, 'remote', 'add', 'origin', 'https://github.com/example/mac-only.git');
 const macOnlyCheckout = await mac.client.call('checkouts.add', { path: macOnly, profileId: profile.id });
 await mac.client.call('threads.start', { checkoutId: macOnlyCheckout.id, text: 'Only the MacBook has this repository' });
+const browserProject = join(root, 'MacBook', 'browser-project');
+const browserOrigin = join(root, 'browser-project.git');
+const browserRemote = 'https://github.com/example/browser-project.git';
+await initRepoWithOrigin(browserProject, browserOrigin, { 'README.md': 'Disposable browser fixture\n' });
+await git(browserProject, 'remote', 'set-url', 'origin', browserRemote);
+await pc.client.call('machines.setProfileFolders', { machineId: (await pc.client.thisMachine()).id, profileId: profile.id, folders: [join(root, 'PC', 'clones')] });
+const browserCheckout = await mac.client.call('checkouts.add', { path: browserProject, profileId: profile.id });
+fetchFrom(browserOrigin, browserRemote);
+await mac.client.call('threads.start', { checkoutId: browserCheckout.id, text: 'Browser project history on the MacBook' });
+await hub.settings.registerProjects([{ repoKey: 'github.com/example/hub-only', name: 'hub-only', profileId: profile.id }]);
+fetchFrom(browserOrigin, 'https://github.com/example/hub-only.git');
 // A folder without a remote, only on the MacBook: listed on the PC while the MacBook is online, and its threads run there.
 const macNotes = join(root, 'MacBook', 'mac-notes');
 await mkdir(macNotes); await git(macNotes, 'init', '--quiet');

@@ -76,5 +76,6 @@ export const RELAY_CLIENT_READS = [
 ] as const satisfies readonly MethodName[];
 
 export const RELAY_CLIENT_THREAD_ACTIONS = [
+  'threads.start',
   'threads.send', 'threads.queued', 'threads.stop', 'threads.setModel', 'secretRequests.answer', 'confirmations.answer',
 ] as const satisfies readonly (typeof RELAY_THREAD_METHODS[number])[];

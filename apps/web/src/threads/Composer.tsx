@@ -5,6 +5,7 @@ import { useAppEvent } from '../app/appEvents';
 import { useAction } from '../app/useAction';
 import { useClient } from '../app/connection';
 import { useLive } from '../app/useLive';
+import { Button } from '../ui/Button';
 import { useThreads } from './threads';
 import { caretLeft, MentionBackdrop, MentionMenu } from './Mentions';
 import { mentionAt, mentionOptions, skillCommandAt, skillOptions, type MentionKind, type MentionOption } from './mentionQuery';
@@ -85,6 +86,7 @@ export function Composer({
   const pasteShortcut = /Mac/.test(navigator.platform) ? '⌘⇧V' : 'Ctrl+Shift+V';
   const [controlHeld, setControlHeld] = useState(false);
   const { busy, error, run } = useAction();
+  const startingDraft = client.browser && target === 'draft' && busy;
   const sending = useRef(false);
   const input = useRef<HTMLTextAreaElement>(null);
   const queuing = !!onStop && controlHeld;
@@ -432,11 +434,12 @@ export function Composer({
               <StopSquare />
             </button>
           )}
-          <button type="submit" className={`send${queuing ? ' queue' : ''}`} aria-label={queuing ? 'Queue message' : 'Send'}
+          <Button type="submit" className={`send${queuing ? ' queue' : ''}`} aria-label={startingDraft ? 'Starting…' : queuing ? 'Queue message' : 'Send'}
+            busy={startingDraft} busyLabel=""
             title={!queuing && armed && shipOffer ? `Send, then ${shipWhenDoneLabel(shipOffer.mode).toLowerCase()}` : undefined} disabled={disabled || busy || !sendable}
             onClick={e => { e.preventDefault(); void submit(onStop && (e.ctrlKey || e.metaKey) ? 'queue' : 'steer'); }}>
             {queuing ? <Queue /> : <ArrowUp />}
-          </button>
+          </Button>
         </div>
       </form>
     </div>
