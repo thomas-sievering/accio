@@ -14,8 +14,8 @@ import { Resources } from './resources.js';
 import { McpGateway } from './mcp.js';
 import { RESOURCE_WRITES } from './resourceClient.js';
 import { SecretsVault, SecretStoreError } from './secrets.js';
-import type { PairedClientView } from '@accio/protocol';
-import { browserCookie, browserCookieValue, browserForm, browserName, browserOrigin, browserPage, browserToken, recheckBrowserSession } from './browser.js';
+import type { BrowserSharedState, PairedClientView } from '@accio/protocol';
+import { browserApp, browserAppFile, browserCookie, browserCookieValue, browserForm, browserName, browserOrigin, browserPage, browserToken, recheckBrowserSession } from './browser.js';
 
 export const HUB_PROTOCOL = 2;
 /** Largest relay WebSocket message; machines split bigger frames into chunks. */
@@ -45,7 +45,7 @@ export type HubSnapshot = {
   sortingHat?: SortingHatView;
 };
 export type HubServiceOptions = {
-  home: string; host?: string; port?: number;
+  home: string; host?: string; port?: number; webRoot?: string;
   mcpFetch?: Fetch; publicUrl?: string; secretKey?: string;
   /** GLOSSARY: Accio version. What this hub runs, shown to clients. */
   version?: string;
@@ -148,23 +148,32 @@ export async function startHubService(opts: HubServiceOptions) {
   const relay = new WebSocketServer({ noServer: true, maxPayload: RELAY_FRAME_BYTES });
   /** GLOSSARY: Relay. One socket per machine; a newer one replaces the older. */
   const relays = new Map<string, WebSocket>();
+  const clientRelays = new Map<WebSocket, string>();
   function relayPeers() {
-    const frame = JSON.stringify({ kind: 'peers', from: 'hub', machines: [...relays.keys()] });
-    for (const ws of relays.values()) if (ws.readyState === WebSocket.OPEN) ws.send(frame);
+    const frame = { kind: 'peers', from: 'hub', machines: [...relays.keys()] };
+    const machineFrame = JSON.stringify({ ...frame, clients: [...new Set(clientRelays.values())] });
+    for (const ws of relays.values()) if (ws.readyState === WebSocket.OPEN) ws.send(machineFrame);
+    const clientFrame = JSON.stringify(frame);
+    for (const ws of clientRelays.keys()) if (ws.readyState === WebSocket.OPEN) ws.send(clientFrame);
   }
   function closeRelay(machineId: string, reason: string) { relays.get(machineId)?.close(4001, reason); }
   /** Forwards a frame by its `to`, stamped with the authenticated sender. The rest stays opaque. */
-  function forward(from: string, text: string) {
+  function forward(sender: WebSocket, from: string, fromKind: 'machine' | 'client', text: string) {
     let frame: any;
     try { frame = JSON.parse(text); } catch { return; }
     if (!frame || typeof frame !== 'object' || Array.isArray(frame) || typeof frame.to !== 'string' || frame.to.length > 128 || !['request', 'response', 'event', 'chunk'].includes(frame.kind)) return;
+    if (fromKind === 'client' && (frame.kind !== 'request' || frame.to === '*')) return;
     frame.from = from;
+    frame.fromKind = fromKind;
     const out = JSON.stringify(frame);
-    const targets = frame.to === '*' ? [...relays].filter(([id]) => id !== from).map(([, ws]) => ws) : [relays.get(frame.to)].filter((ws) => !!ws && frame.to !== from);
+    const targets = frame.to === '*' ? [...relays].filter(([id]) => id !== from).map(([, ws]) => ws) : frame.to === from ? [] : [relays.get(frame.to)];
+    if (fromKind === 'machine' && frame.kind !== 'request') {
+      for (const [ws, id] of clientRelays) if (frame.to === id || frame.to === '*') targets.push(ws);
+    }
     let sent = false;
-    for (const ws of targets) if (ws!.readyState === WebSocket.OPEN) { ws!.send(out); sent = true; }
+    for (const ws of targets) if (ws?.readyState === WebSocket.OPEN) { ws.send(out); sent = true; }
     if (!sent && frame.to !== '*' && typeof frame.id === 'string' && (frame.kind === 'request' || frame.kind === 'chunk')) {
-      relays.get(from)?.send(JSON.stringify({ kind: 'undeliverable', from: 'hub', id: frame.id }));
+      sender.send(JSON.stringify({ kind: 'undeliverable', from: 'hub', id: frame.id }));
     }
   }
   /** GLOSSARY: Sign-in. Only which machine started each one, so another can't poll, finish or cancel it; the Sorting Hat holds the rest. */
@@ -359,7 +368,24 @@ export async function startHubService(opts: HubServiceOptions) {
       const id = token && await trust.useClient(token);
       if (!token && !target.searchParams.has('check-session') && ['cross-site', 'same-site'].includes(req.headers['sec-fetch-site'] ?? '')) return recheckBrowserSession(res);
       if (token) browserCookie(res, id ? token : '');
+      if (id && opts.webRoot) return browserApp(res, opts.webRoot, 'index.html');
       return browserPage(res, id ? { id, clients: trust.clients() } : undefined);
+    }
+    const appFile = browserAppFile(path);
+    if (req.method === 'GET' && (path === '/client/state' || appFile && opts.webRoot)) {
+      const token = browserToken(req);
+      if (!token || !trust.authenticateClient(token)) return json(res, 401, { error: 'Pair this browser' });
+      if (path === '/client/state') {
+        const profiles = settings.profiles();
+        const state: BrowserSharedState = {
+          hubId: trust.id, version: opts.version, profiles: profileViews(profiles, link), accounts: link.accountViews(),
+          machines: settings.machines().map(({ id, name, platform, version, harnesses, lastSeen }) => ({ id, name, platform, version, harnesses, lastSeen })),
+          projects: settings.projects(), spaces: settings.spaces(), clients: trust.clients(),
+        };
+        res.setHeader('cache-control', 'no-store');
+        return json(res, 200, state);
+      }
+      return browserApp(res, opts.webRoot!, appFile!);
     }
     if (path === '/healthz' && req.method === 'GET') return json(res, closing ? 503 : 200, { hubId: trust.id, protocol: HUB_PROTOCOL, ready: !closing });
     if (path === '/client/unpair' && req.method === 'POST') {
@@ -426,7 +452,7 @@ export async function startHubService(opts: HubServiceOptions) {
   }
   server.on('upgrade', (req, socket, head) => {
     const refuse = () => socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
-    if (req.url === '/client/events' && browserOrigin(req, opts.publicUrl)) {
+    if ((req.url === '/client/events' || req.url === '/client/relay') && browserOrigin(req, opts.publicUrl)) {
       const token = browserToken(req);
       if (!token) { refuse(); return; }
       const onError = () => socket.destroy();
@@ -435,12 +461,19 @@ export async function startHubService(opts: HubServiceOptions) {
         if (socket.destroyed) return;
         if (closing || !id || !trust.authenticateClient(token)) { refuse(); return; }
         socket.off('error', onError);
-        sockets.handleUpgrade(req, socket, head, (ws) => {
+        const isRelay = req.url === '/client/relay';
+        (isRelay ? relay : sockets).handleUpgrade(req, socket, head, (ws) => {
           browserOwners.set(ws, id);
           keepAlive(ws, HUB_INTERVAL_MS, { endOnWake: false });
           ws.on('error', () => {});
           ws.once('close', () => browserOwners.delete(ws));
-          ws.send(JSON.stringify({ revision }));
+          if (!isRelay) { ws.send(JSON.stringify({ revision })); return; }
+          clientRelays.set(ws, id);
+          ws.on('message', (data, binary) => {
+            if (!binary && trust.authenticateClient(token)?.id === id) forward(ws, id, 'client', String(data));
+          });
+          ws.once('close', () => { clientRelays.delete(ws); relayPeers(); });
+          relayPeers();
         });
       }).catch(() => socket.destroy());
       return;
@@ -453,7 +486,7 @@ export async function startHubService(opts: HubServiceOptions) {
         previous?.close(4000, 'Replaced by a newer connection');
         keepAlive(ws, HUB_INTERVAL_MS, { endOnWake: false });
         ws.on('error', () => {});
-        ws.on('message', (data, binary) => { if (!binary && relays.get(machineId) === ws) forward(machineId, String(data)); });
+        ws.on('message', (data, binary) => { if (!binary && relays.get(machineId) === ws) forward(ws, machineId, 'machine', String(data)); });
         ws.once('close', () => { if (relays.get(machineId) === ws) { relays.delete(machineId); relayPeers(); } });
         relayPeers();
       });

@@ -1,24 +1,28 @@
 import type { MethodName } from './index.js';
-import type { CheckoutView, ProjectView } from './projects.js';
+import type { CheckoutView, HubProject, ProjectView } from './projects.js';
 import type { ThreadView } from './threads.js';
+import type { AccountView, ProfileView } from './profiles.js';
+import type { MachineView } from './machine.js';
+import type { Space } from './spaces.js';
+import type { PairedClientView } from './hub.js';
 
 /**
- * GLOSSARY: Relay. Frames a machine exchanges with other machines through the hub.
- * The hub reads only `to`, stamps `from` with the authenticated sender and forwards
- * the frame unchanged; it never stores or interprets the rest.
+ * GLOSSARY: Relay. Frames machines and clients exchange through the hub.
+ * The hub routes by `to`, stamps the authenticated sender, and never stores the payload.
  */
-export type RelayFrame =
-  | { kind: 'request'; to: string; from?: string; id: string; method: string; params: unknown }
-  | { kind: 'response'; to: string; from?: string; id: string; ok: true; result: unknown }
-  | { kind: 'response'; to: string; from?: string; id: string; ok: false; error: string }
+export type RelayFrame = { to: string; from?: string; fromKind?: 'machine' | 'client' } & (
+  | { kind: 'request'; id: string; method: string; params: unknown }
+  | { kind: 'response'; id: string; ok: true; result: unknown }
+  | { kind: 'response'; id: string; ok: false; error: string }
   /** `to: '*'` reaches every other machine connected to the relay. */
-  | { kind: 'event'; to: string; from?: string; event: string; data: unknown }
+  | { kind: 'event'; event: string; data: unknown }
   /** Part of a serialized frame too large for one WebSocket message. `id` is the request id for requests. */
-  | { kind: 'chunk'; to: string; from?: string; id: string; index: number; total: number; data: string };
+  | { kind: 'chunk'; id: string; index: number; total: number; data: string }
+);
 
 /** Frames only the hub sends. */
 export type RelayHubFrame =
-  | { kind: 'peers'; from: 'hub'; machines: string[] }
+  | { kind: 'peers'; from: 'hub'; machines: string[]; clients?: string[] }
   | { kind: 'undeliverable'; from: 'hub'; id: string };
 
 /** What a machine shares about its own work with the other machines. */
@@ -32,6 +36,17 @@ export type RelaySnapshot = {
 
 /** A thread owned by another machine, as the viewing machine shows it. */
 export type RemoteMachine = { id: string; name: string; online: boolean };
+
+export type BrowserSharedState = {
+  hubId: string;
+  version?: string;
+  profiles: ProfileView[];
+  accounts: AccountView[];
+  machines: Pick<MachineView, 'id' | 'name' | 'platform' | 'version' | 'harnesses' | 'lastSeen'>[];
+  projects: HubProject[];
+  spaces: Space[];
+  clients: PairedClientView[];
+};
 
 /**
  * Thread methods a machine serves to the others through the relay. Anything not
@@ -54,3 +69,5 @@ export const RELAY_THREAD_METHODS = [
  */
 export const RELAY_MACHINE_METHODS = ['update.status', 'update.start', 'app.screenshot', 'checkouts.clone', 'checkouts.cloneUrl'] as const satisfies readonly MethodName[];
 export type RelayMachineMethod = typeof RELAY_MACHINE_METHODS[number];
+
+export const RELAY_CLIENT_READS = ['harnesses.list', 'models.list'] as const satisfies readonly MethodName[];

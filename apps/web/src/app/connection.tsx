@@ -1,14 +1,40 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { HubConnectionView } from '@accio/protocol';
-import { RpcClient, socketUrl, takeToken, type ConnectionStatus } from './rpcClient';
+import { RpcClient, socketUrl, takeToken, type AppClient, type ConnectionStatus } from './rpcClient';
+import { HubClient, loadBrowserState } from './hubClient';
 import { HubSettings } from '../hub/HubSettings';
 
-const ClientContext = createContext<RpcClient | null>(null);
-const HubsContext = createContext<{ hubs: HubConnectionView[]; selectedId: string; /** The user picked this hub themselves, rather than it being the default. */ chosen: boolean; select: (id: string) => void; root: RpcClient } | null>(null);
+const ClientContext = createContext<AppClient | null>(null);
+const HubsContext = createContext<{ hubs: HubConnectionView[]; selectedId: string; /** The user picked this hub themselves, rather than it being the default. */ chosen: boolean; select: (id: string) => void; root: AppClient } | null>(null);
 
 const HUB_KEY = 'accio.hub';
 
 export function ConnectionProvider({ children }: { children: ReactNode }) {
+  return document.getElementById('root')?.hasAttribute('data-hub-client')
+    ? <BrowserConnection>{children}</BrowserConnection> : <WorkerConnection>{children}</WorkerConnection>;
+}
+
+function BrowserConnection({ children }: { children: ReactNode }) {
+  const [connection, setConnection] = useState<{ client: HubClient; hub: HubConnectionView }>();
+  const [error, setError] = useState<string>();
+  useEffect(() => {
+    const lifetime = new AbortController();
+    let client: HubClient | undefined;
+    void loadBrowserState(lifetime.signal).then((shared) => {
+      if (lifetime.signal.aborted) return;
+      client = new HubClient(shared);
+      setConnection({ client, hub: { id: shared.hubId, name: 'Hub', url: location.origin, local: false, running: 0, status: 'connected', version: shared.version } });
+    }, (failure: Error) => { if (!lifetime.signal.aborted) setError(failure.message); });
+    return () => { lifetime.abort(); client?.close(); };
+  }, []);
+  if (!connection) return <div className="center-screen" role="status">{error ?? 'Connecting to the hub…'}</div>;
+  const { hub, client } = connection;
+  return <HubsContext.Provider value={{ hubs: [hub], selectedId: hub.id, chosen: true, select: () => {}, root: client }}>
+    <ClientContext.Provider value={client}>{children}</ClientContext.Provider>
+  </HubsContext.Provider>;
+}
+
+function WorkerConnection({ children }: { children: ReactNode }) {
   const [token] = useState(takeToken);
   const [root, setRoot] = useState<RpcClient>();
   const [client, setClient] = useState<RpcClient>();
@@ -40,7 +66,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   </HubsContext.Provider>;
 }
 
-export function useClient(): RpcClient { const client = useContext(ClientContext); if (!client) throw new Error('useClient outside ConnectionProvider'); return client; }
+export function useClient(): AppClient { const client = useContext(ClientContext); if (!client) throw new Error('useClient outside ConnectionProvider'); return client; }
 export function useHubs() { const context = useContext(HubsContext); if (!context) throw new Error('useHubs outside ConnectionProvider'); return context; }
 export function useConnectionStatus(): ConnectionStatus {
   const client = useClient(); const [status, setStatus] = useState(client.status);

@@ -1,10 +1,27 @@
 import { randomBytes } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { PairedClientView } from '@accio/protocol';
 import { CLIENT_TTL_MS } from './trust.js';
 import { HubError } from './errors.js';
 
 const cookieName = '__Host-accio-client';
+const webTypes: Record<string, string> = { html: 'text/html; charset=utf-8', js: 'text/javascript', css: 'text/css', svg: 'image/svg+xml', woff2: 'font/woff2', png: 'image/png' };
+
+export function browserAppFile(path: string) {
+  if (path === '/favicon.svg' || /^\/assets\/[\w.-]+\.(?:js|css|svg|woff2|png)$/.test(path)) return path.slice(1);
+}
+
+export async function browserApp(res: ServerResponse, root: string, file: string) {
+  const body = await readFile(join(root, file)).catch(() => undefined);
+  res.writeHead(body ? 200 : 404, {
+    'content-type': body ? webTypes[file.split('.').at(-1)!]! : 'text/plain', 'cache-control': 'no-store',
+    'x-content-type-options': 'nosniff', 'referrer-policy': 'same-origin',
+    'content-security-policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+  });
+  res.end(file === 'index.html' && body ? body.toString().replace('<div id="root">', '<div id="root" data-hub-client>') : body ?? 'Web app file not found');
+}
 export function browserToken(req: IncomingMessage) {
   return req.headers.cookie?.split(';').map((part) => part.trim()).find((part) => part.startsWith(`${cookieName}=`))?.slice(cookieName.length + 1);
 }
@@ -45,7 +62,7 @@ export function browserPage(res: ServerResponse, signedIn?: { id: string; client
     'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'referrer-policy': 'same-origin',
     'content-security-policy': `default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`,
   });
-  const content = signedIn ? `<h1>You're paired with Accio</h1><p>Threads aren't available in the web app yet.</p><h2>Paired clients</h2>${signedIn.clients.map(({ id, name }) => `<form method="post" action="/client/unpair"><input type="hidden" name="id" value="${escape(id)}"><p><b>${escape(name)}</b>${id === signedIn.id ? ' (this browser)' : ''} <button data-busy="Unpairing…">Unpair ${escape(name)}</button></p></form>`).join('')}` :
+  const content = signedIn ? `<h1>You're paired with Accio</h1><p>This hub was started without the web app.</p><h2>Paired clients</h2>${signedIn.clients.map(({ id, name }) => `<form method="post" action="/client/unpair"><input type="hidden" name="id" value="${escape(id)}"><p><b>${escape(name)}</b>${id === signedIn.id ? ' (this browser)' : ''} <button data-busy="Unpairing…">Unpair ${escape(name)}</button></p></form>`).join('')}` :
     `<h1>Pair this browser</h1><p>In Accio, open Settings → Machines → Pair a browser for a one-time code.</p>${error ? `<p role="alert">${escape(error.message)}</p>` : ''}
     <form method="post" action="/client/pair"><label for="code">Pairing code</label> <input id="code" name="code" type="text" required maxlength="64" autocomplete="off" spellcheck="false"> <button data-busy="Pairing…">Pair browser</button></form>`;
   res.end(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Accio</title><main style="font-family:system-ui;max-width:38rem;margin:10vh auto;padding:1.5rem">${content}</main>

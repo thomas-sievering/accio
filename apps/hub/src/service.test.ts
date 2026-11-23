@@ -127,12 +127,21 @@ describe('standalone hub trust and network boundary', () => {
     }
     expect(service.snapshot().profiles).toEqual([]);
     const firstSocket = socket('/client/events', { cookie: first.cookie });
+    const firstRelay = socket('/client/relay', { cookie: first.cookie });
     const secondSocket = socket('/client/events', { cookie: second.cookie });
-    await Promise.all([once(firstSocket, 'open'), once(secondSocket, 'open')]);
+    await Promise.all([once(firstSocket, 'open'), once(firstRelay, 'open'), once(secondSocket, 'open')]);
+    await expect(once(socket('/client/relay', { origin: 'https://other.example', cookie: first.cookie }), 'open')).rejects.toThrow('Unexpected server response: 401');
+    await expect(once(socket('/client/relay', { authorization: first.authorization }), 'open')).rejects.toThrow('Unexpected server response: 401');
+    expect((await fetch(service.url + '/client/state')).status).toBe(401);
+    const state = await (await fetch(service.url + '/client/state', { headers: { cookie: first.cookie } })).json();
+    expect(state).toMatchObject({ profiles: [], projects: [], spaces: [], machines: [expect.objectContaining({ id: 'desktop' })] });
+    expect(state).not.toHaveProperty('secrets');
     const firstClosed = once(firstSocket, 'close');
+    const relayClosed = once(firstRelay, 'close');
     expect((await form('/client/unpair', { id: first.id }, { cookie: second.cookie, origin: 'https://other.example' })).status).toBe(403);
     expect((await form('/client/unpair', { id: first.id }, { cookie: second.cookie })).status).toBe(303);
     expect((await firstClosed)[0]).toBe(4001);
+    expect((await relayClosed)[0]).toBe(4001);
     expect(secondSocket.readyState).toBe(WebSocket.OPEN);
     expect(await (await fetch(service.url, { headers: { cookie: first.cookie } })).text()).toContain('Pair this browser');
     await expect(once(socket('/client/events', { cookie: first.cookie }), 'open')).rejects.toThrow('Unexpected server response: 401');

@@ -60,6 +60,7 @@ export function App() {
  * thread can do is on its right-click menu.
  */
 function Shell({ page, setPage }: { page: Page; setPage: Dispatch<SetStateAction<Page>> }) {
+  const { browser } = useClient();
   const { profiles, accounts, filter, setFilter } = useProfiles();
   const { state } = useProjects();
   const { spaces } = useSpaces();
@@ -133,7 +134,7 @@ function Shell({ page, setPage }: { page: Page; setPage: Dispatch<SetStateAction
   // A machine without checkouts is set up once the hub has projects to clone here.
   const setUp = profiles && state && profiles.length > 0 && profiles.some((p) => hasSignedInAccount(p, accounts)) && (state.checkouts.length > 0 || !!state.elsewhere?.length);
   // Until setup is done there is nothing to search, filter or start a thread in.
-  const settingUp = !!profiles && !!accounts && !!state && !setUp;
+  const settingUp = !browser && !!profiles && !!accounts && !!state && !setUp;
   const inSettings = settings !== null;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

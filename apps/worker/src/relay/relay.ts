@@ -2,13 +2,14 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { JsonFile } from '@accio/persistence';
 import { RelaySocket, type RelayRequest } from '@accio/hub';
-import { RELAY_MACHINE_METHODS, RELAY_THREAD_METHODS, type CheckoutView, type Events, type MachineView, type MethodName, type ParamsOf, type ProjectsState, type ResultOf, type RelaySnapshot, type ThreadView } from '@accio/protocol';
+import { RELAY_CLIENT_READS, RELAY_MACHINE_METHODS, RELAY_THREAD_METHODS, type CheckoutView, type Events, type MachineView, type MethodName, type ParamsOf, type ProjectsState, type ResultOf, type RelaySnapshot, type ThreadView } from '@accio/protocol';
 import { UserError, type Router } from '../rpc/router.js';
 import { CLONE_TIMEOUT_MS, httpsUrlOf, remoteUrlOf } from '../projects/git.js';
 import type { RemoteMediaKey, ThreadAssets } from '../threads/assets.js';
 
 const RELAY_METHODS = new Set<string>(RELAY_THREAD_METHODS);
 const MACHINE_METHODS = new Set<string>(RELAY_MACHINE_METHODS);
+const CLIENT_METHODS = new Set<string>([...RELAY_THREAD_METHODS, ...RELAY_CLIENT_READS]);
 /** Transcripts another machine streams from here at once; the oldest stops when it opens another. */
 const OBSERVED_PER_PEER = 16;
 /** Long enough to send the largest media through the hub. */
@@ -55,6 +56,7 @@ type Cache = { machines: Record<string, RelaySnapshot> };
 export class Relay {
   private socket?: RelaySocket;
   private online = new Set<string>();
+  private clients = new Set<string>();
   private remote = new Map<string, RelaySnapshot>();
   private owners = new Map<string, string>();
   /** Peer → threads it streams from here, oldest first. */
@@ -84,7 +86,7 @@ export class Relay {
     this.socket = new RelaySocket(url, token, {
       request: (request) => this.serve(request),
       event: (from, event, data) => this.receive(from, event, data),
-      peers: (machines) => this.peers(machines),
+      peers: (machines, clients) => this.peers(machines, clients),
       disconnected: () => this.peers([]),
     });
     if (this.asleep) this.socket.setAsleep(true);
@@ -312,12 +314,14 @@ export class Relay {
     return { threads: this.deps.threads(), projects, checkouts, version: { boot: this.boot, seq: ++this.seq } };
   }
 
-  private async serve({ from, method, params }: RelayRequest): Promise<unknown> {
-    if (!this.deps.machineName(from)) throw new Error('This machine is not paired with the hub.');
+  private async serve({ from, fromKind, method, params }: RelayRequest): Promise<unknown> {
+    if (fromKind === 'client') {
+      if (!this.clients.has(from) || method !== 'relay.snapshot' && !CLIENT_METHODS.has(method)) throw new Error(NOT_RELAYED);
+    } else if (!this.deps.machineName(from)) throw new Error('This machine is not paired with the hub.');
     if (method === 'relay.snapshot') return this.snapshot();
     if (MACHINE_METHODS.has(method)) {
       if ((params as { machineId?: unknown } | undefined)?.machineId !== this.deps.here) throw new Error('This call is about another machine.');
-    } else if (!RELAY_METHODS.has(method)) throw new Error(NOT_RELAYED);
+    } else if (fromKind !== 'client' && !RELAY_METHODS.has(method)) throw new Error(NOT_RELAYED);
     const threadId = (params as { threadId?: unknown } | undefined)?.threadId;
     if (method === 'threads.observe' && typeof threadId === 'string' && this.deps.threads().some((t) => t.id === threadId)) {
       // Subscribe before the snapshot is read, as a local client does; the viewer drops changes through its cursor.
@@ -345,7 +349,10 @@ export class Relay {
     }
   }
 
-  private peers(machines: string[]) {
+  private peers(machines: string[], clients: string[] = []) {
+    const browsing = new Set(clients);
+    for (const id of this.clients) if (!browsing.has(id)) this.observers.delete(id);
+    this.clients = browsing;
     const next = new Set(machines.filter((id) => id !== this.deps.here));
     const joined = [...next].filter((id) => !this.online.has(id));
     for (const id of this.online) if (!next.has(id)) { this.observers.delete(id); this.leave(id); }
