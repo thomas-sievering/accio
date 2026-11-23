@@ -5,16 +5,22 @@ import { appMenuTemplate } from './appMenu.js';
 const flatten = (items: MenuItemConstructorOptions[]): MenuItemConstructorOptions[] =>
   items.flatMap((item) => [item, ...(Array.isArray(item.submenu) ? flatten(item.submenu) : [])]);
 
-it('installs no Windows application menu that can take Alt from the composer', () => {
-  expect(appMenuTemplate('win32', () => [])).toBeNull();
+it('keeps the Windows menu roles and the hidden DevTools accelerator', () => {
+  const template = appMenuTemplate('win32', () => []);
+  expect(template.map((item) => item.role)).toEqual(['fileMenu', 'editMenu', 'viewMenu', 'windowMenu']);
+  expect(flatten(template)).toContainEqual(expect.objectContaining({
+    label: 'Close Developer Tools',
+    accelerator: 'CmdOrCtrl+W',
+    visible: false,
+  }));
 });
 
-it.each(['darwin', 'linux'] as const)('on %s, Ctrl/Cmd+W closes focused DevTools and never the window', (platform) => {
+it.each(['win32', 'darwin', 'linux'] as const)('on %s, Ctrl/Cmd+W closes focused DevTools and never the window', (platform) => {
   const contents = (devToolsFocused: boolean) => ({ isDestroyed: () => false, isDevToolsFocused: () => devToolsFocused, closeDevTools: vi.fn() });
   const app = contents(false);
   const inspected = contents(true);
   let all = [app, inspected];
-  const items = flatten(appMenuTemplate(platform, () => all as unknown as WebContents[])!);
+  const items = flatten(appMenuTemplate(platform, () => all as unknown as WebContents[]));
 
   // Role menus without their own submenu bring Electron's default items, Close among them
   // (macOS's File menu is only Close).
