@@ -11,10 +11,10 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { startHubService } from '../apps/hub/src/index.js';
-import { startApp } from '../apps/worker/src/app.js';
+import { startApp, type AppDeps } from '../apps/worker/src/app.js';
 import { FakeHarness, replyWith, toolCall } from '../apps/worker/src/testing/fakeHarness.js';
 import { callAccioTools, startTestSortingHat, TestClient } from '../apps/worker/src/testing/testApp.js';
-import { fetchFrom, initRepoWithOrigin } from '../apps/worker/src/testing/gitRepo.js';
+import { BROWSER_AUTHOR, fetchFrom, initRepoWithOrigin } from '../apps/worker/src/testing/gitRepo.js';
 import { git } from '../apps/worker/src/git.js';
 import { onShutdown } from './fixtureLifetime.js';
 
@@ -25,7 +25,7 @@ const hat = await startTestSortingHat(join(root, 'hub'));
 const hub = await startHubService({ home: join(root, 'hub'), port: 0, webRoot: resolve('apps/web/dist') });
 
 /** A machine already joined to the hub, as if paired through Settings → Hubs. */
-async function machine(name: string, port: number, harness: FakeHarness, webRoot?: string) {
+async function machine(name: string, port: number, harness: FakeHarness, webRoot?: string, deliveryHosting?: AppDeps['deliveryHosting']) {
   const home = join(root, name);
   const id = randomUUID();
   await mkdir(home, { recursive: true });
@@ -33,7 +33,7 @@ async function machine(name: string, port: number, harness: FakeHarness, webRoot
   const { code } = await hub.createPairingCode();
   const paired = await fetch(hub.url + '/pair', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code, machineId: id }) }).then((r) => r.json()) as { hubId: string; token: string };
   await writeFile(join(home, 'hub-connections.json'), JSON.stringify([{ id: paired.hubId, name: 'Home', url: hub.url, token: paired.token, home: join(home, 'hubs', paired.hubId), local: true }]));
-  const app = await startApp({ home, host: '127.0.0.1', port, hubPort: 0, token, webRoot }, { harness });
+  const app = await startApp({ home, host: '127.0.0.1', port, hubPort: 0, token, webRoot }, { harness, deliveryHosting });
   const client = await TestClient.open(`ws://127.0.0.1:${app.port}/ws?token=${token}`);
   await client.call('machines.rename', { machineId: id, name });
   // Both machines have a checkout of the same repository, so it is one project.
@@ -42,6 +42,9 @@ async function machine(name: string, port: number, harness: FakeHarness, webRoot
   return { app, client, repo };
 }
 
+const reviewUrl = 'https://github.com/example/relay-review';
+const reviews = new Map<string, { number: number; headRefOid: string }>();
+const deliveryFixtures = new Map<string, { scenario: string; file: string }>();
 const macHarness = new FakeHarness(async function* (run) {
   if (run.prompt === 'Browser steering fixture') {
     const messages: string[] = [];
@@ -81,6 +84,30 @@ const macHarness = new FakeHarness(async function* (run) {
     yield* replyWith(`Secret ${secret}: ${result.status}`);
     return;
   }
+  const scenario = /^Build relay (ship|review|failure) fixture /.exec(run.prompt)?.[1];
+  if (scenario) {
+    const file = `relay-feature-${randomUUID()}.txt`;
+    deliveryFixtures.set(run.cwd, { scenario, file });
+    await writeFile(join(run.cwd, file), run.prompt);
+    yield* replyWith('MacBook built the delivery fixture.');
+    return;
+  }
+  const fixture = deliveryFixtures.get(run.cwd);
+  if (fixture && run.prompt.startsWith('Deliver the current task')) {
+    yield* replyWith('MacBook verifying delivery.');
+    await sleep(1200, undefined, { signal: run.signal });
+    if (fixture.scenario === 'failure') return;
+    await git(run.cwd, 'add', fixture.file);
+    await git(run.cwd, 'commit', '--quiet', '-m', 'Relay delivery fixture');
+    await git(run.cwd, 'fetch', '--quiet', 'origin');
+    await git(run.cwd, 'rebase', 'origin/main');
+    if (run.prompt.includes('NEVER merge')) {
+      const branch = await git(run.cwd, 'branch', '--show-current');
+      await git(run.cwd, 'push', '--quiet', 'origin', 'HEAD');
+      reviews.set(branch, { number: 123 + reviews.size, headRefOid: await git(run.cwd, 'rev-parse', 'HEAD') });
+    } else await git(run.cwd, 'push', '--quiet', 'origin', 'HEAD:refs/heads/main');
+    return;
+  }
   const steps = /long/i.test(run.prompt) ? 6 : 1;
   for (let step = 1; step <= steps; step++) {
     if (steps > 1) {
@@ -90,7 +117,18 @@ const macHarness = new FakeHarness(async function* (run) {
   }
   yield* replyWith(`MacBook here. You said: ${run.prompt.slice(0, 80)}`);
 });
-const mac = await machine('MacBook', 0, macHarness);
+const mac = await machine('MacBook', 0, macHarness, undefined, async (_cwd, args) => {
+  if (args[0] === 'pr') {
+    const identity = args[1] === 'view' ? [...reviews.values()].find(({ number }) => String(number) === args[2]) : reviews.get(args[args.indexOf('--head') + 1]!);
+    if (!identity) return [];
+    const review = { ...identity, url: `${reviewUrl}/pull/${identity.number}`, state: 'OPEN',
+      baseRefName: 'main', isDraft: false, reviewDecision: '', statusCheckRollup: [{ conclusion: 'SUCCESS' }] };
+    return args[1] === 'view' ? review : [review];
+  }
+  if (args[1]?.includes('check-runs')) return { total_count: 1, check_runs: [{ conclusion: 'SUCCESS' }] };
+  if (args[1]?.includes('/status?')) return { total_count: 0, statuses: [] };
+  return args[1]?.includes('/rules/') ? [] : {};
+});
 // A machine with nothing on it, to revoke from Settings → Machines without taking the MacBook's threads offline.
 const spare = await machine('Old laptop', 0, new FakeHarness());
 // Driven from a PC thread, since a sleeping MacBook can't take a message.
@@ -138,6 +176,13 @@ fetchFrom(browserOrigin, 'https://github.com/example/hub-only.git');
 const macNotes = join(root, 'MacBook', 'mac-notes');
 await mkdir(macNotes); await git(macNotes, 'init', '--quiet');
 await mac.client.call('checkouts.add', { path: macNotes, profileId: profile.id });
+
+const deliveryFolder = join(root, 'MacBook', 'relay-review');
+const deliveryOrigin = `${deliveryFolder}-origin.git`;
+await initRepoWithOrigin(deliveryFolder, deliveryOrigin, { 'seed.txt': 'Relay delivery base\n' }, { author: BROWSER_AUTHOR });
+await git(deliveryFolder, 'config', `url.${deliveryOrigin.replaceAll('\\', '/')}.insteadOf`, `${reviewUrl}.git`);
+await git(deliveryFolder, 'remote', 'set-url', 'origin', `${reviewUrl}.git`);
+await mac.client.call('checkouts.add', { path: deliveryFolder, profileId: profile.id });
 
 console.log(`Relay fixture ready: http://127.0.0.1:${pc.app.port}/#token=${token}`);
 process.send?.({ type: 'ready' });

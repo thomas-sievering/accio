@@ -213,10 +213,10 @@ export function DeliveryActions({ thread, project, canRun, active = true }: { th
       </>}
       {settled && !hasChip && <span className="delivery-settled">Settled</span>}
       {snoozedUntil && <span className="delivery-settled">Snoozed until {formatDayTime(snoozedUntil, now)}</span>}
-      {settled && <Button className="delivery-pill" disabled={!!unavailable || busy} busy={calling === 'threads.reopen'} busyLabel="Reopening…" onClick={() => call('threads.reopen')}><Undo />Reopen</Button>}
-      {snoozedUntil && <Button className="delivery-pill" disabled={!!unavailable || busy} busy={calling === 'threads.reopen'} busyLabel="Waking…"
+      {!client.browser && settled && <Button className="delivery-pill" disabled={!!unavailable || busy} busy={calling === 'threads.reopen'} busyLabel="Reopening…" onClick={() => call('threads.reopen')}><Undo />Reopen</Button>}
+      {!client.browser && snoozedUntil && <Button className="delivery-pill" disabled={!!unavailable || busy} busy={calling === 'threads.reopen'} busyLabel="Waking…"
         onClick={() => call('threads.reopen')}><Undo />Wake now</Button>}
-      {!released && (receipt || settled) && thread.workspace && <Button className="delivery-pill" disabled={!!unavailable || busy || thread.status === 'running'} busy={calling === 'threads.archive'} busyLabel="Archiving…" title="Frees the workspace, keeps this thread" onClick={() => call('threads.archive')}>
+      {!client.browser && !released && (receipt || settled) && thread.workspace && <Button className="delivery-pill" disabled={!!unavailable || busy || thread.status === 'running'} busy={calling === 'threads.archive'} busyLabel="Archiving…" title="Frees the workspace, keeps this thread" onClick={() => call('threads.archive')}>
         <Archive />Archive
       </Button>}
       {!released && !reason('threads.openPreview') && summary?.previewAvailable && <button className="delivery-pill" disabled={!!unavailable || busy} onClick={openApp}><Play />Open app</button>}

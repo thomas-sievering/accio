@@ -90,6 +90,61 @@ test('pairs browsers by typing a code or opening the QR URL and unpairs them fro
   }
 });
 
+test('a paired browser ships and prepares for review on the owning machine and shows delivery failures', async ({ page, baseURL }) => {
+  const desktop = await TestClient.open(`${baseURL!.replace('http:', 'ws:')}/ws?token=relay-test-token`);
+  let browserId: string | undefined;
+  try {
+    const existingClients = new Set((await desktop.call('clients.list', {})).map(({ id }) => id));
+    const { code, url } = await desktop.call('clients.createPairingCode', {});
+    const hub = new URL('/', url ?? (await desktop.call('hubs.list', {}))[0]!.url).origin;
+    await page.addInitScript(() => localStorage.setItem('accio.moveOn', '0'));
+    await page.goto(hub);
+    await page.getByRole('textbox', { name: 'Pairing code' }).fill(code);
+    await page.getByRole('button', { name: 'Pair browser', exact: true }).click();
+    await expect(page.locator('.sidebar')).toBeVisible();
+    browserId = (await desktop.call('clients.list', {})).find(({ id }) => !existingClients.has(id))?.id;
+
+    const machineId = (await desktop.call('machines.list', {})).find(({ name }) => name === 'MacBook')!.id;
+    const checkoutId = (await desktop.call('projects.get', {})).elsewhere?.find(({ name }) => name === 'relay-review')
+      ?.on.find((checkout) => checkout.machineId === machineId)?.checkoutId;
+    expect(checkoutId).toBeTruthy();
+    const delivery = page.locator('.delivery-actions');
+    for (const scenario of ['ship', 'review', 'failure']) {
+      const text = `Build relay ${scenario} fixture ${crypto.randomUUID().slice(0, 8)}`;
+      const { id } = await desktop.call('threads.start', { checkoutId: checkoutId!, machineId, text });
+      await page.locator('.sidebar .row-main').filter({ hasText: text }).click();
+      await expect(page.locator('.thread-machine')).toContainText('MacBook');
+      await expect(page.locator('.msg.assistant').last()).toContainText('MacBook built the delivery fixture.');
+      const review = scenario === 'review';
+      if (review) {
+        await delivery.getByRole('button', { name: 'Shipping options' }).click();
+        await delivery.getByRole('menuitemradio', { name: /^Prepare for review/ }).click();
+      }
+      await delivery.getByRole('button', { name: review ? 'Prepare for review' : 'Ship', exact: true }).click();
+      await expect(delivery.getByRole('status')).toHaveText(review ? 'Preparing review…' : 'Shipping…');
+      await expect(page.locator('.msg.assistant').last()).toContainText('MacBook verifying delivery.');
+      if (review) {
+        const pullRequest = delivery.getByRole('link', { name: /^Waiting for merge · #\d+/ });
+        await expect(pullRequest).toHaveAttribute('href', /^https:\/\/github\.com\/example\/relay-review\/pull\/\d+$/);
+        const checkedAt = async () => (await desktop.call('threads.list', {})).find((thread) => thread.id === id)?.delivery?.checkedAt;
+        const before = await checkedAt();
+        expect(before).toBeTruthy();
+        await delivery.getByRole('button', { name: 'Check now' }).click();
+        await expect.poll(async () => Date.parse((await checkedAt()) ?? '')).toBeGreaterThan(Date.parse(before!));
+      } else if (scenario === 'failure') {
+        await expect(delivery.getByRole('status')).toContainText('Needs attention');
+        await expect(delivery.getByRole('alert')).toContainText('Uncommitted work remains. The workspace has been kept.');
+      } else {
+        await expect(delivery.getByRole('status')).toContainText('Shipped to main');
+        await expect(delivery.getByRole('button', { name: 'Archive', exact: true })).toHaveCount(0);
+      }
+    }
+  } finally {
+    try { if (browserId) await desktop.call('clients.unpair', { clientId: browserId }); }
+    finally { desktop.close(); }
+  }
+});
+
 test('a paired phone reads threads across profiles and machines, streams a turn, and keeps the Offline shelf after reload', async ({ browser, baseURL }, info) => {
   test.setTimeout(60_000);
   const desktop = await TestClient.open(`${baseURL!.replace('http:', 'ws:')}/ws?token=relay-test-token`);
