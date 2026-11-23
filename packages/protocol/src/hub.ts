@@ -18,6 +18,8 @@ const PairHub = z.object({ name: z.string().trim().min(1).max(80), url: z.string
 const HubId = z.object({ id: z.string() });
 const RenameHub = z.object({ id: z.string(), name: z.string().trim().min(1).max(80) });
 const RevokeMachine = z.object({ id: z.string(), machineId: z.string() });
+const RevokeClient = z.object({ clientId: z.string() });
+export type PairedClientView = { id: string; name: string };
 
 export const hubMethods = {
   'hubs.list': method<z.ZodObject<{}>, HubConnectionView[]>(z.object({})),
@@ -26,6 +28,9 @@ export const hubMethods = {
   'hubs.remove': method<typeof HubId, null>(HubId),
   'hubs.createPairingCode': method<typeof HubId, { code: string; expiresAt: number }>(HubId),
   'hubs.revokeMachine': method<typeof RevokeMachine, null>(RevokeMachine),
+  'clients.list': method<z.ZodObject<{}>, PairedClientView[]>(z.object({})),
+  'clients.createPairingCode': method<z.ZodObject<{}>, { code: string; expiresAt: number; url?: string }>(z.object({})),
+  'clients.unpair': method<typeof RevokeClient, null>(RevokeClient),
 };
 
-export type HubEvents = { 'hubs.changed': HubConnectionView[] };
+export type HubEvents = { 'hubs.changed': HubConnectionView[]; 'clients.changed': PairedClientView[] };

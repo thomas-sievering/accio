@@ -275,6 +275,9 @@ export async function openWorkspace(record: SavedHub, deps: WorkspaceDeps, slot:
   router.on('threads.list', () => relay.merged());
   // A gh sign-in made since startup shows up in machine settings without a restart.
   router.on('machines.list', async () => { await machines.refresh(); await machines.reportGitHub().catch(() => {}); return relay.machines(); });
+  router.on('clients.list', () => client.snapshot?.clients ?? []);
+  router.on('clients.createPairingCode', () => client.call('clients.createPairingCode'));
+  router.on('clients.unpair', (params) => client.call('clients.unpair', params));
   router.forward = (method, params) => relay.forward(method, params);
 
   // A snooze set from another machine, or dropped by the hub, changes how these threads look.
@@ -293,6 +296,7 @@ export async function openWorkspace(record: SavedHub, deps: WorkspaceDeps, slot:
     if (!slot.closing()) void threads.continueAfterRestart().catch(error => console.error('[threads] startup recovery failed', error));
   };
   client.onChanged(() => { slot.changed(); broadcast('resources.changed', resources.state()); if (client.status === 'connected') resources.syncTools(); relay.announce(); continueAfterRestart(); });
+  client.onChanged(() => broadcast('clients.changed', client.snapshot?.clients ?? []));
   void machines.reportGitHub().catch(() => {});
   // The system may have slept or woken while the workspace opened.
   client.setAsleep(slot.asleep()); relay.setAsleep(slot.asleep());

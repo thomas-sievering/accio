@@ -67,7 +67,7 @@ Use the repository's current setup instructions. Reuse an existing installation 
       <p className="hint">Codes work once, for 10 minutes. A new code replaces the previous one. Provider logins stay on the hub.</p>
       <details>
         <summary>Headless machines and client-only access</summary>
-        <p className="hint">For a headless worker, run <code>pnpm worker</code> from an Accio checkout and open the printed local link to pair. Desktop includes both a client and worker. Standalone clients and running turns on another machine are not available yet.</p>
+        <p className="hint">For a headless worker, run <code>pnpm worker</code> from an Accio checkout and open the printed local link to pair. Desktop includes both a client and worker. To pair only a browser, use Pair a browser under Paired clients.</p>
       </details>
       {error && <p className="error" role="alert">{error}</p>}
       <button type="button" className="ghost" onClick={onClose}>Done</button>

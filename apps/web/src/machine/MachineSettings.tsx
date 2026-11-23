@@ -14,6 +14,7 @@ import { OnboardMachine } from './OnboardMachine';
 import { MachineUpdate, useMachineUpdate } from './MachineUpdate';
 import { RevokeMachine } from './RevokeMachine';
 import { formatDayTime } from '../ui/dates';
+import { PairedClients } from './PairedClients';
 
 /** The machines known to the hub, including those currently offline, and those revoked from this window. */
 export function useMachinesData() {
@@ -42,6 +43,7 @@ export function MachinesList({ nav, data }: Props) {
         {machines.map((m) => <MachineRow key={m.id} machine={m} revoked={data.revoked(m)} onOpen={() => nav.open(m.id)} />)}
       </SettingsSection>
       {onboarding && <OnboardMachine onClose={() => { setOnboarding(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.settings-add')?.focus()); }} />}
+      <PairedClients />
     </>
   );
 }
