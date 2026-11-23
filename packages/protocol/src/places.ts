@@ -1,4 +1,4 @@
-import type { ThreadDelivery, ThreadView } from './threads.js';
+import type { DeliverySummary, ThreadDelivery, ThreadView } from './threads.js';
 
 /** Where a delivery stands, as both apps read it. */
 export type DeliveryPhase =
@@ -53,6 +53,28 @@ export function deliveryPhase(t: Pick<ThreadView, 'status' | 'workVersion' | 'de
   if (d.status === 'running') return 'shipping';
   if (d.observationError) return 'unavailable';
   return observedPhase(d);
+}
+
+/**
+ * GLOSSARY: Ship. Whether a fresh Ship or Prepare for review is the way forward: nothing requested
+ * yet, newer work than the last attempt, or a delivery that stopped on a blocker or a closed PR.
+ * A delivery in flight, waiting or delivered is not shipped again.
+ */
+export function shipOffered(t: Pick<ThreadView, 'status' | 'workVersion' | 'delivery'>): boolean {
+  const phase = deliveryPhase(t);
+  if (!phase || phase === 'superseded') return true;
+  const known = phase === 'unavailable' ? observedPhase(t.delivery!) : phase;
+  return known === 'attention' || known === 'closed';
+}
+
+/**
+ * Why Ship can't run in the thread now: queued messages, which Ship waits behind, or a worktree its
+ * delivery summary says can't ship. Without a summary only the queue is checked. Undefined when it can.
+ */
+export function shipBlockedReason(t: Pick<ThreadView, 'queuedMessages'>, summary?: Pick<DeliverySummary, 'available' | 'reason'>): string | undefined {
+  if (t.queuedMessages?.length) return 'Send or remove queued messages first';
+  if (summary && !summary.available) return summary.reason ?? 'Shipping is unavailable';
+  return undefined;
 }
 
 /**

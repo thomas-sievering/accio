@@ -1,4 +1,4 @@
-import { deliveryPhase, deliveryWaitsOn, observedPhase, type DeliveryMode, type DeliveryPhase, type NeedsYou, type ThreadDelivery, type ThreadView } from '@accio/protocol';
+import { deliveryPhase, deliveryWaitsOn, observedPhase, shipOffered, type DeliveryMode, type DeliveryPhase, type NeedsYou, type ThreadDelivery, type ThreadView } from '@accio/protocol';
 import { ciSummary } from './DeliveryProgress';
 
 /**
@@ -143,7 +143,7 @@ export function deliveryStatus(t: ThreadView): DeliveryStatus | undefined {
     };
   }
   if (stopped && known.phase === 'waiting') known = { ...known, detail: pr ? `Automatic fixes stopped · still tracking #${pr.number}` : 'Automatic fixes stopped' };
-  const canShip = known.phase === 'attention' || known.phase === 'closed';
+  const canShip = shipOffered(t);
   if (phase === 'unavailable') {
     return { ...base, phase, label: 'Status unavailable', tone: 'unavailable', glyph: pr ? 'pr' : 'alert', badge: 'Unavailable',
       detail: `Last known: ${known.label}${prSuffix}`, canShip, canCheck: true };

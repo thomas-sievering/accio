@@ -1,5 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from 'react';
-import type { DeliveryMode, DeliverySummary, ProjectView, ThreadView } from '@accio/protocol';
+import { shipBlockedReason, type DeliveryMode, type DeliverySummary, type ProjectView, type ThreadView } from '@accio/protocol';
 import { emitAppEvent } from '../app/appEvents';
 import { useClient, useConnectionStatus } from '../app/connection';
 import { Archive, Check, ChevronDown, Close, Play, Refresh, Ship, StopSquare, Undo } from '../app/icons';
@@ -125,10 +125,9 @@ export function DeliveryActions({ thread, project, canRun, active = true }: { th
     : [reviewWait ? undefined : status?.detail, status && ['waiting', 'integrated', 'unavailable'].includes(status.phase) ? age : undefined].filter(Boolean).join(' · ') || undefined;
   const statusName = status && statusText(status.label, status.pullRequest);
   // Why Ship can't run now: its button's title, and the reason Ship when done gives.
-  const shipBlocked = unavailable ?? (thread.queuedMessages?.length ? 'Send or remove queued messages first'
-    : !canRun ? 'Sign in to this profile to ship'
+  const shipBlocked = unavailable ?? shipBlockedReason(thread) ?? (!canRun ? 'Sign in to this profile to ship'
     : !summary ? 'Checking the workspace'
-    : !summary.available ? summary.reason ?? 'Shipping is unavailable' : undefined);
+    : shipBlockedReason(thread, summary));
 
   // GLOSSARY: Ship when done. While a message is being written, Ship arms it in the composer instead,
   // which is unavailable wherever Ship is, for the same reason.
