@@ -1,0 +1,100 @@
+.phone-row-state { display: none; }
+
+.layout.phone-layout {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
+}
+.phone-layout .resizer { display: none; }
+.phone-layout > .sidebar { border: 0; }
+.phone-layout .side-controls { padding-inline: 12px; }
+.phone-inbox-title {
+  margin: 14px 0 0;
+  padding-inline-start: var(--caption-start);
+  padding-inline-end: var(--caption);
+  font-size: 22px;
+  color: var(--ink-strong);
+}
+.phone-layout .side-tools { padding-inline-start: 0; gap: 4px; }
+.phone-layout .side-search { height: 44px; }
+.phone-layout .side-search input { height: 100%; font-size: 16px; }
+.phone-layout .side-foot { padding-bottom: max(8px, env(safe-area-inset-bottom)); }
+.phone-layout :is(.side-icon, .shelf-head, .filter-chip) { min-height: 44px; }
+.phone-layout .side-icon { min-width: 44px; }
+.phone-layout .sidebar .row { height: auto; min-height: 64px; border: 1px solid transparent; }
+.phone-layout .sidebar .row:has(.row-state.tone-needs):not(.offline) {
+  background: color-mix(in srgb, var(--amber) 8%, var(--side));
+  border-color: color-mix(in srgb, var(--amber) 25%, var(--line));
+}
+.phone-layout .sidebar .row-main { align-self: stretch; height: auto; padding: 8px 10px; }
+.phone-layout .sidebar .row-project { flex-wrap: wrap; gap: 2px 6px; }
+.phone-layout .sidebar .phone-row-state { display: inline; }
+.phone-layout .sidebar :is(.row:hover, .row:focus-within) .row-status { display: flex; }
+.phone-layout .sidebar .row-actions { display: none; }
+
+.phone-navigation {
+  flex: none;
+  padding-inline: calc(var(--caption-start) + 8px) calc(var(--caption) + 48px);
+  background: var(--side);
+}
+.phone-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding-inline: 8px;
+  border-radius: 8px;
+  color: var(--ink);
+  -webkit-app-region: no-drag;
+}
+.phone-back svg { width: 16px; height: 16px; }
+.phone-back:active { background: var(--hover); }
+.phone-layout .panel-toggle { top: env(safe-area-inset-top); }
+.phone-layout .side-panel { max-width: 100%; }
+.layout.phone-layout .main-top { height: auto; min-height: 60px; padding: 4px 16px 10px; }
+.phone-layout .thread-title { flex-direction: column; align-items: flex-start; gap: 3px; }
+.phone-layout .thread-title > [aria-hidden='true'] { display: none; }
+.phone-layout .thread-where { max-width: 100%; }
+.phone-layout .thread-machine { overflow: hidden; text-overflow: ellipsis; }
+.phone-layout .editable-thread-title { max-width: 100%; margin-inline-start: -5px; font-size: 16px; }
+.phone-layout .thread-actions-trigger { min-width: 44px; min-height: 44px; }
+
+.phone-layout .composer-wrap {
+  width: auto;
+  margin: 0 12px max(10px, env(safe-area-inset-bottom));
+}
+.phone-layout .composer { padding: 10px; }
+.phone-layout :is(.composer textarea, .composer-backdrop, .secret input) { font-size: 16px; }
+.phone-layout .composer-bar { gap: 4px; flex-wrap: wrap; }
+.phone-layout :is(.model-trigger, .effort-trigger, .composer-queue, .send) { min-height: 44px; min-width: 44px; }
+.phone-layout :is(.composer-queue kbd, .effort-trigger kbd) { display: none; }
+.phone-layout .model-trigger { max-width: 100%; }
+.phone-layout .model-picker:popover-open { grid-template-columns: 52px minmax(0, 1fr); }
+.phone-layout .model-picker :is(.model-picker-tabs button, .model-star) { width: 44px; min-height: 44px; opacity: 1; }
+.phone-layout .model-picker :is(.model-picker-row > button:first-child, .model-picker-profiles button, .model-picker-used-up button),
+.phone-layout .effort-menu .menu-item { min-height: 44px; }
+.phone-layout .model-picker-name .model-name { overflow: hidden; text-overflow: ellipsis; }
+
+.phone-layout :is(.secret, .choice) { max-width: 100%; overflow-wrap: anywhere; }
+.phone-layout .secret-head { flex-wrap: wrap; }
+.phone-layout .secret-head b { flex-basis: calc(100% - 24px); }
+.phone-layout :is(.secret button, .secret-saved .check, .choice-caption, .offline-thread-actions button, .jump-latest) { min-height: 44px; }
+
+html:active-view-transition-type(phone-open, phone-back) .phone-layout * { view-transition-name: none; }
+html:active-view-transition-type(phone-open, phone-back)::view-transition { pointer-events: none; }
+html:active-view-transition-type(phone-open, phone-back)::view-transition-group(root) { animation-duration: 0s; }
+html:active-view-transition-type(phone-open, phone-back)::view-transition-image-pair(root) { overflow: clip; }
+html:active-view-transition-type(phone-open, phone-back)::view-transition-old(root),
+html:active-view-transition-type(phone-open, phone-back)::view-transition-new(root) {
+  animation: 230ms var(--ease-settle) both;
+  mix-blend-mode: normal;
+}
+html:active-view-transition-type(phone-open)::view-transition-old(root) { animation-name: phone-exit-left; }
+html:active-view-transition-type(phone-open)::view-transition-new(root) { animation-name: phone-enter-right; }
+html:active-view-transition-type(phone-back)::view-transition-old(root) { animation-name: phone-exit-right; }
+html:active-view-transition-type(phone-back)::view-transition-new(root) { animation-name: phone-enter-left; }
+
+@keyframes phone-exit-left { to { transform: translateX(-100%); } }
+@keyframes phone-enter-right { from { transform: translateX(100%); } }
+@keyframes phone-exit-right { to { transform: translateX(100%); } }
+@keyframes phone-enter-left { from { transform: translateX(-100%); } }
