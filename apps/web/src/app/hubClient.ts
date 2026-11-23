@@ -30,8 +30,9 @@ function isSnapshot(value: unknown): value is RelaySnapshot {
 }
 
 /** The browser has no local machine. Only the list snapshot, not the transcript, is saved. */
-export class HubClient implements AppClient {
+export class HubClient implements Extract<AppClient, { browser: true }> {
   readonly browser = true;
+  get clientId() { return this.shared.clientId; }
   readonly hubId: string;
   status: ConnectionStatus = 'connecting';
   private link?: Link;
@@ -125,9 +126,10 @@ export class HubClient implements AppClient {
   }
 
   private unpair() {
+    if (this.status === 'unauthorized') return;
+    this.retry.cancel();
     this.disconnect('unauthorized');
-    for (const id of this.snapshots.keys()) this.removeCache(id);
-    this.snapshots.clear();
+    this.discardSnapshots();
     this.publishLists();
     location.replace('/');
   }
@@ -135,6 +137,10 @@ export class HubClient implements AppClient {
   private cacheKey(id: string) { return `${cachePrefix}${this.hubId}:${id}`; }
   private removeCache(id: string) {
     try { localStorage.removeItem(this.cacheKey(id)); } catch { /* Storage is optional. */ }
+  }
+  private discardSnapshots() {
+    for (const id of this.snapshots.keys()) this.removeCache(id);
+    this.snapshots.clear();
   }
 
   private async refresh(link: Link) {
@@ -279,7 +285,8 @@ export class HubClient implements AppClient {
     if (method === 'clients.unpair') {
       const { clientId } = params as ParamsOf<'clients.unpair'>;
       const response = await fetch('/client/unpair', { method: 'POST', body: new URLSearchParams({ id: clientId }) });
-      if (!response.ok) throw new Error('Could not unpair this browser.');
+      if (!response.ok) throw new Error('Could not unpair the browser.');
+      if (clientId === this.clientId) this.unpair();
       return null as ResultOf<M>;
     }
     if (!methods.has(method)) throw new Error('This action is not available in the web app.');

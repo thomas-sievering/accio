@@ -179,6 +179,9 @@ button.choice-caption:hover .choice-radio { border-color: var(--ink); }
 }
 .choice-viewer-pick:hover { background: var(--raised-2); }
 .choice-viewer-pick.selected { background: var(--ink-strong); border-color: var(--ink-strong); color: #111; }
+:root[data-browser-theme="light"] .choice-viewer { background: var(--bg); }
+:root[data-browser-theme="light"] .choice-viewer::backdrop { background: var(--bg); }
+:root[data-browser-theme="light"] .choice-viewer-pick.selected { color: var(--bg); }
 .choice-viewer-pick svg { width: 14px; height: 14px; stroke-width: 3; }
 
 /* The pick in the composer and in a sent message. */

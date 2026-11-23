@@ -30,13 +30,18 @@ import { SnoozeNotice } from '../threads/SnoozeNotice';
 import { PhoneMachine, usePhoneLayout } from './phoneLayout';
 import { useLive } from './useLive';
 import { viewTransition } from '../ui/viewTransition';
+import { ThisBrowser, useBrowserTheme } from './ThisBrowser';
 
-type OpenSheet = { kind: 'addProject' } | null;
+type OpenSheet = { kind: 'addProject' | 'browser' } | null;
 
 export function App() {
-  const viewKey = `accio:${useClient().hubId}:view`;
+  const { browser, hubId } = useClient();
+  const viewKey = `accio:${hubId}:view`;
   // The app reopens on the page it closed on; a thread or draft under it comes back on its own.
-  const [page, setPage] = useState<Page>(() => loadPage(localStorage.getItem(viewKey)));
+  const [page, setPage] = useState<Page>(() => {
+    const saved = loadPage(localStorage.getItem(viewKey));
+    return browser ? pageUnderSettings(saved) : saved;
+  });
   const phone = usePhoneLayout();
   const [inbox, setInbox] = useState(true);
   useEffect(() => localStorage.setItem(viewKey, JSON.stringify(savedPage(page))), [viewKey, page]);
@@ -84,6 +89,7 @@ function Shell({ page, setPage, phone, inbox, onInbox }: { page: Page; setPage: 
   const client = useClient();
   const { browser } = client;
   const machines = useLive(() => client.call('machines.list', {}), 'machines.changed');
+  const theme = useBrowserTheme(browser);
   const { profiles, accounts, filter, setFilter } = useProfiles();
   const { state } = useProjects();
   const { spaces } = useSpaces();
@@ -103,7 +109,9 @@ function Shell({ page, setPage, phone, inbox, onInbox }: { page: Page; setPage: 
   const setUp = profiles && state && profiles.length > 0 && profiles.some((p) => hasSignedInAccount(p, accounts)) && (state.checkouts.length > 0 || !!state.elsewhere?.length);
   const settingUp = !browser && !!profiles && !!accounts && !!state && !setUp;
   const phoneInbox = phone && !covered && !settingUp && (inbox || (!thread && !draft));
-  const openSettings = useCallback((route: SettingsRoute) => setPage((p) => settingsPage(p, route)), [setPage]);
+  const openSettings = useCallback((route: SettingsRoute) => {
+    if (!browser) setPage((p) => settingsPage(p, route));
+  }, [browser, setPage]);
   const closeCurrent = useCallback(() => setPage(closePage), [setPage]);
   useAppEvent('settings.open', openSettings);
   // One project editor: the header chip and the Filter gear open its Settings page.
@@ -215,9 +223,9 @@ function Shell({ page, setPage, phone, inbox, onInbox }: { page: Page; setPage: 
             <div className="side-tools">
               {!settingUp && <ThreadSearch />}
               {!settingUp && <ScopeMenu onOpenProject={(p) => openSettings({ section: 'projects', id: p.id })} />}
-              <button className="side-icon" title="Add project" aria-label="Add project" disabled={!profiles?.length} onClick={() => setSheet({ kind: 'addProject' })}>
+              {!browser && <button className="side-icon" title="Add project" aria-label="Add project" disabled={!profiles?.length} onClick={() => setSheet({ kind: 'addProject' })}>
                 <FolderPlus />
-              </button>
+              </button>}
               {!settingUp && <NewThreadButton />}
             </div>
             {filterLabel && (
@@ -233,9 +241,11 @@ function Shell({ page, setPage, phone, inbox, onInbox }: { page: Page; setPage: 
           </nav>
           <SnoozeNotice />
           <footer className="side-foot">
-            <button className="side-icon" title="Settings" aria-label="Settings" onClick={() => openSettings({ section: 'accounts' })}>
+            {browser ? <button className="side-icon" title="This browser" aria-label="This browser" onClick={() => setSheet({ kind: 'browser' })}>
               <Gear />
-            </button>
+            </button> : <button className="side-icon" title="Settings" aria-label="Settings" onClick={() => openSettings({ section: 'accounts' })}>
+              <Gear />
+            </button>}
             <button className={`side-icon${page.kind === 'limits' ? ' on-page' : ''}`} title="Limits" aria-label="Limits" aria-pressed={page.kind === 'limits'}
               onClick={() => page.kind === 'limits' ? closeLimits() : openLimits(defaultLimitsScope(profiles, currentProfileId, filter))}>
               <Limits />
@@ -255,7 +265,7 @@ function Shell({ page, setPage, phone, inbox, onInbox }: { page: Page; setPage: 
             {draft ? (
               <DraftPane key={`${draft.checkoutId}:${draft.profileId}:${draft.elsewhereId ?? ''}`} {...draft} active={threadActive} onOpenProfile={openProfile} onOpenLimits={openLimits} />
             ) : thread ? (
-              <ThreadPane key={thread.id} thread={thread} onOpenSecrets={openSecrets} active={threadActive} onOpenProfile={openProfile} onOpenLimits={openLimits} />
+              <ThreadPane key={thread.id} thread={thread} onOpenSecrets={browser ? undefined : openSecrets} active={threadActive} onOpenProfile={openProfile} onOpenLimits={openLimits} />
             ) : (
               <>
                 <header className="main-top drag" />
@@ -268,6 +278,7 @@ function Shell({ page, setPage, phone, inbox, onInbox }: { page: Page; setPage: 
         {panelOpen && <SidePanel overlay={overlay} />}
         {hasPane && <PanelToggle open={panelOpen} onToggle={togglePanel} />}
         {sheet?.kind === 'addProject' && <AddProjectSheet onClose={close} />}
+        {sheet?.kind === 'browser' && <ThisBrowser {...theme} onClose={close} />}
       </div>
     </PhoneMachine.Provider>
   );

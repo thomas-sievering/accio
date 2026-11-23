@@ -72,7 +72,7 @@ export function ScopeMenu({ onOpenProject }: { onOpenProject: (p: ProjectView) =
                     <span className="menu-text">{p.name}</span>
                     {checked(profile.id, p.id) && <Check />}
                   </button>
-                  <button
+                  {!client.browser && <button
                     className="row-action"
                     title={`${p.name} settings`}
                     aria-label={`${p.name} settings`}
@@ -82,7 +82,7 @@ export function ScopeMenu({ onOpenProject }: { onOpenProject: (p: ProjectView) =
                     }}
                   >
                     <Settings />
-                  </button>
+                  </button>}
                 </div>
               ))}
             {elsewhere

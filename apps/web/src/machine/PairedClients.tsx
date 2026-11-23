@@ -13,11 +13,15 @@ export function PairedClients() {
   const { hubs, selectedId } = useHubs();
   const hub = hubs.find(({ id }) => id === selectedId);
   const { value, error, retry } = useLiveState(() => client.call('clients.list', {}), 'clients.changed');
+  const self = client.browser ? value?.find(({ id }) => id === client.clientId) : undefined;
   return <SettingsSection title="Paired clients">
     {error ? <SettingRow title="Could not load from the hub" description={error}><Button className="ghost" onClick={retry}>Retry</Button></SettingRow> :
       !value ? <SettingRow title="Loading paired clients…" /> : value.length === 0 ? <SettingRow title="No paired clients yet" /> :
-        value.map((item) => <PairedClientRow key={item.id} item={item} />)}
-    {hub && <BrowserPairing key={hub.id} url={hub.url} connected={hub.status === 'connected'} />}
+        <>
+          {self && <PairedClientRow key={self.id} item={self} self />}
+          {value.filter(({ id }) => id !== self?.id).map((item) => <PairedClientRow key={item.id} item={item} />)}
+        </>}
+    {!client.browser && hub && <BrowserPairing key={hub.id} url={hub.url} connected={hub.status === 'connected'} />}
   </SettingsSection>;
 }
 
@@ -57,13 +61,18 @@ function BrowserPairing({ url, connected }: { url: string; connected: boolean })
   </div>;
 }
 
-function PairedClientRow({ item }: { item: PairedClientView }) {
+function PairedClientRow({ item, self }: { item: PairedClientView; self?: boolean }) {
   const client = useClient();
   const [confirming, setConfirming] = useState(false);
   const { busy, error, attempt } = useAction();
-  return <SettingRow title={item.name}>
-    {confirming ? <ConfirmAction question={`Unpair ${item.name}?`} action={`Unpair ${item.name}`} consequence="This browser loses access immediately and needs a new code to pair again."
+  const action = self ? 'Unpair' : `Unpair ${item.name}`;
+  const consequence = client.browser && !self
+    ? `${item.name} loses access immediately and needs a new code to pair again.`
+    : 'This browser loses access immediately and needs a new code to pair again.';
+  return <SettingRow title={item.name} description={self ? 'This browser' : undefined}>
+    {confirming ? <ConfirmAction question={self ? 'Unpair this browser?' : `${action}?`} action={action} consequence={consequence}
+      busyLabel={client.browser ? 'Unpairing…' : undefined}
       busy={busy} error={error} onCancel={() => setConfirming(false)} onConfirm={() => void attempt(() => client.call('clients.unpair', { clientId: item.id }))} /> :
-      <Button className="ghost danger" onClick={() => setConfirming(true)}>Unpair {item.name}</Button>}
+      <Button className="ghost danger" onClick={() => setConfirming(true)}>{action}</Button>}
   </SettingRow>;
 }

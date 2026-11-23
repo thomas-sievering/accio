@@ -134,6 +134,7 @@ describe('standalone hub trust and network boundary', () => {
     await expect(once(socket('/client/relay', { authorization: first.authorization }), 'open')).rejects.toThrow('Unexpected server response: 401');
     expect((await fetch(service.url + '/client/state')).status).toBe(401);
     const state = await (await fetch(service.url + '/client/state', { headers: { cookie: first.cookie } })).json();
+    expect(state.clientId).toBe(first.id);
     expect(state).toMatchObject({ profiles: [], projects: [], spaces: [], machines: [expect.objectContaining({ id: 'desktop' })] });
     expect(state).not.toHaveProperty('secrets');
     const firstClosed = once(firstSocket, 'close');

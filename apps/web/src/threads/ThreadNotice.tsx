@@ -49,14 +49,14 @@ export function ThreadNotice({
         <b>{profile.name}</b> isn’t linked to a house on the Sorting Hat, so this thread can’t run yet.
       </>
     );
-    action = { label: 'Choose house', run: () => onOpenProfile(profile.id) };
+    if (!client.browser) action = { label: 'Choose house', run: () => onOpenProfile(profile.id) };
   } else if (!accountForModel(profile, selected, accounts)?.signedIn) {
     text = (
       <>
         <b>{profile.name}</b> isn’t signed in with {selected.harnessId === 'codex' ? 'ChatGPT' : 'Claude'}, so this thread can’t run yet.
       </>
     );
-    action = { label: 'Choose account', run: () => onOpenProfile(profile.id) };
+    if (!client.browser) action = { label: 'Choose account', run: () => onOpenProfile(profile.id) };
   } else if (thread?.status === 'interrupted') {
     text = detail ?? (client.browser ? 'This turn was interrupted.' : 'This turn was interrupted. It continues only when you resume it.');
     if (!client.browser) action = { label: 'Resume', run: () => run(() => client.call('threads.resume', { threadId: thread.id })) };

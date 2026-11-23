@@ -105,7 +105,7 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
         skills={{ threadId: thread.id }}
         stopDisabled={!!unavailable}
         onStop={running ? async () => void (await client.call('threads.stop', { threadId: thread.id })) : undefined}
-        placeholder={running ? 'Enter steers · Ctrl+Enter queues' : thread.settledAt ? 'Send a message to reopen this thread…' : `Ask ${thread.model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}
+        placeholder={running ? (client.browser ? 'Message the running turn…' : 'Enter steers · Ctrl+Enter queues') : thread.settledAt ? 'Send a message to reopen this thread…' : `Ask ${thread.model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}
         attachment={pick && pickLabel ? { label: pickLabel, onRemove: () => setPick(undefined) } : undefined}
         model={thread.model}
         onSend={async (text, mode, images) => {
