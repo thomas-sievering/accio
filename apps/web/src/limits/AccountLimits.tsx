@@ -1,6 +1,7 @@
 import type { AccountLimitsView, AccountView, LimitWindow, LimitsSnapshot } from '@accio/protocol';
 import type { ReactNode } from 'react';
 import { useAction } from '../app/useAction';
+import { useClient } from '../app/connection';
 import { ProviderLogo, Refresh, Settings } from '../app/icons';
 import { useLimits } from './limits';
 import { formatDayTime, formatRelative } from '../ui/dates';
@@ -178,6 +179,7 @@ export function AccountLimitsCard({ account, providerLabel, sharedWith, usage, o
   usage?: ReactNode;
   onOpenAccount: () => void;
 }) {
+  const { browser } = useClient();
   return (
     <article className="limits-card" id={limitsCardId(account.id)} tabIndex={-1} aria-label={`${account.name}, ${providerLabel}`}>
       <header className="limits-card-top">
@@ -188,11 +190,11 @@ export function AccountLimitsCard({ account, providerLabel, sharedWith, usage, o
         </div>
         {sharedWith.length > 0 && <span className="limits-tag" title="One allowance, used by each of these profiles">Shared with {sharedWith.map((p) => p.name).join(', ')}</span>}
         {usage}
-        <button type="button" className="row-action" title={`${account.name} settings`} aria-label={`${account.name} settings`} onClick={onOpenAccount}>
+        {!browser && <button type="button" className="row-action" title={`${account.name} settings`} aria-label={`${account.name} settings`} onClick={onOpenAccount}>
           <Settings />
-        </button>
+        </button>}
       </header>
-      <AccountLimits account={account} onSignIn={onOpenAccount} />
+      <AccountLimits account={account} onSignIn={browser ? undefined : onOpenAccount} />
     </article>
   );
 }

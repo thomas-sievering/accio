@@ -48,8 +48,8 @@ export function ProjectDashboard({ project, onClose }: { project: ProjectView; o
         </div>
         <span className="spacer" />
         <ProfileLabel profileId={project.profileId} />
-        <button type="button" className="side-icon" title={`${project.name} settings`} aria-label={`${project.name} settings`}
-          onClick={() => emitAppEvent('settings.open', { section: 'projects', id: project.id, extra: { fromDashboard: true } })}><Settings /></button>
+        {!client.browser && <button type="button" className="side-icon" title={`${project.name} settings`} aria-label={`${project.name} settings`}
+          onClick={() => emitAppEvent('settings.open', { section: 'projects', id: project.id, extra: { fromDashboard: true } })}><Settings /></button>}
         <button type="button" className="side-icon" title="Close (Esc)" aria-label="Close dashboard" onClick={onClose}><Close /></button>
       </header>
       <div className="dashboard-body">

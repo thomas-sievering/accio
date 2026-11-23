@@ -374,11 +374,12 @@ export async function startHubService(opts: HubServiceOptions) {
     const appFile = browserAppFile(path);
     if (req.method === 'GET' && (path === '/client/state' || appFile && opts.webRoot)) {
       const token = browserToken(req);
-      if (!token || !trust.authenticateClient(token)) return json(res, 401, { error: 'Pair this browser' });
+      const pairing = token && trust.authenticateClient(token);
+      if (!pairing) return json(res, 401, { error: 'Pair this browser' });
       if (path === '/client/state') {
         const profiles = settings.profiles();
         const state: BrowserSharedState = {
-          hubId: trust.id, version: opts.version, profiles: profileViews(profiles, link), accounts: link.accountViews(),
+          hubId: trust.id, clientId: pairing.id, version: opts.version, profiles: profileViews(profiles, link), accounts: link.accountViews(),
           machines: settings.machines().map(({ id, name, platform, version, harnesses, lastSeen }) => ({ id, name, platform, version, harnesses, lastSeen })),
           projects: settings.projects(), spaces: settings.spaces(), clients: trust.clients(),
         };

@@ -28,6 +28,28 @@
   -webkit-font-smoothing: antialiased;
   overflow-wrap: break-word;
 }
+:root[data-browser-theme="light"] {
+  color-scheme: light;
+  --bg: #f7f7f8;
+  --side: #ebedf0;
+  --panel: #fff;
+  --raised: #f0f1f3;
+  --raised-2: #e7e9ed;
+  --code: #eff0f3;
+  --hover: #e6e8ec;
+  --active: #dce1e8;
+  --line: #dcdfe4;
+  --line-2: #c3c8d1;
+  --ink: #343741;
+  --ink-strong: #171a22;
+  --muted: #575e6a;
+  --dim: #656c78;
+  --green: #237a53;
+  --blue: #3d5c8e;
+  --amber: #775918;
+  --orange: #85560b;
+  --red: #a33142;
+}
 :root.desktop {
   --caption: 138px;
 }

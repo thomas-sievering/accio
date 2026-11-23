@@ -267,13 +267,14 @@ function useEscape(active: boolean, cancel: () => void) {
  * It reads the same everywhere: what happens, then Cancel, which has focus and is what Escape does, then the
  * red action last. The host shows it in place of its own button while confirming.
  */
-export function ConfirmAction({ question, consequence, action, busy, error, onConfirm, onCancel }: {
+export function ConfirmAction({ question, consequence, action, busy, busyLabel, error, onConfirm, onCancel }: {
   /** The group's name, as "Delete Work?". */
   question: string;
   consequence?: string;
   /** The red button, as "Delete Work". */
   action: string;
   busy?: boolean;
+  busyLabel?: string;
   error?: string;
   onConfirm: () => void;
   onCancel: () => void;
@@ -283,7 +284,7 @@ export function ConfirmAction({ question, consequence, action, busy, error, onCo
     <div className="confirm-action" role="group" aria-label={question}>
       {consequence && <small className="hint">{consequence}</small>}
       <button type="button" className="ghost" disabled={busy} autoFocus onClick={onCancel}>Cancel</button>
-      <Button className="ghost danger" busy={busy} onClick={onConfirm}>{action}</Button>
+      <Button className="ghost danger" busy={busy} busyLabel={busyLabel} onClick={onConfirm}>{action}</Button>
       {error && <p className="error" role="alert">{error}</p>}
     </div>
   );

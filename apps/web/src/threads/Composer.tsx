@@ -251,7 +251,7 @@ export function Composer({
   };
 
   const paste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
-    const files = pastedImages(event.clipboardData);
+    const files = client.browser ? [] : pastedImages(event.clipboardData);
     const inline = Date.now() - pasteInline.current < 1000;
     pasteInline.current = 0;
     if (!files.length) {

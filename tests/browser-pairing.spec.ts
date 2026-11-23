@@ -19,8 +19,10 @@ async function openPairedHub(page: Page, desktop: TestClient) {
   await expect(page).toHaveURL(`${hub}/`);
 }
 
-test('pairs browsers by typing a code or opening the QR URL and unpairs them from either client', async ({ browser, page, baseURL }) => {
+test('pairs by code or QR, keeps preferences in this browser, and unpairs from either client', async ({ browser, page, baseURL }, info) => {
   await page.goto(`${baseURL}/#token=relay-test-token`);
+  await expect(page.getByRole('button', { name: 'This browser', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Add project', exact: true })).toBeVisible();
   const clients = await pairedClients(page);
   await expect(clients.getByText('No paired clients yet')).toBeVisible();
   const makeCode = async (label: string, previous?: string) => {
@@ -33,7 +35,7 @@ test('pairs browsers by typing a code or opening the QR URL and unpairs them fro
   const firstCode = await makeCode('Pair a browser');
   const hub = (await clients.locator('p > code').first().textContent())!;
   const phone = await browser.newContext({ userAgent: 'iPhone Version/18.0 Safari/604.1', viewport: { width: 390, height: 844 } });
-  const tablet = await browser.newContext({ userAgent: 'iPad Version/18.0 Safari/604.1' });
+  const tablet = await browser.newContext({ userAgent: 'iPad Version/18.0 Safari/604.1', viewport: { width: 1280, height: 900 } });
   try {
     const typed = await phone.newPage();
     const scanned = await tablet.newPage();
@@ -44,6 +46,29 @@ test('pairs browsers by typing a code or opening the QR URL and unpairs them fro
     await typed.getByRole('textbox', { name: 'Pairing code' }).fill(firstCode);
     await typed.getByRole('button', { name: 'Pair browser', exact: true }).click();
     await expect(typed.locator('.sidebar')).toBeVisible();
+    const openBrowserSheet = async (tab: Page) => {
+      await expect(tab.getByRole('button', { name: 'Settings', exact: true })).toHaveCount(0);
+      await expect(tab.getByRole('button', { name: 'Add project', exact: true })).toHaveCount(0);
+      await expect(tab.getByRole('button', { name: /^(Pick folder|Update|App screenshot)$/i })).toHaveCount(0);
+      await tab.getByRole('button', { name: 'This browser', exact: true }).click();
+      return tab.getByRole('dialog', { name: 'This browser' });
+    };
+    const typedSheet = await openBrowserSheet(typed);
+    await expect(typedSheet.getByText('iPhone Safari', { exact: true })).toBeVisible();
+    const theme = typedSheet.getByRole('combobox', { name: 'Theme' });
+    const moveOn = typedSheet.getByRole('switch', { name: 'Move on after sending' });
+    await expect(theme).toHaveValue('dark');
+    await expect(moveOn).toBeChecked();
+    await theme.selectOption('light');
+    await expect(typed.locator('html')).toHaveCSS('color-scheme', 'light');
+    await moveOn.uncheck();
+    await typed.reload();
+    await openBrowserSheet(typed);
+    await expect(theme).toHaveValue('light');
+    await expect(typed.locator('html')).toHaveCSS('color-scheme', 'light');
+    await expect(moveOn).not.toBeChecked();
+    await typed.screenshot({ path: info.outputPath('this-browser-light.png') });
+    await typedSheet.getByRole('button', { name: 'Close', exact: true }).click();
     expect(await typed.evaluate(() => document.cookie)).not.toContain('accio-client');
     expect((await phone.cookies(hub)).find(({ name }) => name === '__Host-accio-client')).toMatchObject({ httpOnly: true, secure: true, sameSite: 'Strict' });
     await typed.route('https://outside.example/', (route) => route.fulfill({ contentType: 'text/html', body: `<a href="${hub}">Open Accio</a>` }));
@@ -70,7 +95,22 @@ test('pairs browsers by typing a code or opening the QR URL and unpairs them fro
     await scanned.goto(destination!);
     await expect(scanned.locator('.sidebar')).toBeVisible();
     await expect(scanned).toHaveURL(`${hub}/`);
-    const scannedClients = await pairedClients(scanned);
+    await scanned.locator('.sidebar .row-main').filter({ hasText: 'Hello from the MacBook' }).click();
+    const project = scanned.getByRole('button', { name: 'relay-demo', exact: true });
+    await project.click({ button: 'right', timeout: 5000 });
+    await expect(scanned.getByRole('menuitem', { name: /Open in Explorer|Project settings/i })).toHaveCount(0);
+    await project.click();
+    await expect(scanned.getByRole('heading', { name: 'relay-demo' })).toBeVisible();
+    await expect(scanned.getByRole('button', { name: 'relay-demo settings' })).toHaveCount(0);
+    await scanned.getByRole('button', { name: 'Close dashboard' }).click();
+    await scanned.locator('.side-foot').getByRole('button', { name: 'Limits', exact: true }).click();
+    await expect(scanned.getByRole('heading', { name: 'Limits', exact: true })).toBeVisible();
+    await expect(scanned.getByRole('button', { name: /Sign in|settings$/i })).toHaveCount(0);
+    await scanned.getByRole('button', { name: 'Close limits', exact: true }).click();
+    const scannedClients = await openBrowserSheet(scanned);
+    await expect(scannedClients.getByRole('combobox', { name: 'Theme' })).toHaveValue('dark');
+    await expect(scannedClients.getByRole('switch', { name: 'Move on after sending' })).toBeChecked();
+    await expect(scannedClients.getByText('iPad Safari', { exact: true })).toBeVisible();
     await scannedClients.getByRole('button', { name: 'Unpair iPhone Safari' }).click();
     await scannedClients.getByRole('group', { name: 'Unpair iPhone Safari?' }).getByRole('button', { name: 'Unpair iPhone Safari' }).click();
     await expect(scannedClients.getByRole('button', { name: 'Unpair iPhone Safari' })).toHaveCount(0);
@@ -78,13 +118,22 @@ test('pairs browsers by typing a code or opening the QR URL and unpairs them fro
     await typed.reload();
     await expect(typed.getByRole('heading', { name: pairing })).toBeVisible();
 
-    await clients.getByRole('button', { name: 'Unpair iPad Safari' }).click();
-    const confirm = clients.getByRole('group', { name: 'Unpair iPad Safari?' });
+    await scannedClients.getByRole('button', { name: 'Unpair', exact: true }).click();
+    const confirm = scannedClients.getByRole('group', { name: 'Unpair this browser?' });
     await expect(confirm.getByRole('button', { name: 'Cancel' })).toBeFocused();
-    await confirm.getByRole('button', { name: 'Unpair iPad Safari' }).click();
+    await confirm.getByRole('button', { name: 'Unpair', exact: true }).click();
     await expect(clients.getByText('No paired clients yet')).toBeVisible();
-    await scanned.reload();
     await expect(scanned.getByRole('heading', { name: pairing })).toBeVisible();
+
+    const thirdCode = await makeCode('Generate new browser code', secondCode);
+    await typed.getByRole('textbox', { name: 'Pairing code' }).fill(thirdCode);
+    await typed.getByRole('button', { name: 'Pair browser', exact: true }).click();
+    await expect(typed.locator('.sidebar')).toBeVisible();
+    await clients.getByRole('button', { name: 'Unpair iPhone Safari' }).click();
+    await clients.getByRole('group', { name: 'Unpair iPhone Safari?' }).getByRole('button', { name: 'Unpair iPhone Safari' }).click();
+    await expect(clients.getByText('No paired clients yet')).toBeVisible();
+    await typed.reload();
+    await expect(typed.getByRole('heading', { name: pairing })).toBeVisible();
   } finally {
     await Promise.all([phone.close(), tablet.close()]);
   }
@@ -120,8 +169,17 @@ test('a paired phone reads threads across profiles and machines, streams a turn,
     const thread = await desktop.call('threads.start', { profileId: profile.id, machineId, text: 'A long browser fixture turn' });
     await rows.filter({ hasText: 'A long browser fixture turn' }).click();
     await expect(tab.locator('.thread-machine')).toContainText('MacBook');
+    await expect(tab.locator('.composer textarea')).toHaveAttribute('placeholder', 'Message the running turn…');
     await expect(tab.locator('.msg.user').last()).toContainText('A long browser fixture turn');
     await expect(tab.locator('.msg.assistant').last()).toContainText('MacBook here. You said: A long browser fixture turn', { timeout: 15_000 });
+    const form = tab.locator('.composer');
+    await form.locator('textarea').evaluate((textarea) => {
+      const transfer = new DataTransfer();
+      transfer.items.add(new File(['image'], 'image.png', { type: 'image/png' }));
+      textarea.dispatchEvent(new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true, cancelable: true }));
+    });
+    await expect(form.locator('.composer-image, .composer-error')).toHaveCount(0);
+    await expect(form.getByRole('button', { name: 'Open app', exact: true })).toHaveCount(0);
     expect(streamedThreads.has(thread.id)).toBe(true);
     await tab.getByRole('button', { name: 'Inbox', exact: true }).click();
     await expect(tab.getByRole('heading', { name: 'Inbox' })).toBeVisible();
@@ -224,10 +282,10 @@ test.describe('browser request cards', () => {
       threadId = thread.id;
       await desktop.call('secrets.save', { profileId: profile.id, name: 'Fixture saved credential', slot: 'browser:fixture:existing', projectIds: [], value: 'accio-browser-dummy-existing' });
       await openPairedHub(page, desktop);
-      await page.getByRole('button', { name: 'Settings', exact: true }).click();
-      await page.locator('.sidebar nav').getByRole('button', { name: 'Sending', exact: true }).click();
-      await page.getByRole('switch', { name: 'Move on after sending' }).uncheck();
-      await page.getByRole('button', { name: 'Back', exact: true }).click();
+      await page.getByRole('button', { name: 'This browser', exact: true }).click();
+      const browserSheet = page.getByRole('dialog', { name: 'This browser' });
+      await browserSheet.getByRole('switch', { name: 'Move on after sending' }).uncheck();
+      await browserSheet.getByRole('button', { name: 'Close', exact: true }).click();
       const row = page.locator('.sidebar .row-main').filter({ hasText: 'Browser request cards fixture' }).first();
       await row.click();
       const input = page.locator('.composer textarea');

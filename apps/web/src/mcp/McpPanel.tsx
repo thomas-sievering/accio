@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { narrowestLevel, projectKey, type LevelContext, type McpView, type ResourceLevel } from '@accio/protocol';
 import { emitAppEvent } from '../app/appEvents';
+import { useClient } from '../app/connection';
 import { Settings } from '../app/icons';
 import { StatusPill } from '../app/Settings';
 import { useProjects } from '../projects/projects';
@@ -19,6 +20,7 @@ export type McpPanelContext = { profileId?: string; projectId?: string; checkout
  * Only lists them; levels and sign-in change in Settings → MCP servers.
  */
 export function McpPanel({ context }: { context: McpPanelContext }) {
+  const { browser } = useClient();
   const { state, loadError, retry } = useResources();
   const { state: projects } = useProjects();
   const { spaces = [] } = useSpaces();
@@ -32,6 +34,8 @@ export function McpPanel({ context }: { context: McpPanelContext }) {
   const mcps = useMemo(() => (state?.mcps ?? []).flatMap((m) => { const level = narrowestLevel(m.scope, at); return level ? [{ mcp: m, level }] : []; })
     .sort((a, b) => byName(a.mcp, b.mcp)), [state, at]);
   const manage = (mcpId?: string) => emitAppEvent('settings.open', { section: 'mcps', ...(mcpId ? { id: mcpId } : {}) });
+
+  if (browser) return <p className="side-panel-empty">MCP server settings are available in the desktop app.</p>;
 
   if (!state) {
     return <div className="skills-panel">
