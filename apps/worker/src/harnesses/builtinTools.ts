@@ -46,6 +46,12 @@ export const BUILTIN_TOOLS: Record<string, BuiltinTool[]> = {
     { id: 'web', name: 'Web search', description: 'Searches the web.', tools: ['web_search'], default: 'off', config: ['web_search="disabled"'] },
     { id: 'goals', name: 'Goals', description: 'Token-budget goals accio has no UI for yet.', tools: ['get_goal', 'create_goal', 'update_goal'], default: 'off', config: ['features.goals=false'] },
   ],
+  // Pi 1.6.0's own tools. Its turns name the ones that are on, so a tool Pi adds later stays off.
+  pi: [
+    { id: 'shell', name: 'Shell', description: 'Runs commands.', tools: ['bash'], default: 'required' },
+    { id: 'files', name: 'Files', description: 'Reads, including images, and edits files.', tools: ['read', 'edit', 'write'], default: 'required' },
+    { id: 'search', name: 'Search', description: 'Finds files and text; the shell can too.', tools: ['grep', 'find', 'ls'], default: 'off' },
+  ],
 };
 
 const isOn = (tool: BuiltinTool, overrides: Record<string, boolean> = {}) =>

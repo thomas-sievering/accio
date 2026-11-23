@@ -26,20 +26,26 @@ function handlesOf(name: string): { family: string; versioned: string } {
   return { family, versioned: pretty.version ? `${family}-${slug(pretty.version)}` : family };
 }
 
-type Mentionable = { name: string; older?: true };
+type Mentionable = { name: string; older?: true; harnessId?: string };
 
 /**
  * GLOSSARY: Model mention. The handle you type after @ to name a model, such as
  * `@opus` or `@sol`: its family, since only the newest of each family is offered.
- * When two offered models share a family, both carry their version, such as `@opus-5.5`.
+ * When two offered models of one harness share a family, both carry their version,
+ * such as `@opus-5.5`. A model another harness listed first by its name starts with
+ * its harness, such as Pi's `@pi-opus`.
  */
 export function modelHandles<T extends Mentionable>(models: T[]): { model: T; handle: string }[] {
   const offered = models.filter((m) => !m.older);
   const families = new Map<string, number>();
-  for (const m of offered) { const { family } = handlesOf(m.name); families.set(family, (families.get(family) ?? 0) + 1); }
+  const harnessFamily = (m: T) => JSON.stringify([m.harnessId ?? '', handlesOf(m.name).family]);
+  for (const m of offered) families.set(harnessFamily(m), (families.get(harnessFamily(m)) ?? 0) + 1);
+  const owner = new Map<string, string | undefined>();
+  for (const m of offered) if (!owner.has(m.name)) owner.set(m.name, m.harnessId);
   return offered.map((model) => {
     const { family, versioned } = handlesOf(model.name);
-    return { model, handle: families.get(family)! > 1 ? versioned : family };
+    const handle = families.get(harnessFamily(model))! > 1 ? versioned : family;
+    return { model, handle: owner.get(model.name) === model.harnessId ? handle : `${slug(model.harnessId ?? '')}-${handle}` };
   });
 }
 
@@ -47,7 +53,13 @@ export function modelHandles<T extends Mentionable>(models: T[]): { model: T; ha
 export function findMentionedModel<T extends Mentionable>(models: T[], handle: string): T | undefined {
   const wanted = handle.replace(/^@/, '').toLowerCase();
   return modelHandles(models).find((h) => h.handle === wanted)?.model
-    ?? models.filter((m) => !m.older).find((m) => handlesOf(m.name).versioned === wanted);
+    ?? modelHandles(models).find((h) => versionedHandle(h) === wanted)?.model;
+}
+
+/** A handle with the version always present: `@opus-5.5`, or Pi's `@pi-opus-5.5`. */
+function versionedHandle({ model, handle }: { model: Mentionable; handle: string }) {
+  const { family, versioned } = handlesOf(model.name);
+  return handle.endsWith(versioned) ? handle : handle.slice(0, handle.length - family.length) + versioned;
 }
 
 /** `@handle` at the start or after whitespace; a sentence's closing full stop is not part of it. */

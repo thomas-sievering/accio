@@ -3,6 +3,9 @@ packages:
   - apps/*
 allowBuilds:
   esbuild: true
+  # Pulled in by Pi's model catalogue; Accio runs Pi with Claude only, which needs neither.
+  '@google/genai': false
+  protobufjs: false
 # pnpm holds back releases younger than a day. The harness SDKs (Anthropic's Agent
 # SDK and API client, OpenAI's Codex) are first-party and bumped often, so a
 # lockfile on a fresh build would block every new worktree's install until the

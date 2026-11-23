@@ -96,6 +96,16 @@ export type ModelsState = {
   /** Used-up general allowances of the profile's accounts. Turns are not refused for them: the provider may still let them run, such as on extra usage. */
   usedUp: (UsedUpLimit & { providerId: ProviderId })[];
 };
+/** GLOSSARY: Harness. The ones accio knows and the providers each can use. */
+export const HARNESSES = [
+  { id: 'claudeCode', name: 'Claude Code', providers: ['anthropic'] },
+  { id: 'codex', name: 'Codex', providers: ['openai'] },
+  { id: 'pi', name: 'Pi', providers: ['anthropic'] },
+] as const;
+/** A harness's name, such as "Claude Code"; its id when this client doesn't know it yet. */
+export const harnessName = (harnessId: string): string => HARNESSES.find((h) => h.id === harnessId)?.name ?? harnessId;
+/** GLOSSARY: Provider. The one whose account a harness's turns spend. */
+export const harnessProvider = (harnessId: string): 'anthropic' | 'openai' => HARNESSES.find((h) => h.id === harnessId)?.providers[0] ?? 'anthropic';
 /** What new threads use until you pick another. Always a real model, never Claude Code's account default. */
 export const DEFAULT_MODEL: ModelSelection = { harnessId: 'claudeCode', modelId: 'opus' };
 /** Identifies the model alone, whatever its effort. */

@@ -1,3 +1,4 @@
+import { harnessName } from '@accio/protocol';
 import { useState, type FormEvent } from 'react';
 import type { MachineView } from '@accio/protocol';
 import { useClient, useHubs } from '../app/connection';
@@ -123,7 +124,7 @@ function MachineDetail({ machine, revoked, onRevoked, onBack, onOpenThread }: { 
       <SettingsSection title="Installed harnesses">
         {machine.harnesses.length === 0 && <SettingRow title="No harnesses reported" />}
         {machine.harnesses.map((h) => (
-          <SettingRow key={h.harnessId} title={h.harnessId === 'claudeCode' ? 'Claude Code' : h.harnessId === 'codex' ? 'Codex' : h.harnessId}>
+          <SettingRow key={h.harnessId} title={harnessName(h.harnessId)}>
             <code>{h.version ?? 'Version unknown'}</code>
           </SettingRow>
         ))}

@@ -80,6 +80,7 @@ const SECTIONS: Section[] = [
 const DELIVERY: Record<string, string> = {
   claudeCode: "Appended to Claude Code's built-in system prompt.",
   codex: "Sent as developer instructions, alongside Codex's built-in instructions.",
+  pi: "Appended to Pi's system prompt, which Claude Code receives after its own.",
 };
 
 function exampleDir(platform: NodeJS.Platform) {

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { JsonStore } from '@accio/persistence';
-import { DEFAULT_THREAD_NAMING, type ThreadNamingSettings, type HarnessInstall, type HubProject, type MachineInfo, type SaveSpace, type Space } from '@accio/protocol';
+import { DEFAULT_THREAD_NAMING, HARNESSES, type ThreadNamingSettings, type HarnessInstall, type HubProject, type MachineInfo, type SaveSpace, type Space } from '@accio/protocol';
 import { HubError } from './errors.js';
 
 export type { HarnessInstall };
@@ -63,8 +63,7 @@ export const PROVIDERS = [
   { id: 'openai', name: 'OpenAI', accountName: 'ChatGPT account', available: true },
 ] as const;
 
-/** GLOSSARY: Harness. The ones accio knows and the providers each can use. */
-export const HARNESSES = [{ id: 'claudeCode', name: 'Claude Code', providers: ['anthropic'] }, { id: 'codex', name: 'Codex', providers: ['openai'] }] as const;
+export { HARNESSES };
 
 /**
  * GLOSSARY: Shared settings (ADR 0004). Profiles, the paired machines and the

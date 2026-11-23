@@ -1,5 +1,5 @@
 import { createContext, useContext, type ReactNode } from 'react';
-import { DEFAULT_MODEL, accountInUse, providerAccounts, type AccountView, type ProfileView, type ModelSelection, type ProviderId, type SortingHatView } from '@accio/protocol';
+import { DEFAULT_MODEL, accountInUse, providerAccounts, type AccountView, type ProfileView, type ModelSelection, type ProviderId, type SortingHatView, harnessProvider } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { useLive, useLocalState } from '../app/useLive';
 
@@ -49,7 +49,7 @@ function profileAccount(profile: ProfileView, providerId: ProviderId, accounts: 
 }
 
 export function accountForModel(profile: ProfileView, model: ModelSelection, accounts: readonly AccountView[] | undefined) {
-  return profileAccount(profile, model.harnessId === 'codex' ? 'openai' : 'anthropic', accounts);
+  return profileAccount(profile, harnessProvider(model.harnessId), accounts);
 }
 /** Each provider's selected account ids, in order of use. */
 export type AccountSelection = Record<ProviderId, string[]>;

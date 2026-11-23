@@ -48,3 +48,20 @@ export function claudeModel(info: ClaudeModelInfo): HarnessModel | undefined {
   };
 }
 
+
+/**
+ * ADR 0026. Pi's models are the Claude account's own, under the ids pi-claude-bridge knows:
+ * "Claude Opus 5.5" is claude-opus-5-5. An alias without a version, which stands in until
+ * Claude Code has reported the account's list, has no such id and is left out.
+ */
+export function piModels(claude: HarnessModel[]): HarnessModel[] {
+  const seen = new Set<string>();
+  return claude.flatMap((model) => {
+    const match = /^Claude ([A-Za-z]+) (\d+(?:\.\d+)*)$/.exec(model.name);
+    if (!match) return [];
+    const id = `claude-${match[1]!.toLowerCase()}-${match[2]!.replaceAll('.', '-')}`;
+    if (seen.has(id)) return [];
+    seen.add(id);
+    return [{ ...model, id }];
+  });
+}

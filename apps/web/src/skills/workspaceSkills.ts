@@ -1,3 +1,4 @@
+import { harnessName as harnessNameOf } from '@accio/protocol';
 import { useCallback, useEffect, useState } from 'react';
 import type { SkillContext, SkillLevel, WorkspaceSkill, WorkspaceSkills } from '@accio/protocol';
 import { useClient } from '../app/connection';
@@ -60,7 +61,7 @@ export function useWorkspaceSkills(context: SkillContext | undefined): Workspace
 export const LEVEL_NAMES: Record<SkillLevel, string> = { project: 'Project', space: 'Space', profile: 'Profile', global: 'Everywhere' };
 
 /** GLOSSARY: Harness skill. The harness a section of its skills is titled with. */
-export const harnessName = (harnessId: string) => (harnessId === 'codex' ? 'Codex' : 'Claude');
+export const harnessName = (harnessId: string) => (harnessId === 'claudeCode' ? 'Claude' : harnessNameOf(harnessId));
 
 /** Where a skill comes from, as a short label. */
 export function originLabel(skill: WorkspaceSkill): string {

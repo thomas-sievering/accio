@@ -71,7 +71,7 @@ A company whose models threads use, such as Anthropic or OpenAI.
 _Avoid_: Vendor, backend, harness
 
 **Harness**:
-A coding program that runs a thread's turns. Accio currently supports Claude Code with Anthropic and Codex with OpenAI. Each machine reports which harnesses it has installed.
+A coding program that runs a thread's turns. Accio supports Claude Code and Pi with Anthropic, and Codex with OpenAI; Pi reaches Claude through Claude Code (ADR 0026). Each machine reports which harnesses it has installed.
 _Avoid_: Agent, runtime, coding tool, provider (as T3 Code uses it)
 
 **Effort**:
@@ -252,7 +252,7 @@ What a thread waits for between turns, set by its harness through the wait_for a
 _Avoid_: Subscription, watch, trigger, wakeup, sleep
 
 **Model mention**:
-Naming a model in a message with `@` and its handle, such as `@sonnet` or `@sol`, so sub-agents for that work run on it, on either harness. The handle is the model's family; when two offered models share one, both add their version, such as `@opus-5.5`. Typing only `@` in the composer offers Models, Machines and Threads, each opening its list; typing after it lists the matches of every kind. Each mention shows as a pill in the composer and as a chip in the sent message, which keeps the text. The thread's own model does not change.
+Naming a model in a message with `@` and its handle, such as `@sonnet` or `@sol`, so sub-agents for that work run on it, on any harness. The handle is the model's family; when two offered models of one harness share one, both add their version, such as `@opus-5.5`. A model that another harness also offers under the same name starts with its harness, such as Pi's `@pi-opus`. Typing only `@` in the composer offers Models, Machines and Threads, each opening its list; typing after it lists the matches of every kind. Each mention shows as a pill in the composer and as a chip in the sent message, which keeps the text. The thread's own model does not change.
 _Avoid_: Tag, model reference
 
 **Issue tracker**:

@@ -125,10 +125,17 @@ describe('profile model choices', () => {
     expect(harness.runs[0]).toMatchObject({ model: 'claude-fable-5[1m]', effort: 'max', modelName: 'Claude Fable 5' });
     expect(asked).toHaveLength(1);
     expect(asked[0]).toMatchObject({ CLAUDE_CONFIG_DIR: expect.stringContaining('personal'), ANTHROPIC_AUTH_TOKEN: expect.stringMatching(/^hat-/) });
-    expect((await c.call('models.list', { profileId: 'personal' })).models.map((m) => [m.id, m.name, m.description, m.efforts.length])).toEqual([
+    const listed = (await c.call('models.list', { profileId: 'personal' })).models;
+    expect(listed.filter((m) => m.harnessId === 'claudeCode').map((m) => [m.id, m.name, m.description, m.efforts.length])).toEqual([
       ['opus', 'Claude Opus 5.5', 'Best for everyday, complex tasks', 5],
       ['claude-fable-5[1m]', 'Claude Fable 5', 'Most capable for your hardest tasks', 5],
       ['haiku', 'Claude Haiku 5.5', 'Fastest for quick answers', 0],
+    ]);
+    // ADR 0026. Pi offers the same account's models, under the ids pi-claude-bridge knows.
+    expect(listed.filter((m) => m.harnessId === 'pi').map((m) => [m.id, m.name, m.harnessName, m.efforts.length])).toEqual([
+      ['claude-opus-5-5', 'Claude Opus 5.5', 'Pi', 5],
+      ['claude-fable-5', 'Claude Fable 5', 'Pi', 5],
+      ['claude-haiku-5-5', 'Claude Haiku 5.5', 'Pi', 0],
     ]);
     await expect(c.call('threads.setModel', { threadId: thread.id, model: { ...haiku, effort: 'low' } })).rejects.toThrow(/does not accept low/);
     expect(await c.call('threads.setModel', { threadId: thread.id, model: { ...opus, effort: 'low' } })).toMatchObject({ model: { ...opus, effort: 'low' } });
@@ -154,7 +161,9 @@ describe('profile model choices', () => {
     // The turn spent allowance, so the machine reads the account's limits on its own; nobody opened the Limits view.
     await expect.poll(async () => (await c.call('models.list', { profileId: 'personal' })).models.find((m) => m.id === 'fable')?.limited).toBeDefined();
     const state = await c.call('models.list', { profileId: 'personal' });
-    expect(state.models.map((m) => [m.id, m.limited])).toEqual([['opus', undefined], ['fable', { label: "Fable's weekly limit", resetsAt: resets }]]);
+    // Pi spends the same Claude account, so its Fable is used up too.
+    expect(state.models.map((m) => [m.harnessId, m.id, m.limited])).toEqual([['claudeCode', 'opus', undefined], ['claudeCode', 'fable', { label: "Fable's weekly limit", resetsAt: resets }],
+      ['pi', 'claude-opus-5-5', undefined], ['pi', 'claude-fable-5-1', { label: "Fable's weekly limit", resetsAt: resets }]]);
     expect(state.usedUp).toEqual([{ providerId: 'anthropic', label: 'The 5-hour limit', resetsAt: '2099-01-01T00:00:00.000Z' }]);
     await expect(c.call('threads.send', { threadId: thread.id, text: 'more' })).rejects.toThrow(/^Fable's weekly limit is used up until .+\. Choose another model\.$/);
     expect((await c.call('threads.list', {})).find((x) => x.id === thread.id)?.status).toBe('idle');

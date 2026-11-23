@@ -20,6 +20,7 @@ import type { Deliveries } from './deliveries.js';
 import { deliveryPrompt } from './delivery.js';
 import type { Harness, HarnessImage, HarnessTurn, SteerInput, TurnResources } from './harness.js';
 import { providerOf, turnEnv } from './harnessEnv.js';
+import { HARNESSES } from '@accio/hub';
 import type { ThreadState } from './state.js';
 import { AGENT_TOOL_LABEL, isAgentTool, runSubagent, type AgentInput, type SubagentTurn } from './subagents.js';
 import { assertResumable, endTurn, RESTART_NOTICE, retryOf, startTurn, type Thread, type TurnOutcome } from './thread.js';
@@ -309,7 +310,7 @@ export class Turns {
           id: `${turnId}:end`,
           turnId,
           tone: 'error',
-          text: `${thread.model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} stopped without finishing the turn.`,
+          text: `${HARNESSES.find((h) => h.id === thread.model.harnessId)?.name ?? thread.model.harnessId} stopped without finishing the turn.`,
         });
       }
     } catch (err) {

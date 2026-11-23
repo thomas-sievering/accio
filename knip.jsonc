@@ -32,7 +32,9 @@
     },
     "apps/worker": {
       // Forked by path from src/threads/previews.ts.
-      "entry": ["src/threads/previewRunner.ts"]
+      "entry": ["src/threads/previewRunner.ts"],
+      // Pi is started by path from src/threads/pi.ts and loads the bridge by path; pi-ai is the bridge's peer.
+      "ignoreDependencies": ["@earendil-works/pi-coding-agent", "@earendil-works/pi-ai", "pi-claude-bridge"]
     }
   }
 }

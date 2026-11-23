@@ -4,6 +4,7 @@ import { startHubService, type Fetch } from '@accio/hub';
 import type { Harness } from './threads/harness.js';
 import { claudeCode, claudeCodeInstall } from './threads/claudeCode.js';
 import { codexHarness } from './threads/codex.js';
+import { piHarness, piInstall, type PiFactory } from './threads/pi.js';
 import { codexInstall, type CodexFactory } from '@accio/codex';
 import { HubConnections } from './hub/connections.js';
 import type { CommandRunner } from './resources/process.js';
@@ -16,7 +17,7 @@ import { runCommand } from './resources/process.js';
 import type { GhRunner } from './github/accounts.js';
 
 export type AppOptions = { home: string; host: string; port: number; token: string; hubPort: number; webRoot?: string };
-export type AppDeps = { resourceCommand: CommandRunner; mcpFetch: Fetch; harness: Harness; claudeModels: ClaudeModelSource; codexHarness: Harness; codexFactory: CodexFactory; deliveryHosting: DeliveryHosting; github: GhRunner; updates: Partial<Omit<UpdateDeps, 'machineId'>> };
+export type AppDeps = { resourceCommand: CommandRunner; mcpFetch: Fetch; harness: Harness; claudeModels: ClaudeModelSource; codexHarness: Harness; codexFactory: CodexFactory; piFactory: PiFactory; deliveryHosting: DeliveryHosting; github: GhRunner; updates: Partial<Omit<UpdateDeps, 'machineId'>> };
 
 /** The local machine hosts clients and work; all hubs use the standalone service protocol. */
 export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
@@ -26,7 +27,8 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
   const version = root ? await checkoutVersion(root) : undefined;
   const here = { ...machineInfo(await loadMachineId(opts.home)), ...(version ? { version } : {}) };
   const codex = await codexInstall();
-  const harnesses = [await claudeCodeInstall(), ...(codex.version ? [codex] : [])];
+  const pi = await piInstall();
+  const harnesses = [await claudeCodeInstall(), ...(codex.version ? [codex] : []), ...(pi.version ? [pi] : [])];
   const host = desktopHost();
   const updates = new Updates({ machineId: here.id, run: runCommand, pnpm: pnpmHere(), host, ...(deps.updates ?? { root }) });
   // The transport listens first, so every workspace knows its origin; clients wait until the first workspace is open.
@@ -34,7 +36,7 @@ export async function startApp(opts: AppOptions, deps: Partial<AppDeps> = {}) {
   const ready = new Promise<void>((resolve, reject) => { opened = resolve; failed = reject; });
   ready.catch(() => {});
   const transport = await startTransport({ ...opts, ready, routerFor: (id) => connections.router(id), serveHttp: (req, res) => connections.serve(req, res) });
-  const connections = new HubConnections({ home: opts.home, here, harnesses, runners: { claudeCode: deps.harness ?? claudeCode, codex: deps.codexHarness ?? codexHarness(deps.codexFactory) },
+  const connections = new HubConnections({ home: opts.home, here, harnesses, runners: { claudeCode: deps.harness ?? claudeCode, codex: deps.codexHarness ?? codexHarness(deps.codexFactory), pi: piHarness(deps.piFactory) },
     send: transport.broadcast, origin: `http://${['0.0.0.0', '::', ''].includes(opts.host) ? '127.0.0.1' : opts.host.includes(':') ? `[${opts.host}]` : opts.host}:${transport.port}`,
     resourceCommand: deps.resourceCommand, claudeModelSource: deps.claudeModels ?? (deps.harness ? undefined : sdkClaudeModels), deliveryHosting: deps.deliveryHosting, updates, github: deps.github });
   host?.onSleep((asleep) => connections.setAsleep(asleep));

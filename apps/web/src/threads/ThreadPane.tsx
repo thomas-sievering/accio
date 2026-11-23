@@ -1,5 +1,5 @@
 import type { CheckoutView, ChoicePick, MachineView, ProjectView, RemoteMachine, ThreadView } from '@accio/protocol';
-import { issueMessage, type IssueList, type IssueView, type ModelSelection } from '@accio/protocol';
+import { issueMessage, type IssueList, type IssueView, type ModelSelection, harnessName } from '@accio/protocol';
 import { useShareDraftHarness } from '../skills/draftHarness';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useClient } from '../app/connection';
@@ -105,7 +105,7 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
         skills={{ threadId: thread.id }}
         stopDisabled={!!unavailable}
         onStop={running ? async () => void (await client.call('threads.stop', { threadId: thread.id })) : undefined}
-        placeholder={running ? (client.browser ? 'Message the running turn…' : 'Enter steers · Ctrl+Enter queues') : thread.settledAt ? 'Send a message to reopen this thread…' : `Ask ${thread.model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}
+        placeholder={running ? (client.browser ? 'Message the running turn…' : 'Enter steers · Ctrl+Enter queues') : thread.settledAt ? 'Send a message to reopen this thread…' : `Ask ${harnessName(thread.model.harnessId)} anything`}
         attachment={pick && pickLabel ? { label: pickLabel, onRemove: () => setPick(undefined) } : undefined}
         model={thread.model}
         onSend={async (text, mode, images) => {
@@ -219,7 +219,7 @@ export function DraftPane({ checkoutId, profileId, elsewhereId, active = true, o
           imagesUnavailable={client.browser || (machine && !machine.thisMachine) ? remoteImagesReason : undefined}
           handsOffImages
           disabled={!!starting || !spending || !accountForModel(spending, model, place.accounts)?.signedIn || unavailable}
-          placeholder={`Ask ${model.harnessId === 'codex' ? 'Codex' : 'Claude Code'} anything`}
+          placeholder={`Ask ${harnessName(model.harnessId)} anything`}
           model={model}
           attachment={offersIssues && issue ? { label: `${issue.label} ${issue.title}`, icon: <span className="issue-chip-mark"><Issue /></span>, onRemove: () => setPicked(undefined) } : undefined}
           onSend={async (notes, _mode, uploads, previews) => {

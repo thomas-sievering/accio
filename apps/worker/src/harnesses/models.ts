@@ -3,6 +3,7 @@ import { HARNESSES, type SettingsAccess } from '@accio/hub';
 import type { Profiles } from '../profiles/profiles.js';
 import { UserError, type Broadcast, type Router } from '../rpc/router.js';
 import type { ClaudeModels } from './claudeModels.js';
+import { piModels } from './catalog.js';
 import { generalLimits, modelLimit, nextReset, usedUpMessage } from './modelLimits.js';
 
 /** ChatGPT reports its models in no useful order; list them newest version first ("GPT-6.1-Sol" before "GPT-6-Astra"). */
@@ -60,7 +61,8 @@ export class Models {
       if (!installed.some((i) => i.harnessId === h.id)) return [];
       const claudeAccount = signedIn('anthropic');
       const catalog = h.id === 'codex' ? markOlder(newestFirst(this.profiles.codexModels(profileId).map((m) => ({ ...m, efforts: m.efforts ?? [], providerId: 'openai' as const }))))
-        : h.id === 'claudeCode' && claudeAccount ? this.claude.models(profileId, claudeAccount.id) : [];
+        : h.id === 'claudeCode' && claudeAccount ? this.claude.models(profileId, claudeAccount.id)
+        : h.id === 'pi' && claudeAccount ? piModels(this.claude.models(profileId, claudeAccount.id)) : [];
       return catalog.flatMap((m): ModelView[] => {
         const provider = signedIn(m.providerId) && profile.providers.find((p) => p.id === m.providerId);
         if (!provider) return [];

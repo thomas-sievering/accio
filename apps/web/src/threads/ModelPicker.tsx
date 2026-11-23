@@ -1,5 +1,5 @@
 import { useEffect, useId, useState } from 'react';
-import { modelKey, type ModelSelection, type UsedUpLimit } from '@accio/protocol';
+import { modelKey, type ModelSelection, type UsedUpLimit, harnessName, harnessProvider } from '@accio/protocol';
 import { useClient, useConnectionStatus } from '../app/connection';
 import { Check, ProviderLogo, Star } from '../app/icons';
 import { useAction } from '../app/useAction';
@@ -48,7 +48,7 @@ export function ModelPicker({ profileId, threadId, borrowFrom, value, onChange, 
 
   const models = data?.models ?? [];
   const usingModels = inUse.data?.models ?? [];
-  const fallbackName = value.modelId === 'default' ? `${value.harnessId === 'codex' ? 'Codex' : 'Claude Code'} default` : value.modelId;
+  const fallbackName = value.modelId === 'default' ? `${harnessName(value.harnessId)} default` : value.modelId;
   const favorites = new Set(data?.favorites.map(modelKey));
   const groups = [...new Map(models.map((m) => [JSON.stringify([m.providerId, m.harnessId]), {
     id: JSON.stringify([m.providerId, m.harnessId]), providerId: m.providerId, provider: m.providerName, harness: m.harnessName,
@@ -131,7 +131,7 @@ export function ModelPicker({ profileId, threadId, borrowFrom, value, onChange, 
   return <span className="model-choice">
     <button type="button" ref={trigger} className="model-trigger" popoverTarget={id}
       disabled={disabled || busy || !profileId || status !== 'open'} aria-label={`Select model: ${description}`}>
-      <ProviderLogo providerId={selected?.providerId ?? (value.harnessId === 'codex' ? 'openai' : 'anthropic')} />
+      <ProviderLogo providerId={selected?.providerId ?? harnessProvider(value.harnessId)} />
       <span>{shortName}</span>
       {lender && <span className="model-borrowed" title={`Borrowing ${lender.name}’s accounts`}>{lender.name}</span>}
     </button>

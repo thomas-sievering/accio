@@ -1,4 +1,4 @@
-import { noSortingHatMessage, type ProfileView, type ThreadView, type ModelSelection } from '@accio/protocol';
+import { noSortingHatMessage, type ProfileView, type ThreadView, type ModelSelection, harnessProvider } from '@accio/protocol';
 import { useClient } from '../app/connection';
 import { useAction } from '../app/useAction';
 import { accountForModel, defaultModel, useProfiles } from '../profiles/profiles';
@@ -53,7 +53,7 @@ export function ThreadNotice({
   } else if (!accountForModel(profile, selected, accounts)?.signedIn) {
     text = (
       <>
-        <b>{profile.name}</b> isn’t signed in with {selected.harnessId === 'codex' ? 'ChatGPT' : 'Claude'}, so this thread can’t run yet.
+        <b>{profile.name}</b> isn’t signed in with {harnessProvider(selected.harnessId) === 'openai' ? 'ChatGPT' : 'Claude'}, so this thread can’t run yet.
       </>
     );
     if (!client.browser) action = { label: 'Choose account', run: () => onOpenProfile(profile.id) };

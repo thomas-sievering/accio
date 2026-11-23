@@ -34,6 +34,16 @@ describe('model mentions', () => {
     expect(modelHandles([{ name: 'Claude Opus 5.5' }, { name: 'Claude Opus 5' }]).map((h) => h.handle)).toEqual(['opus-5.5', 'opus-5']);
   });
 
+  it('keeps the short handles for the harness that lists a model first, and prefixes another harness offering the same model', () => {
+    const both = [{ name: 'Claude Opus 5.5', harnessId: 'claudeCode' }, { name: 'Claude Haiku 5.5', harnessId: 'claudeCode' },
+      { name: 'Claude Opus 5.5', harnessId: 'pi' }, { name: 'Claude Haiku 5.5', harnessId: 'pi' }];
+    expect(modelHandles(both).map((h) => h.handle)).toEqual(['opus', 'haiku', 'pi-opus', 'pi-haiku']);
+    expect(findMentionedModel(both, '@opus')?.harnessId).toBe('claudeCode');
+    expect(findMentionedModel(both, '@pi-opus')?.harnessId).toBe('pi');
+    expect(findMentionedModel(both, '@pi-opus-5.5')?.harnessId).toBe('pi');
+    expect(findMentionedModel(both, '@opus-5.5')?.harnessId).toBe('claudeCode');
+  });
+
   it('finds a model by its handle or its versioned handle, never an older one', () => {
     expect(findMentionedModel(models, '@sol')?.name).toBe('GPT-6.1-Sol');
     expect(findMentionedModel(models, 'sol-6.1')?.name).toBe('GPT-6.1-Sol');

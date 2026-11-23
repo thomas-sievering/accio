@@ -40,7 +40,7 @@ export function registerHarnesses(router: Router, settings: SettingsAccess, mode
     const harness = runners[harnessId];
     if (!harness || !HARNESSES.some(h => h.id === harnessId)) throw new UserError('This harness is not available on this machine');
     if (pending.has(harnessId)) return pending.get(harnessId)!;
-    const model = models.harnessModels(harnessId)[0]?.id ?? (harnessId === 'codex' ? 'gpt-5.5' : 'opus');
+    const model = models.harnessModels(harnessId)[0]?.id ?? (harnessId === 'codex' ? 'gpt-5.5' : harnessId === 'pi' ? 'claude-opus-5-5' : 'opus');
     const grant = tools.measurementGrant();
     const result = measureBaseline(harness, harnessId, model, builtinToolsOff(harnessId, settings.harnessTools()[harnessId]), grant?.access).finally(() => grant?.revoke());
     pending.set(harnessId, result);

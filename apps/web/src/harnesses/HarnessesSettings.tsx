@@ -5,6 +5,12 @@ import { useLive } from '../app/useLive';
 import { SettingLink, SettingRow, SettingsSection, StatusPill, type SettingsNav } from '../app/Settings';
 import { BuiltinToolsSettings, toolCount } from './BuiltinToolsSettings';
 
+/** Where each harness's models come from. */
+const MODEL_SOURCES: Record<string, string> = {
+  codex: 'Available models come from the signed-in ChatGPT account.',
+  pi: "The Claude account's models, run through Claude Code.",
+};
+
 /** Shared harness catalogue and the installations each machine reports. */
 export function useHarnessesData() {
   const client = useClient();
@@ -41,7 +47,7 @@ export function HarnessesList({ nav, data }: Props) {
       {data.items!.map((h) => (
         <SettingsSection key={h.id} title={h.name}>
           <SettingRow title="Providers"><span>{h.providers.map((p) => p === 'anthropic' ? 'Anthropic' : 'OpenAI').join(', ')}</span></SettingRow>
-          <SettingRow title="Models" description={h.id === 'codex' ? 'Available models come from the signed-in ChatGPT account.' : "Model aliases follow Claude Code's current versions."}><span>{h.models.length ? h.models.map((m) => m.name).join(', ') : 'Per account'}</span></SettingRow>
+          <SettingRow title="Models" description={MODEL_SOURCES[h.id] ?? "Model aliases follow Claude Code's current versions."}><span>{h.models.length ? h.models.map((m) => m.name).join(', ') : 'Per account'}</span></SettingRow>
           <SettingLink title="Built-in tools" onClick={() => nav.open(h.id)}><span className="tool-required">{toolCount(h.tools)}</span></SettingLink>
           {h.machines.length === 0 && <SettingRow title="No installations reported" />}
           {h.machines.map((install) => {
