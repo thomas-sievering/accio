@@ -80,6 +80,7 @@ export function startTurn(thread: Thread, firstText: string, now: string): Threa
     ...reopen(thread),
     status: 'running',
     runningSince: now,
+    lastTurnStartedAt: now,
     ranMs: continuing ? thread.ranMs : undefined,
     resumeAfterRestart: undefined,
     title: thread.title === NEW_THREAD_TITLE && !thread.titleManual ? titleFrom(firstText) : thread.title,

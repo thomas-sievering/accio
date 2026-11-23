@@ -33,6 +33,13 @@ describe('thread lifecycle', () => {
     expect(endTurn(r, 'interrupted', 'now').status).toBe('interrupted');
   });
 
+  it('keeps the latest turn start after completion', () => {
+    const running = startTurn(t0, 'a', 'first start');
+    const idle = endTurn(running, 'completed', 'first end');
+    expect(idle).toMatchObject({ lastTurnStartedAt: 'first start', updatedAt: 'first end' });
+    expect(startTurn(idle, 'b', 'second start').lastTurnStartedAt).toBe('second start');
+  });
+
   it('keeps the time run across restarts, without the downtime, but not across a new message', () => {
     const running = { ...startTurn(t0, 'a', '2026-01-01T10:00:00Z'), sessionId: 's' };
     // A clean shutdown marks the turn to resume, then ends it: 30 minutes banked.
