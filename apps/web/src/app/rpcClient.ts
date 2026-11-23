@@ -1,4 +1,5 @@
 import type { EventName, Events, MethodName, ParamsOf, ResultOf, ServerEnvelope } from '@accio/protocol';
+import { Reconnect } from './reconnect';
 
 /** `unreachable`: the worker did not answer. `unauthorized`: it answered and refused the token. */
 export type ConnectionStatus = 'connecting' | 'open' | 'closed' | 'unreachable' | 'unauthorized';
@@ -26,8 +27,6 @@ export type RpcClientOptions = {
 
 const OPEN = 1;
 const CALL_TIMEOUT_MS = 60_000;
-const RETRY_MIN_MS = 500;
-const RETRY_MAX_MS = 30_000;
 
 /** A plain GET to the socket path answers 401 when the token is wrong; no answer means the worker is down. */
 async function probeWorker(url: string): Promise<'unreachable' | 'unauthorized'> {
@@ -59,8 +58,7 @@ export class RpcClient {
   private pending = new Map<number, Pending>();
   private eventListeners = new Map<string, Set<(data: unknown) => void>>();
   private statusListeners = new Set<(s: ConnectionStatus) => void>();
-  private retry?: ReturnType<typeof setTimeout>;
-  private retryDelay = RETRY_MIN_MS;
+  private retry = new Reconnect();
   private closed = false;
   private socket: (url: string) => SocketLike;
   private probe: (url: string) => Promise<'unreachable' | 'unauthorized'>;
@@ -97,7 +95,7 @@ export class RpcClient {
     let opened = false;
     ws.onopen = () => {
       opened = true;
-      this.retryDelay = RETRY_MIN_MS;
+      this.retry.reset();
       this.setStatus('open');
     };
     ws.onmessage = (e) => {
@@ -123,9 +121,7 @@ export class RpcClient {
   }
 
   private scheduleRetry() {
-    const delay = this.retryDelay;
-    this.retryDelay = Math.min(delay * 2, RETRY_MAX_MS);
-    this.retry = setTimeout(() => this.connect(), delay);
+    this.retry.schedule(() => this.connect());
   }
 
   private failPending(message: string) {
@@ -174,7 +170,7 @@ export class RpcClient {
 
   close() {
     this.closed = true;
-    clearTimeout(this.retry);
+    this.retry.cancel();
     this.failPending('Connection closed');
     this.ws?.close();
   }

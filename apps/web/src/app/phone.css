@@ -34,6 +34,8 @@
 
 .phone-navigation {
   flex: none;
+  display: flex;
+  align-items: center;
   padding-inline: calc(var(--caption-start) + 8px) calc(var(--caption) + 48px);
   background: var(--side);
 }

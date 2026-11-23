@@ -247,6 +247,7 @@ function Shell({ page, setPage, phone, inbox, onInbox }: { page: Page; setPage: 
         <div className="main" role="main" hidden={phoneInbox} inert={overlay}>
           {phone && threadActive && (thread || draft) && <div className="phone-navigation drag">
             <button className="phone-back" onClick={onInbox}><ArrowLeft /> Inbox</button>
+            {client.browser && <ConnectionNotice />}
           </div>}
           {coveringPage()}
           {/* Keep the composer and reading position mounted under every other page. */}
