@@ -96,6 +96,7 @@ export function ThreadPane({ thread, active = true, onOpenProfile, onOpenLimits,
       <Composer
         key={thread.id}
         imagesUnavailable={imagesUnavailable}
+        uploadTo={thread.machine?.id}
         disabled={!!unavailable || savingModel || thread.delivery?.status === 'queued' || thread.delivery?.status === 'running' || !spending || !accountForModel(spending, thread.model, place.accounts)?.signedIn}
         actions={<><DeliveryActions key={thread.id} thread={thread} active={active} project={place.project} canRun={!!spending && !!accountForModel(spending, thread.model, place.accounts)?.signedIn} /><GoalBar thread={thread} /><WaitBar thread={thread} /><QueueTray thread={thread} /></>}
         target={thread.id}
@@ -216,7 +217,8 @@ export function DraftPane({ checkoutId, profileId, elsewhereId, active = true, o
           draftId={newThreadDraftId(checkoutId, profileId, elsewhereId)}
           profileId={place.profile?.id}
           skills={checkoutId ? { checkoutId, ...(place.profile ? { profileId: place.profile.id } : {}), harnessId: model.harnessId } : place.profile ? { profileId: place.profile.id, harnessId: model.harnessId } : undefined}
-          imagesUnavailable={client.browser || (machine && !machine.thisMachine) ? remoteImagesReason : undefined}
+          imagesUnavailable={!client.browser && machine && !machine.thisMachine ? remoteImagesReason : undefined}
+          uploadTo={client.browser ? machineId : undefined}
           handsOffImages
           disabled={!!starting || !spending || !accountForModel(spending, model, place.accounts)?.signedIn || unavailable}
           placeholder={`Ask ${harnessName(model.harnessId)} anything`}

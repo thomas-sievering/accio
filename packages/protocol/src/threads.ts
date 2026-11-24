@@ -306,7 +306,8 @@ const Start = z.union([
   z.object({ repoKey: z.string().min(1).max(300), ...StartCommon }).refine(said, { message: 'Write a message' }),
 ]);
 /** Base64 bytes of one pasted image, which the client has already shrunk to the attachment limit. */
-const Upload = z.object({ name: z.string().max(180), mimeType: z.enum(IMAGE_TYPES), data: z.string().min(1).max(Math.ceil(IMAGE_ATTACHMENT_BYTES / 3) * 4 + 4) });
+/** `machineId` routes a paired browser's upload to the machine its message goes to; that machine ignores it. */
+const Upload = z.object({ name: z.string().max(180), machineId: z.string().max(200).optional(), mimeType: z.enum(IMAGE_TYPES), data: z.string().min(1).max(Math.ceil(IMAGE_ATTACHMENT_BYTES / 3) * 4 + 4) });
 /** GLOSSARY: Borrowing. `borrowFrom` names the profile whose model it is: null for the thread's own, left out to keep the current one. */
 const SetModel = z.object({ threadId: z.string(), model: ModelSelection, borrowFrom: BorrowFrom.nullable().optional() });
 /** GLOSSARY: Goal. The status bar's controls; setting one goes through `/goal` in a message. */

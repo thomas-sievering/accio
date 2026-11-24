@@ -316,9 +316,8 @@ export class Relay {
 
   private async serve({ from, fromKind, method, params }: RelayRequest): Promise<unknown> {
     if (fromKind === 'client') {
+      // A browser's images are its uploads to this machine, so its sends carry them like a local client's.
       if (!this.clients.has(from) || method !== 'relay.snapshot' && !CLIENT_METHODS.has(method)) throw new Error(NOT_RELAYED);
-      const images = (params as { images?: unknown } | undefined)?.images;
-      if (method === 'threads.send' && Array.isArray(images) && images.length) throw new Error(NOT_RELAYED);
     } else if (!this.deps.machineName(from)) throw new Error('This machine is not paired with the hub.');
     if (method === 'relay.snapshot') return this.snapshot();
     if (MACHINE_METHODS.has(method)) {

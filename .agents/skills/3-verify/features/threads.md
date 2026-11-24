@@ -4,7 +4,7 @@ Users choose a project or profile, select a model, send prompts, observe streame
 
 ## Sub-features
 
-- `threads-browser-capabilities`: at the paired hub URL, an image pasted in the composer shows neither an upload chip nor a refusal. The running composer leaves out the keyboard-only steering/queueing hint, and delivery never offers `Open app`. Project menus omit `Open in Explorer` and Settings shortcuts. Use `pnpm verify:ui browser-pairing.spec.ts --project=relay`; the worker URL retains desktop behavior.
+- `threads-browser-capabilities`: at the paired hub URL, the composer has `Attach images`, which opens the file picker (the photo library on a phone); a picked or pasted image uploads to the thread's machine, or the draft's chosen machine, and sends with the message. The running composer leaves out the keyboard-only steering/queueing hint, and delivery never offers `Open app`. Project menus omit `Open in Explorer` and Settings shortcuts. Use `pnpm verify:ui browser-pairing.spec.ts --project=relay` (`a paired phone attaches a photo` sends a chunked upload); the worker URL retains desktop behavior.
 - `threads-picker`: project, multiple-checkout, hub project without a checkout here, another online machine's folder without a remote, and No project/profile entries with mouse/keyboard search.
 - `threads-models`: provider tabs, provider groups, favourites, cross-harness handoff and borrowing another profile's accounts.
 - `threads-turn`: first send, streaming transcript, follow-up, tool effects and persistence.

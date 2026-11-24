@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent, type FormEvent, type ReactNode } from 'react';
 import { foldsPaste, IMAGES_PER_MESSAGE, imageRefusal, joinPastes, normalizePaste, readsImage, splitMentions, type ModelSelection, type SkillContext } from '@accio/protocol';
-import { ArrowUp, Close, Queue, StopSquare } from '../app/icons';
+import { ArrowUp, Close, ImagePlus, Queue, StopSquare } from '../app/icons';
 import { useAppEvent } from '../app/appEvents';
 import { useAction } from '../app/useAction';
 import { useClient } from '../app/connection';
@@ -44,6 +44,7 @@ export function Composer({
   model,
   handsOffImages,
   imagesUnavailable,
+  uploadTo,
   lastMessage,
 }: {
   /** `images` are upload ids, in the order they were pasted; `previews` their local copies. */
@@ -72,6 +73,8 @@ export function Composer({
   /** Sending hands the images' local copies to `onSend` to free, and each image travels into the sent message. */
   handsOffImages?: boolean;
   imagesUnavailable?: string;
+  /** In the web app: the machine the message goes to, which keeps its images until it sends (GLOSSARY: Image attachment). */
+  uploadTo?: string;
   /** What Up in an empty composer brings back: the text of your last message here. */
   lastMessage?: string;
 }) {
@@ -146,7 +149,9 @@ export function Composer({
   const listed = model && models?.models.find((m) => m.harnessId === model.harnessId && m.id === model.modelId);
   const refusalFor = (mimeType: string) => imagesUnavailable ?? (listed && !readsImage(listed, mimeType) ? imageRefusal(listed.name, listed.imageTypes ?? [], mimeType) : undefined);
   // A model chosen after pasting may not read what is already here.
-  const refused = images.map((image) => refusalFor(image.mimeType)).find(Boolean);
+  const refused = images.map((image) => refusalFor(image.mimeType)).find(Boolean)
+    // A draft whose machine changed after attaching: the image waits on the other one.
+    ?? (images.some((image) => image.machineId && image.machineId !== uploadTo) ? 'An image was added for another machine. Remove it and attach it again.' : undefined);
   const uploading = images.some((image) => !image.uploadId);
   const composing = !!text.trim() || !!attachment || images.length > 0 || pastes.length > 0 || reactions.length > 0;
   const sendable = composing && !uploading && !refused;
@@ -253,7 +258,7 @@ export function Composer({
   };
 
   const paste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
-    const files = client.browser ? [] : pastedImages(event.clipboardData);
+    const files = pastedImages(event.clipboardData);
     const inline = Date.now() - pasteInline.current < 1000;
     pasteInline.current = 0;
     if (!files.length) {
@@ -265,6 +270,11 @@ export function Composer({
       return;
     }
     event.preventDefault();
+    addImages(files);
+  };
+  const picker = useRef<HTMLInputElement>(null);
+  /** Pasted or picked images, each uploaded as it arrives. */
+  const addImages = (files: File[]) => {
     setImageError(undefined);
     if (imagesUnavailable) { setImageError(imagesUnavailable); return; }
     // Reserve places before any await, so two quick pastes respect the limit together.
@@ -275,10 +285,11 @@ export function Composer({
       if (refusal) { setImageError(refusal); continue; }
       const key = crypto.randomUUID();
       const name = file.name && file.name !== 'image.png' ? file.name : 'Pasted image';
-      setImages((current) => [...current, { key, name, mimeType: file.type, url: URL.createObjectURL(file) }]);
+      const machineId = client.browser ? uploadTo : undefined;
+      setImages((current) => [...current, { key, name, mimeType: file.type, url: URL.createObjectURL(file), ...(machineId ? { machineId } : {}) }]);
       void (async () => {
         const blob = await prepareImage(file);
-        const { uploadId } = await client.call('threads.upload', { name, mimeType: blob.type as 'image/png', data: await base64(blob) });
+        const { uploadId } = await client.call('threads.upload', { name, mimeType: blob.type as 'image/png', data: await base64(blob), ...(machineId ? { machineId } : {}) });
         setImages((current) => current.map((image) => image.key === key ? { ...image, mimeType: blob.type, uploadId } : image));
       })().catch((cause: unknown) => {
         setImages((current) => current.filter((image) => { if (image.key === key) URL.revokeObjectURL(image.url); return image.key !== key; }));
@@ -422,6 +433,16 @@ export function Composer({
         </div>
         <div className="composer-bar">
           {toolbar}
+          {/* On a phone this opens the photo library; a desktop browser can paste too. */}
+          {client.browser && <>
+            <input ref={picker} type="file" accept="image/*" multiple hidden onChange={(e) => {
+              const files = [...e.target.files ?? []];
+              e.target.value = '';
+              if (files.length) addImages(files);
+            }} />
+            <button type="button" className="composer-attach" aria-label="Attach images" title={imagesUnavailable ?? 'Attach images'}
+              disabled={disabled || !!imagesUnavailable || images.length >= IMAGES_PER_MESSAGE} onClick={() => picker.current?.click()}><ImagePlus /></button>
+          </>}
           {onStop && sendable && <button type="button" className="composer-queue" disabled={disabled || busy} onClick={() => void submit('queue')}>Queue <kbd>Ctrl ↵</kbd></button>}
           {onStop && (
             <button

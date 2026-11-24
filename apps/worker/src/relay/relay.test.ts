@@ -81,8 +81,23 @@ describe('thread relay between machines', () => {
       expect(await call('threads.deliver', { threadId, mode })).toMatchObject({ ok: false, error: expect.stringContaining('committed Git project') });
     }
     expect(await call('threads.cancelDelivery', { threadId })).toMatchObject({ ok: false, error: 'Only a queued or paused delivery can be cancelled.' });
-    expect(await call('threads.send', { threadId, text: 'Browser follow-up', images: ['not-a-browser-upload'] })).toMatchObject({ ok: false, error: 'Not available from another machine.' });
-    expect(await call('threads.send', { threadId, text: 'Browser follow-up' })).toMatchObject({ ok: true });
+    // GLOSSARY: Image attachment. The browser uploads to the thread's machine, in chunks like any large frame, then sends it.
+    const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+    const upload = new Promise<any>((resolve) => {
+      const receive = (message: WebSocket.RawData) => {
+        const frame = JSON.parse(String(message));
+        if (frame.kind === 'response' && frame.id === 'upload') { ws.off('message', receive); resolve(frame); }
+      };
+      ws.on('message', receive);
+    });
+    const text = JSON.stringify({ kind: 'request', to: machine, id: 'upload', method: 'threads.upload', params: { name: 'photo.png', mimeType: 'image/png', data: png, machineId: machine } });
+    const half = Math.ceil(text.length / 2);
+    for (const index of [0, 1]) ws.send(JSON.stringify({ kind: 'chunk', to: machine, id: 'upload', index, total: 2, data: text.slice(index * half, (index + 1) * half) }));
+    const uploaded = await upload;
+    expect(uploaded).toMatchObject({ ok: true, result: { uploadId: expect.any(String) } });
+    expect(await call('threads.send', { threadId, text: 'Browser follow-up', images: [uploaded.result.uploadId] })).toMatchObject({ ok: true });
+    await expect.poll(async () => remote(await mac.client.call('threads.list', {}), threadId)?.status).toBe('idle');
+    expect(await call('threads.transcript', { threadId })).toMatchObject({ ok: true, result: expect.arrayContaining([expect.objectContaining({ kind: 'user', text: 'Browser follow-up', images: [expect.objectContaining({ name: 'photo.png' })] })]) });
     expect(await call('threads.transcript', { threadId })).toMatchObject({ ok: true, result: expect.arrayContaining([expect.objectContaining({ kind: 'user', text: 'Browser follow-up' })]) });
     for (const method of ['threads.rename', 'threads.delete', 'threads.openPreview', 'threads.archive', 'threads.reopen', 'update.status', 'update.start', 'app.screenshot', 'checkouts.clone', 'checkouts.cloneUrl', 'hubs.list', 'profiles.save', 'spaces.save', 'models.favorite', 'machines.rename', 'secrets.list', 'secrets.save', 'clients.createPairingCode']) {
       expect(await call(method, { machineId: machine, threadId })).toMatchObject({ ok: false, error: 'Not available from another machine.' });

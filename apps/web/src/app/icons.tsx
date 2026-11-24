@@ -417,3 +417,13 @@ export const Issue = () => (
     <circle cx="8" cy="8" r="1.4" fill="currentColor" stroke="none" />
   </svg>
 );
+
+// image-plus, drawn on the same grid
+export const ImagePlus = () => (
+  <svg {...base}>
+    <path d="M10.67 3.33h4M12.67 1.33v4" />
+    <path d="M14 7.67v5a1.33 1.33 0 0 1-1.33 1.33H3.33A1.33 1.33 0 0 1 2 12.67V3.33A1.33 1.33 0 0 1 3.33 2h5" />
+    <path d="m14 10-2.06-2.06a1.33 1.33 0 0 0-1.89 0L4 14" />
+    <circle cx="6" cy="6" r="1.33" />
+  </svg>
+);

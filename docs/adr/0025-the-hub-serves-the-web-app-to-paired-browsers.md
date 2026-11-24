@@ -18,4 +18,5 @@ The hub stays a relay (ADR 0009): it does not cache machines' thread lists. The 
 - The hub needs a client role in its trust store and a client entry point to the relay that stamps `from` with the client's id and kind.
 - Workers accept a narrower allowlist from a client than from a machine: thread reads and actions, starting a thread, delivery, answers to confirmations, choices and secrets, and read-only shared settings. Never `update.*`, `app.screenshot`, clones or hub writes.
 - The web app is the same React app as the desktop client, with a hub transport and a capability flag for having no machine of its own.
-- Features that need a machine of the user's own, such as image attachments, account sign-in, Pick folder and Open app, are not in the web app.
+- Features that need a machine of the user's own, such as account sign-in, Pick folder and Open app, are not in the web app.
+- Image attachments upload through the relay to the machine the message goes to and wait there until it sends, so clients may send `threads.upload` and chunked requests. (Amended 2026-11-24.)

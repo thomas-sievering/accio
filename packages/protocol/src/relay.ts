@@ -76,8 +76,12 @@ export const RELAY_CLIENT_READS = [
   'harnesses.list', 'models.list', 'secrets.status',
 ] as const satisfies readonly MethodName[];
 
+/**
+ * `threads.upload` is the browser's alone: a paired browser has no machine to keep an
+ * image on, so it uploads to the machine its message goes to (GLOSSARY: Image attachment).
+ */
 export const RELAY_CLIENT_THREAD_ACTIONS = [
-  'threads.start',
+  'threads.start', 'threads.upload',
   'threads.deliver', 'threads.cancelDelivery', 'threads.checkDelivery',
   'threads.send', 'threads.queued', 'threads.stop', 'threads.setModel', 'secretRequests.answer', 'confirmations.answer',
-] as const satisfies readonly (typeof RELAY_THREAD_METHODS[number])[];
+] as const satisfies readonly (typeof RELAY_THREAD_METHODS[number] | 'threads.upload')[];

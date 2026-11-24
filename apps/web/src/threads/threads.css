@@ -1034,6 +1034,9 @@ div.model-picker-empty b { color: var(--ink); font-weight: 500; }
 .composer-queue { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px; color: var(--muted); font-size: 12px; border-radius: 5px; }
 .composer-queue:hover:not(:disabled) { background: var(--raised-2); color: var(--ink); }
 .composer-queue kbd { color: var(--dim); font: inherit; font-size: 11px; }
+.composer-attach { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; color: var(--muted); border-radius: 6px; }
+.composer-attach:hover:not(:disabled) { background: var(--hover); color: var(--ink); }
+.composer-attach:disabled { cursor: default; opacity: 0.6; }
 .queue-tray { margin: 0 10px; padding: 4px 8px; background: var(--raised); border: 1px solid var(--line); border-bottom: 0; border-radius: 9px 9px 0 0; max-height: 200px; overflow: auto; }
 .queued-message { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 32px; font-size: 12px; }
 .queued-message > svg { width: 13px; height: 13px; flex: none; color: var(--dim); }

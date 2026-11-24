@@ -327,12 +327,7 @@ test('a paired phone reads threads across profiles and machines, streams a turn,
     await expect(tab.locator('.msg.user').last()).toContainText('A long browser fixture turn');
     await expect(tab.locator('.msg.assistant').last()).toContainText('MacBook here. You said: A long browser fixture turn', { timeout: 15_000 });
     const form = tab.locator('.composer');
-    await form.locator('textarea').evaluate((textarea) => {
-      const transfer = new DataTransfer();
-      transfer.items.add(new File(['image'], 'image.png', { type: 'image/png' }));
-      textarea.dispatchEvent(new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true, cancelable: true }));
-    });
-    await expect(form.locator('.composer-image, .composer-error')).toHaveCount(0);
+    await expect(form.getByRole('button', { name: 'Attach images', exact: true })).toBeVisible();
     await expect(form.getByRole('button', { name: 'Open app', exact: true })).toHaveCount(0);
     expect(streamedThreads.has(thread.id)).toBe(true);
     await tab.getByRole('button', { name: 'Inbox', exact: true }).click();
@@ -419,6 +414,64 @@ test('a paired browser drives a MacBook thread and keeps its draft across naviga
     await expect(row).toContainText('Interrupted');
   } finally {
     if (threadId) await desktop.call('threads.stop', { threadId }).catch(() => {});
+    desktop.close();
+  }
+});
+
+test('a paired phone attaches a photo from its library to a MacBook thread', async ({ browser, baseURL }, info) => {
+  test.setTimeout(60_000);
+  const desktop = await TestClient.open(`${baseURL!.replace('http:', 'ws:')}/ws?token=relay-test-token`);
+  const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, userAgent: 'iPhone Version/18.0 Safari/604.1' });
+  try {
+    const profile = await desktop.signedIn('Phone photo fixture');
+    const machineId = (await desktop.call('machines.list', {})).find(({ name }) => name === 'MacBook')!.id;
+    const thread = await desktop.call('threads.start', { profileId: profile.id, machineId, text: 'Phone photo fixture' });
+    await expect.poll(async () => (await desktop.call('threads.list', {})).find(({ id }) => id === thread.id)?.status).toBe('idle');
+    const page = await phone.newPage();
+    const uploads: number[] = [];
+    page.on('websocket', (socket) => {
+      if (socket.url().endsWith('/client/relay')) socket.on('framesent', ({ payload }) => { if (String(payload).includes('"kind":"chunk"')) uploads.push(String(payload).length); });
+    });
+    await openPairedHub(page, desktop);
+    await page.locator('.sidebar .row-main').filter({ hasText: 'Phone photo fixture' }).click();
+    // A camera photo: noise, so it stays large and travels in chunks.
+    const photo = await page.evaluate(async () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 900; canvas.height = 700;
+      const context = canvas.getContext('2d')!;
+      const pixels = context.createImageData(canvas.width, canvas.height);
+      for (let i = 0; i < pixels.data.length; i++) pixels.data[i] = i % 4 === 3 ? 255 : Math.random() * 256;
+      context.putImageData(pixels, 0, 0);
+      const blob = await new Promise<Blob>((done) => canvas.toBlob((b) => done(b!), 'image/jpeg', 0.95));
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      let binary = '';
+      for (const byte of bytes) binary += String.fromCharCode(byte);
+      return btoa(binary);
+    });
+    const attach = page.getByRole('button', { name: 'Attach images', exact: true });
+    await expect(attach).toBeEnabled();
+    const chooser = page.waitForEvent('filechooser');
+    await attach.click();
+    await (await chooser).setFiles({ name: 'IMG_0042.jpg', mimeType: 'image/jpeg', buffer: Buffer.from(photo, 'base64') });
+    const chip = page.locator('.composer-image');
+    await expect(chip).toHaveCount(1);
+    await expect(chip).not.toHaveClass(/uploading/, { timeout: 15_000 });
+    expect(uploads.length).toBeGreaterThan(1);
+    await page.screenshot({ path: info.outputPath('phone-attached-photo.png') });
+    await page.locator('.composer textarea').fill('What is in this photo?');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect.poll(async () => (await desktop.call('threads.transcript', { threadId: thread.id }))
+      .find((item) => item.kind === 'user' && item.text === 'What is in this photo?'), { timeout: 15_000 })
+      .toMatchObject({ images: [expect.objectContaining({ name: 'IMG_0042.jpg', mimeType: 'image/jpeg' })] });
+    // Sending moved on to the next thread: come back through the Inbox.
+    await page.getByRole('button', { name: 'Inbox', exact: true }).click();
+    await page.locator('.sidebar .row-main').filter({ hasText: 'Phone photo fixture' }).first().click();
+    const sent = page.locator('.msg.user').filter({ hasText: 'What is in this photo?' }).locator('.msg-image img');
+    await expect(sent).toBeVisible();
+    await expect.poll(() => sent.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
+    await page.screenshot({ path: info.outputPath('phone-sent-photo.png') });
+  } finally {
+    await phone.close();
     desktop.close();
   }
 });

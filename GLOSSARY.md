@@ -21,7 +21,7 @@ The app you use to read threads, send prompts and change settings. It holds no t
 _Avoid_: Thin client (in UI text), frontend, desktop (for the role)
 
 **Web app**:
-The client you open in a browser, mostly on a phone, to read and drive threads without running a worker. It reaches threads only through the hub and the relay, so it works while no particular machine is online. It covers threads: reading, sending, steering, queueing, interrupting, starting a thread on any online machine, shipping it and answering what a thread asks of you, across every profile. Shared settings and anything that needs a machine of its own, such as image attachments, account sign-in or Open app, stay in the desktop app; the web app keeps only its own look and feel, such as the theme and Move on.
+The client you open in a browser, mostly on a phone, to read and drive threads without running a worker. It reaches threads only through the hub and the relay, so it works while no particular machine is online. It covers threads: reading, sending, steering, queueing, interrupting, starting a thread on any online machine, shipping it and answering what a thread asks of you, across every profile. Image attachments go to the thread's machine. Shared settings and anything that needs a machine of its own, such as account sign-in or Open app, stay in the desktop app; the web app keeps only its own look and feel, such as the theme and Move on.
 _Avoid_: App view, web client, remote UI, browser client
 
 **Developer CLI**:
@@ -33,7 +33,7 @@ The process on a machine that runs harnesses, executes turns and provides access
 _Avoid_: Server (for the role), machine (for the process), agent, sub-agent
 
 **Relay**:
-The hub passing messages between workers on different machines, so you can read and drive a thread from any client. The thread stays on its worker's machine; nothing is copied. Each client lists every machine's threads together, with the owning machine's name on the others. While that machine is offline its threads stay listed from the last list it sent, greyed and read-only, on the Offline shelf. A new thread can start on any machine on the relay, in any project the hub keeps: a machine without a checkout of the project's repository, this one included, clones it first, into the profile's folder there or else its home folder. No project starts on any machine. Saved images and files can be viewed through the relay. Sending image attachments, editing thread skills and Open app for an owned preview require the thread's machine. See the [relay plan](docs/plans/thread-relay.md).
+The hub passing messages between workers on different machines, so you can read and drive a thread from any client. The thread stays on its worker's machine; nothing is copied. Each client lists every machine's threads together, with the owning machine's name on the others. While that machine is offline its threads stay listed from the last list it sent, greyed and read-only, on the Offline shelf. A new thread can start on any machine on the relay, in any project the hub keeps: a machine without a checkout of the project's repository, this one included, clones it first, into the profile's folder there or else its home folder. No project starts on any machine. Saved images and files can be viewed through the relay. From the desktop app, sending image attachments, editing thread skills and Open app for an owned preview require the thread's machine; the web app sends image attachments to it. See the [relay plan](docs/plans/thread-relay.md).
 _Avoid_: Sync (for threads), tunnel
 
 **Update**:
@@ -181,7 +181,7 @@ _Avoid_: Token count, memory, context size (in UI text)
 A message saved to start a later turn after the current turn finishes. It can be edited, removed or sent as steering while the harness accepts input.
 
 **Image attachment**:
-An image pasted into the composer and sent with a message. It is kept with the thread, shown in the message and given to the harness both as an image and as a saved file it can open. Only models that read its type can receive it.
+An image pasted into the composer, or in the web app also picked with Attach images (on a phone, from the photo library), and sent with a message. Until it sends it waits on the machine the message goes to; the web app uploads it there through the relay. It is kept with the thread, shown in the message and given to the harness both as an image and as a saved file it can open. Only models that read its type can receive it.
 _Avoid_: Upload, file (in UI text)
 
 **Pasted text**:

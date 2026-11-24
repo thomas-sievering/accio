@@ -162,7 +162,8 @@ export async function startHubService(opts: HubServiceOptions) {
     let frame: any;
     try { frame = JSON.parse(text); } catch { return; }
     if (!frame || typeof frame !== 'object' || Array.isArray(frame) || typeof frame.to !== 'string' || frame.to.length > 128 || !['request', 'response', 'event', 'chunk'].includes(frame.kind)) return;
-    if (fromKind === 'client' && (frame.kind !== 'request' || frame.to === '*')) return;
+    // A browser sends requests, split into chunks when large, such as an image upload.
+    if (fromKind === 'client' && (frame.kind !== 'request' && frame.kind !== 'chunk' || frame.to === '*')) return;
     frame.from = from;
     frame.fromKind = fromKind;
     const out = JSON.stringify(frame);

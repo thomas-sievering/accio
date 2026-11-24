@@ -2,7 +2,8 @@ import { useMemo, useSyncExternalStore } from 'react';
 import { REACTION_KINDS, type Reaction } from '@accio/protocol';
 
 /** GLOSSARY: Image attachment. A pasted image in the composer; it can be sent once uploaded. */
-export type PendingImage = { key: string; name: string; mimeType: string; url: string; uploadId?: string };
+/** `machineId`: in the web app, the machine that holds its upload. */
+export type PendingImage = { key: string; name: string; mimeType: string; url: string; uploadId?: string; machineId?: string };
 
 /** What a composer holds before it sends; `ship` is an armed Ship when done (GLOSSARY: Ship when done). */
 export type DraftContent = { text: string; pastes: string[]; reactions: Reaction[]; images: PendingImage[]; ship: boolean };

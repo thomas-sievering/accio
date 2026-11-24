@@ -68,7 +68,7 @@
 .phone-layout .composer { padding: 10px; }
 .phone-layout :is(.composer textarea, .composer-backdrop, .secret input) { font-size: 16px; }
 .phone-layout .composer-bar { gap: 4px; flex-wrap: wrap; }
-.phone-layout :is(.model-trigger, .effort-trigger, .composer-queue, .send) { min-height: 44px; min-width: 44px; }
+.phone-layout :is(.model-trigger, .effort-trigger, .composer-queue, .composer-attach, .send) { min-height: 44px; min-width: 44px; }
 .phone-layout :is(.composer-queue kbd, .effort-trigger kbd) { display: none; }
 .phone-layout .model-trigger { max-width: 100%; }
 .phone-layout .model-picker:popover-open { grid-template-columns: 52px minmax(0, 1fr); }

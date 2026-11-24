@@ -10,6 +10,18 @@ type Link = { abort: AbortController; relay?: WebSocket; events?: WebSocket; tim
 
 export class PairingRequired extends Error {}
 
+/** Frames above this go as chunks, as a machine sends them: the hub takes at most 1 MiB per message. */
+const CHUNK_CHARS = 256 * 1024;
+
+function send(relay: WebSocket, frame: Extract<RelayFrame, { kind: 'request' }>) {
+  const text = JSON.stringify(frame);
+  if (text.length <= CHUNK_CHARS) { relay.send(text); return; }
+  const total = Math.ceil(text.length / CHUNK_CHARS);
+  for (let index = 0; index < total; index++) {
+    relay.send(JSON.stringify({ kind: 'chunk', to: frame.to, id: frame.id, index, total, data: text.slice(index * CHUNK_CHARS, (index + 1) * CHUNK_CHARS) } satisfies RelayFrame));
+  }
+}
+
 export async function loadBrowserState(signal: AbortSignal): Promise<BrowserSharedState> {
   const response = await fetch('/client/state', { cache: 'no-store', signal });
   if (response.status === 401) throw new PairingRequired();
@@ -275,7 +287,7 @@ export class HubClient implements Extract<AppClient, { browser: true }> {
       };
       const timer = setTimeout(() => finish('The machine did not answer in time.'), timeout);
       this.pending.set(id, { machine, action: actions.has(method), finish });
-      relay.send(JSON.stringify({ kind: 'request', to: machine, id, method, params } satisfies RelayFrame));
+      send(relay, { kind: 'request', to: machine, id, method, params });
     });
   }
 
@@ -308,6 +320,12 @@ export class HubClient implements Extract<AppClient, { browser: true }> {
         this.publishLists();
       }
       return thread as ResultOf<M>;
+    }
+    if (method === 'threads.upload') {
+      // GLOSSARY: Image attachment. The image waits on the machine its message goes to.
+      const { machineId } = params as ParamsOf<'threads.upload'>;
+      if (!machineId) throw new Error('Choose an online machine.');
+      return await this.request(machineId, method, params, 3 * 60_000) as ResultOf<M>;
     }
     const { threadId } = params as { threadId?: string };
     const machine = threadId
